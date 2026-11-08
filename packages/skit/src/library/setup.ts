@@ -610,7 +610,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
 /** Scan once more, hold it to the approved plan ID, and open its review. */
 export const openApprovedSetupReview = Effect.fn("Setup.openApprovedReview")(function* (
   options: SetupOptions,
-  approvedPlanId: typeof Hash.Type,
+  approvedPlanId: Hash,
   manage: ManageOptions,
 ) {
   const current = yield* revalidateSetupPlan(options, approvedPlanId);

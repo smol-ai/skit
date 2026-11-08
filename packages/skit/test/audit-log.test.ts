@@ -34,9 +34,7 @@ it.effect("reports the malformed JSONL line", () =>
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-audit-log-invalid-" });
     yield* fs.writeFileString(join(home, "audit.jsonl"), "{}\n");
-    const failure = yield* Effect.gen(function* () {
-      return yield* readLibraryAudit(home);
-    }).pipe(Effect.flip);
+    const failure = yield* Effect.suspend(() => readLibraryAudit(home)).pipe(Effect.flip);
     expect(failure).toMatchObject({ _tag: "LibraryAuditInvalid", line: 1 });
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );

@@ -39,12 +39,12 @@ const historyAt = Effect.fn("Test.historyEvidence")(function* (home: string) {
     read: (kind, hash) =>
       Effect.gen(function* () {
         const text = yield* fs.readFileString(join(folder(kind), `${hash.slice(7)}.json`)).pipe(
-          Effect.map(Option.some),
+          Effect.asSome,
           Effect.catchReason("PlatformError", "NotFound", () => Effect.succeedNone),
           Effect.mapError(failed),
         );
         if (kind !== "tree" || Option.isNone(text)) return text;
-        const manifest = Schema.decodeUnknownOption(Manifest)(text.value);
+        const manifest = Schema.decodeOption(Manifest)(text.value);
         if (Option.isNone(manifest)) return text; // Legacy byte-bearing trees and malformed documents go through the canonical verifier.
         const tree = yield* Effect.forEach(manifest.value.entries, (entry) =>
           Effect.gen(function* () {
@@ -75,7 +75,7 @@ const historyAt = Effect.fn("Test.historyEvidence")(function* (home: string) {
         Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed([])),
         Effect.flatMap((names) =>
           Effect.forEach(names.filter((name) => /^[a-f0-9]{64}\.json$/.test(name)).sort(), (name) =>
-            Schema.decodeUnknownEffect(History.TreeHash)(`sha256:${name.slice(0, -5)}`),
+            Schema.decodeEffect(History.TreeHash)(`sha256:${name.slice(0, -5)}`),
           ),
         ),
         Effect.mapError(failed),

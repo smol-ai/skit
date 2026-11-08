@@ -50,9 +50,8 @@ type HarnessDoctorSkill = typeof HarnessDoctorSkill.Type;
 const NativeDoctorHarness = HarnessName.pick(["claude-code", "opencode", "devin"]);
 type NativeDoctorHarness = typeof NativeDoctorHarness.Type;
 const NativeDiscoveryFinding = Schema.Union([
-  Schema.Struct({ _tag: Schema.Literal("Warning"), message: Schema.String }),
-  Schema.Struct({
-    _tag: Schema.Literal("NameCollision"),
+  Schema.TaggedStruct("Warning", { message: Schema.String }),
+  Schema.TaggedStruct("NameCollision", {
     name: Schema.String,
     paths: Schema.Array(Schema.String),
     selectedPath: Schema.optionalKey(Schema.String),
@@ -178,7 +177,7 @@ export const readClaudeCommands = Effect.fn("Doctor.readClaudeCommands")(functio
         Stream.splitLines,
         Stream.filter((line) => line.trim().length > 0),
         Stream.mapEffect((line) =>
-          Schema.decodeUnknownEffect(Schema.fromJsonString(ClaudeEnvelope))(line),
+          Schema.decodeEffect(Schema.fromJsonString(ClaudeEnvelope))(line),
         ),
         Stream.filter(
           (message) =>
@@ -310,7 +309,14 @@ export interface NativeDiscovery {
     version?: string,
   ) => Effect.Effect<
     { readonly skills: readonly HarnessDoctorSkill[]; readonly warnings: readonly string[] },
-    unknown,
+    Effect.Error<
+      ReturnType<
+        | typeof readClaudeCommands
+        | typeof readOpenCodeSkills
+        | typeof readOpenCodeV2Skills
+        | typeof readDevinSkills
+      >
+    >,
     ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | SourceProcess
   >;
   /** Drop diagnostics that only restate SKIT's own expected installed skills. */

@@ -13,7 +13,7 @@ const Entry = Schema.Struct({
   hash: Schema.String,
   marker: Schema.NullOr(Schema.String),
   markerType: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  markerMode: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+  markerMode: Schema.optionalKey(Schema.NullOr(Schema.Finite)),
   linkTarget: Schema.NullOr(Schema.String),
 });
 
@@ -58,7 +58,7 @@ const maybeStat = Effect.fn("SetupUndo.stat")(function* (path: string) {
     .lstat(path)
     .pipe(
       Effect.catchTag("PlatformError", (error) =>
-        error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+        error.reason._tag === "NotFound" ? Effect.undefined : Effect.fail(error),
       ),
     );
 });

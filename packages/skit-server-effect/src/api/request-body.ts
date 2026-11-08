@@ -1,10 +1,10 @@
 import { Effect, Schema, Stream } from "effect";
 import type { HttpServerRequest } from "effect/http";
 
-class RequestBodyTooLarge extends Schema.TaggedError<RequestBodyTooLarge>()(
-  "Http.RequestBodyTooLarge",
-  { limit: Schema.Int },
-) {}
+class RequestBodyTooLarge extends Schema.TaggedError<
+  RequestBodyTooLarge,
+  { readonly brand: unique symbol }
+>()("Http.RequestBodyTooLarge", { limit: Schema.Int }) {}
 
 interface BodyChunks {
   readonly chunks: Array<Uint8Array>;
@@ -39,7 +39,7 @@ export const schemaBodyJsonLimited = Effect.fn("Http.schemaBodyJsonLimited")(fun
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(
+  return yield* Schema.decodeEffect(Schema.fromJsonString(schema))(
     new TextDecoder().decode(bytes),
     options,
   );

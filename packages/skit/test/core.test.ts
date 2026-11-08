@@ -371,8 +371,9 @@ it.effect(
       yield* fs.writeFileString(join(root, nfc), "included\n");
       const distinct = yield* fs.writeFileString(join(root, nfd), "ignored\n", { flag: "wx" }).pipe(
         Effect.as(true),
-        Effect.catch((error) =>
-          error.reason._tag === "AlreadyExists" ? Effect.succeed(false) : Effect.fail(error),
+        Effect.catchIf(
+          (error) => error.reason._tag === "AlreadyExists",
+          () => Effect.succeed(false),
         ),
       );
       if (!distinct) {

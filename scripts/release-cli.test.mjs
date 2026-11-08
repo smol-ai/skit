@@ -55,7 +55,7 @@ async function journey({
   }
 }
 
-test("builds only CLI dependencies, smokes before publication, then promotes", async () => {
+await test("builds only CLI dependencies, smokes before publication, then promotes", async () => {
   const calls = await journey();
   assert.deepEqual(calls[0].args, ["--filter", "@smolai/skit...", "build"]);
   const publish = calls.findIndex(({ args }) => args[0] === "publish");
@@ -65,7 +65,7 @@ test("builds only CLI dependencies, smokes before publication, then promotes", a
   const installs = calls.filter(({ args }) => args[0] === "install");
   assert.notEqual(installs[0].args[2], installs[1].args[2]);
 });
-test("resumes matching published bytes without republishing after promotion failure", async () => {
+await test("resumes matching published bytes without republishing after promotion failure", async () => {
   await assert.rejects(journey({ failPromotion: true }), /permission denied/);
   const resumed = await journey({ published: true });
   assert.equal(
@@ -74,12 +74,12 @@ test("resumes matching published bytes without republishing after promotion fail
   );
   assert.equal(resumed.at(-1).args[0], "dist-tag");
 });
-test("rejects mismatched published bytes and backward tags", async () => {
+await test("rejects mismatched published bytes and backward tags", async () => {
   await assert.rejects(journey({ published: true, mismatch: true }), /differs/);
   await assert.rejects(journey({ current: "0.3.0-alpha.1" }), /backwards/);
   await assert.rejects(journey({ registryStatus: 503 }), /preflight failed/);
 });
-test("propagation retries are bounded and apply to installs only", async () => {
+await test("propagation retries are bounded and apply to installs only", async () => {
   let attempts = 0;
   const delays = [];
   await retryInstall(

@@ -40,8 +40,13 @@ it.effect("configuration writers honor ConfigProvider and explicit home override
     };
     for (const home of [undefined, explicit])
       yield* addRegistryRemote("fixture", "https://registry.example.test", home).pipe(
-        Effect.provide(skitConfigurationLayer()),
-        Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: configured }))),
+        Effect.provide(
+          skitConfigurationLayer().pipe(
+            Layer.provideMerge(
+              ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: configured })),
+            ),
+          ),
+        ),
         Effect.provideService(FileSystem.FileSystem, filesystem),
       );
     assert.deepStrictEqual([...checked], [configured, explicit]);
@@ -111,9 +116,10 @@ it.effect("parsed configuration commands honor ConfigProvider without a home fla
             Effect.sync(() => {
               failures.push(value);
             }),
-        }),
+        }).pipe(
+          Layer.provideMerge(ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: home }))),
+        ),
       ),
-      Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: home }))),
     );
     assert.deepStrictEqual(failures, []);
     assert.isTrue(yield* fs.exists(join(home, "auth.json")));

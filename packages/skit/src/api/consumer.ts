@@ -64,7 +64,10 @@ export const Readiness = Schema.Struct({
   ready: Schema.Boolean,
   checks: Schema.Array(ReadinessCheck),
 });
-export interface Readiness extends Schema.Schema.Type<typeof Readiness> {}
+export namespace Readiness {
+  export interface Type extends Schema.Schema.Type<typeof Readiness> {}
+}
+export type Readiness = Readiness.Type;
 
 const CreateTokenRequest = Schema.Struct({
   name: Schema.String,

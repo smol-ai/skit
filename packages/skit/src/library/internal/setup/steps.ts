@@ -221,7 +221,7 @@ const enable = Effect.fn("Library.setup.enable")(function* (
     reason: outcome.reason,
     message: outcome.cause.message,
   });
-  if (Option.isNone(warning)) return yield* Effect.fail(outcome.cause);
+  if (Option.isNone(warning)) return yield* outcome.cause;
   return { results: setEnabledResults(outcome), warnings: [warning.value] };
 });
 

@@ -1,5 +1,5 @@
 import { join, resolve } from "node:path";
-import { Effect, FileSystem, Schema } from "effect";
+import { Layer, Effect, FileSystem, Schema } from "effect";
 import { it } from "@effect/vitest";
 import { makeCollectionId, makeSkillId } from "@smolai/skit-core/universal/consumer";
 import { skitLayer } from "@smolai/skit-core/platform";
@@ -13,8 +13,26 @@ import { enableOutputContracts } from "../src/library/enable.js";
 import { renderContract } from "../src/commands/output-presenters.js";
 import { defaultTerminalEnvironment, renderResultFrame } from "../src/commands/output-frame.js";
 import { writeCommandContractArtifacts } from "../src/platform/command-contracts.js";
+import { ReleaseCheck } from "../src/releases.js";
+import { UpdatePlan } from "../src/library/update/output.js";
 
 const contractsRoot = resolve(import.meta.dirname, "../contracts");
+
+test("release-check timestamps preserve finite millisecond precision", () => {
+  const timestamp = Schema.Struct({ checkedAt: ReleaseCheck.fields.checkedAt });
+  for (const checkedAt of [-1, 0, 1_700_000_000_000.25])
+    expect(Schema.encodeSync(timestamp)({ checkedAt })).toEqual({ checkedAt });
+  for (const checkedAt of [NaN, Infinity, -Infinity])
+    expect(() => Schema.encodeSync(timestamp)({ checkedAt })).toThrow();
+});
+
+test("new-available counts cannot emit fractional, negative or non-finite values", () => {
+  const count = Schema.Struct({ new_available: UpdatePlan.value.fields.new_available });
+  expect(Schema.encodeSync(count)({ new_available: 0 })).toEqual({ new_available: 0 });
+  expect(Schema.encodeSync(count)({ new_available: 3 })).toEqual({ new_available: 3 });
+  for (const new_available of [-1, 0.5, NaN, Infinity])
+    expect(() => Schema.encodeSync(count)({ new_available })).toThrow();
+});
 
 describe("generated command contracts", () => {
   it.effect("committed artifacts exactly match deterministic generation", () =>
@@ -25,8 +43,9 @@ describe("generated command contracts", () => {
       for (const [name, contents] of Object.entries(expected))
         expect(yield* fs.readFileString(join(contractsRoot, name))).toBe(contents);
     }).pipe(
-      Effect.provide(cliLayer(false, "/tmp/skit-contract-generation-test")),
-      Effect.provide(skitLayer),
+      Effect.provide(
+        cliLayer(false, "/tmp/skit-contract-generation-test").pipe(Layer.provideMerge(skitLayer)),
+      ),
     ),
   );
 
@@ -66,7 +85,7 @@ describe("generated command contracts", () => {
   test("schemas validate representative branching payloads", () => {
     const collectionId = makeCollectionId();
     const skillId = makeSkillId();
-    expect(() => Schema.decodeUnknownSync(outputContracts.updatePlan.schema)([])).not.toThrow();
+    expect(() => Schema.decodeSync(outputContracts.updatePlan.schema)([])).not.toThrow();
     const enabled = Schema.decodeUnknownSync(outputContracts.enablePlan.schema)({
       subject_id: collectionId,
       skills: ["review"],
@@ -83,7 +102,7 @@ describe("generated command contracts", () => {
     // @ts-expect-error a disable definition cannot encode an enable result
     encodeResult("enablePlan", enableOutputContracts.disablePlan, enabled);
     expect(() =>
-      Schema.decodeUnknownSync(outputContracts.registryRemote.schema)({
+      Schema.decodeSync(outputContracts.registryRemote.schema)({
         name: "public",
         origin: "https://registry.example",
         isDefault: true,

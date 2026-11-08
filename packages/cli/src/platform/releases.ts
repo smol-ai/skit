@@ -24,11 +24,11 @@ const DistTags = Schema.Record(Schema.String, Schema.String);
 const Cache = Schema.Struct({
   schema: Schema.Literal("skit.release-cache.v1"),
   source: Schema.String,
-  attemptedAt: Schema.Number,
-  succeededAt: Schema.optionalKey(Schema.Number),
+  attemptedAt: Schema.Finite,
+  succeededAt: Schema.optionalKey(Schema.Finite),
   tags: DistTags,
   notifiedVersion: Schema.optionalKey(Schema.String),
-  notifiedAt: Schema.optionalKey(Schema.Number),
+  notifiedAt: Schema.optionalKey(Schema.Finite),
 });
 type Cache = typeof Cache.Type;
 const makeReleaseNotice = Effect.gen(function* () {
@@ -44,7 +44,7 @@ const makeReleaseNotice = Effect.gen(function* () {
   const read = fs.readFileString(path).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Cache))),
     Effect.map((cache) => (cache.source === source ? cache : undefined)),
-    Effect.catch(() => Effect.succeed(undefined)),
+    Effect.catch(() => Effect.undefined),
   );
   const write = Effect.fn("ReleaseNotice.write")(function* (cache: Cache) {
     const temporary = `${path}.${randomUUID()}.tmp`;
@@ -68,7 +68,7 @@ const makeReleaseNotice = Effect.gen(function* () {
         cache ?? { schema: "skit.release-cache.v1", source, attemptedAt: now - DAY, tags: {} },
       ).pipe(
         Effect.as(true),
-        Effect.catch(() => Effect.succeed(false)),
+        Effect.orElseSucceed(() => false),
       );
       if (!writable) return { cache: undefined, now, reason: "Update cache is not writable." };
     }
@@ -145,7 +145,7 @@ const makeReleaseNotice = Effect.gen(function* () {
         notifiedAt: now,
       }).pipe(
         Effect.as(true),
-        Effect.catch(() => Effect.succeed(false)),
+        Effect.orElseSucceed(() => false),
       );
       if (!saved) return undefined;
       return checked;

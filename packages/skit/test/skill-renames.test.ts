@@ -80,7 +80,7 @@ const merge = (base: Files, ours: Files, theirs: Files) => {
 };
 const fixture = Effect.fn("Test.renameFixture")(function* (name: string) {
   const fs = yield* FileSystem.FileSystem;
-  const entry = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Rename))(
+  const entry = yield* Schema.decodeEffect(Schema.fromJsonString(Rename))(
     yield* fs.readFileString(join(root, name, "case.json")),
   );
   return {

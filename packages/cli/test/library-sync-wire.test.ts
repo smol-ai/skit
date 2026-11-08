@@ -54,7 +54,7 @@ it.effect("decodes a literal skit.library.v8 head without loss", () =>
     const head = yield* wire("portable-v8.json");
     const { result, sent } = yield* exchange(
       () => Response.json(head),
-      (api) => api.read(),
+      (api) => api.read,
     );
     assert.deepStrictEqual(sent, [
       { method: "GET", path: "/api/library/portable", body: undefined },
@@ -68,7 +68,7 @@ it.effect("reads a literal library_not_found as an absent remote", () =>
   Effect.gen(function* () {
     const { result } = yield* exchange(
       () => Response.json({ error: "library_not_found" }, { status: 404 }),
-      (api) => api.read(),
+      (api) => api.read,
     );
     assert.strictEqual(result, null);
   }).pipe(Effect.provide(testPlatformLayer)),
@@ -80,7 +80,7 @@ it.effect("rejects a literal skit.library.v2 head instead of reading it", () =>
     const failure = yield* Effect.flip(
       exchange(
         () => Response.json(head),
-        (api) => api.read(),
+        (api) => api.read,
       ),
     );
     assert.strictEqual(failure._tag, "Library.LibraryApiInvalidResponse");
@@ -93,7 +93,7 @@ it.effect("refuses a literal skit.library.v9 head as written by a newer SKIT", (
     const failure = yield* Effect.flip(
       exchange(
         () => Response.json(head),
-        (api) => api.read(),
+        (api) => api.read,
       ),
     );
     assert.instanceOf(failure, LibraryManifestTooNew);
@@ -135,7 +135,7 @@ it.effect("reads a missing, foreign or malformed manifest schema as an invalid r
             Response.json({
               library: { ...head.library, manifest: { ...head.library.manifest, schema } },
             }),
-          (api) => api.read(),
+          (api) => api.read,
         ),
       );
       assert.strictEqual(failure._tag, "Library.LibraryApiInvalidResponse", String(schema));

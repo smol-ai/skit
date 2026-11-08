@@ -5,10 +5,10 @@ const ITERATIONS = 100_000;
 const HASH_BYTES = 32;
 const SALT_BYTES = 16;
 
-export class PasswordHashError extends Schema.TaggedError<PasswordHashError>()(
-  "PasswordHasher.PasswordHashError",
-  { cause: Schema.Defect() },
-) {}
+export class PasswordHashError extends Schema.TaggedError<
+  PasswordHashError,
+  { readonly brand: unique symbol }
+>()("PasswordHasher.PasswordHashError", { cause: Schema.Defect() }) {}
 
 const derivePromise = async (crypto: Crypto, password: string, salt: Uint8Array) => {
   const material = await crypto.subtle.importKey(

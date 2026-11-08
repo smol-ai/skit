@@ -68,7 +68,7 @@ export const writeWorkspaceTree = Effect.fn("AuthorWorkspace.writeTree")(functio
     if (blockers.some((target) => entry.path.startsWith(`${target}/`))) continue;
     const info = yield* links
       .lstat(absolute)
-      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
     if (info?.type !== "Directory") continue;
     const pending = [entry.path];
     while (pending.length > 0) {

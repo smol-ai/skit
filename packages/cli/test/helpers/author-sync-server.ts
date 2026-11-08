@@ -43,7 +43,7 @@ export interface StoredRevision {
 const decode = <S extends Schema.Top>(schema: S, request: HttpClientRequest.HttpClientRequest) =>
   request.body._tag !== "Uint8Array"
     ? Effect.die(new Error("Expected an encoded SKIT request"))
-    : Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.toCodecJson(schema)))(
+    : Schema.decodeEffect(Schema.fromJsonString(Schema.toCodecJson(schema)))(
         new TextDecoder().decode(request.body.body),
       ).pipe(Effect.orDie);
 
@@ -101,7 +101,7 @@ export const makeAuthorSyncServer = Effect.fn("Test.makeAuthorSyncServer")(funct
         ? [undefined, pending]
         : [pending[index], pending.filter((_, position) => position !== index)];
     });
-    if (fault?.action.kind === "drop-response") return yield* Effect.fail(transportError(request));
+    if (fault?.action.kind === "drop-response") return yield* transportError(request);
     if (fault?.action.kind === "gate") {
       yield* Deferred.succeed(fault.action.entered, undefined);
       yield* Deferred.await(fault.action.released);
@@ -113,7 +113,7 @@ export const makeAuthorSyncServer = Effect.fn("Test.makeAuthorSyncServer")(funct
 
   const transport = (device: AuthorDevice): TestHttpHandler =>
     Effect.fn("Test.authorSyncTransport")(function* (request, url) {
-      if ((yield* Ref.get(offline)).has(device)) return yield* Effect.fail(transportError(request));
+      if ((yield* Ref.get(offline)).has(device)) return yield* transportError(request);
       const state = yield* Ref.get(skit);
       if (request.method === "POST" && url.pathname === "/api/skits") {
         const input = yield* decode(SkitCreateRequest, request);
@@ -202,12 +202,12 @@ export const makeAuthorSyncServer = Effect.fn("Test.makeAuthorSyncServer")(funct
         return found === undefined
           ? notFound()
           : Response.json(
-              Schema.encodeSync(Schema.toCodecJson(RevisionReadResponse))({
+              yield* Schema.encodeEffect(Schema.toCodecJson(RevisionReadResponse))({
                 revision: found.revision,
                 tree: found.tree,
                 diagnostics: [],
                 descriptor: null,
-              }),
+              }).pipe(Effect.orDie),
             );
       }
       if (request.method === "GET" && url.pathname === `${prefix}/revisions`) {
@@ -229,10 +229,10 @@ export const makeAuthorSyncServer = Effect.fn("Test.makeAuthorSyncServer")(funct
         const offset = Number(url.searchParams.get("cursor") ?? "0");
         const page = order.slice(offset, offset + 2);
         return Response.json(
-          Schema.encodeSync(Schema.toCodecJson(RevisionPage))({
+          yield* Schema.encodeEffect(Schema.toCodecJson(RevisionPage))({
             revisions: page.map(({ id, revision }) => ({ id, revision, diagnostics: [] })),
             next_cursor: offset + 2 < order.length ? String(offset + 2) : null,
-          }),
+          }).pipe(Effect.orDie),
         );
       }
       return yield* Effect.die(new Error(`Unexpected SKIT request: ${request.method} ${url}`));

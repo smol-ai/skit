@@ -235,7 +235,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
       const choices = scopeChoices(input.cwd);
       if (choices.length > 1) {
         const chosen = yield* promptForScope(input.cwd, choices).pipe(
-          Effect.catchTag("PromptCancelled", () => Effect.succeed(undefined)),
+          Effect.catchTag("PromptCancelled", () => Effect.undefined),
         );
         if (chosen === undefined) return;
         scope = chosen;

@@ -90,7 +90,7 @@ const nativeGitPaths = Effect.fn("Tree.nativeGitPaths")(function* (
       if (nativeName === undefined) {
         const requested = yield* links.identity
           .lstat(path.join(directory, name))
-          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
         if (requested === undefined) break; // A tracked path can have been deleted.
         for (const candidate of names) {
           if (candidate.normalize("NFC").toLowerCase() !== name.normalize("NFC").toLowerCase())

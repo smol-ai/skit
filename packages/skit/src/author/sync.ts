@@ -181,8 +181,7 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
             : yield* history.saveTree(scan.success.tree),
       });
   // Preview cannot apply this inventory. Keep its refusal passive, before talking to the Registry.
-  if (applying === undefined && Result.isFailure(scanned))
-    return yield* Effect.fail(scanned.failure);
+  if (applying === undefined && Result.isFailure(scanned)) return yield* scanned.failure;
   // The engine's store reports what it cannot read back; that is unusable history.
   const storeFailure = (error: History.StoreError) => Effect.fail(authorHistoryStoreError(error));
 
@@ -263,7 +262,7 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
         applying.observation,
         registry,
       ).pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure));
-    return yield* Effect.fail(scanned.failure);
+    return yield* scanned.failure;
   }
   const { local, localHash } = scanned.success;
   const state =

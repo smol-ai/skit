@@ -373,7 +373,7 @@ function classifySource(input: string, cwd: string): Effect.Effect<SkitSource, P
       const recognized = profile.recognize(value);
       if (recognized === undefined) continue;
       // Recognizers only split syntax; the schema decides whether the parts are safe.
-      return yield* Schema.decodeUnknownEffect(SkitSource)(recognized).pipe(
+      return yield* Schema.decodeEffect(SkitSource)(recognized).pipe(
         Effect.mapError(() =>
           recognized.type === "git" || recognized.type === "github"
             ? new UnsafeGitSubpath()
@@ -465,15 +465,14 @@ export class CommandFailed
  * itself rather than by matching the message text.
  */
 export const SourcePolicyViolationReason = Schema.Union([
-  Schema.Struct({
-    _tag: Schema.Literal("Transport"),
+  Schema.TaggedStruct("Transport", {
     detail: Schema.String,
-    status: Schema.optionalKey(Schema.Number),
+    status: Schema.optionalKey(Schema.Int),
   }),
-  Schema.Struct({ _tag: Schema.Literal("LimitExceeded"), detail: Schema.String }),
-  Schema.Struct({ _tag: Schema.Literal("PinMismatch"), detail: Schema.String }),
-  Schema.Struct({ _tag: Schema.Literal("VersionDisagreement"), detail: Schema.String }),
-  Schema.Struct({ _tag: Schema.Literal("InvalidSource"), detail: Schema.String }),
+  Schema.TaggedStruct("LimitExceeded", { detail: Schema.String }),
+  Schema.TaggedStruct("PinMismatch", { detail: Schema.String }),
+  Schema.TaggedStruct("VersionDisagreement", { detail: Schema.String }),
+  Schema.TaggedStruct("InvalidSource", { detail: Schema.String }),
 ]);
 export type SourcePolicyViolationReason = typeof SourcePolicyViolationReason.Type;
 
@@ -761,7 +760,7 @@ function discoverRoot(
         foundSkillPaths: foundSkills.map((directory) => relative(extracted, directory) || "."),
         ...(selection.diagnostics.length ? { diagnostics: selection.diagnostics } : {}),
       };
-    return yield* Effect.fail(new NoSkitDescriptorFound());
+    return yield* new NoSkitDescriptorFound();
   });
 }
 
@@ -840,9 +839,9 @@ const fetchDiscovery = Effect.fn("Discovery.fetch")(function* (
     const indexUrl = `${baseUrl}/${path}/index.json`;
     const body = yield* readDiscoveryResponse(indexUrl, 2 * 1024 * 1024);
     if (!body) continue;
-    const document = yield* Schema.decodeUnknownEffect(discoveryJson)(
-      new TextDecoder().decode(body),
-    ).pipe(Effect.mapError((error) => invalidSource(`Invalid discovery index: ${error.message}`)));
+    const document = yield* Schema.decodeEffect(discoveryJson)(new TextDecoder().decode(body)).pipe(
+      Effect.mapError((error) => invalidSource(`Invalid discovery index: ${error.message}`)),
+    );
     selected = { indexUrl, path, document };
     break;
   }
@@ -1059,7 +1058,8 @@ const fetchGitSource = Effect.fn("Source.fetchGit")(function* (
     Effect.catchTag("CommandFailed", (error) =>
       Effect.fail(
         new CommandFailed({
-          ...error,
+          command: error.command,
+          exitCode: error.exitCode,
           stderr: `Cannot acquire Git revision ${revision} from ${cloneUrl}. Restore access to that revision or explicitly run skit update on the retaining device and sync again. No newer revision was substituted. ${error.stderr}`,
         }),
       ),
@@ -1095,7 +1095,7 @@ const fetchGitSource = Effect.fn("Source.fetchGit")(function* (
   for (const path of [...new Set(selectedPaths)].sort()) {
     const requested = yield* lockedSkillDirectory(root, path);
     const directory = yield* checkoutPath(checkoutRoot, requested).pipe(
-      Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
+      Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined),
     );
     if (directory !== undefined) selectedDirectories.set(path, directory);
   }
@@ -1321,7 +1321,7 @@ export function resolveSkitSource(
       Effect.catchTag("PluginSkillConflict", (error) =>
         Effect.fail(
           new PluginSkillConflict({
-            name: error.name,
+            skillName: error.skillName,
             paths: error.paths,
             directories: error.directories,
             ...(source.type === "github"

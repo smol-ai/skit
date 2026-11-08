@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import * as Library from "../src/library/library.js";
 import { LibraryState } from "../src/library/library-state.js";
-import { openSetupReview, runSetup } from "../src/library/setup.js";
+import { openSetupReview } from "../src/library/setup.js";
 import { OperationStatus } from "../src/library/store/state-schema.js";
 import { inspectLibrary, saveLibrary } from "./helpers/library-store.js";
 import { skitLayer } from "../src/platform/layer.js";
@@ -112,7 +112,7 @@ for (const boundary of [
       const beta = join(agents, "beta");
       const betaBytes = yield* fs.readFileString(join(beta, "SKILL.md"));
       const betaMarker = yield* fs.readFileString(join(beta, ".skit-ownership.json"));
-      const before = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(LibraryState))(
+      const before = yield* Schema.decodeEffect(Schema.fromJsonString(LibraryState))(
         yield* fs.readFileString(join(home, "state.json")),
       );
       let stopped = false;
@@ -134,7 +134,7 @@ for (const boundary of [
               from.includes(".skit-stage-") &&
               to === join(agents, "alpha");
             if (interruption === "recorded" && to === join(home, "state.json")) {
-              const state = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(LibraryState))(
+              const state = yield* Schema.decodeEffect(Schema.fromJsonString(LibraryState))(
                 yield* fs.readFileString(to),
               ).pipe(Effect.orDie);
               stop ||= state.operations.some(
@@ -211,10 +211,10 @@ for (const boundary of [
       if (boundary === "occupied" && result._tag === "Failure")
         assert.include(Cause.pretty(result.cause), "ChangeChoiceRequired");
       if (legacy) {
-        const state = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(LibraryState))(
+        const state = yield* Schema.decodeEffect(Schema.fromJsonString(LibraryState))(
           yield* fs.readFileString(join(home, "state.json")),
         );
-        const operations = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
+        const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
           state.operations,
         );
         const old = operations.map((operation) => ({
@@ -223,7 +223,7 @@ for (const boundary of [
         }));
         const encoded = yield* Schema.encodeEffect(Schema.Array(OperationStatus))(old);
         // An independent pre-fix disk record: keep its batches and progress, remove the new marker.
-        const raw = yield* Schema.decodeUnknownEffect(
+        const raw = yield* Schema.decodeEffect(
           Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
         )(yield* fs.readFileString(join(home, "state.json")));
         yield* fs.writeFileString(

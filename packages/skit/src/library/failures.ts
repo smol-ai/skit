@@ -82,10 +82,13 @@ export class ImportContentInvalid
 }
 
 export class InvalidLibraryState
-  extends Schema.TaggedError<InvalidLibraryState>()("InvalidLibraryState", {
-    path: Schema.String,
-    detail: Schema.String,
-  })
+  extends Schema.TaggedError<InvalidLibraryState, { readonly brand: unique symbol }>()(
+    "InvalidLibraryState",
+    {
+      path: Schema.String,
+      detail: Schema.String,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -99,7 +102,10 @@ export class InvalidLibraryState
 
 /** The Library moved on since the state a change was planned from; nothing was saved. */
 export class LibraryChanged
-  extends Schema.TaggedError<LibraryChanged>()("LibraryChanged", { path: Schema.String })
+  extends Schema.TaggedError<LibraryChanged, { readonly brand: unique symbol }>()(
+    "LibraryChanged",
+    { path: Schema.String },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;

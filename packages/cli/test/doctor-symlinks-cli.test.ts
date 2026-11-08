@@ -84,7 +84,9 @@ require('node:readline').createInterface({input: process.stdin}).on('line', line
       expect(enabled.status, enabled.stderr).toBe(0);
       const json = command("doctor", "--json");
       expect(json.status, json.stderr).toBe(0);
-      const report = Schema.decodeUnknownSync(envelope)(JSON.parse(json.stdout)).data;
+      const report = (yield* Schema.decodeUnknownEffect(envelope)(JSON.parse(json.stdout)).pipe(
+        Effect.orDie,
+      )).data;
       expect(report.codex.status, report.codex.detail).toBe("checked");
       expect(report.codex.errors).toEqual([]);
       expect(report.codex.findings).toHaveLength(1);

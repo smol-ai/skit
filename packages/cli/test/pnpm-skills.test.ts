@@ -211,11 +211,9 @@ it.effect("reports pnpm copies but excludes acquisition, setup selection and rem
     const removal = (yield* saveRecoveryFiles(home.home, [f.alias])).result;
     expect(removal._tag).toBe("Stopped");
     if (removal._tag === "Stopped" && removal.reason._tag === "StepFailed")
-      expect(
-        Schema.is(Schema.Struct({ _tag: Schema.Literal("PnpmSkillManaged") }))(
-          removal.reason.error,
-        ),
-      ).toBe(true);
+      expect(Schema.is(Schema.TaggedStruct("PnpmSkillManaged", {}))(removal.reason.error)).toBe(
+        true,
+      );
     expect(yield* f.fs.readLink(f.alias)).toBe(f.skill);
     expect((yield* home.durable).skills).toHaveLength(0);
     expect(yield* f.fs.exists(join(f.root, "removed"))).toBe(false);

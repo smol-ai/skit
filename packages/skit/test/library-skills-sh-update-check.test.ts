@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { Effect, FileSystem } from "effect";
+import { Layer, Effect, FileSystem } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { expect } from "vitest";
@@ -255,8 +255,11 @@ it.effect("checks skills.sh status against real Git history without saving Libra
       // Checking only reports: the Library it read is left exactly as it was.
       expect(yield* fs.readFileString(join(home, "state.json"))).toBe(beforeState);
     }).pipe(
-      Effect.provide(Library.layer({ home, roots: testRoots(home) })),
-      Effect.provide(skitConfigurationLayer(home)),
+      Effect.provide(
+        Library.layer({ home, roots: testRoots(home) }).pipe(
+          Layer.provideMerge(skitConfigurationLayer(home)),
+        ),
+      ),
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

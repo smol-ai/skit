@@ -23,6 +23,7 @@ import {
   LibraryWriter,
   loadLibrary,
   writeLibrary,
+  type LibraryStateWriteError,
 } from "../src/library/store/library-store.js";
 import { Hash } from "../src/shared/hash.js";
 import { skitLayer } from "../src/platform/layer.js";
@@ -93,8 +94,9 @@ it.effect("accepts exactly one of two writes planned from the same state", () =>
     const global = { ...base, enabled };
     const local = { ...base, repositories: [{ root: "/workspace", enabled }] };
 
-    const outcomes = yield* Effect.all(
-      [global, local].map((next) => Effect.result(save(next, base))),
+    const outcomes = yield* Effect.forEach(
+      [global, local],
+      (next) => Effect.result(save(next, base)),
       { concurrency: "unbounded" },
     );
 
@@ -121,8 +123,9 @@ it.effect("accepts exactly one of two concurrent saves sharing one write", () =>
       home,
       Effect.gen(function* () {
         const writer = yield* LibraryWriter;
-        return yield* Effect.all(
-          [global, local].map((next) => Effect.result(writer.save(next, base))),
+        return yield* Effect.forEach(
+          [global, local],
+          (next) => Effect.result(writer.save(next, base)),
           { concurrency: "unbounded" },
         );
       }),
@@ -207,7 +210,7 @@ it.live("keeps the lock until a save already under way in a forked fiber has fin
     };
     const base = yield* loadLibrary(home);
     const next = { ...base, enabled: [] };
-    let child: Fiber.Fiber<void, unknown> | undefined;
+    let child: Fiber.Fiber<void, LibraryStateWriteError> | undefined;
     const owner = yield* writeLibrary(
       home,
       Effect.gen(function* () {
@@ -300,7 +303,7 @@ it.effect("keeps operation records on this device: saved and loaded, never synce
 
     assert.deepStrictEqual(loaded, next);
     assert.deepStrictEqual(
-      yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(loaded.operations),
+      yield* Schema.decodeEffect(Schema.Array(OperationStatus))(loaded.operations),
       operations,
     );
     assert.deepStrictEqual(
@@ -354,7 +357,7 @@ it.effect(
         base,
       );
 
-      const loaded = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
+      const loaded = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
         (yield* loadLibrary(home)).operations,
       );
 
@@ -405,7 +408,7 @@ it.effect("reads a recorded LibraryBusy failure without rewriting it, and encode
     const snapshot = yield* owner.read;
     assert.strictEqual(snapshot._tag, "Present");
     if (snapshot._tag !== "Present") return;
-    const operations = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
+    const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
       snapshot.state.operations,
     );
     const operation = operations[0];

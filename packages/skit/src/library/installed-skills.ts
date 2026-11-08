@@ -64,10 +64,7 @@ export type Protection = typeof Protection.Type;
 export const Facts = Schema.Struct({
   marker: OwnershipMarkerInspection,
   /** An empty or unhashable folder is a fact, never a planning failure. */
-  hash: Schema.Union([
-    Hash,
-    Schema.Struct({ _tag: Schema.Literal("Unreadable"), reason: Schema.String }),
-  ]),
+  hash: Schema.Union([Hash, Schema.TaggedStruct("Unreadable", { reason: Schema.String })]),
   realPath: Schema.String,
   /** A `.git` at or above the folder: a checkout owns it. */
   insideRepository: Schema.Boolean,
@@ -83,9 +80,8 @@ export const Facts = Schema.Struct({
 });
 export type Facts = typeof Facts.Type;
 const Entry = Schema.Union([
-  Schema.Struct({ _tag: Schema.Literal("Absent") }),
-  Schema.Struct({
-    _tag: Schema.Literal("Present"),
+  Schema.TaggedStruct("Absent", {}),
+  Schema.TaggedStruct("Present", {
     kind: Schema.Literals(["Directory", "SymbolicLink", "File", "Other"]),
     identity: Identity,
     /** Where a link points, when it points at something. */
@@ -338,7 +334,7 @@ export const make = Effect.fn("make")(function* (configuration?: Routing | Inven
     const absolute = resolve(path);
     const info = yield* links.identity
       .lstat(absolute)
-      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
     const ancestors = yield* pathChain(dirname(absolute));
     if (info === undefined)
       return {
@@ -349,7 +345,7 @@ export const make = Effect.fn("make")(function* (configuration?: Routing | Inven
       } satisfies Folder;
     const followed = yield* links.identity
       .stat(absolute)
-      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
     const kind =
       info.type === "Directory" || info.type === "SymbolicLink" || info.type === "File"
         ? info.type

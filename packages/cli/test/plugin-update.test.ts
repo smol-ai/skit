@@ -2,7 +2,7 @@ import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import * as Library from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Layer, Effect, FileSystem, Order } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
@@ -56,8 +56,9 @@ it.effect(
       };
       const run = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         effect.pipe(
-          Effect.provide(Library.layer({ home, roots })),
-          Effect.provide(skitConfigurationLayer(home)),
+          Effect.provide(
+            Library.layer({ home, roots }).pipe(Layer.provideMerge(skitConfigurationLayer(home))),
+          ),
           Effect.provideService(HttpClient.HttpClient, client),
           Effect.provide(rendererTestLayer()),
         );
@@ -124,7 +125,7 @@ it.effect(
       assert.deepStrictEqual(
         collection.skillIds
           .map((skillId) => after.skills.find((entry) => entry.skill_id === skillId)?.path)
-          .toSorted(),
+          .toSorted(Order.mapInput(Order.String, String)),
         ["plugins/tools/legacy", "plugins/tools/skills/added", "skills/review"],
       );
       for (const original of before.skills)

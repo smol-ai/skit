@@ -2,7 +2,7 @@
 
 `skit --version` prints the installed version without network access. `skit version`
 reports build identity and checks npm with a 1.5-second network timeout; `--json`
-returns `skit.version.v2` (replacing the subcommand’s previous v1 output).
+returns `skit.version.v3` (replacing the subcommand’s previous v1 output).
 The global `--version --json` retains `skit.version.v1`. An unavailable check does not fail local version reporting.
 Development builds can inspect npm but are not compared as published releases.
 
@@ -31,6 +31,16 @@ ignored. Upgrade instructions currently use npm; the executable cannot reliably
 identify which package manager originally installed it.
 
 ## Publishing
+
+Before creating a CLI release tag, review contract changes and finalize required
+contract version bumps under the
+[compatibility policy](./coding-standards.md#name-things-plainly). Regenerate the
+artifacts and update affected consumers and fixtures together.
+
+The release workflow checks the tagged checkout against `origin/dev` using
+`pnpm --filter @smolai/skit contracts:check --base origin/dev`. Development PR CI
+does not run this compatibility gate. Generated-artifact and payload-validation
+tests remain part of development CI.
 
 For the first publication, add a granular token with publication rights as the
 GitHub `npm` environment secret `NPM_BOOTSTRAP_TOKEN`, then dispatch

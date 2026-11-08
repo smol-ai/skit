@@ -104,7 +104,7 @@ const manifestOf = (choices: Side): LibraryManifest => {
   );
   const retained_copies = present.map(({ entry }) => entry.collectionVersion);
   const imports = present.map(({ entry }) => entry.sourceImport);
-  return Schema.decodeUnknownSync(LibraryManifest)(
+  return Schema.decodeSync(LibraryManifest)(
     currentLibraryManifest({
       collections: present.map(({ entry, choice }) => entry.collection(choice.label)),
       skills: present.map(({ entry }) => entry.skill),

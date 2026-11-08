@@ -326,7 +326,8 @@ it.effect("an unwritable root refuses enablement before saving Binding intent", 
   Effect.gen(function* () {
     const f = yield* fixture;
     const planLibrary = yield* f.home.owned(
-      Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
+      Library.Service.pipe(
+        withLibraryOwner(f.home.installOptions),
         withSandboxDenying(join(f.root, "account", ".agents")),
       ),
     );
@@ -769,21 +770,24 @@ for (const mode of ["dry-run", "decline", "apply", "cancel"] as const) {
       const changed = yield* f.home.owned(
         presentDoctorCleanup([f.budget], f.home.installOptions, 30, mode === "dry-run").pipe(
           Effect.catchTag("PromptCancelled", () => Effect.succeed(false)),
-          Effect.provide(prompt),
           Effect.provide(
-            rendererTestLayer({
-              note: (body) =>
-                Effect.sync(() => {
-                  notes.push(body);
+            prompt.pipe(
+              Layer.provideMerge(
+                rendererTestLayer({
+                  note: (body) =>
+                    Effect.sync(() => {
+                      notes.push(body);
+                    }),
                 }),
-            }),
-          ),
-          Effect.provide(
-            ConfigProvider.layer(
-              ConfigProvider.fromUnknown({
-                CODEX_HOME: join(f.root, "empty-codex"),
-                CLAUDE_CONFIG_DIR: join(f.root, "empty-claude"),
-              }),
+              ),
+              Layer.provideMerge(
+                ConfigProvider.layer(
+                  ConfigProvider.fromUnknown({
+                    CODEX_HOME: join(f.root, "empty-codex"),
+                    CLAUDE_CONFIG_DIR: join(f.root, "empty-claude"),
+                  }),
+                ),
+              ),
             ),
           ),
         ),
@@ -1094,7 +1098,8 @@ it.effect(
         overrides: { ...f.home.installOptions.overrides, "claude-code": [claude] },
       };
       const planLibrary = yield* f.home.owned(
-        Library.Service.pipe(withLibraryOwner(configuration)).pipe(
+        Library.Service.pipe(
+          withLibraryOwner(configuration),
           Effect.provideService(FileSystem.FileSystem, {
             ...f.fs,
             rename: (from, to) =>
@@ -1169,7 +1174,8 @@ it.effect("a refused intent save remains a refusal and creates no installed copy
       pathOrDescriptor: f.home.statePath,
     });
     const planLibrary = yield* f.home.owned(
-      Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
+      Library.Service.pipe(
+        withLibraryOwner(f.home.installOptions),
         Effect.provideService(FileSystem.FileSystem, {
           ...f.fs,
           rename: (from, to) =>
@@ -1272,7 +1278,8 @@ it.effect("a batch saves every intent together and reports the scope that cannot
     const repository = join(f.root, "project");
     const target = join(repository, ".agents", "skills", "beta");
     const planLibrary = yield* f.home.owned(
-      Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
+      Library.Service.pipe(
+        withLibraryOwner(f.home.installOptions),
         Effect.provideService(FileSystem.FileSystem, {
           ...f.fs,
           rename: (from, to) =>
@@ -1332,7 +1339,8 @@ it.effect.each(["defect", "interruption"] as const)(
     Effect.gen(function* () {
       const f = yield* fixture;
       const planLibrary = yield* f.home.owned(
-        Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
+        Library.Service.pipe(
+          withLibraryOwner(f.home.installOptions),
           Effect.provideService(FileSystem.FileSystem, {
             ...f.fs,
             rename: (from, to) =>
@@ -1398,7 +1406,7 @@ it.effect(
       assert.ok(result);
       assert.strictEqual(result.contract, "enable");
       if (result.contract !== "enable") return;
-      assert.strictEqual(result.schema, "skit.enable.v10");
+      assert.strictEqual(result.schema, "skit.enable.v8");
       assert.strictEqual(result.exitCode, 12);
       assert.strictEqual(result.data.application.status, "incomplete");
       assert.strictEqual(result.data.application.intent, "saved");
@@ -1449,7 +1457,8 @@ it.effect(
       const f = yield* fixture;
       let changed = false;
       const planLibrary = yield* f.home.owned(
-        Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
+        Library.Service.pipe(
+          withLibraryOwner(f.home.installOptions),
           Effect.provideService(FileSystem.FileSystem, {
             ...f.fs,
             rename: (from, to) =>
@@ -1683,7 +1692,8 @@ it.effect("an unwritable root keeps bindings unchanged and records its stopped a
   Effect.gen(function* () {
     const f = yield* fixture;
     const library = yield* f.home.owned(
-      Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
+      Library.Service.pipe(
+        withLibraryOwner(f.home.installOptions),
         withSandboxDenying(join(f.root, "account", ".agents")),
       ),
     );
@@ -1797,7 +1807,8 @@ it.effect(
       assert.ok(old);
       const path = join(f.destination, "alpha");
       const library = yield* f.home.owned(
-        Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
+        Library.Service.pipe(
+          withLibraryOwner(f.home.installOptions),
           Effect.provideServiceEffect(
             FileSystem.FileSystem,
             Effect.map(FileSystem.FileSystem, (fs) => ({
@@ -1886,7 +1897,8 @@ it.effect(
       assert.ok(old);
       const path = join(f.destination, "alpha");
       const library = yield* f.home.owned(
-        Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
+        Library.Service.pipe(
+          withLibraryOwner(f.home.installOptions),
           Effect.provideService(FileSystem.FileSystem, {
             ...f.fs,
             rename: (from, to) =>
@@ -2021,16 +2033,17 @@ for (const reverse of [false, true])
         const requests = [{ ...local, invocation: "explicit" as const }, f.request];
         if (reverse) requests.reverse();
         const planLibrary = yield* f.home.owned(
-          Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
+          Library.Service.pipe(
+            withLibraryOwner(f.home.installOptions),
             Effect.provideService(FileSystem.FileSystem, {
               ...f.fs,
               rename: (from, to) =>
                 Effect.gen(function* () {
                   yield* f.fs.rename(from, to);
                   if (to === f.home.statePath) {
-                    const state = yield* Schema.decodeUnknownEffect(
-                      Schema.fromJsonString(LibraryState),
-                    )(yield* f.fs.readFileString(to)).pipe(Effect.orDie);
+                    const state = yield* Schema.decodeEffect(Schema.fromJsonString(LibraryState))(
+                      yield* f.fs.readFileString(to),
+                    ).pipe(Effect.orDie);
                     accepted ||=
                       state.repositories.find((entry) => entry.root === repository)
                         ?.invocation_policies?.[alpha.skill_id] === "explicit";
@@ -2099,38 +2112,35 @@ for (const reverse of [false, true])
 it.effect("a shared final publication failure belongs to every accepted request", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    const doneApply = Schema.Struct({
-      _tag: Schema.Literal("Pending"),
+    const doneApply = Schema.TaggedStruct("Pending", {
       steps: Schema.Array(
         Schema.Struct({
-          step: Schema.Struct({
-            _tag: Schema.Literal("Apply"),
-            phase: Schema.Struct({ _tag: Schema.Literal("Done") }),
+          step: Schema.TaggedStruct("Apply", {
+            phase: Schema.TaggedStruct("Done", {}),
           }),
         }),
       ),
     });
     let refused = false;
     const planLibrary = yield* f.home.owned(
-      Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
+      Library.Service.pipe(
+        withLibraryOwner(f.home.installOptions),
         Effect.provideService(FileSystem.FileSystem, {
           ...f.fs,
           rename: (from, to) =>
             Effect.gen(function* () {
               if (to === f.home.statePath) {
-                const state = yield* Schema.decodeUnknownEffect(
-                  Schema.fromJsonString(LibraryState),
-                )(yield* f.fs.readFileString(from)).pipe(Effect.orDie);
+                const state = yield* Schema.decodeEffect(Schema.fromJsonString(LibraryState))(
+                  yield* f.fs.readFileString(from),
+                ).pipe(Effect.orDie);
                 if (state.operations.some(Schema.is(doneApply))) {
                   refused = true;
-                  return yield* Effect.fail(
-                    systemError({
-                      _tag: "PermissionDenied",
-                      module: "FileSystem",
-                      method: "rename",
-                      pathOrDescriptor: to,
-                    }),
-                  );
+                  return yield* systemError({
+                    _tag: "PermissionDenied",
+                    module: "FileSystem",
+                    method: "rename",
+                    pathOrDescriptor: to,
+                  });
                 }
               }
               yield* f.fs.rename(from, to);

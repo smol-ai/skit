@@ -2,7 +2,7 @@ import * as Library from "@smolai/skit-core/library";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { Deferred, Effect, Fiber, FileSystem, Result, Schema } from "effect";
+import { Layer, Deferred, Effect, Fiber, FileSystem, Result, Schema } from "effect";
 import { join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 
@@ -206,7 +206,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     assert.deepStrictEqual(disabled.enabled, []);
     assert.deepStrictEqual(disabled.repositories, []);
     for (const result of yield* interaction.results) {
-      assert.strictEqual(result.schema, "skit.disable.v10");
+      assert.strictEqual(result.schema, "skit.disable.v8");
       assert.ok(
         renderSetEnabled(result.data as Parameters<typeof renderSetEnabled>[0], true).startsWith(
           "Disabled review",
@@ -526,9 +526,8 @@ it.effect("rejects a stale multi-destination disable before changing any Binding
                 Effect.sync(() => {
                   results.push(value);
                 }),
-            }),
+            }).pipe(Layer.provideMerge(interaction.layer)),
           ),
-          Effect.provide(interaction.layer),
         ),
       )
       .pipe(Effect.result, Effect.forkScoped);

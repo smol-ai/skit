@@ -38,11 +38,16 @@ const runAuthorSync = (
     const historyHome = options.home ?? (yield* SkitConfiguration).skitHome;
     return yield* Effect.scoped(
       syncAuthorWorkspace(root, options).pipe(
-        Effect.provide(registryCredentialLayer("https://registry.example")),
-        Effect.provide(registryHttpLayer(testHttpClientLayer(transport))),
-        Effect.provide(authorLayer(historyHome)),
-        // A first sync without workspace.json adopts an id from this home's Library (A3).
-        Effect.provide(libraryLayer().pipe(Layer.provide(skitConfigurationLayer(historyHome)))),
+        Effect.provide(
+          registryCredentialLayer("https://registry.example").pipe(
+            Layer.provideMerge(registryHttpLayer(testHttpClientLayer(transport))),
+            Layer.provideMerge(authorLayer(historyHome)),
+            // A first sync without workspace.json adopts an id from this home's Library (A3).
+            Layer.provideMerge(
+              libraryLayer().pipe(Layer.provide(skitConfigurationLayer(historyHome))),
+            ),
+          ),
+        ),
       ),
     );
   });

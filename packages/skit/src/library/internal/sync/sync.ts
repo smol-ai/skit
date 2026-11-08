@@ -94,7 +94,7 @@ const syncPlan = Schema.TaggedStruct("Sync", {
     device: Schema.Unknown.pipe(Schema.refine(Schema.is(LibraryState))),
     deviceSelection: Schema.OptionFromOptionalKey(DeviceSkillSelection),
     installedSkills: Schema.OptionFromOptionalKey(SyncInstalledSkillsPreview),
-    collectionsToRemove: Schema.Number,
+    collectionsToRemove: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     missingSelection: Schema.Array(Schema.String),
     collisions: Schema.Array(SyncConflictDetail),
     clean: Schema.Boolean,
@@ -142,10 +142,13 @@ export interface SyncOutcome {
   readonly _tag: "Sync";
   readonly result: SyncResult;
 }
-class SyncStopped extends Schema.TaggedError<SyncStopped>()("Library.SyncStopped", {
-  operationId: OperationId,
-  reason: SetupStopReason,
-}) {
+class SyncStopped extends Schema.TaggedError<SyncStopped, { readonly brand: unique symbol }>()(
+  "Library.SyncStopped",
+  {
+    operationId: OperationId,
+    reason: SetupStopReason,
+  },
+) {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT";
   readonly remediation =
@@ -328,8 +331,7 @@ export const planSync = Effect.fn("Library.planSync")(function* (
   );
   if (inspected._tag === "Success")
     for (const folder of inspected.success.folders) paths.add(folder.path);
-  else if (!installation.independent && conflicts.length === 0)
-    return yield* Effect.fail(inspected.failure);
+  else if (!installation.independent && conflicts.length === 0) return yield* inspected.failure;
   const folders = yield* Effect.forEach([...paths], (path) =>
     Effect.map(files.inspect(path), (folder) => ({
       path,
@@ -518,7 +520,7 @@ export const applySync = Effect.fn("Library.applySync")(function* (
               Schema.is(TreeError)(error) ||
               isPlatformError(error)
             )
-              return yield* Effect.fail(error);
+              return yield* error;
           }
           return yield* new SyncStopped({ operationId: fresh.operationId, reason: result.reason });
         }

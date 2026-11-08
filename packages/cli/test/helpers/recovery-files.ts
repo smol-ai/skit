@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Option } from "effect";
+import { Effect, FileSystem } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { createHash } from "node:crypto";
 import { LinkStat } from "@smolai/skit-core/platform";
@@ -38,7 +38,7 @@ export const recoveryFolderFixture = Effect.fn("Test.recoveryFolderFixture")(fun
   const contentHash = `sha256:${hash.digest("hex")}`;
   if (info.type === "Directory") {
     const marker = yield* fs.readFileString(join(path, ".skit-ownership.json")).pipe(
-      Effect.map(Option.some),
+      Effect.asSome,
       Effect.catchReason("PlatformError", "NotFound", () => Effect.succeedNone),
     );
     return {

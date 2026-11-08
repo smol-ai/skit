@@ -10,7 +10,7 @@ const SkillChanges = {
   /** New upstream Skills enabled because the Collection is followed. */
   enabled: Schema.Array(Schema.String),
   /** New upstream Skills nothing enables. */
-  new_available: Schema.Number,
+  new_available: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   /** Enabled Skills whose bytes changed. */
   updated: Schema.Array(Schema.String),
   /** Skills deleted upstream and retired because their Collection is followed. */
@@ -29,7 +29,7 @@ const UpdateFailure = Schema.Struct({
   source_imported: Schema.Boolean,
   error: Schema.Struct({
     code: Schema.String,
-    exitCode: Schema.Number,
+    exitCode: Schema.Int,
     message: Schema.String,
     remediation: Schema.String,
   }),
@@ -45,7 +45,7 @@ export const UpdateResult = Schema.Array(
       selected_collection_version_id: Schema.String,
       snapshot_digest: Hash,
       changed: Schema.Boolean,
-      installed: Schema.Number,
+      installed: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
       ...SkillChanges,
     }),
   ]),
@@ -66,10 +66,10 @@ export type UpdatePlan = typeof UpdatePlan.Type;
 
 export const updateOutputContracts = {
   update: { id: "skit.update.v9", schema: UpdateResult },
-  updatePlan: { id: "skit.update.plan.v6", schema: UpdatePlan },
-  projectionRetention: { id: "skit.update.projection-retention.v4", schema: EditImportResult },
+  updatePlan: { id: "skit.update.plan.v7", schema: UpdatePlan },
+  projectionRetention: { id: "skit.update.projection-retention.v3", schema: EditImportResult },
   projectionRetentionPlan: {
-    id: "skit.update.projection-retention.plan.v4",
+    id: "skit.update.projection-retention.plan.v3",
     schema: EditImportPlan,
   },
 } as const;

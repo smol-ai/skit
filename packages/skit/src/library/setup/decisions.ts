@@ -153,7 +153,10 @@ export const SetupCopySelection = Schema.Struct({
   approvedSymlinks: Schema.optionalKey(Schema.Array(ApprovedSymlink)),
   approvedCopies: Schema.optionalKey(Schema.Array(SetupApprovedCopy)),
 });
-export interface SetupCopySelection extends Schema.Schema.Type<typeof SetupCopySelection> {}
+export namespace SetupCopySelection {
+  export interface Type extends Schema.Schema.Type<typeof SetupCopySelection> {}
+}
+export type SetupCopySelection = SetupCopySelection.Type;
 
 export interface SetupSelectedCopy {
   readonly operation: "add" | "bind";

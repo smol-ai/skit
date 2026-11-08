@@ -28,7 +28,7 @@ const SkillsResponse = Schema.Struct({
   ),
 });
 const Envelope = Schema.Struct({
-  id: Schema.optionalKey(Schema.Union([Schema.Number, Schema.String])),
+  id: Schema.optionalKey(Schema.Union([Schema.Finite, Schema.String])),
   result: Schema.optionalKey(Schema.Unknown),
   error: Schema.optionalKey(Schema.Struct({ message: Schema.String })),
 });
@@ -91,9 +91,7 @@ export const readCodexSkills = Effect.fn("Doctor.readCodexSkills")(function* (
         Stream.decodeText(),
         Stream.splitLines,
         Stream.filter((line) => line.trim().length > 0),
-        Stream.mapEffect((line) =>
-          Schema.decodeUnknownEffect(Schema.fromJsonString(Envelope))(line),
-        ),
+        Stream.mapEffect((line) => Schema.decodeEffect(Schema.fromJsonString(Envelope))(line)),
         Stream.mapEffect((message) =>
           message.error && !(includeConfig && message.id === 3)
             ? Effect.fail(new CodexDoctorFailure({ message: message.error.message }))

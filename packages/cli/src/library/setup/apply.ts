@@ -31,7 +31,7 @@ export const openSetupCommandReview = Effect.fn("CLI.setup.openReview")(function
   readonly selection?: SetupCommandSelection["selection"];
 }) {
   const renderer = yield* Renderer;
-  const planId = Schema.decodeUnknownOption(Hash)(input.planId);
+  const planId = Schema.decodeOption(Hash)(input.planId);
   if (Option.isNone(planId))
     return yield* new OptionCombinationInvalid({
       detail: "--apply takes the full planId that `skit setup` prints",

@@ -45,7 +45,10 @@ export const ManageTarget = Schema.Struct({
   harness: HarnessName,
   scope: InstallScope,
 });
-export interface ManageTarget extends Schema.Schema.Type<typeof ManageTarget> {}
+export namespace ManageTarget {
+  export interface Type extends Schema.Schema.Type<typeof ManageTarget> {}
+}
+export type ManageTarget = ManageTarget.Type;
 
 const ManageBlocker = Schema.Literals([
   "empty-selection",

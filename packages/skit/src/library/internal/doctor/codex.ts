@@ -200,7 +200,7 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
                 path: skill.path,
                 message: "Could not read the discovered SKILL.md for content comparison",
               });
-              return Effect.succeed(undefined);
+              return Effect.undefined;
             }),
           );
           return {

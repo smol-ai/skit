@@ -302,9 +302,9 @@ it.effect.each(["jsonl", "jsonl.zst"])(
         Stream.concat(Stream.never),
         Stream.ensuring(Deferred.succeed(closed, undefined)),
       );
-      const fiber = yield* Effect.gen(function* () {
-        return yield* scanUsage({ roots: [{ root, harness: "codex" }], end });
-      }).pipe(
+      const fiber = yield* Effect.suspend(() =>
+        scanUsage({ roots: [{ root, harness: "codex" }], end }),
+      ).pipe(
         Effect.provideService(FileSystem.FileSystem, { ...fs, stream: () => stream }),
         Effect.forkScoped,
       );
@@ -322,9 +322,9 @@ it.effect("retains healthy evidence when another transcript is unreadable", () =
     yield* fs.writeFileString(blocked, JSON.stringify(call(start, "blocked")));
     yield* fs.writeFileString(join(root, "healthy.jsonl"), JSON.stringify(call(start, "healthy")));
     const error = systemError({ _tag: "PermissionDenied", module: "FileSystem", method: "stream" });
-    const report = yield* Effect.gen(function* () {
-      return yield* scanUsage({ roots: [{ root, harness: "claude-code" }], end });
-    }).pipe(
+    const report = yield* Effect.suspend(() =>
+      scanUsage({ roots: [{ root, harness: "claude-code" }], end }),
+    ).pipe(
       Effect.provideService(FileSystem.FileSystem, {
         ...fs,
         stream: (file, options) =>
@@ -959,9 +959,9 @@ it.effect("decodes split UTF-8 and CRLF chunks and reads the final line without 
     const unicodeSplit = bytes.indexOf(Buffer.from("é")) + 1;
     const crlfSplit = bytes.indexOf(13) + 1;
     yield* fs.writeFileString(join(root, "one.jsonl"), content);
-    const report = yield* Effect.gen(function* () {
-      return yield* scanUsage({ roots: [{ root, harness: "claude-code" }], end });
-    }).pipe(
+    const report = yield* Effect.suspend(() =>
+      scanUsage({ roots: [{ root, harness: "claude-code" }], end }),
+    ).pipe(
       Effect.provideService(FileSystem.FileSystem, {
         ...fs,
         stream: () =>
@@ -999,9 +999,9 @@ it.effect(
         module: "FileSystem",
         method: "stream",
       });
-      const report = yield* Effect.gen(function* () {
-        return yield* scanUsage({ roots: [{ root, harness: "claude-code" }], end });
-      }).pipe(
+      const report = yield* Effect.suspend(() =>
+        scanUsage({ roots: [{ root, harness: "claude-code" }], end }),
+      ).pipe(
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
           stream: () =>
@@ -1129,9 +1129,9 @@ it.effect(
         JSON.stringify(first) + "\r\n\r\n" + JSON.stringify(call(start, "last")),
       );
       yield* fs.writeFile(join(root, "records.jsonl.zst"), bytes);
-      const report = yield* Effect.gen(function* () {
-        return yield* scanUsage({ roots: [{ root, harness: "claude-code" }], end });
-      }).pipe(
+      const report = yield* Effect.suspend(() =>
+        scanUsage({ roots: [{ root, harness: "claude-code" }], end }),
+      ).pipe(
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
           stream: () =>
@@ -1193,9 +1193,9 @@ it.effect("compressed reads keep the inventoried byte bound and diagnose concurr
       }),
     );
     yield* fs.writeFile(path, before);
-    const report = yield* Effect.gen(function* () {
-      return yield* scanUsage({ roots: [{ root, harness: "claude-code" }], end });
-    }).pipe(
+    const report = yield* Effect.suspend(() =>
+      scanUsage({ roots: [{ root, harness: "claude-code" }], end }),
+    ).pipe(
       Effect.provideService(FileSystem.FileSystem, {
         ...fs,
         stream: (file, options) =>

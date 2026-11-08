@@ -10,7 +10,7 @@ import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 export class UnsafeInstalledSkillName
   extends Data.TaggedError("UnsafeInstalledSkillName")<{
-    name: string;
+    skillName: string;
   }>
   implements SkitFailure
 {
@@ -18,7 +18,7 @@ export class UnsafeInstalledSkillName
   readonly code = "INVALID_ARGUMENT" as const;
   readonly remediation = "Rename the Skill to a single safe path segment, then retry.";
   get message(): string {
-    return `Unsafe installed-skill name: ${this.name}`;
+    return `Unsafe installed-skill name: ${this.skillName}`;
   }
 }
 

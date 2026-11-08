@@ -11,21 +11,21 @@ import { SecureRandom } from "effect/crypto";
 import type { FindLibrary } from "./owned.js";
 
 const RevisionRow = Schema.Struct({ manifest_json: Schema.String });
-const CountRow = Schema.Struct({ n: Schema.Number });
+const CountRow = Schema.Struct({ n: Schema.Finite });
 const StoredManifest = Schema.fromJsonString(StoredLibraryManifest);
 
-export class LibraryRevisionConflict extends Schema.TaggedError<LibraryRevisionConflict>()(
-  "Library.LibraryRevisionConflict",
-  {},
-) {}
-class LibrarySnapshotMissing extends Schema.TaggedError<LibrarySnapshotMissing>()(
-  "Library.LibrarySnapshotMissing",
-  { digest: Schema.String },
-) {}
-class LibraryRevisionInvalid extends Schema.TaggedError<LibraryRevisionInvalid>()(
-  "Library.LibraryRevisionInvalid",
-  {},
-) {}
+export class LibraryRevisionConflict extends Schema.TaggedError<
+  LibraryRevisionConflict,
+  { readonly brand: unique symbol }
+>()("Library.LibraryRevisionConflict", {}) {}
+class LibrarySnapshotMissing extends Schema.TaggedError<
+  LibrarySnapshotMissing,
+  { readonly brand: unique symbol }
+>()("Library.LibrarySnapshotMissing", { digest: Schema.String }) {}
+class LibraryRevisionInvalid extends Schema.TaggedError<
+  LibraryRevisionInvalid,
+  { readonly brand: unique symbol }
+>()("Library.LibraryRevisionInvalid", {}) {}
 export interface Sync {
   readonly read: (
     principal: Principal,
@@ -82,7 +82,7 @@ export const makeSync = (
   random: SecureRandom.SecureRandom["Service"],
   own: FindLibrary,
 ): Sync => {
-  const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
+  const db = <A, E>(operation: string, effect: Effect.Effect<A, E>) =>
     effect.pipe(databaseError(operation));
   const revision = Effect.fn("LibrarySync.revision")(function* (id: string) {
     const rows = yield* db(
@@ -100,7 +100,7 @@ export const makeSync = (
     const library = yield* own(principal, false);
     if (library?.current_revision_id === null || library === undefined) return undefined;
     const record = yield* revision(library.current_revision_id);
-    const manifest = yield* Schema.decodeUnknownEffect(StoredManifest)(record.manifest_json).pipe(
+    const manifest = yield* Schema.decodeEffect(StoredManifest)(record.manifest_json).pipe(
       Effect.mapError(() => new LibraryRevisionInvalid()),
     );
     return { library_id: library.library_id, revision_id: library.current_revision_id, manifest };

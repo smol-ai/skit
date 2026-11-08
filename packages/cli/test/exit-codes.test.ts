@@ -126,7 +126,7 @@ it.effect("malformed direct Skill downloads preserve the validation exit code", 
   Effect.gen(function* () {
     const routes = HttpRouter.serve(
       HttpRouter.addAll([
-        HttpRouter.route(
+        HttpRouter.route<never, never>(
           "GET",
           "/SKILL.md",
           HttpServerResponse.text("not a skill", { contentType: "text/markdown" }),
@@ -141,7 +141,7 @@ it.effect("malformed direct Skill downloads preserve the validation exit code", 
         source: { type: "url", url: "https://example.com/SKILL.md" },
         input: "https://example.com/SKILL.md",
       }).pipe(Effect.flip),
-    ).pipe(Effect.provide(routes.pipe(Layer.provideMerge(client))), Effect.provide(skitLayer));
+    ).pipe(Effect.provide(routes.pipe(Layer.provideMerge(client), Layer.provideMerge(skitLayer))));
     expect(classifyFailure(outcome)).toMatchObject({ code: "VALIDATION_FAILED", exitCode: 65 });
   }),
 );

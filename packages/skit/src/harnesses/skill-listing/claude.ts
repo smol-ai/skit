@@ -18,7 +18,7 @@ export interface ClaudeListingOptions {
 const Settings = Schema.Struct({
   model: Schema.optionalKey(Schema.String),
   skillListingBudgetFraction: Schema.optionalKey(
-    Schema.Number.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1)),
+    Schema.Finite.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1)),
   ),
   skillListingMaxDescChars: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThan(0))),
   skillOverrides: Schema.optionalKey(
@@ -434,20 +434,14 @@ export const readClaudeListingSnapshot = Effect.fn("Listing.claudeDiscovery")(fu
       budget: claudeListingResult(options.cwd, visible, resolved, coverage),
     } satisfies ClaudeListingSnapshot;
   }).pipe(
-    Effect.catchTag("PlatformError", (e) =>
-      Effect.fail(new ListingReadFailure({ detail: String(e) })),
-    ),
-    Effect.catchTag("ConfigError", (e) =>
-      Effect.fail(new ListingReadFailure({ detail: String(e) })),
-    ),
-    Effect.catchTag("ListingReadFailure", (e) =>
+    Effect.catchTag(["PlatformError", "ConfigError", "ListingReadFailure"], (e) =>
       Effect.succeed({
         entries: [],
         budget: {
           _tag: "Unavailable" as const,
           harness: "claude-code" as const,
           cwd: options.cwd,
-          detail: e.detail,
+          detail: e._tag === "ListingReadFailure" ? e.detail : String(e),
         },
       }),
     ),

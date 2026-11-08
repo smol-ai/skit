@@ -168,7 +168,7 @@ it.live("suppresses secret subprocess stderr even on a failing exit", () =>
     expect(result._tag).toBe("Failure");
     if (result._tag === "Failure")
       expect(result.failure.message).not.toContain("credential-sentinel");
-  }).pipe(Effect.provide(processesLayer), Effect.provide(NodeServices.layer)),
+  }).pipe(Effect.provide(processesLayer.pipe(Layer.provideMerge(NodeServices.layer)))),
 );
 
 it.live("interrupts scoped host processes and their descendants", () =>
@@ -195,7 +195,10 @@ it.live("interrupts scoped host processes and their descendants", () =>
       });
       expect(alive).toBe(false);
     }
-  }).pipe(Effect.scoped, Effect.provide(processesLayer), Effect.provide(NodeServices.layer)),
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(processesLayer.pipe(Layer.provideMerge(NodeServices.layer))),
+  ),
 );
 
 it.effect("fails boot immediately when the launched Tart process has exited", () =>
@@ -232,11 +235,14 @@ it.effect("fails boot immediately when the launched Tart process has exited", ()
 it.live("keeps clone compatibility independent of a shell's CODEX_VERSION", () =>
   Effect.gen(function* () {
     const load = (codex: string) =>
-      Effect.gen(function* () {
-        return yield* Configuration;
-      }).pipe(
-        Effect.provide(configurationLayer),
-        Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ CODEX_VERSION: codex }))),
+      Configuration.pipe(
+        Effect.provide(
+          configurationLayer.pipe(
+            Layer.provideMerge(
+              ConfigProvider.layer(ConfigProvider.fromUnknown({ CODEX_VERSION: codex })),
+            ),
+          ),
+        ),
       );
     const first = yield* load("latest");
     const pinned = yield* load("0.165.0");

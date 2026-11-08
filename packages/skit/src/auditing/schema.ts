@@ -69,8 +69,8 @@ const AuditProbe = Schema.Struct({
   status: Schema.Literals(["ok", "failed"]),
   observed: Schema.optionalKey(
     Schema.Struct({
-      plugins: Schema.optionalKey(Schema.Number),
-      mcpServers: Schema.optionalKey(Schema.Number),
+      plugins: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+      mcpServers: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
     }),
   ),
   reason: Schema.optionalKey(Schema.String),
@@ -96,7 +96,10 @@ export const AuditReport = Schema.Struct({
   observations: Schema.Array(AuditEntry),
   findings: Schema.Array(AuditFinding),
   probes: Schema.Array(AuditProbe),
-  summary: Schema.Struct({ capabilities: Schema.Number, findings: Schema.Number }),
+  summary: Schema.Struct({
+    capabilities: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    findings: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  }),
 });
 export type AuditReport = typeof AuditReport.Type;
 
@@ -141,13 +144,11 @@ export type AuditMcpServerV1Alpha4 = typeof AuditMcpServerV1Alpha4.Type;
 const AuditRuleV1Alpha4 = Schema.Struct(auditEntryFields);
 type AuditRuleV1Alpha4 = typeof AuditRuleV1Alpha4.Type;
 const AuditMarketplaceV1Alpha4 = Schema.Struct(auditEntryFields);
-type AuditMarketplaceV1Alpha4 = typeof AuditMarketplaceV1Alpha4.Type;
 export type AuditEntryV1Alpha4 =
   | AuditSkillV1Alpha4
   | AuditPluginV1Alpha4
   | AuditMcpServerV1Alpha4
-  | AuditRuleV1Alpha4
-  | AuditMarketplaceV1Alpha4;
+  | AuditRuleV1Alpha4;
 
 const AuditFindingV1Alpha4 = Schema.Struct({
   id: Schema.String,
@@ -188,8 +189,8 @@ export const AuditReportV1Alpha4 = Schema.Struct({
       status: Schema.Literals(["ok", "failed"]),
       observed: Schema.optionalKey(
         Schema.Struct({
-          plugins: Schema.optionalKey(Schema.Number),
-          mcpServers: Schema.optionalKey(Schema.Number),
+          plugins: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+          mcpServers: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
         }),
       ),
       reason: Schema.optionalKey(Schema.String),
@@ -197,13 +198,13 @@ export const AuditReportV1Alpha4 = Schema.Struct({
   ),
   coverage: Schema.Struct({ deferredHarnessIds: StringArray }),
   summary: Schema.Struct({
-    harnesses: Schema.Number,
-    skills: Schema.Number,
-    plugins: Schema.Number,
-    mcpServers: Schema.Number,
-    rules: Schema.Number,
-    marketplaces: Schema.Number,
-    findings: Schema.Number,
+    harnesses: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    skills: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    plugins: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    mcpServers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    rules: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    marketplaces: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    findings: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   }),
 });
 export type AuditReportV1Alpha4 = typeof AuditReportV1Alpha4.Type;

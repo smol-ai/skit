@@ -9,7 +9,7 @@ describe("BlobStore", () => {
   it.effect("reads, writes and deletes through the real R2 binding", () =>
     Effect.gen(function* () {
       const blobs = yield* BlobStore;
-      yield* blobs.probe();
+      yield* blobs.probe;
       expect(yield* blobs.put("write test object", "platform-test", bytes("hello"))).toBe(true);
       expect(
         yield* blobs.put("rewrite test object", "platform-test", bytes("other"), {

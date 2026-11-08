@@ -18,7 +18,7 @@ import { applySetupSelections } from "./helpers/setup-apply.js";
 
 import { type DuplicateScanError, findDuplicates } from "@smolai/skit-core/library/routing";
 import { it } from "@effect/vitest";
-import { Effect, FileSystem, Result } from "effect";
+import { Effect, FileSystem, Result, Order } from "effect";
 import { join } from "node:path";
 import { expect } from "vitest";
 
@@ -543,7 +543,11 @@ it.effect("preserves selected links and equal copies automatically across add an
     }
     const [operationId] = yield* recoveryList(f.home.home);
     const recovery = yield* recoveryInspection(f.home.home, operationId);
-    expect(recovery.entries.map((entry) => [entry.name, entry.type, entry.status]).sort()).toEqual([
+    expect(
+      recovery.entries
+        .map((entry) => [entry.name, entry.type, entry.status])
+        .sort(Order.mapInput(Order.String, String)),
+    ).toEqual([
       ["later", "SymbolicLink", "saved"],
       ["ordinary-one", "Directory", "saved"],
       ["ordinary-two", "Directory", "saved"],

@@ -31,8 +31,9 @@ export function helpDocument<Name extends string, Input, ContextInput, E, R>(
   path: readonly string[],
 ) {
   let captured: HelpDoc.HelpDoc | undefined;
+  const defaults: Readonly<CliOutput.Formatter> = CliOutput.defaultFormatter({ colors: false });
   const formatter: CliOutput.Formatter = {
-    ...CliOutput.defaultFormatter({ colors: false }),
+    ...defaults,
     formatHelpDoc: (document) => {
       captured = document;
       return "";

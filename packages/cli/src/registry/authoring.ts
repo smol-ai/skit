@@ -84,7 +84,7 @@ const authorInventoryApi = Effect.fn("Registry.authorInventory")(function* (inpu
   if (!input.origin || !input.token)
     return yield* new AuthenticationRequired({ origin: input.origin, scopes: "authoring:write" });
   const parse = (value: string) =>
-    Schema.decodeUnknownEffect(Schema.URLFromString)(value).pipe(
+    Schema.decodeEffect(Schema.URLFromString)(value).pipe(
       Effect.mapError(() => new RegistryOriginInvalid({ origin: value })),
     );
   const origin = (yield* parse(input.origin)).origin;
@@ -101,7 +101,7 @@ const authorInventoryApi = Effect.fn("Registry.authorInventory")(function* (inpu
           if (classified.kind === "request_encoding")
             return new SkitContractError({
               contract: "author SKIT list request",
-              issues: [{ path: "", message: String(error) }],
+              issues: [{ path: "", message: classified.detail }],
             });
           const failure = registryApiFailure(error);
           if (failure.status === 401)
@@ -109,7 +109,7 @@ const authorInventoryApi = Effect.fn("Registry.authorInventory")(function* (inpu
           if (classified.kind === "response_decode")
             return new SkitContractError({
               contract: "author SKIT list response",
-              issues: [{ path: "", message: String(error) }],
+              issues: [{ path: "", message: classified.detail }],
             });
           return new AuthorListResponseError({
             message:
@@ -144,14 +144,14 @@ export const deletePrivateAuthorSkit = Effect.fn("Registry.deletePrivateAuthorSk
         if (classified.kind === "request_encoding")
           return new SkitContractError({
             contract: "author SKIT delete request",
-            issues: [{ path: "", message: String(error) }],
+            issues: [{ path: "", message: classified.detail }],
           });
         if (Schema.is(SkitNotFoundResponse)(error)) return new AuthorSkitNotFound();
         if (Schema.is(DeleteRequiresPrivateResponse)(error)) return new DeleteRequiresPrivate();
         if (classified.kind === "response_decode")
           return new SkitContractError({
             contract: "author SKIT delete response",
-            issues: [{ path: "", message: String(error) }],
+            issues: [{ path: "", message: classified.detail }],
           });
         return new AuthorDeleteResponseError({
           message: registryApiFailureMessage("Author SKIT delete", error),
@@ -193,7 +193,7 @@ export const listAuthorInventory = Effect.fn("Registry.listAuthorInventory")(fun
     cursor = page.next_cursor;
     pages++;
     if (cursor && (cursors.has(cursor) || pages >= 1_000 || skits.length > 100_000))
-      return yield* Effect.fail(new AuthorListPaginationError({ origin }));
+      return yield* new AuthorListPaginationError({ origin });
     if (cursor) cursors.add(cursor);
   } while (cursor);
   return { origin, skits };
@@ -203,5 +203,5 @@ export type { AuthorListPaginationError, AuthorListResponseError };
 
 /** Adapt the command's captured account without leaking its credential into Author. */
 export const authorInventoryRegistry = (account: ResolvedAuth) => ({
-  list: () => listAuthorInventory(account),
+  list: listAuthorInventory(account),
 });

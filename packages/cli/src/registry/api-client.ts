@@ -8,7 +8,7 @@ import {
   PrincipalAuthentication,
   RequestDecoding,
 } from "@smolai/skit-core/api";
-import { Data, Effect, Layer, Predicate, Schema } from "effect";
+import { Data, Effect, Inspectable, Layer, Predicate, Schema } from "effect";
 import { HttpClientError, HttpClientRequest } from "effect/http";
 import { HttpApiMiddleware } from "effect/http-api";
 
@@ -69,7 +69,10 @@ export const registryApiFailureMessage = (
     : `${operation} failed (${failure.status}): ${reason}`;
 };
 
-const isResponseBodyReadFailure = (error: unknown, successStatuses: readonly number[]) =>
+const isResponseBodyReadFailure = (
+  error: unknown,
+  successStatuses: readonly number[],
+): error is HttpClientError.HttpClientError =>
   HttpClientError.isHttpClientError(error) &&
   error.response !== undefined &&
   successStatuses.includes(error.response.status) &&
@@ -79,7 +82,7 @@ const isResponseBodyReadFailure = (error: unknown, successStatuses: readonly num
 export const isSuccessfulResponseDecodeFailure = (
   error: unknown,
   successStatuses: readonly number[],
-) => Schema.isSchemaError(error) || isResponseBodyReadFailure(error, successStatuses);
+): boolean => Schema.isSchemaError(error) || isResponseBodyReadFailure(error, successStatuses);
 
 /** Marks only decoding: generated request encoders run before this hook. */
 class RegistryResponseDecodeError extends Data.TaggedError("RegistryResponseDecodeError")<{
@@ -90,7 +93,7 @@ class RegistryResponseDecodeError extends Data.TaggedError("RegistryResponseDeco
   }
 }
 
-export const markRegistryResponseDecoding = (effect: Effect.Effect<unknown, unknown, unknown>) =>
+export const markRegistryResponseDecoding = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.mapError((error) =>
       Schema.isSchemaError(error) ? new RegistryResponseDecodeError({ cause: error }) : error,
@@ -104,11 +107,16 @@ export const classifyRegistryApiFailure = (error: unknown, successStatuses: read
   if (Schema.is(InsufficientScopeResponse)(error)) return { kind: "insufficient_scope" as const };
   if (Schema.is(ForbiddenResponse)(error) || Schema.is(ForbiddenOriginResponse)(error))
     return { kind: "forbidden" as const };
-  if (
-    Predicate.isTagged(error, "RegistryResponseDecodeError") ||
-    isResponseBodyReadFailure(error, successStatuses)
-  )
-    return { kind: "response_decode" as const };
-  if (Schema.isSchemaError(error)) return { kind: "request_encoding" as const };
+  if (Predicate.isTagged(error, "RegistryResponseDecodeError")) {
+    const cause = "cause" in error ? error.cause : undefined;
+    return {
+      kind: "response_decode" as const,
+      detail: Schema.isSchemaError(cause) ? String(cause) : Inspectable.toStringUnknown(error),
+    };
+  }
+  if (isResponseBodyReadFailure(error, successStatuses))
+    return { kind: "response_decode" as const, detail: String(error) };
+  if (Schema.isSchemaError(error))
+    return { kind: "request_encoding" as const, detail: String(error) };
   return { kind: "other" as const };
 };

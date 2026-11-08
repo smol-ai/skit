@@ -113,7 +113,7 @@ export const installEnabledSkills = (options: {
       _tag: "Apply",
       plan: yield* owner.plan({ _tag: "Install" }, { base: yield* owner.read, approvals }),
     })).result;
-    if (outcome._tag === "Incomplete") return yield* Effect.fail(outcome.cause);
+    if (outcome._tag === "Incomplete") return yield* outcome.cause;
     return count(outcome, "Installed");
   });
 

@@ -24,9 +24,12 @@ import { withLibraryStateReplacement } from "./store/writer-lock.js";
 export type Settings = Omit<CurrentMachineDocument, "schemaVersion"> & { readonly path: string };
 
 export class Unusable
-  extends Schema.TaggedError<Unusable>()("MachineSettingsUnusable", {
-    path: Schema.String,
-  })
+  extends Schema.TaggedError<Unusable, { readonly brand: unique symbol }>()(
+    "MachineSettingsUnusable",
+    {
+      path: Schema.String,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -58,15 +61,13 @@ export const read = Effect.fn("MachineSettings.read")(function* (home: string) {
     .readFileString(path)
     .pipe(
       Effect.catchTag("PlatformError", (error) =>
-        error.reason._tag === "NotFound"
-          ? Effect.succeed(undefined)
-          : Effect.fail(new Unusable({ path })),
+        error.reason._tag === "NotFound" ? Effect.undefined : Effect.fail(new Unusable({ path })),
       ),
     );
   const document =
     text === undefined
       ? emptyMachineDocument()
-      : yield* Schema.decodeUnknownEffect(MachineDocumentJson)(text).pipe(
+      : yield* Schema.decodeEffect(MachineDocumentJson)(text).pipe(
           Effect.mapError(() => new Unusable({ path })),
         );
   return settingsAt(path, document);
@@ -262,10 +263,13 @@ export const setupRecord = Effect.fn("MachineSettings.setupRecord")(function* (
 
 /** No record of the setup to undo: it saved no discovery folders, or a later setup has since. */
 class SetupNotRecorded
-  extends Schema.TaggedError<SetupNotRecorded>()("MachineSettings.SetupNotRecorded", {
-    path: Schema.String,
-    operationId: Schema.String,
-  })
+  extends Schema.TaggedError<SetupNotRecorded, { readonly brand: unique symbol }>()(
+    "MachineSettings.SetupNotRecorded",
+    {
+      path: Schema.String,
+      operationId: Schema.String,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;

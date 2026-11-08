@@ -27,18 +27,18 @@ const PatRow = Schema.Struct({
   principal_id: Schema.String,
   token_id: Schema.String,
   state: Schema.String,
-  authorization_generation: Schema.Number,
-  token_generation: Schema.Number,
+  authorization_generation: Schema.Finite,
+  token_generation: Schema.Finite,
   scopes_json: Schema.String,
   expires_at: Schema.NullOr(Schema.String),
   revoked_at: Schema.NullOr(Schema.String),
 });
 const StoredScopes = Schema.fromJsonString(Schema.Array(Scope));
-const PrincipalGeneration = Schema.Struct({ authorization_generation: Schema.Number });
+const PrincipalGeneration = Schema.Struct({ authorization_generation: Schema.Finite });
 const SessionPrincipalRow = Schema.Struct({
   principal_id: Schema.String,
   state: Schema.String,
-  authorization_generation: Schema.Number,
+  authorization_generation: Schema.Finite,
 });
 const ListedPatRow = Schema.Struct({
   token_id: Schema.String,
@@ -52,19 +52,22 @@ const ListedPatRow = Schema.Struct({
 });
 const RFC_3339_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
-class SessionRequired extends Schema.TaggedError<SessionRequired>()(
-  "Authentication.SessionRequired",
+class SessionRequired extends Schema.TaggedError<
+  SessionRequired,
+  { readonly brand: unique symbol }
+>()("Authentication.SessionRequired", {}) {}
+class InvalidScope extends Schema.TaggedError<InvalidScope, { readonly brand: unique symbol }>()(
+  "Authentication.InvalidScope",
   {},
 ) {}
-class InvalidScope extends Schema.TaggedError<InvalidScope>()("Authentication.InvalidScope", {}) {}
-class InvalidExpiry extends Schema.TaggedError<InvalidExpiry>()(
+class InvalidExpiry extends Schema.TaggedError<InvalidExpiry, { readonly brand: unique symbol }>()(
   "Authentication.InvalidExpiry",
   {},
 ) {}
-class UnauthorizedPrincipal extends Schema.TaggedError<UnauthorizedPrincipal>()(
-  "Authentication.UnauthorizedPrincipal",
-  {},
-) {}
+class UnauthorizedPrincipal extends Schema.TaggedError<
+  UnauthorizedPrincipal,
+  { readonly brand: unique symbol }
+>()("Authentication.UnauthorizedPrincipal", {}) {}
 
 export interface AuthenticationService {
   readonly authenticate: (
@@ -98,7 +101,7 @@ export const makeCredentials = (
     const digests = yield* Digest.Digest;
     const random = yield* SecureRandom.SecureRandom;
     const clock = yield* Clock.Clock;
-    const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
+    const db = <A, E>(operation: string, effect: Effect.Effect<A, E>) =>
       effect.pipe(databaseError(operation));
 
     const authenticatePat = Effect.fn("Authentication.authenticatePat")(function* (token: string) {
@@ -125,7 +128,7 @@ export const makeCredentials = (
         (row.expires_at !== null && row.expires_at <= now)
       )
         return undefined;
-      const scopes = yield* Schema.decodeUnknownEffect(StoredScopes)(row.scopes_json).pipe(
+      const scopes = yield* Schema.decodeEffect(StoredScopes)(row.scopes_json).pipe(
         Effect.mapError(
           (cause) => new DatabaseError({ operation: "decode access token scopes", cause }),
         ),
@@ -246,7 +249,7 @@ export const makeCredentials = (
             (cause) => new DatabaseError({ operation: "decode access token list", cause }),
           ),
           Effect.flatMap(({ scopes_json, ...row }) =>
-            Schema.decodeUnknownEffect(StoredScopes)(scopes_json).pipe(
+            Schema.decodeEffect(StoredScopes)(scopes_json).pipe(
               Effect.mapError(
                 (cause) =>
                   new DatabaseError({ operation: "decode listed access token scopes", cause }),

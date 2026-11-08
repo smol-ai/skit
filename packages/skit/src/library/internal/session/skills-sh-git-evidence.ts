@@ -5,9 +5,12 @@ import { SourceProcess } from "../../../platform/source-process.js";
 import { FailureTypeId, type SkitFailure } from "../../../shared/failure.js";
 
 class GitInspectionFailed
-  extends Schema.TaggedError<GitInspectionFailed>()("SkillsSh.GitInspectionFailed", {
-    operation: Schema.String,
-  })
+  extends Schema.TaggedError<GitInspectionFailed, { readonly brand: unique symbol }>()(
+    "SkillsSh.GitInspectionFailed",
+    {
+      operation: Schema.String,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;

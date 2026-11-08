@@ -81,10 +81,13 @@ const WorkspaceDocument = Schema.Struct({
 
 /** Saved recovery state must be readable before sync may change files or the Registry. */
 export class AuthorSyncStateInvalid
-  extends Schema.TaggedError<AuthorSyncStateInvalid>()("AuthorSyncStateInvalid", {
-    path: Schema.String,
-    reason: Schema.String,
-  })
+  extends Schema.TaggedError<AuthorSyncStateInvalid, { readonly brand: unique symbol }>()(
+    "AuthorSyncStateInvalid",
+    {
+      path: Schema.String,
+      reason: Schema.String,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -170,10 +173,13 @@ type ConnectionTransition =
 
 /** What a transition or register planned from is no longer what is on disk. */
 export class AuthorWorkspaceConflict
-  extends Schema.TaggedError<AuthorWorkspaceConflict>()("AuthorWorkspaceConflict", {
-    root: WorkspaceRoot,
-    found: Workspace,
-  })
+  extends Schema.TaggedError<AuthorWorkspaceConflict, { readonly brand: unique symbol }>()(
+    "AuthorWorkspaceConflict",
+    {
+      root: WorkspaceRoot,
+      found: Workspace,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -186,9 +192,12 @@ export class AuthorWorkspaceConflict
 
 /** The input is not an existing directory (A1). */
 export class AuthorWorkspaceRootInvalid
-  extends Schema.TaggedError<AuthorWorkspaceRootInvalid>()("AuthorWorkspaceRootInvalid", {
-    input: Schema.String,
-  })
+  extends Schema.TaggedError<AuthorWorkspaceRootInvalid, { readonly brand: unique symbol }>()(
+    "AuthorWorkspaceRootInvalid",
+    {
+      input: Schema.String,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -204,10 +213,13 @@ export class AuthorWorkspaceRootInvalid
  * real directory, or the lock is a symlink, not a regular file, or not a lock SQLite can take.
  */
 class AuthorWorkspaceUnsafe
-  extends Schema.TaggedError<AuthorWorkspaceUnsafe>()("AuthorWorkspaceUnsafe", {
-    path: Schema.String,
-    reason: Schema.String,
-  })
+  extends Schema.TaggedError<AuthorWorkspaceUnsafe, { readonly brand: unique symbol }>()(
+    "AuthorWorkspaceUnsafe",
+    {
+      path: Schema.String,
+      reason: Schema.String,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -221,7 +233,10 @@ class AuthorWorkspaceUnsafe
 
 /** Another process (or this one) holds the workspace lease. */
 class AuthorWorkspaceBusy
-  extends Schema.TaggedError<AuthorWorkspaceBusy>()("AuthorWorkspaceBusy", { root: WorkspaceRoot })
+  extends Schema.TaggedError<AuthorWorkspaceBusy, { readonly brand: unique symbol }>()(
+    "AuthorWorkspaceBusy",
+    { root: WorkspaceRoot },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -235,7 +250,10 @@ class AuthorWorkspaceBusy
 
 /** writeTree's trees are not the ones a current, unused PreparedWrite names (A13). */
 class AuthorWriteNotPrepared
-  extends Schema.TaggedError<AuthorWriteNotPrepared>()("AuthorWriteNotPrepared", { key: SyncKey })
+  extends Schema.TaggedError<AuthorWriteNotPrepared, { readonly brand: unique symbol }>()(
+    "AuthorWriteNotPrepared",
+    { key: SyncKey },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -248,9 +266,12 @@ class AuthorWriteNotPrepared
 
 /** A lease handle used after its scope closed. */
 export class AuthorLeaseNotHeld
-  extends Schema.TaggedError<AuthorLeaseNotHeld>()("AuthorLeaseNotHeld", {
-    root: WorkspaceRoot,
-  })
+  extends Schema.TaggedError<AuthorLeaseNotHeld, { readonly brand: unique symbol }>()(
+    "AuthorLeaseNotHeld",
+    {
+      root: WorkspaceRoot,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -377,7 +398,7 @@ const make = Effect.gen(function* () {
   const sameConnection = Schema.toEquivalence(Connection);
   const lstat = (target: string) =>
     links.lstat(target).pipe(
-      Effect.map(Option.some),
+      Effect.asSome,
       Effect.catchReason("PlatformError", "NotFound", () => Effect.succeedNone),
     );
 
@@ -397,11 +418,11 @@ const make = Effect.gen(function* () {
   const readIdentity = Effect.fn("AuthorWorkspace.readIdentity")(function* (root: WorkspaceRoot) {
     const file = identityPath(root);
     const text = yield* fs.readFileString(file).pipe(
-      Effect.map(Option.some),
+      Effect.asSome,
       Effect.catchReason("PlatformError", "NotFound", () => Effect.succeedNone),
     );
     if (Option.isNone(text)) return Option.none<Identity>();
-    const document = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(WorkspaceDocument), {
+    const document = yield* Schema.decodeEffect(Schema.fromJsonString(WorkspaceDocument), {
       onExcessProperty: "error",
     })(text.value).pipe(Effect.mapError(() => new AuthorWorkspaceMetadataInvalid({ path: file })));
     return Option.some(Identity.make({ workspaceId: document.workspace_id }));
@@ -412,13 +433,13 @@ const make = Effect.gen(function* () {
     const file = remotePath(root);
     const invalid = () => new AuthorRemoteMetadataInvalid({ path: file });
     const text = yield* fs.readFileString(file).pipe(
-      Effect.map(Option.some),
+      Effect.asSome,
       Effect.catchTag("PlatformError", (error) =>
         isErrno(error, "ENOENT") ? Effect.succeedNone : Effect.fail(invalid()),
       ),
     );
     if (Option.isNone(text)) return Option.none<AuthorRemoteHome>();
-    const document = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(AuthorRemoteHome), {
+    const document = yield* Schema.decodeEffect(Schema.fromJsonString(AuthorRemoteHome), {
       onExcessProperty: "error",
     })(text.value).pipe(Effect.mapError(invalid));
     const normalized = yield* normalizeRemote(document).pipe(
@@ -437,7 +458,7 @@ const make = Effect.gen(function* () {
     file: string,
     text: string,
   ) {
-    const checkpoint = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Connecting), {
+    const checkpoint = yield* Schema.decodeEffect(Schema.fromJsonString(Connecting), {
       onExcessProperty: "error",
     })(text).pipe(
       Effect.mapError((error) => new AuthorSyncStateInvalid({ path: file, reason: String(error) })),
@@ -455,7 +476,7 @@ const make = Effect.gen(function* () {
     const remote = yield* readRemote(root);
     const file = connectionPath(root);
     const text = yield* fs.readFileString(file).pipe(
-      Effect.map(Option.some),
+      Effect.asSome,
       Effect.catchTag("PlatformError", (error) =>
         isErrno(error, "ENOENT") ? Effect.succeedNone : Effect.fail(error),
       ),

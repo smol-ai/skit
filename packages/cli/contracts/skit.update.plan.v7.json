@@ -1,5 +1,5 @@
 {
-  "$id": "skit.update.plan.v6",
+  "$id": "skit.update.plan.v7",
   "type": "array",
   "items": {
     "type": "object",
@@ -62,19 +62,9 @@
         }
       },
       "new_available": {
-        "anyOf": [
-          {
-            "type": "number"
-          },
-          {
-            "type": "string",
-            "enum": [
-              "Infinity",
-              "-Infinity",
-              "NaN"
-            ]
-          }
-        ]
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
       },
       "updated": {
         "type": "array",

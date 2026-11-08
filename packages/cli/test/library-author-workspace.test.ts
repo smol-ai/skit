@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { originalTreePath } from "./helpers/original-tree.js";
 import { assert, it } from "@effect/vitest";
-import { Effect, Exit, FileSystem, Schema, Scope } from "effect";
+import { Layer, Effect, Exit, FileSystem, Schema, Scope } from "effect";
 import { join } from "node:path";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
@@ -60,7 +60,10 @@ it.effect(
         [true, false],
       );
       assert.strictEqual(state.skills.find((skill) => skill.name === "review")?.versions.length, 2);
-    }).pipe(Effect.provide(authorWorkspaceLayer), Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(
+      Effect.provide(authorWorkspaceLayer.pipe(Layer.provideMerge(skitLayer))),
+      Effect.scoped,
+    ),
 );
 
 const workspaceFixture = Effect.gen(function* () {
@@ -124,7 +127,7 @@ it.effect("built-in Author edits refuse a held workspace lease while preview sta
       yield* f.fs.readFileString(metadataPath),
       "policy:\n  allow_implicit_invocation: false\n",
     );
-  }).pipe(Effect.provide(authorWorkspaceLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(authorWorkspaceLayer.pipe(Layer.provideMerge(skitLayer))), Effect.scoped),
 );
 
 it.effect("recovers a missing workspace document from the retained identity", () =>
@@ -140,7 +143,7 @@ it.effect("recovers a missing workspace document from the retained identity", ()
     );
     assert.deepStrictEqual(yield* f.metadata, before);
     assert.strictEqual((yield* f.home.durable).collections.length, 1);
-  }).pipe(Effect.provide(authorWorkspaceLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(authorWorkspaceLayer.pipe(Layer.provideMerge(skitLayer))), Effect.scoped),
 );
 
 it.effect("initializing through a symlink reuses the canonical workspace claim", () =>
@@ -157,7 +160,7 @@ it.effect("initializing through a symlink reuses the canonical workspace claim",
     );
     assert.deepStrictEqual(yield* f.metadata, identity);
     assert.strictEqual((yield* f.home.durable).collections.length, 1);
-  }).pipe(Effect.provide(authorWorkspaceLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(authorWorkspaceLayer.pipe(Layer.provideMerge(skitLayer))), Effect.scoped),
 );
 
 it.effect("rejects a copied workspace identity before scaffolding or publishing", () =>
@@ -170,7 +173,7 @@ it.effect("rejects a copied workspace identity before scaffolding or publishing"
     const failure = yield* Effect.flip(f.init(copy));
     assert.strictEqual(failure._tag, "AuthorWorkspaceAlreadyRegistered");
     yield* assertDiskUnchanged(before);
-  }).pipe(Effect.provide(authorWorkspaceLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(authorWorkspaceLayer.pipe(Layer.provideMerge(skitLayer))), Effect.scoped),
 );
 
 it.effect.each(["collection", "skill"] as const)(
@@ -197,7 +200,10 @@ it.effect.each(["collection", "skill"] as const)(
       assert.ok(registered.entry);
       assert.deepStrictEqual(yield* f.metadata, { workspace_id: identity });
       assert.strictEqual((yield* f.home.durable).collections.length, 1);
-    }).pipe(Effect.provide(authorWorkspaceLayer), Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(
+      Effect.provide(authorWorkspaceLayer.pipe(Layer.provideMerge(skitLayer))),
+      Effect.scoped,
+    ),
 );
 
 it.effect("removal leaves a different workspace identity untouched", () =>
@@ -221,7 +227,7 @@ it.effect("removal leaves a different workspace identity untouched", () =>
     );
     assert.strictEqual(yield* f.fs.readFileString(f.path), replacement);
     assert.strictEqual((yield* f.home.durable).collections.length, 0);
-  }).pipe(Effect.provide(authorWorkspaceLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(authorWorkspaceLayer.pipe(Layer.provideMerge(skitLayer))), Effect.scoped),
 );
 
 it.effect("a refused Library import leaves the workspace registered for a retry", () =>
@@ -240,7 +246,7 @@ it.effect("a refused Library import leaves the workspace registered for a retry"
     assert.ok(retried.entry);
     assert.strictEqual((yield* f.metadata).workspace_id, pending.workspace_id);
     assert.strictEqual((yield* f.home.durable).collections.length, 1);
-  }).pipe(Effect.provide(authorWorkspaceLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(authorWorkspaceLayer.pipe(Layer.provideMerge(skitLayer))), Effect.scoped),
 );
 
 it.effect(
@@ -257,7 +263,10 @@ it.effect(
       // The lease's own files may exist; no identity, and no scaffold, was written.
       assert.isFalse(yield* f.fs.exists(f.path));
       assert.strictEqual(yield* f.fs.readFileString(join(f.source, "skit.json")), descriptor);
-    }).pipe(Effect.provide(authorWorkspaceLayer), Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(
+      Effect.provide(authorWorkspaceLayer.pipe(Layer.provideMerge(skitLayer))),
+      Effect.scoped,
+    ),
 );
 
 it.effect.each(["collection", "skill"] as const)(
@@ -291,7 +300,10 @@ it.effect.each(["collection", "skill"] as const)(
       assert.isFalse(yield* f.fs.exists(f.source));
       assert.ok((yield* f.init(moved)).entry);
       assert.strictEqual((yield* f.home.durable).collections.length, 1);
-    }).pipe(Effect.provide(authorWorkspaceLayer), Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(
+      Effect.provide(authorWorkspaceLayer.pipe(Layer.provideMerge(skitLayer))),
+      Effect.scoped,
+    ),
 );
 
 it.effect("a copied identity is rejected after its original workspace moved", () =>
@@ -307,7 +319,7 @@ it.effect("a copied identity is rejected after its original workspace moved", ()
     const failure = yield* Effect.flip(f.init(copy));
     assert.strictEqual(failure._tag, "AuthorWorkspaceAlreadyRegistered");
     yield* assertDiskUnchanged(before);
-  }).pipe(Effect.provide(authorWorkspaceLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(authorWorkspaceLayer.pipe(Layer.provideMerge(skitLayer))), Effect.scoped),
 );
 
 it.effect(
@@ -336,7 +348,10 @@ it.effect(
         again.entry?.collection.collection_id,
         first.entry.collection.collection_id,
       );
-    }).pipe(Effect.provide(authorWorkspaceLayer), Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(
+      Effect.provide(authorWorkspaceLayer.pipe(Layer.provideMerge(skitLayer))),
+      Effect.scoped,
+    ),
 );
 
 it.effect(
@@ -430,5 +445,8 @@ it.effect(
       assert.strictEqual(retried.kind, "removed");
       assert.strictEqual((yield* f.home.durable).collections.length, 0);
       assert.isFalse(yield* f.fs.exists(installed));
-    }).pipe(Effect.provide(authorWorkspaceLayer), Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(
+      Effect.provide(authorWorkspaceLayer.pipe(Layer.provideMerge(skitLayer))),
+      Effect.scoped,
+    ),
 );

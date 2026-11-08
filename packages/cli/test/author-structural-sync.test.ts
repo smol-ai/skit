@@ -67,15 +67,13 @@ for (const direction of ["file-to-directory", "directory-to-file"] as const)
                 Effect.gen(function* () {
                   if (boundary === "EXDEV" && inWorkspace(to) && !interrupted) {
                     interrupted = true;
-                    return yield* Effect.fail(
-                      systemError({
-                        _tag: "Unknown",
-                        module: "FileSystem",
-                        method: "link",
-                        pathOrDescriptor: to,
-                        cause: { code: "EXDEV" },
-                      }),
-                    );
+                    return yield* systemError({
+                      _tag: "Unknown",
+                      module: "FileSystem",
+                      method: "link",
+                      pathOrDescriptor: to,
+                      cause: { code: "EXDEV" },
+                    });
                   }
                   yield* fs.link(from, to);
                   if (inWorkspace(to)) {

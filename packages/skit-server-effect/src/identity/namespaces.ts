@@ -34,7 +34,7 @@ const predicate = (subjects: ReadonlyArray<NamespaceSubject>) => ({
 export const makeNamespaceAccess = Effect.fn("Identity.makeNamespaceAccess")(function* () {
   const sql: DatabaseSqlClient = yield* D1Client.D1Client;
   const teams = yield* Teams;
-  const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
+  const db = <A, E>(operation: string, effect: Effect.Effect<A, E>) =>
     effect.pipe(databaseError(operation));
 
   const subjects = Effect.fn("Identity.subjects")(function* (principal: Principal) {
@@ -51,8 +51,9 @@ export const makeNamespaceAccess = Effect.fn("Identity.makeNamespaceAccess")(fun
   ) {
     const normalized = normalizeNamespace(namespace);
     if (normalized === undefined) return false;
-    const rows = yield* Effect.all(
-      EffectArray.chunksOf(candidates, SUBJECT_BATCH_SIZE).map((batch) => {
+    const rows = yield* Effect.forEach(
+      EffectArray.chunksOf(candidates, SUBJECT_BATCH_SIZE),
+      (batch) => {
         const where = predicate(batch);
         return db(
           "check namespace ownership",
@@ -62,7 +63,7 @@ export const makeNamespaceAccess = Effect.fn("Identity.makeNamespaceAccess")(fun
             [normalized, ...where.bindings],
           ),
         );
-      }),
+      },
       { concurrency: SUBREQUEST_CONCURRENCY },
     );
     return rows.some((row) => row.length !== 0);
@@ -77,14 +78,15 @@ export const makeNamespaceAccess = Effect.fn("Identity.makeNamespaceAccess")(fun
 
   const ownedNamespaces = Effect.fn("Identity.ownedNamespaces")(function* (principal: Principal) {
     const candidates = yield* subjects(principal);
-    const rows = yield* Effect.all(
-      EffectArray.chunksOf(candidates, SUBJECT_BATCH_SIZE).map((batch) => {
+    const rows = yield* Effect.forEach(
+      EffectArray.chunksOf(candidates, SUBJECT_BATCH_SIZE),
+      (batch) => {
         const where = predicate(batch);
         return db(
           "list owned namespaces",
           sql.unsafe(`SELECT namespace_slug FROM namespaces WHERE ${where.sql}`, where.bindings),
         );
-      }),
+      },
       { concurrency: SUBREQUEST_CONCURRENCY },
     );
     const decoded = yield* Effect.forEach(rows, (result) =>

@@ -221,7 +221,7 @@ const applyRecoveryMoves = Effect.fn("RecoveryMoves.apply")(
         .pipe(
           Effect.catchTag("PlatformError", (error) =>
             error.reason._tag === "NotFound"
-              ? Effect.succeed(undefined)
+              ? Effect.undefined
               : Effect.fail(
                   new StalePlan({ message: "The Library changed since this was previewed" }),
                 ),
@@ -241,7 +241,9 @@ const applyRecoveryMoves = Effect.fn("RecoveryMoves.apply")(
     // Write once, exclusively, before any move. Filesystem evidence supplies progress.
     yield* writeJsonExclusive(
       join(recoveryDirectory, "receipt.json"),
-      Schema.encodeSync(CurrentMoveRecord)({ schemaVersion: 3, entries }),
+      yield* Schema.encodeEffect(CurrentMoveRecord)({ schemaVersion: 3, entries }).pipe(
+        Effect.orDie,
+      ),
     );
     for (const entry of entries) {
       yield* checkApproved(entry);
@@ -257,7 +259,7 @@ const missingStat = Effect.fn("Recovery.stat")(function* (path: string) {
     .lstat(path)
     .pipe(
       Effect.catchTag("PlatformError", (error) =>
-        error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+        error.reason._tag === "NotFound" ? Effect.undefined : Effect.fail(error),
       ),
     );
 });
@@ -331,9 +333,7 @@ const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
         detail: `Move record is not a regular file: ${moveRecordPath}`,
       });
     const raw = yield* fs.readFileString(moveRecordPath);
-    const moveRecord = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(MoveRecord))(
-      raw,
-    ).pipe(
+    const moveRecord = yield* Schema.decodeEffect(Schema.fromJsonString(MoveRecord))(raw).pipe(
       Effect.mapError(
         () => new RecoveryInvalid({ detail: `Invalid move record: ${moveRecordPath}` }),
       ),

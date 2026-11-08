@@ -8,7 +8,12 @@ import * as Library from "../src/library/library.js";
 import { classifyLibraryAuditEvent } from "../src/library/audit/state-diff.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
 
-import { LibraryWriter, loadLibrary, writeLibrary } from "../src/library/store/library-store.js";
+import {
+  LibraryWriter,
+  loadLibrary,
+  writeLibrary,
+  type LibraryStateWriteError,
+} from "../src/library/store/library-store.js";
 import { withLock as withHomeLock } from "../src/platform/home-lock.js";
 import type { LibraryState } from "../src/library/library-state.js";
 import { skitLayer } from "../src/platform/layer.js";
@@ -149,7 +154,7 @@ it.live("records a forked save under way at release in its action's event", () =
     const before = (yield* history).length;
     const entered = yield* Deferred.make<void>();
     const resume = yield* Deferred.make<void>();
-    const forked = yield* Deferred.make<Fiber.Fiber<void, unknown>>();
+    const forked = yield* Deferred.make<Fiber.Fiber<void, LibraryStateWriteError>>();
     const action = yield* writeLibrary(
       home,
       Effect.gen(function* () {

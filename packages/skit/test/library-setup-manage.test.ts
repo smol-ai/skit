@@ -54,10 +54,10 @@ const crashingAt = (
             stop ||=
               boundary === "successor" && from.includes(".skit-stage-") && to.endsWith("/review");
             if (to === join(home, "state.json")) {
-              const state = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(LibraryState))(
+              const state = yield* Schema.decodeEffect(Schema.fromJsonString(LibraryState))(
                 yield* fs.readFileString(to),
               ).pipe(Effect.orDie);
-              const operation = (yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
+              const operation = (yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
                 state.operations,
               ).pipe(Effect.orDie)).find((item) => item._tag === "Pending");
               if (operation?._tag === "Pending") {
@@ -176,7 +176,7 @@ const recordedOperations = (home: string) =>
   Effect.gen(function* () {
     const inspected = yield* inspectLocalLibraryState(home);
     return inspected.present
-      ? yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(inspected.state.operations)
+      ? yield* Schema.decodeEffect(Schema.Array(OperationStatus))(inspected.state.operations)
       : [];
   });
 

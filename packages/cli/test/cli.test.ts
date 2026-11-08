@@ -298,7 +298,7 @@ describe("CLI contracts", () => {
 
   test("reports the package version without interpreting it as a value flag", () => {
     const result = spawnSync(process.execPath, [bin, "version", "--json"], { encoding: "utf8" });
-    const expected = Schema.decodeUnknownSync(PackageDocument)(
+    const expected = Schema.decodeSync(PackageDocument)(
       readFileSync(join(process.cwd(), "package.json"), "utf8"),
     ).version;
     expect(result.status).toBe(0);
@@ -306,7 +306,7 @@ describe("CLI contracts", () => {
       /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/,
     );
     expect(JSON.parse(result.stdout)).toMatchObject({
-      schema: "skit.version.v2",
+      schema: "skit.version.v3",
       data: {
         version: expected,
         build: { version: expected, kind: "dev" },
@@ -317,7 +317,7 @@ describe("CLI contracts", () => {
   });
 
   test.each(["-v", "--version"])("prints the package version with %s", (flag) => {
-    const expected = Schema.decodeUnknownSync(PackageDocument)(
+    const expected = Schema.decodeSync(PackageDocument)(
       readFileSync(join(process.cwd(), "package.json"), "utf8"),
     ).version;
     const human = spawnSync(process.execPath, [bin, flag], { encoding: "utf8" });
@@ -399,7 +399,7 @@ describe("CLI contracts", () => {
     expect(enabled.status).toBe(0);
     expect(JSON.parse(enabled.stdout)).toEqual(
       expect.objectContaining({
-        schema: "skit.enable.v10",
+        schema: "skit.enable.v8",
         data: expect.objectContaining({ action: "enable" }),
       }),
     );
@@ -505,11 +505,11 @@ describe("CLI contracts", () => {
     );
     expect(result.status).toBe(12);
     expect(result.stderr).toBe("");
-    const document = Schema.decodeUnknownSync(DoctorDocument)(result.stdout);
+    const document = Schema.decodeSync(DoctorDocument)(result.stdout);
     expect(document.data.harnesses.map((check) => check.findings)).toEqual([[], [], []]);
     expect(document).toEqual(
       expect.objectContaining({
-        schema: "skit.doctor.v10",
+        schema: "skit.doctor.v8",
         data: expect.objectContaining({ ok: false, issues: expect.any(Array) }),
       }),
     );
@@ -607,9 +607,9 @@ describe("CLI contracts", () => {
       { encoding: "utf8" },
     );
     expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout).schema).toBe("skit.enable.plan.v9");
+    expect(JSON.parse(result.stdout).schema).toBe("skit.enable.plan.v8");
     expect(existsSync(join(repo, ".agents", "skills", "review"))).toBe(false);
-    const state = Schema.decodeUnknownSync(LibraryStateDocument)(
+    const state = Schema.decodeSync(LibraryStateDocument)(
       await readFile(join(home, "state.json"), "utf8"),
     );
     expect(state.enabled).toEqual([]);
@@ -743,9 +743,7 @@ describe("CLI contracts", () => {
     const stateBeforePreview = await readFile(join(home, "state.json"), "utf8");
     const previewProcess = run("update", "review", "--from-projection", "claude", "--dry-run");
     expect(previewProcess.status).toBe(0);
-    const preview = Schema.decodeUnknownSync(ProjectionRetentionPlanDocument)(
-      previewProcess.stdout,
-    );
+    const preview = Schema.decodeSync(ProjectionRetentionPlanDocument)(previewProcess.stdout);
     expect(
       preview.data.installed_skills.map(({ destination, agreement }) => [destination, agreement]),
     ).toEqual([
@@ -762,9 +760,7 @@ describe("CLI contracts", () => {
 
     const applyProcess = run("update", "review", "--from-projection", "claude");
     expect(applyProcess.status).toBe(0);
-    const applied = Schema.decodeUnknownSync(ProjectionRetentionResultDocument)(
-      applyProcess.stdout,
-    );
+    const applied = Schema.decodeSync(ProjectionRetentionResultDocument)(applyProcess.stdout);
     expect(applied.data.previous_skill_version_id).toBe(preview.data.previous_skill_version_id);
     expect(applied.data.imported_skill_version_id).not.toBe(applied.data.previous_skill_version_id);
     expect(applied.data.imported).toBe(true);
@@ -775,7 +771,7 @@ describe("CLI contracts", () => {
       ["claude", "installed"],
     ]);
 
-    const state = Schema.decodeUnknownSync(LibraryStateDocument)(
+    const state = Schema.decodeSync(LibraryStateDocument)(
       await readFile(join(home, "state.json"), "utf8"),
     );
     const importedSkill = state.skills.find((skill) => skill.skill_id === preview.data.skill_id);
@@ -805,7 +801,7 @@ describe("CLI contracts", () => {
 
     const doctorProcess = run("doctor");
     expect(doctorProcess.status).toBe(12);
-    const doctor = Schema.decodeUnknownSync(DoctorDocument)(doctorProcess.stdout);
+    const doctor = Schema.decodeSync(DoctorDocument)(doctorProcess.stdout);
     expect(doctor.data.issues).toEqual([
       expect.objectContaining({ code: "PROJECTION_CONFLICT", path: paths.agents }),
     ]);
@@ -822,14 +818,12 @@ describe("CLI contracts", () => {
     installedSkill.current_hash = selectedHash;
     installedSkill.status = "conflicted";
     await writeFile(join(home, "state.json"), `${JSON.stringify(partialState, null, 2)}\n`);
-    const beforeRecovery = Schema.decodeUnknownSync(LibraryStateDocument)(
+    const beforeRecovery = Schema.decodeSync(LibraryStateDocument)(
       await readFile(join(home, "state.json"), "utf8"),
     );
     const recoveredProcess = run("update", "review", "--from-projection", "claude");
     expect(recoveredProcess.status).toBe(0);
-    const recovered = Schema.decodeUnknownSync(ProjectionRetentionResultDocument)(
-      recoveredProcess.stdout,
-    );
+    const recovered = Schema.decodeSync(ProjectionRetentionResultDocument)(recoveredProcess.stdout);
     expect(recovered.data.imported).toBe(false);
     expect(recovered.data.imported_skill_version_id).toBe(applied.data.imported_skill_version_id);
     expect(
@@ -838,7 +832,7 @@ describe("CLI contracts", () => {
       ["agents", "conflicted"],
       ["claude", "installed"],
     ]);
-    const afterRecovery = Schema.decodeUnknownSync(LibraryStateDocument)(
+    const afterRecovery = Schema.decodeSync(LibraryStateDocument)(
       await readFile(join(home, "state.json"), "utf8"),
     );
     expect(afterRecovery.skills[0]?.versions.length).toBe(

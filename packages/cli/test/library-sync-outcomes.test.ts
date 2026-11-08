@@ -126,12 +126,7 @@ const seed = Effect.fn("Test.seedSyncHomes")(function* ({ a, b }: Homes) {
   yield* b.sync();
 });
 
-const cases: readonly {
-  row: string;
-  run: (
-    homes: Homes,
-  ) => Effect.Effect<void, unknown, Layer.Success<typeof testPlatformLayer> | Scope.Scope>;
-}[] = [
+const cases = [
   {
     row: "Preflight: local_bytes_changed preserves every store",
     run: (homes) =>
@@ -370,7 +365,9 @@ const cases: readonly {
         assert.ok((yield* Effect.flip(b.sync())) instanceof SyncLocalChanged);
         assert.strictEqual(
           yield* fs.readFileString(join(b.home, "state.json")),
-          Schema.encodeSync(Schema.fromJsonString(LibraryState))(concurrent),
+          yield* Schema.encodeEffect(Schema.fromJsonString(LibraryState))(concurrent).pipe(
+            Effect.orDie,
+          ),
         );
         assert.deepStrictEqual(yield* b.state, concurrent);
         assert.deepStrictEqual(server.remote, head);
@@ -399,7 +396,9 @@ const cases: readonly {
         assert.ok((yield* Effect.flip(a.sync())) instanceof SyncLocalChanged);
         assert.strictEqual(
           yield* fs.readFileString(join(a.home, "state.json")),
-          Schema.encodeSync(Schema.fromJsonString(LibraryState))(concurrent),
+          yield* Schema.encodeEffect(Schema.fromJsonString(LibraryState))(concurrent).pipe(
+            Effect.orDie,
+          ),
         );
         assert.deepStrictEqual(yield* a.state, concurrent);
         assert.deepStrictEqual(yield* fs.readFile(join(a.root, "first", "SKILL.md")), skillBefore);
@@ -722,7 +721,12 @@ const cases: readonly {
         );
       }),
   },
-];
+] satisfies readonly {
+  row: string;
+  run: (
+    homes: Homes,
+  ) => Effect.Effect<void, unknown, Layer.Success<typeof testPlatformLayer> | Scope.Scope>;
+}[];
 
 for (const scenario of cases)
   it.effect(`oracle row: ${scenario.row}`, () =>
@@ -741,7 +745,7 @@ it.effect("oracle: every applying path commits remote before local, on the revis
         events.length = 0;
         const exit = yield* Effect.exit(sync);
         // A stopped operation must not pass merely because its writes happened in order.
-        assert.isTrue(Exit.isSuccess(exit), `${[...events]}`);
+        assert.isTrue(Exit.isSuccess(exit), events.join(","));
         return [...events];
       });
     const ordered = (
@@ -754,7 +758,7 @@ it.effect("oracle: every applying path commits remote before local, on the revis
       assert.deepStrictEqual(recorded.slice(0, firstSave), remoteEvents);
       assert.isTrue(
         recorded.slice(firstSave).every((event) => event === `save ${device}`),
-        `${recorded}`,
+        recorded.join(","),
       );
     };
     yield* a.importSource("first");

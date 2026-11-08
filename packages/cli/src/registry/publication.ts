@@ -41,12 +41,6 @@ export class PublicationResponseError
   readonly code = "OPERATION_FAILED" as const;
   readonly remediation = "Check the Registry's reason, then publish again.";
 }
-function discoveryUrl(template: string, base: string): Effect.Effect<string, TypeError> {
-  const url = URL.parse(template, base);
-  return url
-    ? Effect.succeed(url.toString())
-    : Effect.fail(new TypeError(`Invalid URL: ${template} against ${base}`));
-}
 function stringField(body: unknown, field: string): string | undefined {
   if (typeof body !== "object" || body === null || !(field in body)) return undefined;
   const value: unknown = Reflect.get(body, field);
@@ -83,19 +77,17 @@ export const publishRelease = Effect.fn("Registry.publishRelease")(function* (
     const template = stringField(yield* discovery.json, "publish");
     return template === undefined
       ? undefined
-      : yield* discoveryUrl(
+      : URL.parse(
           template
             .replace("{owner}", encodeURIComponent(owner))
             .replace("{slug}", encodeURIComponent(slug)),
           base,
-        );
+        )?.toString();
   }).pipe(
     Effect.catchTags({
-      RegistryTransportError: () => Effect.succeed(undefined),
-      HttpClientError: () => Effect.succeed(undefined),
+      RegistryTransportError: () => Effect.undefined,
+      HttpClientError: () => Effect.undefined,
     }),
-    // Only discovery URL syntax remains in this channel.
-    Effect.catch(() => Effect.succeed(undefined)),
   );
   if (discovered) publishUrl = discovered;
   const client = yield* HttpApiClient.makeWith(PublicationAuthenticatedApi, {
@@ -162,7 +154,7 @@ export const publishRelease = Effect.fn("Registry.publishRelease")(function* (
       if (classified.kind === "response_decode" || classified.kind === "request_encoding")
         return new SkitContractError({
           contract: classified.kind === "request_encoding" ? "publish request" : "publish response",
-          issues: [{ path: "", message: String(error) }],
+          issues: [{ path: "", message: classified.detail }],
         });
       const failure = registryApiFailure(error, { defaultStatus: 400 });
       const detail = registryApiFailureMessage("SKIT publish", error, { defaultStatus: 400 });

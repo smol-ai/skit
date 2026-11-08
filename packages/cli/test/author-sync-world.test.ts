@@ -43,7 +43,7 @@ const workspaceIdOf = Effect.fn("Test.workspaceIdOf")(function* (device: {
   readonly workspace: string;
 }) {
   const fs = yield* FileSystem.FileSystem;
-  const identity = yield* Schema.decodeUnknownEffect(
+  const identity = yield* Schema.decodeEffect(
     Schema.fromJsonString(Schema.Struct({ workspace_id: Schema.String })),
   )(yield* fs.readFileString(join(device.workspace, ".skit/workspace.json")));
   return identity.workspace_id;
@@ -55,7 +55,7 @@ const savedStates = Effect.fn("Test.savedSyncStates")(function* (device: {
   readonly home: string;
 }) {
   const fs = yield* FileSystem.FileSystem;
-  const bindings = yield* Schema.decodeUnknownEffect(
+  const bindings = yield* Schema.decodeEffect(
     Schema.fromJsonString(
       Schema.Struct({
         schema: Schema.Literal("skit.author-sync.v1"),
@@ -391,8 +391,9 @@ it.effect.each(["distinct", "hardlink"] as const)(
         })
         .pipe(
           Effect.as(true),
-          Effect.catch((error) =>
-            error.reason._tag === "AlreadyExists" ? Effect.succeed(false) : Effect.fail(error),
+          Effect.catchIf(
+            (error) => error.reason._tag === "AlreadyExists",
+            () => Effect.succeed(false),
           ),
         );
       if (!distinct) {
@@ -443,8 +444,9 @@ it.effect("a new incoming NFC name cannot create a twin beside an ignored NFD en
       })
       .pipe(
         Effect.as(true),
-        Effect.catch((error) =>
-          error.reason._tag === "AlreadyExists" ? Effect.succeed(false) : Effect.fail(error),
+        Effect.catchIf(
+          (error) => error.reason._tag === "AlreadyExists",
+          () => Effect.succeed(false),
         ),
       );
     if (!distinct) {
@@ -925,7 +927,7 @@ it.effect("an interrupted pull never moves current and the next sync pulls again
         link: Effect.fn("Test.pauseRemoteOnlyApplication")(function* (from, to) {
           if (to.endsWith("/notes/new.txt")) {
             yield* Deferred.succeed(reachedApply, undefined);
-            yield* Effect.never;
+            return yield* Effect.never;
           }
           yield* fs.link(from, to);
         }),
@@ -1254,7 +1256,7 @@ it.effect.each(["pull", "merge"] as const)(
             yield* fs.link(from, to);
             if (to.endsWith("/notes/1.txt")) {
               yield* Deferred.succeed(appliedFirst, undefined);
-              yield* Effect.never;
+              return yield* Effect.never;
             }
           }),
         }),
@@ -1311,7 +1313,7 @@ it.effect("repeatedly interrupted pulls keep real edits and finish remote deleti
             yield* fs.link(from, to);
             if (to === join(world.a.workspace, path)) {
               yield* Deferred.succeed(written, undefined);
-              yield* Effect.never;
+              return yield* Effect.never;
             }
           }),
         }),

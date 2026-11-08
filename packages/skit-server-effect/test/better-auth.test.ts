@@ -1,7 +1,7 @@
 import { applyD1Migrations, env, reset } from "cloudflare:test";
 import { D1Client } from "@effect/sql-d1";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Order } from "effect";
 import { vi } from "vitest";
 import { makeWebHandler } from "../src/http.js";
 import { databaseLayer } from "../src/platform/cloudflare.js";
@@ -20,7 +20,7 @@ const web = makeWebHandler(env);
 
 const webPromise = <A>(evaluate: () => Promise<A>) =>
   // oxlint-disable-next-line skit/no-promise-wrappers -- Fetch-compatible Worker handlers are Promise APIs; this test helper owns that host boundary.
-  Effect.tryPromise({ try: evaluate, catch: (cause) => cause }).pipe(Effect.orDie);
+  Effect.promise(evaluate);
 
 const request = (path: string, init?: RequestInit) =>
   webPromise(() => web.handler(new Request(`https://registry.test${path}`, init)));
@@ -44,9 +44,9 @@ const signInWithGitHub = (handler: ReturnType<typeof makeWebHandler>, email: str
         }),
       ),
     );
-    const { url } = Schema.decodeUnknownSync(Schema.Struct({ url: Schema.String }))(
+    const { url } = yield* Schema.decodeUnknownEffect(Schema.Struct({ url: Schema.String }))(
       yield* webPromise(() => started.json()),
-    );
+    ).pipe(Effect.orDie);
     const state = new URL(url).searchParams.get("state") ?? "";
     const cookie = started.headers
       .getSetCookie()
@@ -489,9 +489,9 @@ describe("Better Auth adapter", () => {
           }),
         ),
       );
-      const body = Schema.decodeUnknownSync(
+      const body = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ url: Schema.String, redirect: Schema.Boolean }),
-      )(yield* webPromise(() => response.json()));
+      )(yield* webPromise(() => response.json())).pipe(Effect.orDie);
 
       expect(response.status).toBe(200);
       expect(body.redirect).toBe(true);
@@ -629,7 +629,7 @@ describe("Better Auth adapter", () => {
         user_code: Schema.String,
         verification_uri: Schema.String,
         verification_uri_complete: Schema.String,
-        interval: Schema.Number,
+        interval: Schema.Int,
       });
       expect(
         (yield* request("/api/auth/device/code", {
@@ -644,7 +644,9 @@ describe("Better Auth adapter", () => {
         body: JSON.stringify({ client_id: "skit-cli" }),
       });
       expect(started.status).toBe(200);
-      const code = Schema.decodeUnknownSync(DeviceCode)(yield* webPromise(() => started.json()));
+      const code = yield* Schema.decodeUnknownEffect(DeviceCode)(
+        yield* webPromise(() => started.json()),
+      ).pipe(Effect.orDie);
       expect(code.verification_uri).toBe("https://registry.test/device");
       expect(code.verification_uri_complete).toBe(
         `https://registry.test/device?user_code=${code.user_code}`,
@@ -690,9 +692,9 @@ describe("Better Auth adapter", () => {
       vi.useFakeTimers({ now: Date.now() + 6_000, toFake: ["Date"] });
       const granted = yield* poll().pipe(Effect.ensuring(Effect.sync(() => vi.useRealTimers())));
       expect(granted.status).toBe(200);
-      const { access_token } = Schema.decodeUnknownSync(
+      const { access_token } = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ access_token: Schema.String }),
-      )(yield* webPromise(() => granted.json()));
+      )(yield* webPromise(() => granted.json())).pipe(Effect.orDie);
 
       const bearer = { ...json, authorization: `Bearer ${access_token}` };
       const created = yield* request("/api/tokens", {
@@ -804,9 +806,9 @@ describe("Better Auth adapter", () => {
         scopes: ["library:sync"],
         expires_at: null,
       });
-      const tokenValue = Schema.decodeUnknownSync(Schema.Struct({ token: Schema.String }))(
-        token,
-      ).token;
+      const tokenValue = (yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ token: Schema.String }),
+      )(token).pipe(Effect.orDie)).token;
       const patLimit = vi.fn<RateLimit["limit"]>().mockResolvedValue({ success: false });
       const unexpectedLimit = vi
         .fn<RateLimit["limit"]>()
@@ -864,9 +866,9 @@ describe("Better Auth adapter", () => {
         ],
       });
 
-      const tokenId = Schema.decodeUnknownSync(Schema.Struct({ token_id: Schema.String }))(
-        token,
-      ).token_id;
+      const tokenId = (yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ token_id: Schema.String }),
+      )(token).pipe(Effect.orDie)).token_id;
       const revokedToken = yield* request(`/api/tokens/${tokenId}`, {
         method: "DELETE",
         headers: { cookie: sessionCookie, origin: "https://registry.test" },
@@ -894,13 +896,13 @@ describe("Better Auth adapter", () => {
         });
       const firstUpload = yield* uploadSnapshot();
       expect(firstUpload.status).toBe(200);
-      const uploaded = Schema.decodeUnknownSync(
+      const uploaded = yield* Schema.decodeUnknownEffect(
         Schema.Struct({
           library_id: Schema.String,
           snapshot_digest: Schema.String,
           reused: Schema.Boolean,
         }),
-      )(yield* webPromise(() => firstUpload.json()));
+      )(yield* webPromise(() => firstUpload.json())).pipe(Effect.orDie);
       expect(uploaded).toMatchObject({ snapshot_digest: archive.digest, reused: false });
       const libraryId = uploaded.library_id;
       const secondUpload = yield* uploadSnapshot();
@@ -1092,7 +1094,7 @@ describe("Better Auth adapter", () => {
       expect((yield* writeLibrarySync(null, portableV7)).status).toBe(400);
       const committed = yield* writeLibrarySync(null, portable);
       expect(committed.status).toBe(200);
-      const syncedBody = Schema.decodeUnknownSync(
+      const syncedBody = yield* Schema.decodeUnknownEffect(
         Schema.Struct({
           library: Schema.Struct({
             library_id: Schema.String,
@@ -1100,7 +1102,7 @@ describe("Better Auth adapter", () => {
             manifest: Schema.Unknown,
           }),
         }),
-      )(yield* webPromise(() => committed.json()));
+      )(yield* webPromise(() => committed.json())).pipe(Effect.orDie);
       const repeated = yield* writeLibrarySync(syncedBody.library.revision_id, portable);
       expect(repeated.status).toBe(200);
       expect(yield* webPromise(() => repeated.json())).toEqual(syncedBody);
@@ -1154,9 +1156,9 @@ describe("Better Auth adapter", () => {
       };
       const sourceCommitted = yield* writeLibrarySync(syncedBody.library.revision_id, sourceBacked);
       expect(sourceCommitted.status).toBe(200);
-      const sourceBody = Schema.decodeUnknownSync(
+      const sourceBody = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ library: Schema.Struct({ revision_id: Schema.String }) }),
-      )(yield* webPromise(() => sourceCommitted.json()));
+      )(yield* webPromise(() => sourceCommitted.json())).pipe(Effect.orDie);
       expect(
         (yield* writeLibrarySync(sourceBody.library.revision_id, {
           ...portable,
@@ -1503,12 +1505,14 @@ describe("Better Auth adapter", () => {
 
         // workerd may serialize the two requests; either way exactly one first write may commit.
         const raced = yield* Effect.all([firstWrite(), firstWrite()], { concurrency: "unbounded" });
-        expect(raced.map((response) => response.status).sort()).toEqual([200, 409]);
-        const winner = Schema.decodeUnknownSync(
+        expect(raced.map((response) => response.status).sort(Order.Number)).toEqual([200, 409]);
+        const winner = yield* Schema.decodeUnknownEffect(
           Schema.Struct({
             library: Schema.Struct({ library_id: Schema.String, revision_id: Schema.String }),
           }),
-        )(yield* webPromise(() => raced.find((response) => response.status === 200)!.json()));
+        )(yield* webPromise(() => raced.find((response) => response.status === 200)!.json())).pipe(
+          Effect.orDie,
+        );
         const head = yield* send("/api/library/portable", { headers: { cookie: alice.cookie } });
         expect(yield* webPromise(() => head.json())).toMatchObject({ library: winner.library });
 
@@ -1533,9 +1537,9 @@ describe("Better Auth adapter", () => {
         // The same bytes uploaded by Bob are his own snapshot in his own Library.
         const bobUpload = yield* upload(bob);
         expect(bobUpload.status).toBe(200);
-        const bobSnapshot = Schema.decodeUnknownSync(
+        const bobSnapshot = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ library_id: Schema.String, reused: Schema.Boolean }),
-        )(yield* webPromise(() => bobUpload.json()));
+        )(yield* webPromise(() => bobUpload.json())).pipe(Effect.orDie);
         expect(bobSnapshot.library_id).not.toBe(winner.library.library_id);
         expect(bobSnapshot.reused).toBe(false);
       }).pipe(Effect.provide(platformLayer)),

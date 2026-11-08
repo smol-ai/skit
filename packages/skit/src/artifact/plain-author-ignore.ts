@@ -96,7 +96,7 @@ export const makePlainAuthorIgnore = Effect.fn("Tree.makePlainAuthorIgnore")(fun
   const links = yield* LinkStat;
   const path = yield* Path.Path;
   const initialized = yield* (yield* AuthorIgnoreRepository).repository.pipe(
-    Effect.map(Option.some),
+    Effect.asSome,
     // Without Git there is no evaluator; only a folder with no .gitignore can do without one.
     Effect.catchReason("PlatformError", "NotFound", () => Effect.succeedNone),
     Effect.mapError((error) => failure(String(error))),

@@ -14,7 +14,7 @@ export const writeCommandContractArtifacts = Effect.fn("CLI.writeCommandContract
         .readFileString(path)
         .pipe(
           Effect.catchTag("PlatformError", (error) =>
-            error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+            error.reason._tag === "NotFound" ? Effect.undefined : Effect.fail(error),
           ),
         );
       if (existing !== contents) yield* fs.writeFileString(path, contents);

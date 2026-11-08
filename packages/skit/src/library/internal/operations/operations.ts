@@ -55,7 +55,7 @@ export const operationScope = Effect.fn("Library.operationScope")(function* (
 ) {
   const writer = yield* LibraryWriter;
   const savedState = yield* loadLibrary(writer.home);
-  const savedOperations = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
+  const savedOperations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
     savedState.operations,
   );
   const savedOperation = savedOperations.find((item) => item.operationId === operationId);
@@ -63,13 +63,11 @@ export const operationScope = Effect.fn("Library.operationScope")(function* (
     savedOperation?._tag === "Pending" ? savedOperation.steps[index]?.applies?.at(-1) : undefined;
   if (latest) {
     const outcome = yield* runApply(operationId, index, latest.apply, latest.key);
-    if (outcome._tag === "Incomplete") return yield* Effect.fail(outcome.cause);
+    if (outcome._tag === "Incomplete") return yield* outcome.cause;
   }
   const applyBatch = Effect.fn("Library.applyBatch")(function* (key: string, plan: Plan) {
     const state = yield* loadLibrary(writer.home);
-    const operations = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
-      state.operations,
-    );
+    const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(state.operations);
     const operation = operations.find((item) => item.operationId === operationId);
     if (operation?._tag !== "Pending" || !operation.steps[index])
       return yield* new StalePlan({ message: "Installed changes require their Pending operation" });
@@ -81,9 +79,7 @@ export const operationScope = Effect.fn("Library.operationScope")(function* (
   }, Effect.scoped);
   const publishSync = Effect.fn("Library.saveSyncState")(function* () {
     const current = yield* loadLibrary(writer.home);
-    const saved = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
-      current.operations,
-    );
+    const saved = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(current.operations);
     const operation = saved.find((item) => item.operationId === operationId);
     const step = operation?._tag === "Pending" ? operation.steps[index]?.step : undefined;
     const source =

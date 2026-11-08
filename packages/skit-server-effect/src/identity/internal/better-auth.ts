@@ -29,7 +29,7 @@ const UserIdentity = Schema.Struct({
 });
 const SessionIdentity = Schema.Struct({
   user: Schema.Struct({ id: Schema.String }),
-  session: Schema.Struct({ authorizationGeneration: Schema.optionalKey(Schema.Number) }),
+  session: Schema.Struct({ authorizationGeneration: Schema.optionalKey(Schema.Finite) }),
 });
 
 interface SessionIdentity {
@@ -37,19 +37,19 @@ interface SessionIdentity {
   readonly authorizationGeneration: number;
 }
 
-export class BetterAuthError extends Schema.TaggedError<BetterAuthError>()(
-  "BetterAuth.AdapterError",
-  { operation: Schema.String, cause: Schema.Defect() },
-) {}
+export class BetterAuthError extends Schema.TaggedError<
+  BetterAuthError,
+  { readonly brand: unique symbol }
+>()("BetterAuth.AdapterError", { operation: Schema.String, cause: Schema.Defect() }) {}
 
-class InvalidUsername extends Schema.TaggedError<InvalidUsername>()(
-  "BetterAuth.InvalidUsername",
-  {},
-) {}
-class UsernameUnavailable extends Schema.TaggedError<UsernameUnavailable>()(
-  "BetterAuth.UsernameUnavailable",
-  {},
-) {}
+class InvalidUsername extends Schema.TaggedError<
+  InvalidUsername,
+  { readonly brand: unique symbol }
+>()("BetterAuth.InvalidUsername", {}) {}
+class UsernameUnavailable extends Schema.TaggedError<
+  UsernameUnavailable,
+  { readonly brand: unique symbol }
+>()("BetterAuth.UsernameUnavailable", {}) {}
 
 export interface BetterAuthService {
   readonly handle: (request: Request) => Effect.Effect<Response, BetterAuthError>;
@@ -92,6 +92,8 @@ const githubAccountLinkingPolicy = {
 
 export const makeBetterAuth = (configuration: BetterAuthConfiguration, sql: DatabaseSqlClient) =>
   Effect.gen(function* () {
+    // Better Auth invokes Promise hooks outside the fiber; keep the identity owner's services.
+    const services = yield* Effect.context();
     const crypto = yield* WebCrypto.WebCrypto;
     const random = yield* SecureRandom.SecureRandom;
     const clock = yield* Clock.Clock;
@@ -284,7 +286,7 @@ export const makeBetterAuth = (configuration: BetterAuthConfiguration, sql: Data
               return { data: user };
             },
             after: async (unknownUser) => {
-              const decoded = Schema.decodeUnknownOption(UserIdentity)(unknownUser);
+              const decoded = Schema.decodeOption(UserIdentity)(unknownUser);
               // oxlint-disable-next-line skit/no-throw-in-effect -- Better Auth database hooks are Promise callbacks and reject by throwing.
               if (Option.isNone(decoded)) throw new Error("INVALID_USER_IDENTITY");
               if (
@@ -294,8 +296,7 @@ export const makeBetterAuth = (configuration: BetterAuthConfiguration, sql: Data
                 return;
               // A failed batch writes nothing; the next sign-in or username claim provisions
               // the user.
-              // oxlint-disable-next-line skit/no-nested-runtime -- Better Auth database hooks are Promise callbacks; this adapter owns that integration boundary.
-              await Effect.runPromise(
+              await Effect.runPromiseWith(services)(
                 provision(decoded.value.id, decoded.value.username).pipe(
                   Effect.tapError((error) =>
                     Effect.logError("Principal provisioning failed", error),
@@ -309,8 +310,7 @@ export const makeBetterAuth = (configuration: BetterAuthConfiguration, sql: Data
           create: {
             before: async (session) => {
               // Sign-in repairs a user whose username was saved without its Principal Namespace.
-              // oxlint-disable-next-line skit/no-nested-runtime -- Better Auth database hooks are Promise callbacks; this adapter owns that integration boundary.
-              await Effect.runPromise(
+              await Effect.runPromiseWith(services)(
                 readProvisioning(session.userId).pipe(
                   Effect.flatMap(({ username, namespace_slug }) =>
                     username === null || namespace_slug !== null
@@ -364,8 +364,8 @@ export const makeBetterAuth = (configuration: BetterAuthConfiguration, sql: Data
         catch: (cause) => new BetterAuthError({ operation: "read session", cause }),
       }).pipe(
         Effect.flatMap((unknownSession) => {
-          if (unknownSession === null) return Effect.succeed(undefined);
-          return Schema.decodeUnknownEffect(SessionIdentity)(unknownSession).pipe(
+          if (unknownSession === null) return Effect.undefined;
+          return Schema.decodeEffect(SessionIdentity)(unknownSession).pipe(
             Effect.map(({ user, session }) => ({
               userId: user.id,
               authorizationGeneration: session.authorizationGeneration ?? 1,

@@ -79,7 +79,9 @@ export const readOpenCodeV2Skills = Effect.fn("Doctor.readOpenCodeV2Skills")(fun
         ),
       );
       yield* Effect.addFinalizer(() =>
-        Stream.empty.pipe(Stream.run(child.stdin), Effect.ignore).pipe(
+        Stream.empty.pipe(
+          Stream.run(child.stdin),
+          Effect.ignore,
           Effect.andThen(
             child.exitCode.pipe(
               Effect.timeoutOrElse({
@@ -114,7 +116,7 @@ export const readOpenCodeV2Skills = Effect.fn("Doctor.readOpenCodeV2Skills")(fun
         Stream.decodeText(),
         Stream.splitLines,
         Stream.filter((line) => Boolean(line.trim())),
-        Stream.mapEffect((line) => Schema.decodeUnknownEffect(Schema.fromJsonString(Ready))(line)),
+        Stream.mapEffect((line) => Schema.decodeEffect(Schema.fromJsonString(Ready))(line)),
         Stream.runHead,
       );
       if (Option.isNone(ready))
@@ -164,7 +166,7 @@ export const readOpenCodeV2Skills = Effect.fn("Doctor.readOpenCodeV2Skills")(fun
         );
       });
       const active = Effect.gen(function* () {
-        const report = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(envelope(Plugins)))(
+        const report = yield* Schema.decodeEffect(Schema.fromJsonString(envelope(Plugins)))(
           yield* read("/api/plugin"),
         );
         if (report.location.directory !== directory)
@@ -181,7 +183,7 @@ export const readOpenCodeV2Skills = Effect.fn("Doctor.readOpenCodeV2Skills")(fun
       let previous = "";
       let stable = 0;
       const inventory = Effect.gen(function* () {
-        const report = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(envelope(Skills)))(
+        const report = yield* Schema.decodeEffect(Schema.fromJsonString(envelope(Skills)))(
           yield* read("/api/skill"),
         );
         if (report.location.directory !== directory)

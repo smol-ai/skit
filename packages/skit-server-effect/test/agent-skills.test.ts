@@ -12,7 +12,7 @@ const web = makeWebHandler(env);
 
 const webPromise = <A>(evaluate: () => Promise<A>) =>
   // oxlint-disable-next-line skit/no-promise-wrappers -- Fetch-compatible Worker handlers are Promise APIs; this test helper owns that host boundary.
-  Effect.tryPromise({ try: evaluate, catch: (cause) => cause }).pipe(Effect.orDie);
+  Effect.promise(evaluate);
 
 const request = (path: string) =>
   webPromise(() => web.handler(new Request(`https://registry.test${path}`)));
@@ -118,13 +118,13 @@ describe("Agent Skills discovery", () => {
         ],
         16,
       );
-      const index = Schema.decodeUnknownSync(Index)(
+      const index = yield* Schema.decodeUnknownEffect(Index)(
         JSON.parse(
           new TextDecoder().decode(
             yield* bytesOf(yield* request("/tim/tools/.well-known/agent-skills/index.json")),
           ),
         ),
-      );
+      ).pipe(Effect.orDie);
 
       expect(index.skills.map(({ name }) => name)).toEqual(["lint", "review"]);
       for (const entry of index.skills) {

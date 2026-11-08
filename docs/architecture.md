@@ -399,10 +399,11 @@ Dispatch parses against that catalog and centralizes help, successful results, s
 
 Output contracts are Effect Schemas bound to command definitions. The generated command manifest
 and JSON Schemas in `packages/cli/contracts/` are committed so public contract changes are visible
-in review. Branch-local generation overwrites and prunes those artifacts freely. Pull-request CI
-freezes stable contract IDs that exist at the base commit and permits at most the next version in a
-contract family. Tests check catalog invariants, generated-artifact drift, and real payload
-validation without adding production-time schema parsing.
+in review and may evolve throughout development. Tests check catalog invariants,
+generated-artifact freshness, and real payload validation without adding production-time
+schema parsing. Contract versioning follows the
+[release compatibility policy](./coding-standards.md#name-things-plainly); the release
+workflow checks compatibility against `origin/dev`.
 
 ## Harness knowledge and projections
 

@@ -40,14 +40,12 @@ const documentAt = Effect.fn("PnpmSkills.document")(function* (
     });
     return PnpmDocument.Unreadable();
   }
-  try {
+  return yield* Effect.try(() => {
     const document = parseDocument(result.success);
     if (document.errors.length) return PnpmDocument.Malformed();
     const value: unknown = document.toJSON();
     return PnpmDocument.Parsed({ value });
-  } catch {
-    return PnpmDocument.Malformed();
-  }
+  }).pipe(Effect.orElseSucceed(() => PnpmDocument.Malformed()));
 });
 
 /** Corroborate pnpm's ledger with a live link into an installed package's skills directory.

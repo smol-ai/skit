@@ -57,7 +57,7 @@ export interface SetupApplyOptions {
  * can undo it by its operation ID.
  */
 export class SetupStopped
-  extends Schema.TaggedError<SetupStopped>()("SetupStopped", {
+  extends Schema.TaggedError<SetupStopped, { readonly brand: unique symbol }>()("SetupStopped", {
     operationId: Schema.String,
     step: Schema.Int,
     detail: Schema.String,

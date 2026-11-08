@@ -116,9 +116,7 @@ const agentSkillsRoutes = (application: ReleaseApplication) =>
 
 const authenticatedRoutes = (env: RuntimeEnv) =>
   HttpRouter.use((router) =>
-    Effect.gen(function* () {
-      yield* router.add("*", "/api/auth/*", handleAuthRequest(env));
-    }),
+    Effect.asVoid(Effect.suspend(() => router.add("*", "/api/auth/*", handleAuthRequest(env)))),
   );
 
 const onboardingRoutes = (application: AuthenticatedApplication) =>

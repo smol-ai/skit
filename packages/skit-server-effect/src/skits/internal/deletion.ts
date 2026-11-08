@@ -31,12 +31,15 @@ interface SkitDeletePlan {
   readonly release_versions: ReadonlyArray<string>;
 }
 
-class DeleteRequiresPrivate extends Schema.TaggedError<DeleteRequiresPrivate>()(
-  "SkitDelete.RequiresPrivate",
-  {},
-) {}
+class DeleteRequiresPrivate extends Schema.TaggedError<
+  DeleteRequiresPrivate,
+  { readonly brand: unique symbol }
+>()("SkitDelete.RequiresPrivate", {}) {}
 
-class DeleteNotFound extends Schema.TaggedError<DeleteNotFound>()("SkitDelete.NotFound", {}) {}
+class DeleteNotFound extends Schema.TaggedError<
+  DeleteNotFound,
+  { readonly brand: unique symbol }
+>()("SkitDelete.NotFound", {}) {}
 
 export interface Deletion {
   readonly planDelete: (
@@ -62,7 +65,7 @@ export const makeDeletion = (
   blobs: BlobStoreService,
   ownsNamespace: (principal: Principal, namespace: string) => Effect.Effect<boolean, DatabaseError>,
 ): Deletion => {
-  const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
+  const db = <A, E>(operation: string, effect: Effect.Effect<A, E>) =>
     effect.pipe(databaseError(operation));
 
   const plan = Effect.fn("SkitDeletion.plan")(function* (owner: string, slug: string) {
@@ -180,14 +183,14 @@ export const makeDeletion = (
         release_versions: [],
       };
     }
-    const revisions = yield* Schema.decodeUnknownEffect(Schema.Array(RevisionRow))(
+    const revisions = yield* Schema.decodeEffect(Schema.Array(RevisionRow))(
       deletedRevisions ?? [],
     ).pipe(
       Effect.mapError(
         (cause) => new DatabaseError({ operation: "decode deleted revisions", cause }),
       ),
     );
-    const releases = yield* Schema.decodeUnknownEffect(Schema.Array(DeletedReleaseRow))(
+    const releases = yield* Schema.decodeEffect(Schema.Array(DeletedReleaseRow))(
       deletedReleases ?? [],
     ).pipe(
       Effect.mapError(

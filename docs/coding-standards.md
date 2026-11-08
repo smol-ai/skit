@@ -67,10 +67,15 @@ Compatibility is required for released formats and contracts. Before adding a
 migration, legacy loader, fallback decoder, or compatibility alias, identify the
 released version or explicit compatibility commitment that requires it.
 
-Change unreleased formats directly and update their callers and fixtures together.
-A format's presence in Git, tests, or development files does not establish a
-compatibility requirement. Preserve unreleased formats only when explicitly
-requested.
+Contracts and stored formats may evolve freely while unreleased, including across
+multiple PRs merged into `dev`. Update their producers, consumers, fixtures, and
+generated artifacts together. A format's presence in Git, tests, development files,
+or on `dev` does not establish a compatibility commitment. Preserve unreleased
+formats only when explicitly requested.
+
+Finalize required version bumps and migrations when preparing a release.
+Development PRs must not introduce version increments or compatibility machinery
+solely to preserve an earlier unreleased representation.
 
 Renaming stored names used by released versions requires a migration in the owning
 store loader. Published contract names, released CLI flags, and Registry wire

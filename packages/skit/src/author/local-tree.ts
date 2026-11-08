@@ -52,7 +52,7 @@ export const scanWorkspaceWrite = Effect.fn("AuthorWorkspace.scanWriteTree")(fun
   const stat = (target: string) =>
     links
       .lstat(target)
-      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
   const identityMatches = (info: FileSystem.File.Info, expected: NativeTreeIdentity) =>
     Option.exists(nativeIdentityOf(info), (identity) => sameNativeIdentity(identity, expected));
   const nativePath = (target: string) =>

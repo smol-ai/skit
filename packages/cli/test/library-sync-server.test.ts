@@ -19,13 +19,13 @@ const fixtures = Effect.gen(function* () {
     "../../skit-server-effect/test/fixtures/library-sync/",
     import.meta.url,
   );
-  const manifest = Schema.decodeUnknownSync(Schema.fromJsonString(LibraryManifest))(
+  const manifest = yield* Schema.decodeEffect(Schema.fromJsonString(LibraryManifest))(
     yield* fs.readFileString(new URL("manifest.json", directory).pathname),
-  );
+  ).pipe(Effect.orDie);
   return {
-    archive: Schema.decodeUnknownSync(Schema.fromJsonString(SnapshotArchive))(
+    archive: yield* Schema.decodeEffect(Schema.fromJsonString(SnapshotArchive))(
       yield* fs.readFileString(new URL("archive.json", directory).pathname),
-    ),
+    ).pipe(Effect.orDie),
     manifest,
     changed: {
       ...manifest,
@@ -83,7 +83,9 @@ it.effect("fake treats a retry of the committed manifest on the new head as appl
     });
     assert.strictEqual(retry.status, 200);
     assert.deepStrictEqual(
-      Schema.decodeUnknownSync(LibraryResponse)(yield* Effect.promise(() => retry.json())).library,
+      (yield* Schema.decodeUnknownEffect(LibraryResponse)(
+        yield* Effect.promise(() => retry.json()),
+      ).pipe(Effect.orDie)).library,
       committed.head,
     );
     assert.deepStrictEqual(server.stored, committed);

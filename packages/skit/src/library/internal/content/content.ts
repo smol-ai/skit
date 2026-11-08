@@ -62,7 +62,7 @@ export const planContent = Effect.fn("Library.content.plan")(function* (
   target: LibraryManifest,
   localArchives: readonly SnapshotArchive[],
 ) {
-  const manifest = yield* Schema.decodeUnknownEffect(LibraryManifest, {
+  const manifest = yield* Schema.decodeEffect(LibraryManifest, {
     onExcessProperty: "error",
   })(structuredClone(target)).pipe(
     Effect.mapError(
@@ -143,7 +143,7 @@ export const stageContent = Effect.fn("Library.content.stage")(function* <E = ne
   const originalsPath = libraryOriginalsPath(home);
   const fs = yield* FileSystem.FileSystem;
   const manifest = normalizeLibraryManifest(
-    yield* Schema.decodeUnknownEffect(LibraryManifest, { onExcessProperty: "error" })(
+    yield* Schema.decodeEffect(LibraryManifest, { onExcessProperty: "error" })(
       structuredClone(target),
     ).pipe(Effect.mapError(() => new RestoreInvalid({ detail: "invalid target manifest" }))),
   );

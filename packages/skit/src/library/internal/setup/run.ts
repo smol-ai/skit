@@ -256,7 +256,7 @@ export const checkSteps = (home: string, steps: readonly SetupStep[]) => {
 };
 
 const decodeOperations = (state: LibraryState) =>
-  Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(state.operations);
+  Schema.decodeEffect(Schema.Array(OperationStatus))(state.operations);
 const encodeOperation = Schema.encodeEffect(OperationStatus);
 
 /** The decoded operation `operationId` names in `state`, if it records one. */
@@ -744,7 +744,7 @@ export const applyRecorded = Effect.fn("Library.applyRecorded")(function* (
     outcome._tag === "Incomplete" &&
     (plan.intent._tag !== "Enabled" || outcome.results.length === 0)
   )
-    return yield* Effect.fail(outcome.cause);
+    return yield* outcome.cause;
   return outcome;
 }, Effect.scoped);
 

@@ -5,7 +5,7 @@ import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import * as Library from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { Cause, Effect, Exit, FileSystem } from "effect";
+import { Layer, Cause, Effect, Exit, FileSystem } from "effect";
 import { systemError } from "effect/PlatformError";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { execFileSync } from "node:child_process";
@@ -67,8 +67,9 @@ const fixture = Effect.gen(function* () {
   const roots = { home: root, configHome: join(root, "config"), overrides: {} };
   const run = <A, E, R>(operation: Effect.Effect<A, E, R>) =>
     operation.pipe(
-      Effect.provide(Library.layer({ home, roots })),
-      Effect.provide(skitConfigurationLayer(home)),
+      Effect.provide(
+        Library.layer({ home, roots }).pipe(Layer.provideMerge(skitConfigurationLayer(home))),
+      ),
       Effect.provideService(HttpClient.HttpClient, client),
     );
   const load = run(
@@ -195,30 +196,33 @@ for (const failurePhase of ["install", "source-cleanup"] as const) {
             Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
           ).pipe(
             // The owner is built under this test's faulting filesystem.
-            Effect.provide(Library.layer({ home: f.home, roots })),
             Effect.provide(
-              rendererTestLayer({
-                withStatus: (status, operation) =>
-                  failurePhase === "source-cleanup" &&
-                  typeof status !== "string" &&
-                  status.pending === `${collection.label} · Fetching and inspecting Source`
-                    ? operation.pipe(
-                        Effect.ensuring(
-                          Effect.gen(function* () {
-                            failed = true;
-                            return yield* Effect.die(
-                              systemError({
-                                _tag: "PermissionDenied",
-                                module: "FileSystem",
-                                method: "makeTempDirectoryScoped",
-                                pathOrDescriptor: join(f.root, "source-temp"),
+              Library.layer({ home: f.home, roots }).pipe(
+                Layer.provideMerge(
+                  rendererTestLayer({
+                    withStatus: (status, operation) =>
+                      failurePhase === "source-cleanup" &&
+                      typeof status !== "string" &&
+                      status.pending === `${collection.label} · Fetching and inspecting Source`
+                        ? operation.pipe(
+                            Effect.ensuring(
+                              Effect.gen(function* () {
+                                failed = true;
+                                return yield* Effect.die(
+                                  systemError({
+                                    _tag: "PermissionDenied",
+                                    module: "FileSystem",
+                                    method: "makeTempDirectoryScoped",
+                                    pathOrDescriptor: join(f.root, "source-temp"),
+                                  }),
+                                );
                               }),
-                            );
-                          }),
-                        ),
-                      )
-                    : operation,
-              }),
+                            ),
+                          )
+                        : operation,
+                  }),
+                ),
+              ),
             ),
             Effect.provideService(FileSystem.FileSystem, {
               ...f.fs,
@@ -226,14 +230,12 @@ for (const failurePhase of ["install", "source-cleanup"] as const) {
                 failurePhase === "install" && input?.prefix === ".skit-stage-" && !failed
                   ? Effect.gen(function* () {
                       failed = true;
-                      return yield* Effect.fail(
-                        systemError({
-                          _tag: "PermissionDenied",
-                          module: "FileSystem",
-                          method: "makeTempDirectoryScoped",
-                          pathOrDescriptor: join(f.root, "install-stage"),
-                        }),
-                      );
+                      return yield* systemError({
+                        _tag: "PermissionDenied",
+                        module: "FileSystem",
+                        method: "makeTempDirectoryScoped",
+                        pathOrDescriptor: join(f.root, "install-stage"),
+                      });
                     })
                   : f.fs.makeTempDirectoryScoped(input),
             }),

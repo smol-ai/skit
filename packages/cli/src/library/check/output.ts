@@ -34,7 +34,7 @@ export const CheckResult = Schema.Array(
         original_intact: Schema.Boolean,
       }),
     ),
-    unresolved_skill_selections: Schema.Number,
+    unresolved_skill_selections: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     source_status: Schema.Literals(["current", "changed", "unverified", "not-applicable"]),
     current_snapshot_digest: Schema.optionalKey(Hash),
     available_snapshot_digest: Schema.optionalKey(Hash),

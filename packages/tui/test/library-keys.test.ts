@@ -2,7 +2,7 @@
 // its snapshot mode in a Bun subprocess and observe the Library on disk, never the frame text.
 // Each replay step waits for the host to settle; `a+b` presses keys before that work can finish.
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Order } from "effect";
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { skitLayer } from "@smolai/skit-core/platform";
@@ -73,7 +73,7 @@ const bound = (library: TuiLibrary, scope: "global" | "repository") =>
               ?.label
           : state.skills.find((candidate) => candidate.skill_id === item.skill)?.name,
       )
-      .sort(),
+      .sort(Order.mapInput(Order.String, String)),
   );
 
 const cancelled: { at: string; environment: Record<string, string>; keys: string }[] = [

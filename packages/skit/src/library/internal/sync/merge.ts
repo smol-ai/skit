@@ -420,10 +420,7 @@ export function mergeLibraryManifests(
         ),
     ),
   ];
-  if (
-    conflicts.length === 0 &&
-    Result.isFailure(Schema.decodeUnknownResult(LibraryManifest)(manifest))
-  )
+  if (conflicts.length === 0 && Result.isFailure(Schema.decodeResult(LibraryManifest)(manifest)))
     conflicts.push("manifest:invariants");
   return {
     manifest,
@@ -450,7 +447,7 @@ function describeLibraryMergeConflicts(
   manifest: LibraryManifest,
   unresolvable: readonly string[] = [],
 ) {
-  const decoded = Schema.decodeUnknownResult(LibraryManifest)(manifest);
+  const decoded = Schema.decodeResult(LibraryManifest)(manifest);
   const invalid = Result.isFailure(decoded) ? decoded.failure.message : "Invalid merged Library";
   return conflicts.map((key) => {
     const collection = manifest.collections.find(

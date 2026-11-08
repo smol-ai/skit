@@ -28,9 +28,7 @@ type ReadError =
 /** The workspace read, with only skit.remote.json present: every other workspace file is absent. */
 const remote = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
-  return yield* Effect.gen(function* () {
-    return yield* readAuthorWorkspace("/");
-  }).pipe(
+  return yield* Effect.suspend(() => readAuthorWorkspace("/")).pipe(
     // Fresh: the platform layer's own AuthorWorkspace reads the real FileSystem.
     Effect.provide(Layer.fresh(authorWorkspaceLayer)),
     Effect.provideService(FileSystem.FileSystem, {

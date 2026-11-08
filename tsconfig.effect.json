@@ -1,0 +1,6 @@
+{
+  "$schema": "./node_modules/@effect/tsgo/schema.json",
+  "compilerOptions": {
+    "plugins": [{ "name": "@effect/language-service", "diagnostics": false }]
+  }
+}

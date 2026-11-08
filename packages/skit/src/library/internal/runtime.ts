@@ -271,7 +271,7 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
     read,
     history: Effect.gen(function* () {
       const state = yield* loadLibrary(home);
-      const operations = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
+      const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
         state.operations,
       ).pipe(
         Effect.mapError(

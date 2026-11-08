@@ -2,8 +2,9 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
-import { Cause, Effect, Exit, FileSystem, Schema } from "effect";
+import { Layer, Cause, Effect, Exit, FileSystem, Schema } from "effect";
 import { skitLayer } from "@smolai/skit-core/platform";
+import { releasePublishRequestSchema } from "@smolai/skit-core/api";
 import { publish } from "../src/author/publish.js";
 import { authorWorkspaceLayer } from "@smolai/skit-core/author";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
@@ -24,10 +25,15 @@ const runPublish = (
   options: { transport: TestHttpHandler; credentialOrigin?: string },
 ) =>
   publish(root, version, revision).pipe(
-    Effect.provide(registryHttpLayer(testHttpClientLayer(options.transport))),
-    Effect.provide(authorWorkspaceLayer),
-    // The environment's token is for this Registry only.
-    Effect.provide(registryCredentialLayer(options.credentialOrigin ?? "https://registry.test")),
+    Effect.provide(
+      registryHttpLayer(testHttpClientLayer(options.transport)).pipe(
+        Layer.provideMerge(authorWorkspaceLayer),
+        // The environment's token is for this Registry only.
+        Layer.provideMerge(
+          registryCredentialLayer(options.credentialOrigin ?? "https://registry.test"),
+        ),
+      ),
+    ),
   );
 
 /** The error a publication failed or died with, or `undefined` when it succeeded. */
@@ -61,63 +67,72 @@ const unzipList = (archive: string) =>
 const unzipEntry = (archive: string, entry: string) =>
   Effect.sync(() => execFileSync("unzip", ["-p", archive, entry], { encoding: "utf8" }));
 
-it.effect("publish sends a validated archive to the Registry", () =>
-  Effect.gen(function* () {
-    const root = yield* scratch("skit-publish-test-");
-    yield* writeRemote(root);
-    yield* copySkitFixtureEffect("readme-authored", root);
-    let received: {
-      url?: string;
-      authorization?: string;
-      body?: Schema.Schema.Type<typeof Schema.JsonObject>;
-    } = {};
-    const fetcher: TestHttpHandler = (input, url) =>
-      Effect.sync(() => {
-        if (input.url.endsWith("/.well-known/agent-skills/"))
-          return Response.json({ publish: "/registry/{owner}/{slug}/publish" });
-        received = {
-          url: url.toString(),
-          authorization: input.headers["authorization"],
-          body: Schema.decodeUnknownSync(Schema.fromJsonString(Schema.JsonObject))(
-            new TextDecoder().decode(
-              input.body._tag === "Uint8Array" ? input.body.body : undefined,
-            ),
-          ),
-        };
-        return Response.json(
-          {
-            release: {
-              release_id: "rel_1",
-              version: "1.2.3",
-              revision_id: revision,
-              archive_digest: `sha256:${"a".repeat(64)}`,
-              download_path: "/api/skits/test/tools/releases/1.2.3/download",
+it.effect.each(["/registry/{owner}/{slug}/publish", "http://["])(
+  "publish uses discovery or its default endpoint for template %s",
+  (template) =>
+    Effect.gen(function* () {
+      const root = yield* scratch("skit-publish-test-");
+      yield* writeRemote(root);
+      yield* copySkitFixtureEffect("readme-authored", root);
+      let received: {
+        url?: string;
+        authorization?: string;
+        body?: typeof releasePublishRequestSchema.Type;
+      } = {};
+      const fetcher: TestHttpHandler = (input, url) =>
+        Effect.gen(function* () {
+          if (input.url.endsWith("/.well-known/agent-skills/"))
+            return Response.json({ publish: template });
+          received = {
+            url: url.toString(),
+            authorization: input.headers["authorization"],
+            body: yield* Schema.decodeEffect(Schema.fromJsonString(releasePublishRequestSchema))(
+              new TextDecoder().decode(
+                input.body._tag === "Uint8Array" ? input.body.body : undefined,
+              ),
+            ).pipe(Effect.orDie),
+          };
+          return Response.json(
+            {
+              release: {
+                release_id: "rel_1",
+                version: "1.2.3",
+                revision_id: revision,
+                archive_digest: `sha256:${"a".repeat(64)}`,
+                download_path: "/api/skits/test/tools/releases/1.2.3/download",
+              },
             },
-          },
-          { status: 201 },
-        );
+            { status: 201 },
+          );
+        });
+      const result = yield* runPublish(root, "1.2.3", revision, {
+        transport: fetcher,
+        credentialOrigin: "https://registry.test",
       });
-    const result = yield* runPublish(root, "1.2.3", revision, {
-      transport: fetcher,
-      credentialOrigin: "https://registry.test",
-    });
-    expect(result.release.version).toBe("1.2.3");
-    expect(result.release.revision_id).toBe(revision);
-    expect(received.url).toBe("https://registry.test/registry/test/tools/publish");
-    expect(received.authorization).toBe("Bearer test-token");
-    expect(received.body?.version).toBe("1.2.3");
-    expect(received.body?.revision_id).toBe(revision);
-    const archive = join(root, "uploaded.zip");
-    yield* writeBytes(archive, Buffer.from(String(received.body?.archive_base64), "base64"));
-    expect(yield* unzipList(archive)).toEqual([
-      "README.md",
-      "skills/review/SKILL.md",
-      "skills/review/agents/openai.yaml",
-    ]);
-    expect(yield* unzipEntry(archive, "skills/review/SKILL.md")).toBe(
-      yield* readText(join(root, "skills", "review", "SKILL.md")),
-    );
-  }).pipe(Effect.provide(skitLayer)),
+      expect(result.release.version).toBe("1.2.3");
+      expect(result.release.revision_id).toBe(revision);
+      expect(received.url).toBe(
+        template === "http://["
+          ? "https://registry.test/api/skits/test/tools/releases"
+          : "https://registry.test/registry/test/tools/publish",
+      );
+      expect(received.authorization).toBe("Bearer test-token");
+      expect(received.body?.version).toBe("1.2.3");
+      expect(received.body?.revision_id).toBe(revision);
+      const archive = join(root, "uploaded.zip");
+      expect(received.body).toBeDefined();
+      if (!received.body)
+        return yield* Effect.die(new Error("Publication request was not observed"));
+      yield* writeBytes(archive, Buffer.from(received.body.archive_base64, "base64"));
+      expect(yield* unzipList(archive)).toEqual([
+        "README.md",
+        "skills/review/SKILL.md",
+        "skills/review/agents/openai.yaml",
+      ]);
+      expect(yield* unzipEntry(archive, "skills/review/SKILL.md")).toBe(
+        yield* readText(join(root, "skills", "review", "SKILL.md")),
+      );
+    }).pipe(Effect.provide(skitLayer)),
 );
 
 it.effect("publish uses skit.remote.json without including it in the Release", () =>
@@ -166,16 +181,16 @@ it.effect("publish uses skit.remote.json without including it in the Release", (
     yield* runPublish(root, "1.2.3", revision, {
       credentialOrigin: "https://registry.example",
       transport: (input, url) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
           if (input.url.includes(".well-known")) return new Response(null, { status: 404 });
           publishUrl = url.toString();
-          archiveBase64 = String(
-            Schema.decodeUnknownSync(Schema.fromJsonString(Schema.JsonObject))(
-              new TextDecoder().decode(
-                input.body._tag === "Uint8Array" ? input.body.body : undefined,
-              ),
-            ).archive_base64,
-          );
+          archiveBase64 = (yield* Schema.decodeEffect(
+            Schema.fromJsonString(releasePublishRequestSchema),
+          )(
+            new TextDecoder().decode(
+              input.body._tag === "Uint8Array" ? input.body.body : undefined,
+            ),
+          ).pipe(Effect.orDie)).archive_base64;
           return Response.json(
             {
               release: {
@@ -208,13 +223,13 @@ it.effect("publish lets the Registry select its current SKIT when --revision is 
     yield* runPublish(root, "1.2.3", undefined, {
       credentialOrigin: "https://registry.test",
       transport: (input, url) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
           if (url.toString().includes(".well-known")) return new Response(null, { status: 404 });
-          publishedRevision = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.JsonObject))(
+          publishedRevision = (yield* Schema.decodeEffect(Schema.fromJsonString(Schema.JsonObject))(
             new TextDecoder().decode(
               input.body._tag === "Uint8Array" ? input.body.body : undefined,
             ),
-          ).revision_id;
+          ).pipe(Effect.orDie)).revision_id;
           return Response.json(
             {
               release: {

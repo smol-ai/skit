@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
-import { Effect, FileSystem, Stream } from "effect";
+import { Data, Effect, FileSystem, Stream } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { ZipFile } from "yazl";
 import { skitLayer } from "../src/platform/layer.js";
@@ -10,6 +10,10 @@ import { SourceProcess } from "../src/platform/source-process.js";
 import { resolveSkitSource } from "../src/sources/resolve.js";
 
 const skill = "---\nname: review\ndescription: Review code.\n---\n# Review\n";
+
+class ZipFixtureFailed extends Data.TaggedError("ZipFixtureFailed")<{ cause: unknown }> {
+  override readonly message = "ZIP fixture failed";
+}
 
 const linkedZip = (outside: string) =>
   Effect.gen(function* () {
@@ -20,7 +24,7 @@ const linkedZip = (outside: string) =>
     zip.end();
     const chunks = yield* Stream.fromAsyncIterable(
       zip.outputStream,
-      (cause) => new Error("ZIP fixture failed", { cause }),
+      (cause) => new ZipFixtureFailed({ cause }),
     ).pipe(
       Stream.map((chunk) => (typeof chunk === "string" ? Buffer.from(chunk) : chunk)),
       Stream.runCollect,

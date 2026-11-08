@@ -156,14 +156,12 @@ for (const boundary of ["blob", "manifest"] as const)
             ) {
               stopped = true;
               if (boundary === "manifest") expect(flushedBlobs).toBe(true);
-              return yield* Effect.fail(
-                systemError({
-                  _tag: "PermissionDenied",
-                  module: "FileSystem",
-                  method: "link",
-                  pathOrDescriptor: to,
-                }),
-              );
+              return yield* systemError({
+                _tag: "PermissionDenied",
+                module: "FileSystem",
+                method: "link",
+                pathOrDescriptor: to,
+              });
             }
             yield* f.fs.link(from, to);
           }),

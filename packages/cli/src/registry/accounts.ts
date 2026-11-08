@@ -63,7 +63,7 @@ type AuthStatusCredential = {
 
 // URL syntax errors retain their generic command classification; programming defects do not.
 export const parseOrigin = (input: string) =>
-  Schema.decodeUnknownEffect(Schema.URLFromString)(input).pipe(
+  Schema.decodeEffect(Schema.URLFromString)(input).pipe(
     Effect.map((url) => url.origin),
     Effect.mapError(() => new RegistryOriginInvalid({ origin: input })),
   );
@@ -108,7 +108,7 @@ export const environmentCredential = Effect.fn("RegistryAccounts.environmentCred
 const validateAlias = (name: string) =>
   /^[a-z][a-z0-9-]*$/.test(name)
     ? Effect.succeed(name)
-    : Effect.fail(new RegistryAliasInvalid({ name }));
+    : Effect.fail(new RegistryAliasInvalid({ alias: name }));
 
 /** One immutable decoded account snapshot. No filesystem, environment reads, or network IO. */
 export class RegistryAccounts {
@@ -145,7 +145,9 @@ export class RegistryAccounts {
   }
   private alias(name: string) {
     const origin = this.config.registryAliases?.[name];
-    return origin ? Effect.succeed(origin) : Effect.fail(new RegistryAliasNotFound({ name }));
+    return origin
+      ? Effect.succeed(origin)
+      : Effect.fail(new RegistryAliasNotFound({ alias: name }));
   }
 
   /** Explicit ignores defaults/env; logout uses stored accounts only. */
@@ -253,7 +255,7 @@ export class RegistryAccounts {
     if (!alias) return;
     yield* validateAlias(alias);
     const existing = this.config.registryAliases?.[alias];
-    if (existing && existing !== origin) return yield* new RegistryAliasConflict({ name: alias });
+    if (existing && existing !== origin) return yield* new RegistryAliasConflict({ alias });
   });
 
   private allocateAlias(origin: string) {
@@ -312,7 +314,8 @@ export class RegistryAccounts {
   ) {
     yield* validateAlias(name);
     const origin = yield* parseOrigin(originInput);
-    if (this.config.registryAliases?.[name]) return yield* new RegistryAliasConflict({ name });
+    if (this.config.registryAliases?.[name])
+      return yield* new RegistryAliasConflict({ alias: name });
     return {
       config: this.next({
         ...this.config,

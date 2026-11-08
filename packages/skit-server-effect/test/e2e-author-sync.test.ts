@@ -13,8 +13,7 @@ import { RevisionReadResponse, SkitCurrentResponse } from "@smolai/skit-core/uni
 import { CreatedPat } from "@smolai/skit-core/api";
 import type { RuntimeEnv } from "../src/platform/cloudflare.js";
 
-const Captured = Schema.Struct({
-  _tag: Schema.Literal("Success"),
+const Captured = Schema.TaggedStruct("Success", {
   value: Schema.Struct({ id: History.RevisionId, treeHash: History.TreeHash }),
 });
 const execute = promisify(execFile);

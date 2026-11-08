@@ -185,9 +185,9 @@ it.effect("records the posting credential captured by the authoring owner", () =
         }),
       );
       expect(response.status).toBe(201);
-      const credential = Schema.decodeUnknownSync(CreatedPat)(
+      const credential = yield* Schema.decodeUnknownEffect(CreatedPat)(
         yield* Effect.promise(() => response.json()),
-      );
+      ).pipe(Effect.orDie);
       const httpClient = (yield* HttpClient.HttpClient).pipe(
         HttpClient.mapRequest(
           HttpClientRequest.setHeaders({ authorization: `Bearer ${credential.token}` }),

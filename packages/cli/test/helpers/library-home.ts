@@ -223,6 +223,9 @@ export const importCollectionIn = (home: string) => (request: ImportRequest) =>
 /** Change the Library at `home` the way a front end does: through its owner. */
 export const writingTo = <A, E, R>(home: string, effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.provide(Library.layer({ home, roots: testRoots(home) })),
-    Effect.provide(skitConfigurationLayer(home)),
+    Effect.provide(
+      Library.layer({ home, roots: testRoots(home) }).pipe(
+        Layer.provideMerge(skitConfigurationLayer(home)),
+      ),
+    ),
   );

@@ -101,7 +101,7 @@ const readAuditContents = Effect.fn("LibraryAudit.readContents")(function* (home
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index]!;
     if (!line && index === lines.length - 1) continue;
-    const event = yield* Schema.decodeUnknownEffect(AuditLine)(line).pipe(
+    const event = yield* Schema.decodeEffect(AuditLine)(line).pipe(
       Effect.mapError((cause) => new LibraryAuditInvalid({ path, line: index + 1, cause })),
     );
     events.push(event);

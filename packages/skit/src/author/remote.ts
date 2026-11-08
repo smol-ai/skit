@@ -23,7 +23,7 @@ export const AuthorRemoteHome = Schema.Struct({
 export type AuthorRemoteHome = typeof AuthorRemoteHome.Type;
 
 export const decodeUrl = (input: string) =>
-  Schema.decodeUnknownEffect(Schema.URLFromString)(input).pipe(
+  Schema.decodeEffect(Schema.URLFromString)(input).pipe(
     Effect.mapError(() => new AuthorDestinationMalformed({ message: "Invalid URL" })),
   );
 

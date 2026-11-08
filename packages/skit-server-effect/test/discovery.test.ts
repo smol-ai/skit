@@ -10,10 +10,7 @@ const releaseOnlyWeb = makeWebHandler(env, {});
 
 const fetchEffect = (path: string) =>
   // oxlint-disable-next-line skit/no-promise-wrappers -- Fetch-compatible Worker handlers are Promise APIs; this test owns that host boundary.
-  Effect.tryPromise({
-    try: () => web.handler(new Request(`https://registry.test${path}`)),
-    catch: (cause) => cause,
-  }).pipe(Effect.orDie);
+  Effect.promise(() => web.handler(new Request(`https://registry.test${path}`)));
 
 describe("server discovery", () => {
   it("represents a release-download-only server without write capabilities", () => {
@@ -29,20 +26,18 @@ describe("server discovery", () => {
       // oxlint-disable-next-line skit/no-promise-wrappers -- Fetch-compatible Worker handlers are Promise APIs; this test owns that host boundary.
       const discovery = yield* Effect.tryPromise(() =>
         releaseOnlyWeb.handler(new Request("https://registry.test/.well-known/skit")),
-      ).pipe(Effect.orDie);
-      // oxlint-disable-next-line skit/no-promise-wrappers -- Response body decoding is part of the Fetch host boundary under test.
-      expect(yield* Effect.tryPromise(() => discovery.json()).pipe(Effect.orDie)).toEqual(
-        makeServerDiscovery({}),
       );
+      // oxlint-disable-next-line skit/no-promise-wrappers -- Response body decoding is part of the Fetch host boundary under test.
+      expect(yield* Effect.tryPromise(() => discovery.json())).toEqual(makeServerDiscovery({}));
 
       // oxlint-disable-next-line skit/no-promise-wrappers -- Fetch-compatible Worker handlers are Promise APIs; this test owns that host boundary.
       const skit = yield* Effect.tryPromise(() =>
         releaseOnlyWeb.handler(
           new Request("https://registry.test/api/skits/alice/tools/skit", { method: "GET" }),
         ),
-      ).pipe(Effect.orDie);
+      );
       expect(skit.status).toBe(404);
-    }),
+    }).pipe(Effect.orDie),
   );
   for (const path of ["/.well-known/agent-skills/", "/.well-known/skit"]) {
     it.effect(`serves the versioned contract at ${path}`, () =>

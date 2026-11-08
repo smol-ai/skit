@@ -56,7 +56,10 @@ it.effect(
         Effect.provide(Library.layer({ home: elsewhere, roots: testRoots(elsewhere) })),
       );
       // The reviewed operation needs no ambient owner or platform and cannot be redirected.
-      const applying: Effect.Effect<unknown, unknown> = library.apply({
+      const applying: Effect.Effect<
+        unknown,
+        Effect.Error<ReturnType<typeof library.apply>>
+      > = library.apply({
         _tag: "Apply",
         plan: portablePlan.plan,
       });

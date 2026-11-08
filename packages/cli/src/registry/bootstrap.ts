@@ -165,11 +165,9 @@ function run(
         { concurrency: "unbounded" },
       ).pipe(Effect.mapError((error) => externalFailure(operation, error.message)));
       if (code !== 0)
-        return yield* Effect.fail(
-          externalFailure(
-            operation,
-            `${command} exited with status ${code}${captured.trim() ? `: ${captured.trim()}` : ""}`,
-          ),
+        return yield* externalFailure(
+          operation,
+          `${command} exited with status ${code}${captured.trim() ? `: ${captured.trim()}` : ""}`,
         );
     }),
   );
@@ -204,9 +202,7 @@ export const originFromWranglerConfig = Effect.fn("Bootstrap.origin")(function* 
   const errors: ParseError[] = [];
   const document = parse(source, errors, { allowTrailingComma: true });
   if (errors.length > 0)
-    return yield* Effect.fail(
-      new BootstrapConfigInvalid({ message: "Wrangler config is invalid" }),
-    );
+    return yield* new BootstrapConfigInvalid({ message: "Wrangler config is invalid" });
   const config = yield* decodeWranglerConfig(document).pipe(
     Effect.mapError(() => new BootstrapConfigInvalid({ message: "Wrangler config is invalid" })),
   );
@@ -224,23 +220,19 @@ export const originFromWranglerConfig = Effect.fn("Bootstrap.origin")(function* 
   }
   // Which Worker is meant is ambiguous, and the secret must not land on the wrong one.
   if (config.env !== undefined)
-    return yield* Effect.fail(
-      new BootstrapConfigInvalid({
-        message:
-          "The Wrangler config has environments; pass --env <name>, or --url to bootstrap the top-level Worker",
-      }),
-    );
+    return yield* new BootstrapConfigInvalid({
+      message:
+        "The Wrangler config has environments; pass --env <name>, or --url to bootstrap the top-level Worker",
+    });
   if (config.vars?.PUBLIC_APP_ORIGIN === undefined)
-    return yield* Effect.fail(
-      new BootstrapConfigInvalid({
-        message: "PUBLIC_APP_ORIGIN is missing from the Wrangler config; pass --url explicitly",
-      }),
-    );
+    return yield* new BootstrapConfigInvalid({
+      message: "PUBLIC_APP_ORIGIN is missing from the Wrangler config; pass --url explicitly",
+    });
   return config.vars.PUBLIC_APP_ORIGIN;
 });
 
 const parseOrigin = (origin: string) =>
-  Schema.decodeUnknownEffect(Schema.URLFromString)(origin).pipe(
+  Schema.decodeEffect(Schema.URLFromString)(origin).pipe(
     Effect.mapError(() => new BootstrapOriginInvalid({ origin })),
   );
 
@@ -378,15 +370,13 @@ export const bootstrapServer = Effect.fn("Bootstrap.server")(function* (
                 const cleanup = Cause.findError(removed.cause);
                 if (Result.isSuccess(cleanup)) {
                   const original = Exit.isFailure(exit) ? Cause.findError(exit.cause) : undefined;
-                  return yield* Effect.fail(
-                    new BootstrapCleanupFailed({
-                      target,
-                      cleanup: cleanup.success,
-                      ...(original && Result.isSuccess(original)
-                        ? { original: original.success }
-                        : {}),
-                    }),
-                  );
+                  return yield* new BootstrapCleanupFailed({
+                    target,
+                    cleanup: cleanup.success,
+                    ...(original && Result.isSuccess(original)
+                      ? { original: original.success }
+                      : {}),
+                  });
                 }
                 return yield* Effect.failCause(removed.cause);
               }

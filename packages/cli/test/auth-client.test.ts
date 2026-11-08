@@ -88,8 +88,11 @@ describe("saved login reuse", () => {
         scopes: ["library:sync"],
         interactive: false,
       }).pipe(
-        Effect.provide(interaction.layer),
-        Effect.provide(registryHttpLayer(testHttpClientLayer(handler))),
+        Effect.provide(
+          interaction.layer.pipe(
+            Layer.provideMerge(registryHttpLayer(testHttpClientLayer(handler))),
+          ),
+        ),
       );
       expect(value).toMatchObject({
         alreadyAuthenticated: true,
@@ -113,14 +116,17 @@ describe("saved login reuse", () => {
           scopes: ["library:sync"],
           interactive: false,
         }).pipe(
-          Effect.provide(interaction.layer),
           Effect.provide(
-            registryHttpLayer(
-              testHttpClientLayer(() =>
-                Effect.succeed(
-                  Response.json(
-                    status === 200 ? { library: null } : { error: "insufficient_scope" },
-                    { status },
+            interaction.layer.pipe(
+              Layer.provideMerge(
+                registryHttpLayer(
+                  testHttpClientLayer(() =>
+                    Effect.succeed(
+                      Response.json(
+                        status === 200 ? { library: null } : { error: "insufficient_scope" },
+                        { status },
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -140,10 +146,15 @@ describe("saved login reuse", () => {
       const interaction = yield* makeScriptedInteraction([]);
       const failure = yield* Effect.flip(
         authLoginCommand({ home, scopes: ["library:sync"], interactive: false }).pipe(
-          Effect.provide(interaction.layer),
           Effect.provide(
-            registryHttpLayer(
-              testHttpClientLayer(() => Effect.sync(() => expect.fail("Expired bearer was sent"))),
+            interaction.layer.pipe(
+              Layer.provideMerge(
+                registryHttpLayer(
+                  testHttpClientLayer(() =>
+                    Effect.sync(() => expect.fail("Expired bearer was sent")),
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -160,11 +171,14 @@ describe("saved login reuse", () => {
       for (const status of [401, 503]) {
         const failure = yield* Effect.flip(
           authLoginCommand({ home, scopes: ["library:sync"], interactive: false }).pipe(
-            Effect.provide(interaction.layer),
             Effect.provide(
-              registryHttpLayer(
-                testHttpClientLayer(() =>
-                  Effect.succeed(Response.json({ error: "unavailable" }, { status })),
+              interaction.layer.pipe(
+                Layer.provideMerge(
+                  registryHttpLayer(
+                    testHttpClientLayer(() =>
+                      Effect.succeed(Response.json({ error: "unavailable" }, { status })),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -188,8 +202,11 @@ describe("saved login reuse", () => {
         interactive: true,
         relogin: true,
       }).pipe(
-        Effect.provide(interaction.layer),
-        Effect.provide(registryHttpLayer(testHttpClientLayer(successfulServer(requests)))),
+        Effect.provide(
+          interaction.layer.pipe(
+            Layer.provideMerge(registryHttpLayer(testHttpClientLayer(successfulServer(requests)))),
+          ),
+        ),
       );
       expect(value).toMatchObject({
         alreadyAuthenticated: false,
@@ -254,7 +271,7 @@ const MintedToken = Schema.Struct({
 function successfulServer(requests: Array<{ url: string; init?: RequestInit }>): TestHttpHandler {
   let minted = 0;
   return (request) =>
-    Effect.sync(() => {
+    Effect.gen(function* () {
       const url = request.url;
       const init = requestInit(request);
       requests.push({ url, init });
@@ -271,7 +288,9 @@ function successfulServer(requests: Array<{ url: string; init?: RequestInit }>):
         });
       if (url.endsWith("/api/tokens") && init?.method === "POST") {
         const suffix = minted++ === 0 ? "one" : "two";
-        const requested = Schema.decodeUnknownSync(MintRequest)(JSON.parse(payload(init)));
+        const requested = yield* Schema.decodeUnknownEffect(MintRequest)(
+          JSON.parse(payload(init)),
+        ).pipe(Effect.orDie);
         return Response.json(
           {
             token: `skit_pat_secret_${suffix}`,
@@ -297,7 +316,7 @@ describe("CLI authentication journey", () => {
       expect(yield* resolveLoginTarget(undefined, home)).toBe("https://skit.smol.ai");
       expect(yield* Effect.flip(resolveLoginTarget("missing", home))).toMatchObject({
         _tag: "RegistryAliasNotFound",
-        name: "missing",
+        alias: "missing",
       });
     }).pipe(Effect.provide(testPlatformLayer)),
   );
@@ -391,9 +410,9 @@ describe("CLI authentication journey", () => {
         Effect.gen(function* () {
           const response = yield* base(request, url, signal);
           if (request.url.endsWith("/api/tokens") && request.method === "POST") {
-            const { expires_at: _omitted, ...body } = Schema.decodeUnknownSync(MintedToken)(
-              yield* HttpClientResponse.fromWeb(request, response).json,
-            );
+            const { expires_at: _omitted, ...body } = yield* Schema.decodeUnknownEffect(
+              MintedToken,
+            )(yield* HttpClientResponse.fromWeb(request, response).json).pipe(Effect.orDie);
             return Response.json(body, { status: 201 });
           }
           return response;

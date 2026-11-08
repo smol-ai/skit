@@ -35,14 +35,26 @@ import {
   type DatabaseSqlClient,
 } from "../platform/cloudflare.js";
 
-class SkitForbidden extends Schema.TaggedError<SkitForbidden>()("SKIT.Forbidden", {}) {}
+class SkitForbidden extends Schema.TaggedError<SkitForbidden, { readonly brand: unique symbol }>()(
+  "SKIT.Forbidden",
+  {},
+) {}
 
-class SkitExists extends Schema.TaggedError<SkitExists>()("SKIT.Exists", {}) {}
+class SkitExists extends Schema.TaggedError<SkitExists, { readonly brand: unique symbol }>()(
+  "SKIT.Exists",
+  {},
+) {}
 
-class SkitNotFound extends Schema.TaggedError<SkitNotFound>()("SKIT.NotFound", {}) {}
+class SkitNotFound extends Schema.TaggedError<SkitNotFound, { readonly brand: unique symbol }>()(
+  "SKIT.NotFound",
+  {},
+) {}
 
 /** A revision the SKIT refuses to record or point at. `code` is the wire error. */
-class InvalidRevision extends Schema.TaggedError<InvalidRevision>()("SKIT.InvalidRevision", {
+class InvalidRevision extends Schema.TaggedError<
+  InvalidRevision,
+  { readonly brand: unique symbol }
+>()("SKIT.InvalidRevision", {
   code: Schema.Literals([
     "UNSAFE_PATH",
     "PATH_COLLISION",
@@ -54,19 +66,31 @@ class InvalidRevision extends Schema.TaggedError<InvalidRevision>()("SKIT.Invali
 }) {}
 
 /** Another device moved `current` first; this is where it points now. */
-class CurrentMoved extends Schema.TaggedError<CurrentMoved>()("SKIT.CurrentMoved", {
-  current: Schema.NullOr(History.RevisionId),
-}) {}
+class CurrentMoved extends Schema.TaggedError<CurrentMoved, { readonly brand: unique symbol }>()(
+  "SKIT.CurrentMoved",
+  {
+    current: Schema.NullOr(History.RevisionId),
+  },
+) {}
 
-class RevisionBlobMissing extends Schema.TaggedError<RevisionBlobMissing>()("SKIT.BlobMissing", {
+class RevisionBlobMissing extends Schema.TaggedError<
+  RevisionBlobMissing,
+  { readonly brand: unique symbol }
+>()("SKIT.BlobMissing", {
   path: Schema.String,
 }) {}
 
-class RevisionBlobCorrupt extends Schema.TaggedError<RevisionBlobCorrupt>()("SKIT.BlobCorrupt", {
+class RevisionBlobCorrupt extends Schema.TaggedError<
+  RevisionBlobCorrupt,
+  { readonly brand: unique symbol }
+>()("SKIT.BlobCorrupt", {
   path: Schema.String,
 }) {}
 
-class RevisionTooLarge extends Schema.TaggedError<RevisionTooLarge>()("SKIT.TooLarge", {}) {}
+class RevisionTooLarge extends Schema.TaggedError<
+  RevisionTooLarge,
+  { readonly brand: unique symbol }
+>()("SKIT.TooLarge", {}) {}
 
 type PostError = SkitNotFound | InvalidRevision | IntegrityError | DatabaseError | BlobStorageError;
 
@@ -173,7 +197,7 @@ export const layer = Layer.effect(
     const sql: DatabaseSqlClient = yield* D1Client.D1Client;
     const digests = yield* Digest.Digest;
     const random = yield* SecureRandom.SecureRandom;
-    const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
+    const db = <A, E>(operation: string, effect: Effect.Effect<A, E>) =>
       effect.pipe(databaseError(operation));
 
     const findSkit = Effect.fn("SKIT.findSkit")(function* (owner: string, slug: string) {
@@ -223,7 +247,7 @@ export const layer = Layer.effect(
         parentRows,
       ).pipe(databaseError("decode revision parents"));
       return yield* Effect.forEach(stored, (row) =>
-        Schema.decodeUnknownEffect(History.Revision)({
+        Schema.decodeEffect(History.Revision)({
           tree: row.tree_hash,
           parents: parents
             .filter(({ revision_id }) => revision_id === row.revision_id)

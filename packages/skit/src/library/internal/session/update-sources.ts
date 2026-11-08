@@ -46,7 +46,7 @@ const canonicalStoragePath = Effect.fn("Library.canonicalStoragePath")(function*
       .realPath(path)
       .pipe(
         Effect.catchTag("PlatformError", (error) =>
-          error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+          error.reason._tag === "NotFound" ? Effect.undefined : Effect.fail(error),
         ),
       );
     if (canonical !== undefined) return join(canonical, ...suffix);

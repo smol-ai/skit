@@ -59,14 +59,17 @@ function cliTypes(context) {
   // Oxlint visits many files in one process. Resolve their shared graph only once. Refresh
   // if a host reuses the plugin for edited source (e.g. a subsequent editor lint pass).
   if (cliProgram?.getSourceFile(filename)?.text !== context.sourceCode.text) {
-    const config = ts.readConfigFile(resolve(root, "packages/cli/tsconfig.json"), ts.sys.readFile);
+    const config = ts.readConfigFile(
+      resolve(root, "packages/cli/tsconfig.json"),
+      ts.sys.readFile.bind(ts.sys),
+    );
     const parsed = ts.parseJsonConfigFileContent(
       config.config,
       ts.sys,
       resolve(root, "packages/cli"),
     );
     const host = ts.createCompilerHost(parsed.options);
-    const read = host.readFile;
+    const read = host.readFile.bind(host);
     host.readFile = (file) => (file === filename ? context.sourceCode.text : read(file));
     // Inspect current core source, never declarations from a previous dist/ build.
     host.resolveModuleNameLiterals = (literals, from, redirected, options, source) =>

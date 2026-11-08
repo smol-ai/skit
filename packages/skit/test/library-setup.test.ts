@@ -68,7 +68,7 @@ const recordedOperations = (home: string) =>
   Effect.gen(function* () {
     const inspected = yield* inspectLocalLibraryState(home);
     return inspected.present
-      ? yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(inspected.state.operations)
+      ? yield* Schema.decodeEffect(Schema.Array(OperationStatus))(inspected.state.operations)
       : [];
   });
 

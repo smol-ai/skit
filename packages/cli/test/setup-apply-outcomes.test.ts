@@ -34,11 +34,11 @@ const skillBytes = (name: string, body = `${name} body`) =>
   `---\nname: ${name}\ndescription: ${name} fixture\n---\n\n${body}\n`;
 
 /** Explicit points in the apply where a test changes the world; never a timer. */
-interface Gates {
+interface Gates<E> {
   /** Runs once the confirmation prompt has approved the plan. */
-  readonly approved?: Effect.Effect<void, unknown>;
+  readonly approved?: Effect.Effect<void, E>;
   /** Runs once the first Library state has replaced state.json. */
-  readonly published?: Effect.Effect<void, unknown>;
+  readonly published?: Effect.Effect<void, E>;
   /** Refuses a publication selected by its domain state, independently of checkpoint count. */
   readonly refusePublication?: (state: LibraryState) => boolean;
   readonly directory?: (path: string) => Effect.Effect<void>;
@@ -66,9 +66,9 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
     probePath: "",
     skillsStateHome: join(root, "state"),
   };
-  const setup = (
+  const setup = <E = never>(
     answers: readonly ScriptedAnswer[],
-    gates: Gates = {},
+    gates: Gates<E> = {},
     flags: { interactive?: boolean; dryRun?: boolean; workDirFlag?: string } = {},
   ) =>
     Effect.gen(function* () {
@@ -124,9 +124,9 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
                   Effect.gen(function* () {
                     yield* gates.rename?.(from, to) ?? Effect.void;
                     if (to !== home.statePath) return yield* files.rename(from, to);
-                    const state = yield* Schema.decodeUnknownEffect(
-                      Schema.fromJsonString(LibraryState),
-                    )(yield* files.readFileString(from)).pipe(Effect.orDie);
+                    const state = yield* Schema.decodeEffect(Schema.fromJsonString(LibraryState))(
+                      yield* files.readFileString(from),
+                    ).pipe(Effect.orDie);
                     if (gates.refusePublication?.(state)) return yield* refuseRename(to);
                     yield* files.rename(from, to);
                     if (!announcedPublication) {
@@ -196,7 +196,7 @@ const readMoveRecord = Effect.fn("Test.readSetupMoveRecord")(function* (home: st
     if ((yield* fs.stat(join(home, "removed", directory!, batch))).type !== "Directory") continue;
     const path = join(home, "removed", directory!, batch, "receipt.json");
     if (yield* fs.exists(path))
-      return yield* Schema.decodeUnknownEffect(MoveRecord)(yield* fs.readFileString(path));
+      return yield* Schema.decodeEffect(MoveRecord)(yield* fs.readFileString(path));
   }
   return yield* Effect.die(new Error("No removal move record was written"));
 });
@@ -447,7 +447,7 @@ it.effect("every destination directory write has its preparation recorded first"
       directory: (path) =>
         Effect.gen(function* () {
           if (path !== root && !path.startsWith(root + "/")) return;
-          const state = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(LibraryState))(
+          const state = yield* Schema.decodeEffect(Schema.fromJsonString(LibraryState))(
             yield* f.fs.readFileString(f.home.statePath),
           );
           const operation = state.operations.find((operation) => operation._tag === "Pending");

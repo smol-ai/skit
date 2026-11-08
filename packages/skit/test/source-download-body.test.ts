@@ -22,7 +22,7 @@ function observableBody(chunks: readonly Uint8Array[], options: { stall?: boolea
       pull(controller) {
         state.pulls += 1;
         const chunk = chunks[state.pulls - 1];
-        if (chunk) return void controller.enqueue(chunk);
+        if (chunk) return controller.enqueue(chunk);
         // A stalled body never closes, so an interrupt has something live to cancel.
         if (!options.stall) controller.close();
         return new Promise<void>(() => {});

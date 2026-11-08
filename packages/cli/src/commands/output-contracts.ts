@@ -59,7 +59,7 @@ export const outputContracts = {
   recoveryList: recoveryOutputContracts.recoveryList,
   recovery: recoveryOutputContracts.recovery,
   usage: usageOutputContracts.usage,
-  versionReport: effectOutput("skit.version.v2", VersionReport),
+  versionReport: effectOutput("skit.version.v3", VersionReport),
   version: effectOutput("skit.version.v1", Schema.Struct({ version: Schema.String })),
   init: effectOutput(
     "skit.init.v1",

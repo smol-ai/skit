@@ -40,9 +40,12 @@ it.live.skipIf(!name)(
     }).pipe(
       Effect.scoped,
       Effect.provide(
-        tartLayer.pipe(Layer.provide(configurationLayer), Layer.provide(processesLayer)),
+        tartLayer.pipe(
+          Layer.provide(configurationLayer),
+          Layer.provide(processesLayer),
+          Layer.provideMerge(NodeServices.layer),
+        ),
       ),
-      Effect.provide(NodeServices.layer),
     ),
   { timeout: 30_000 },
 );
@@ -94,9 +97,12 @@ it.live.skipIf(!name)(
       }).pipe(Effect.provide(tartLayer.pipe(Layer.provide(Layer.succeed(Processes, proxy)))));
     }).pipe(
       Effect.scoped,
-      Effect.provide(processesLayer),
-      Effect.provide(configurationLayer),
-      Effect.provide(NodeServices.layer),
+      Effect.provide(
+        processesLayer.pipe(
+          Layer.provideMerge(configurationLayer),
+          Layer.provideMerge(NodeServices.layer),
+        ),
+      ),
     ),
   { timeout: 30_000 },
 );
@@ -118,9 +124,12 @@ it.live.skipIf(!name)(
     }).pipe(
       Effect.scoped,
       Effect.provide(
-        tartLayer.pipe(Layer.provide(configurationLayer), Layer.provide(processesLayer)),
+        tartLayer.pipe(
+          Layer.provide(configurationLayer),
+          Layer.provide(processesLayer),
+          Layer.provideMerge(NodeServices.layer),
+        ),
       ),
-      Effect.provide(NodeServices.layer),
     ),
   { timeout: 30_000 },
 );
@@ -156,9 +165,12 @@ it.live.skipIf(!name)(
     }).pipe(
       Effect.scoped,
       Effect.provide(
-        tartLayer.pipe(Layer.provide(configurationLayer), Layer.provide(processesLayer)),
+        tartLayer.pipe(
+          Layer.provide(configurationLayer),
+          Layer.provide(processesLayer),
+          Layer.provideMerge(NodeServices.layer),
+        ),
       ),
-      Effect.provide(NodeServices.layer),
     ),
   { timeout: 30_000 },
 );
@@ -199,9 +211,12 @@ it.live.skipIf(!name)(
     }).pipe(
       Effect.scoped,
       Effect.provide(
-        tartLayer.pipe(Layer.provide(configurationLayer), Layer.provide(processesLayer)),
+        tartLayer.pipe(
+          Layer.provide(configurationLayer),
+          Layer.provide(processesLayer),
+          Layer.provideMerge(NodeServices.layer),
+        ),
       ),
-      Effect.provide(NodeServices.layer),
     ),
   { timeout: 45_000 },
 );

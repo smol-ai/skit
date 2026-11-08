@@ -124,7 +124,10 @@ export const LibraryStateFields = {
   installed_skills: Schema.mutable(Schema.Array(InstalledSkill)),
 };
 const syncPublication = Schema.Struct(LibraryStateFields);
-export interface SyncPublication extends Schema.Schema.Type<typeof syncPublication> {}
+export namespace SyncPublication {
+  export interface Type extends Schema.Schema.Type<typeof syncPublication> {}
+}
+export type SyncPublication = SyncPublication.Type;
 export const SyncPublication: Schema.Codec<SyncPublication, unknown> = Schema.Unknown.pipe(
   Schema.refine(
     (value): value is SyncPublication =>
@@ -384,7 +387,10 @@ const installedApply = Schema.TaggedStruct("Apply", {
   ]),
 });
 
-export interface InstalledApply extends Schema.Schema.Type<typeof installedApply> {}
+export namespace InstalledApply {
+  export interface Type extends Schema.Schema.Type<typeof installedApply> {}
+}
+export type InstalledApply = InstalledApply.Type;
 export interface StoredInstalledApply extends Schema.Codec.Encoded<typeof installedApply> {}
 export const InstalledApply: Schema.Codec<InstalledApply, StoredInstalledApply> = installedApply;
 
@@ -484,15 +490,14 @@ const SystemErrorTags = Schema.Literals([
  * Effect's PlatformError, stored as the fields it exposes. Its `cause` can be any value, so it is
  * not stored; a read-back error has none.
  */
-const StoredPlatformError = Schema.Struct({
-  _tag: Schema.Literal("PlatformError"),
+const StoredPlatformError = Schema.TaggedStruct("PlatformError", {
   reason: Schema.Struct({
     _tag: Schema.Union([SystemErrorTags, Schema.Literal("BadArgument")]),
     module: Schema.String,
     method: Schema.String,
     description: Schema.optionalKey(Schema.String),
     syscall: Schema.optionalKey(Schema.String),
-    pathOrDescriptor: Schema.optionalKey(Schema.Union([Schema.String, Schema.Number])),
+    pathOrDescriptor: Schema.optionalKey(Schema.Union([Schema.String, Schema.Finite])),
   }),
 }).pipe(
   Schema.decodeTo(Schema.declare(isPlatformError), {

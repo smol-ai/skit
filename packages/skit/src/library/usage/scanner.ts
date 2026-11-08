@@ -1,7 +1,7 @@
 import { NodeStream } from "@effect/platform-node";
 import { systemError } from "effect/PlatformError";
 import { createZstdDecompress } from "node:zlib";
-import { Clock, DateTime, Effect, FileSystem, Option, Stream } from "effect";
+import { Clock, DateTime, Effect, FileSystem, Option, Stream, Order, Result } from "effect";
 import { createHash } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
 import { harnessDrivers } from "../../harnesses/drivers.js";
@@ -84,12 +84,11 @@ export const scanUsage = Effect.fn("Library.scanUsage")(function* (options: Usag
   const window = { start: startDate.toISOString(), end: endDate.toISOString() };
   if (options.project !== undefined) {
     const info = yield* fs.stat(resolve(options.project)).pipe(
-      Effect.catch(() =>
-        Effect.fail(
+      Effect.mapError(
+        () =>
           new InvalidUsageOptions({
             message: "The project must be an accessible directory.",
           }),
-        ),
       ),
     );
     if (info.type !== "Directory")
@@ -109,7 +108,7 @@ export const scanUsage = Effect.fn("Library.scanUsage")(function* (options: Usag
       Effect.catch((error) => {
         if (isRoot) c.status = error.reason._tag === "NotFound" ? "missing" : "unreadable";
         else c.unreadableFiles++;
-        return Effect.succeed(undefined);
+        return Effect.undefined;
       }),
     );
     if (!info) return;
@@ -122,7 +121,7 @@ export const scanUsage = Effect.fn("Library.scanUsage")(function* (options: Usag
         const snapshot = yield* fs.stat(dir).pipe(
           Effect.catch(() => {
             c.unreadableFiles++;
-            return Effect.succeed(undefined);
+            return Effect.undefined;
           }),
         );
         if (!snapshot) return;
@@ -157,7 +156,7 @@ export const scanUsage = Effect.fn("Library.scanUsage")(function* (options: Usag
         return Effect.succeed([]);
       }),
     );
-    for (const name of names.sort()) yield* walk(join(dir, name), c);
+    for (const name of names.sort(Order.String)) yield* walk(join(dir, name), c);
   });
   for (const c of coverage) yield* walk(c.root, c, true);
   const observations: TranscriptEvent[] = [];
@@ -173,13 +172,12 @@ export const scanUsage = Effect.fn("Library.scanUsage")(function* (options: Usag
     const projectCwds = new Map<string, string>();
     const consume = Effect.fn("Usage.record")(function* (line: string) {
       if (!line.length) return;
-      let raw: unknown;
-      try {
-        raw = JSON.parse(line);
-      } catch {
+      const parsed = yield* Effect.result(Effect.try((): unknown => JSON.parse(line)));
+      if (Result.isFailure(parsed)) {
         c.malformed++;
         return;
       }
+      const raw = parsed.success;
       if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
         c.malformed++;
         return;

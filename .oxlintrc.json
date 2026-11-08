@@ -1,9 +1,11 @@
 {
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "$schema": "./node_modules/@effect/tsgo/oxlint-schema.json",
+  "extends": ["./node_modules/@effect/tsgo/oxlint-presets/recommended.json"],
   "plugins": ["typescript", "unicorn", "oxc", "import"],
   "ignorePatterns": ["packages/cli/test/fixtures/source-regressions/humanlayer/**"],
   "jsPlugins": ["./lint/oxlint-plugin-skit.mjs"],
   "rules": {
+    "effecttsgo/experimental-api-usage": "off",
     "oxc/no-barrel-file": "error",
     "skit/frontend-no-resources": "error",
     "skit/no-failure-unions": "error",

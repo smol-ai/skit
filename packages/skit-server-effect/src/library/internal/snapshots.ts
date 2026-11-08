@@ -22,18 +22,18 @@ const SnapshotRow = Schema.Struct({
 });
 const JsonUnknown = Schema.fromJsonString(Schema.Unknown);
 
-class SnapshotMissing extends Schema.TaggedError<SnapshotMissing>()(
-  "Library.SnapshotMissing",
-  {},
-) {}
-class SnapshotForbidden extends Schema.TaggedError<SnapshotForbidden>()(
-  "Library.SnapshotForbidden",
-  {},
-) {}
-class SnapshotStoreInvalid extends Schema.TaggedError<SnapshotStoreInvalid>()(
-  "Library.SnapshotStoreInvalid",
-  {},
-) {}
+class SnapshotMissing extends Schema.TaggedError<
+  SnapshotMissing,
+  { readonly brand: unique symbol }
+>()("Library.SnapshotMissing", {}) {}
+class SnapshotForbidden extends Schema.TaggedError<
+  SnapshotForbidden,
+  { readonly brand: unique symbol }
+>()("Library.SnapshotForbidden", {}) {}
+class SnapshotStoreInvalid extends Schema.TaggedError<
+  SnapshotStoreInvalid,
+  { readonly brand: unique symbol }
+>()("Library.SnapshotStoreInvalid", {}) {}
 
 type SnapshotFailure =
   | DatabaseError
@@ -64,7 +64,7 @@ export const makeSnapshots = (
   clock: Clock.Clock,
   own: FindLibrary,
 ): Snapshots => {
-  const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
+  const db = <A, E>(operation: string, effect: Effect.Effect<A, E>) =>
     effect.pipe(databaseError(operation));
   const snapshotRow = Effect.fn("LibrarySnapshots.row")(function* (
     libraryId: string,
@@ -87,15 +87,16 @@ export const makeSnapshots = (
     const object = yield* blobs.get("read snapshot object", key);
     if (Option.isNone(object)) return yield* new SnapshotStoreInvalid();
     const json = new TextDecoder().decode(object.value);
-    const value = yield* Schema.decodeUnknownEffect(JsonUnknown)(json).pipe(
+    const value = yield* Schema.decodeEffect(JsonUnknown)(json).pipe(
       Effect.mapError(() => new SnapshotStoreInvalid()),
     );
     return yield* verifySnapshotArchive(value).pipe(Effect.provideService(Digest.Digest, digests));
   });
   const ownDefault = (principal: Principal) =>
     own(principal, true).pipe(
-      Effect.flatMap((library) =>
-        library === undefined ? Effect.fail(new SnapshotStoreInvalid()) : Effect.succeed(library),
+      Effect.filterOrFail(
+        (library) => library !== undefined,
+        () => new SnapshotStoreInvalid(),
       ),
     );
   const upload = Effect.fn("LibrarySnapshots.upload")(function* (

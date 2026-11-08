@@ -20,7 +20,10 @@ export type RuntimeEnv = Omit<
   readonly ASSETS?: Fetcher;
 };
 
-export class DatabaseError extends Schema.TaggedError<DatabaseError>()("Cloudflare.DatabaseError", {
+export class DatabaseError extends Schema.TaggedError<
+  DatabaseError,
+  { readonly brand: unique symbol }
+>()("Cloudflare.DatabaseError", {
   operation: Schema.String,
   cause: Schema.Defect(),
 }) {}
@@ -30,13 +33,13 @@ export const databaseLayer = (database: D1Database) => D1Client.layer({ db: data
 export const databaseError = (operation: string) =>
   Effect.mapError((cause: unknown) => new DatabaseError({ operation, cause }));
 
-export class BlobStorageError extends Schema.TaggedError<BlobStorageError>()(
-  "Cloudflare.BlobStorageError",
-  {
-    operation: Schema.String,
-    cause: Schema.Defect(),
-  },
-) {}
+export class BlobStorageError extends Schema.TaggedError<
+  BlobStorageError,
+  { readonly brand: unique symbol }
+>()("Cloudflare.BlobStorageError", {
+  operation: Schema.String,
+  cause: Schema.Defect(),
+}) {}
 
 /** R2 deletes at most this many keys per call. */
 const MAX_DELETE_KEYS = 1_000;
@@ -70,7 +73,7 @@ export interface BlobStoreService {
     operation: string,
     keys: ReadonlyArray<string>,
   ) => Effect.Effect<void, BlobStorageError>;
-  readonly probe: () => Effect.Effect<void, BlobStorageError>;
+  readonly probe: Effect.Effect<void, BlobStorageError>;
 }
 
 export class BlobStore extends Context.Service<BlobStore, BlobStoreService>()(
@@ -92,7 +95,7 @@ export const blobStoreLayer = (
           Effect.flatMap((object) =>
             object === null
               ? Effect.succeedNone
-              : r2(operation, () => object.bytes()).pipe(Effect.map(Option.some)),
+              : r2(operation, () => object.bytes()).pipe(Effect.asSome),
           ),
         ),
       stream: (operation, key) =>
@@ -117,8 +120,7 @@ export const blobStoreLayer = (
         for (let index = 0; index < keys.length; index += MAX_DELETE_KEYS)
           yield* r2(operation, () => bucket.delete(keys.slice(index, index + MAX_DELETE_KEYS)));
       }),
-      probe: () =>
-        r2("list readiness sentinel", () => bucket.list({ limit: 1 })).pipe(Effect.asVoid),
+      probe: r2("list readiness sentinel", () => bucket.list({ limit: 1 })).pipe(Effect.asVoid),
     }),
   );
 };

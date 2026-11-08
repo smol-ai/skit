@@ -98,10 +98,10 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
           probe.identity.lstat(join(root, name)).pipe(
             Effect.map((info) => ({ name, info })),
             Effect.catchTag("PlatformError", (error) => {
-              if (error.reason._tag === "NotFound") return Effect.succeed(undefined);
+              if (error.reason._tag === "NotFound") return Effect.undefined;
               if (error.reason._tag !== "PermissionDenied") return Effect.fail(error);
               scanIssues.push({ path: join(root, name), harness, code: "UNREADABLE_PATH" });
-              return Effect.succeed(undefined);
+              return Effect.undefined;
             }),
           ),
         );
@@ -114,7 +114,7 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
             harness,
             code: error.reason._tag === "NotFound" ? "MISSING_ROOT" : "UNREADABLE_PATH",
           });
-          return Effect.succeed(undefined);
+          return Effect.undefined;
         }),
       );
       if (!entries) continue;

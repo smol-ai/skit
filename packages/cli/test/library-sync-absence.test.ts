@@ -32,32 +32,33 @@ const empty: LibraryManifest = {
  * the writer lock creates the home when it did not exist yet, as the fault-matrix rows allow; it
  * must stay empty.
  */
-const unwritten = Effect.fn("Test.unwritten")(function* ({ server }: Homes, device: Device) {
-  const before = yield* captureDisk(device.disk, { identity: true });
-  const stored = server.stored;
-  const saves = device.saves;
-  const writeRequests = server.writeRequests;
-  return Effect.gen(function* () {
-    assert.strictEqual(device.saves, saves);
-    assert.strictEqual(server.writeRequests, writeRequests);
-    const changes = yield* diskChanges(before);
-    assert.deepStrictEqual(
-      {
-        ...changes,
-        created: changes.created.filter(
-          (item) =>
-            !(
-              item.path.length === 1 &&
-              item.path[0] === device.home &&
-              item.after.type === "directory"
-            ),
-        ),
-      },
-      noDiskChanges,
-    );
-    assert.deepStrictEqual(server.stored, stored);
-  });
-});
+const unwritten = Effect.fn("Test.unwritten")(({ server }: Homes, device: Device) =>
+  Effect.map(captureDisk(device.disk, { identity: true }), (before) => {
+    const stored = server.stored;
+    const saves = device.saves;
+    const writeRequests = server.writeRequests;
+    return Effect.gen(function* () {
+      assert.strictEqual(device.saves, saves);
+      assert.strictEqual(server.writeRequests, writeRequests);
+      const changes = yield* diskChanges(before);
+      assert.deepStrictEqual(
+        {
+          ...changes,
+          created: changes.created.filter(
+            (item) =>
+              !(
+                item.path.length === 1 &&
+                item.path[0] === device.home &&
+                item.after.type === "directory"
+              ),
+          ),
+        },
+        noDiskChanges,
+      );
+      assert.deepStrictEqual(server.stored, stored);
+    });
+  }),
+);
 
 /** Another home commits a Library holding nothing, so the remote exists but is empty. */
 const emptyRemote = ({ server }: Homes) =>

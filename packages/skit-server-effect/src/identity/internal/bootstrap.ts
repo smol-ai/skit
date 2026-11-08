@@ -11,26 +11,29 @@ export interface BootstrapClaimResult {
   readonly username: string;
 }
 
-const BootstrapClaim = Schema.Struct({ claimed: Schema.Number });
-const UserCount = Schema.Struct({ count: Schema.Number });
+const BootstrapClaim = Schema.Struct({ claimed: Schema.Finite });
+const UserCount = Schema.Struct({ count: Schema.Finite });
 
-class InvalidBootstrapSecret extends Schema.TaggedError<InvalidBootstrapSecret>()(
-  "Bootstrap.InvalidSecret",
-  {},
-) {}
-class InvalidBootstrapInput extends Schema.TaggedError<InvalidBootstrapInput>()(
-  "Bootstrap.InvalidInput",
-  {},
-) {}
-class BootstrapComplete extends Schema.TaggedError<BootstrapComplete>()("Bootstrap.Complete", {}) {}
-class BootstrapUnavailable extends Schema.TaggedError<BootstrapUnavailable>()(
-  "Bootstrap.Unavailable",
-  {},
-) {}
-class SecretComparisonError extends Schema.TaggedError<SecretComparisonError>()(
-  "Bootstrap.SecretComparisonError",
-  { cause: Schema.Defect() },
-) {}
+class InvalidBootstrapSecret extends Schema.TaggedError<
+  InvalidBootstrapSecret,
+  { readonly brand: unique symbol }
+>()("Bootstrap.InvalidSecret", {}) {}
+class InvalidBootstrapInput extends Schema.TaggedError<
+  InvalidBootstrapInput,
+  { readonly brand: unique symbol }
+>()("Bootstrap.InvalidInput", {}) {}
+class BootstrapComplete extends Schema.TaggedError<
+  BootstrapComplete,
+  { readonly brand: unique symbol }
+>()("Bootstrap.Complete", {}) {}
+class BootstrapUnavailable extends Schema.TaggedError<
+  BootstrapUnavailable,
+  { readonly brand: unique symbol }
+>()("Bootstrap.Unavailable", {}) {}
+class SecretComparisonError extends Schema.TaggedError<
+  SecretComparisonError,
+  { readonly brand: unique symbol }
+>()("Bootstrap.SecretComparisonError", { cause: Schema.Defect() }) {}
 
 export type CreateError =
   | InvalidBootstrapSecret
@@ -42,7 +45,7 @@ export type CreateError =
   | PasswordHashError;
 
 export interface BootstrapService {
-  readonly isNeeded: () => Effect.Effect<boolean, DatabaseError>;
+  readonly isNeeded: Effect.Effect<boolean, DatabaseError>;
   readonly createInitialOperator: (
     input: BootstrapInput,
   ) => Effect.Effect<BootstrapClaimResult, CreateError>;
@@ -68,10 +71,10 @@ export const makeBootstrap = (sql: DatabaseSqlClient, bootstrapSecret: string | 
     const random = yield* SecureRandom.SecureRandom;
     const digests = yield* Digest.Digest;
     const clock = yield* Clock.Clock;
-    const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
+    const db = <A, E>(operation: string, effect: Effect.Effect<A, E>) =>
       effect.pipe(databaseError(operation));
 
-    const isNeeded = Effect.fn("Bootstrap.isNeeded")(function* () {
+    const isNeeded = Effect.gen(function* () {
       if (bootstrapSecret === undefined) return false;
       const rows = yield* db(
         "read bootstrap claim",
@@ -84,7 +87,7 @@ export const makeBootstrap = (sql: DatabaseSqlClient, bootstrapSecret: string | 
         ),
       );
       return false;
-    });
+    }).pipe(Effect.withSpan("Bootstrap.isNeeded"));
 
     const createInitialOperator = Effect.fn("Bootstrap.createInitialOperator")(function* (
       input: BootstrapInput,
@@ -101,7 +104,7 @@ export const makeBootstrap = (sql: DatabaseSqlClient, bootstrapSecret: string | 
         input.password.length > 128
       )
         return yield* new InvalidBootstrapInput();
-      if (!(yield* isNeeded())) return yield* new BootstrapComplete();
+      if (!(yield* isNeeded)) return yield* new BootstrapComplete();
 
       const countRows = yield* db(
         "count users before bootstrap",
@@ -134,7 +137,7 @@ export const makeBootstrap = (sql: DatabaseSqlClient, bootstrapSecret: string | 
         ]),
       ).pipe(Effect.result);
       if (committed._tag === "Failure") {
-        const stillNeeded = yield* isNeeded().pipe(Effect.result);
+        const stillNeeded = yield* isNeeded.pipe(Effect.result);
         if (stillNeeded._tag === "Success" && !stillNeeded.success)
           return yield* new BootstrapComplete();
         return yield* committed.failure;

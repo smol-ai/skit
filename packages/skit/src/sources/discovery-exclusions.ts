@@ -38,6 +38,6 @@ export const readDiscoveryExclusions = Effect.fn("Sources.readDiscoveryExclusion
     .readFileString(join(root, "skit.config.json"))
     .pipe(Effect.orElseSucceed(() => undefined));
   if (text === undefined) return [];
-  const decoded = Schema.decodeUnknownResult(RepositoryConfigExclusions)(text);
+  const decoded = Schema.decodeResult(RepositoryConfigExclusions)(text);
   return Result.isSuccess(decoded) ? decoded.success.discovery.exclude : [];
 });

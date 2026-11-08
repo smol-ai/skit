@@ -274,19 +274,8 @@
       "type": "boolean"
     },
     "durationMs": {
-      "anyOf": [
-        {
-          "type": "number"
-        },
-        {
-          "type": "string",
-          "enum": [
-            "Infinity",
-            "-Infinity",
-            "NaN"
-          ]
-        }
-      ]
+      "type": "number",
+      "minimum": 0
     }
   },
   "required": [

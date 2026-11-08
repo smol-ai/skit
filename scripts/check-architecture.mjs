@@ -80,9 +80,9 @@ export function check(root, base) {
   };
   const { parse } = createRequire(join(root, "packages/skit/package.json"))("acorn");
   const failures = [];
-  for (const [file, shrinking] of [
-    ["architecture/boundaries.mjs", ["debt", "serviceDebt"]],
-    ["architecture/layout.mjs", ["layoutDebt", "importDebt"]],
+  for (const { file, shrinking } of [
+    { file: "architecture/boundaries.mjs", shrinking: ["debt", "serviceDebt"] },
+    { file: "architecture/layout.mjs", shrinking: ["layoutDebt", "importDebt"] },
   ]) {
     const current = after(file);
     if (current === undefined) failures.push(`${file}: policy removed`);

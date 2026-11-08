@@ -11,7 +11,7 @@ import type {
   StepRouting,
 } from "../../store/state-schema.js";
 
-export type ApplyStep = typeof InstalledApply.Type;
+export type ApplyStep = InstalledApply;
 export const same = (a: unknown, b: unknown) => canonicalJson(a) === canonicalJson(b);
 export const publication = ({ operations: _operations, ...state }: LibraryState) => state;
 export const body = ({ installed_skills: _rows, ...state }: ApplyStep["before"]) => state;

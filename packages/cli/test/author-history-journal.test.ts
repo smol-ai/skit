@@ -181,7 +181,7 @@ it.effect(
             const content = yield* fs.readFileString(path);
             if (dirname(path) === directory && path.endsWith(".json")) {
               yield* Deferred.succeed(entered, undefined);
-              yield* Effect.never;
+              return yield* Effect.never;
             }
             return content;
           }),

@@ -174,7 +174,7 @@ it("merges a v6 manifest's per-Harness Bindings into one global Binding", () => 
 });
 
 it("encodes a migrated manifest as the current model only", () => {
-  const decoded = Schema.decodeUnknownSync(StoredLibraryManifest)({
+  const decoded = Schema.decodeSync(StoredLibraryManifest)({
     schema: "skit.library.v6",
     collections: [],
     skills: [],

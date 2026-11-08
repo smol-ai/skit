@@ -1,6 +1,6 @@
 import type { PlatformError } from "effect/PlatformError";
 import { basename, dirname, join, resolve } from "node:path";
-import { Effect, FileSystem, Schema } from "effect";
+import { Effect, FileSystem, Schema, Order } from "effect";
 import { parseSkillFrontmatter } from "../harnesses/frontmatter.js";
 import { LinkStat } from "../platform/link-stat.js";
 import { sha256Hash } from "../shared/hash.js";
@@ -78,7 +78,7 @@ export const scanSkillsDirectory = Effect.fn("Install.scanSkillsDirectory")(func
       if (options.blockingNames?.length) return yield* new DuplicateScanIncomplete(error);
       continue;
     }
-    for (const entry of names.sort()) {
+    for (const entry of names.sort(Order.String)) {
       if (entry.startsWith(".")) continue;
       const path = join(root, entry);
       yield* Effect.gen(function* () {

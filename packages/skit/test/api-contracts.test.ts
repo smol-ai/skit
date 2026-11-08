@@ -14,7 +14,7 @@ import { kebabNameSchema } from "../src/artifact/schemas.js";
 
 const ExampleContract = Schema.Struct({
   name: Schema.String,
-  nested: Schema.Struct({ count: Schema.Number }),
+  nested: Schema.Struct({ count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)) }),
 });
 
 const invalidExample = { name: 1, nested: { count: "many" } };

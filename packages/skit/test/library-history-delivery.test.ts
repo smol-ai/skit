@@ -220,7 +220,7 @@ it.effect("resumes a Pending operation into its original action event", () =>
         Effect.gen(function* () {
           const next =
             to === f.statePath
-              ? yield* Schema.decodeUnknownEffect(Schema.fromJsonString(LibraryState))(
+              ? yield* Schema.decodeEffect(Schema.fromJsonString(LibraryState))(
                   yield* f.fs.readFileString(from),
                 ).pipe(Effect.orDie)
               : undefined;
@@ -417,7 +417,7 @@ it.effect("preserves caller interruption after committed state and settles histo
       Effect.gen(function* () {
         yield* owner.import.collection(f.request);
         yield* Deferred.succeed(committed, undefined);
-        yield* Effect.never;
+        return yield* Effect.never;
       }),
     ).pipe(Effect.forkChild);
     yield* Deferred.await(committed);

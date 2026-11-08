@@ -44,10 +44,13 @@ it.effect("names the different ambient, explicit, login, and logout selection ru
       command: "skit auth logout <origin-or-alias>",
     });
     expect(yield* accounts.select("mirror", "logout")).toBe(two);
-    expect(yield* Effect.flip(accounts.select("typo", "explicit"))).toMatchObject({
+    const missing = yield* Effect.flip(accounts.select("typo", "explicit"));
+    expect(missing).toMatchObject({
       _tag: "RegistryAliasNotFound",
-      name: "typo",
+      name: "RegistryAliasNotFound",
+      alias: "typo",
     });
+    expect(String(missing)).toBe("RegistryAliasNotFound: Unknown Registry name: typo");
 
     const empty = new RegistryAccounts({ schemaVersion: 1, servers: {} });
     expect(yield* empty.select(undefined, "ambient")).toBeUndefined();

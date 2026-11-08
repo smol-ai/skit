@@ -42,6 +42,7 @@ const envelope = (path: string, value: unknown) =>
   );
 const emptyDelivery = (): HistoryDelivery => ({ schemaVersion: 1, pending: [] });
 
+// oxlint-disable-next-line effecttsgo/schema-number -- Preserve numeric future-version diagnostics, including overflow.
 const StateVersion = Schema.Struct({ schemaVersion: Schema.Number });
 
 const readStateValue = Effect.fn("Library.readStateValue")(function* (path: string) {
@@ -50,11 +51,11 @@ const readStateValue = Effect.fn("Library.readStateValue")(function* (path: stri
     .readFileString(path)
     .pipe(
       Effect.catchTag("PlatformError", (error) =>
-        error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+        error.reason._tag === "NotFound" ? Effect.undefined : Effect.fail(error),
       ),
     );
   if (text === undefined) return undefined;
-  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
+  return yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
     Effect.mapError(() => new InvalidLibraryState({ path, detail: "invalid Library JSON" })),
   );
 });
@@ -149,7 +150,7 @@ export const migrateLocalLibraryState = Effect.fn("Library.migrateState")(functi
       if (!isLegacyVersion(lockedVersion)) return;
       const migrated = yield* decodeCurrentState(
         path,
-        yield* Schema.decodeUnknownEffect(LegacyLibraryState)(lockedValue).pipe(
+        yield* Schema.decodeEffect(LegacyLibraryState)(lockedValue).pipe(
           Effect.mapError(
             () =>
               new InvalidLibraryState({
@@ -212,7 +213,7 @@ export const saveLibraryState = Effect.fn("Library.saveState")(function* (
       const stored = value === undefined ? undefined : yield* envelope(path, value);
       const delivery = stored?.historyDelivery ?? emptyDelivery();
       const prior = delivery.pending.find((item) => item.event.eventId === action.eventId);
-      const added = yield* Schema.decodeUnknownEffect(Schema.Array(OperationId))(
+      const added = yield* Schema.decodeEffect(Schema.Array(OperationId))(
         cleanNext.operations
           .filter(
             (operation) =>

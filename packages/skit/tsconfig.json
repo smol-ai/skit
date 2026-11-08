@@ -1,4 +1,5 @@
 {
+  "extends": "../../tsconfig.effect.json",
   "compilerOptions": {
     "target": "ES2023",
     "module": "NodeNext",

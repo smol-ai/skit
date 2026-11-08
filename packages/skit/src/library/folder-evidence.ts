@@ -62,7 +62,7 @@ export const recoveryFingerprint = Effect.fn("Library.recoveryFingerprint")(func
 const statAt = Effect.fn("Library.statAt")(function* (path: string) {
   const links = yield* LinkStat;
   return yield* links.identity.lstat(path).pipe(
-    Effect.map(Option.some),
+    Effect.asSome,
     Effect.catchTag("PlatformError", (error) =>
       error.reason._tag === "NotFound" ? Effect.succeedNone : Effect.fail(error),
     ),
@@ -72,7 +72,7 @@ const statAt = Effect.fn("Library.statAt")(function* (path: string) {
 const readMarker = Effect.fn("Library.readMarker")(function* (path: string) {
   const fs = yield* FileSystem.FileSystem;
   return yield* fs.readFileString(join(path, markerName)).pipe(
-    Effect.map(Option.some),
+    Effect.asSome,
     Effect.catchTag("PlatformError", (error) =>
       error.reason._tag === "NotFound" ? Effect.succeedNone : Effect.fail(error),
     ),
@@ -142,7 +142,7 @@ export const parentIsAsRecorded = Effect.fn("Library.parentIsAsRecorded")(functi
 ) {
   const links = yield* LinkStat;
   const physical = yield* links.realPathNative(dirname(path)).pipe(
-    Effect.map(Option.some),
+    Effect.asSome,
     Effect.catchTag("PlatformError", (error) =>
       error.reason._tag === "NotFound" ? Effect.succeedNone : Effect.fail(error),
     ),

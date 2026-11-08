@@ -55,18 +55,21 @@ it.effect.each([false, true])(
           devin: [join(f.root, "devin")],
         },
       }).pipe(
-        Effect.provide(skitConfigurationLayer(f.home)),
         Effect.provide(
-          Layer.mock(ChildProcessSpawner.ChildProcessSpawner, {
-            spawn: () => Effect.die("Custom-root diagnostics must not spawn a native probe"),
-          }),
+          skitConfigurationLayer(f.home).pipe(
+            Layer.provideMerge(
+              Layer.mock(ChildProcessSpawner.ChildProcessSpawner, {
+                spawn: () => Effect.die("Custom-root diagnostics must not spawn a native probe"),
+              }),
+            ),
+          ),
         ),
         Effect.provideService(SourceProcess, {
           run: () => Effect.die("Unexpected native process"),
           output: () => Effect.die("Unexpected native process"),
         }),
       );
-      yield* Schema.decodeUnknownEffect(DoctorReport)({
+      yield* Schema.decodeEffect(DoctorReport)({
         ...libraryDoctorReport(inventory),
         ...report,
       });

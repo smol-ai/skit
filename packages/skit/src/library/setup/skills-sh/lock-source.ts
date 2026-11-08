@@ -152,7 +152,7 @@ const SkillsLockEntry = Schema.StructWithRest(
 
 const SkillsLockDocument = Schema.fromJsonString(
   Schema.Struct({
-    version: Schema.Number,
+    version: Schema.Finite,
     skills: Schema.Record(Schema.String, SkillsLockEntry),
   }),
 );
@@ -164,7 +164,7 @@ export const readSkillsLock = Effect.fn("Setup.readSkillsLock")(function* (
   const fs = yield* FileSystem.FileSystem;
   const text = yield* fs.readFileString(path).pipe(Effect.orElseSucceed(() => undefined));
   if (text === undefined) return undefined;
-  const decoded = Schema.decodeUnknownResult(SkillsLockDocument)(text);
+  const decoded = Schema.decodeResult(SkillsLockDocument)(text);
   if (Result.isFailure(decoded)) return { scope, path, status: "malformed" as const, entries: [] };
   const expected = scope === "project" ? 1 : 3;
   if (decoded.success.version !== expected)
@@ -241,18 +241,18 @@ export const lockMatches = Effect.fn("Setup.lockMatches")(function* (
   return matches;
 });
 
-class SkillsShImportEvidenceInvalid extends Schema.TaggedError<SkillsShImportEvidenceInvalid>()(
-  "SkillsShImportEvidenceInvalid",
-  {
-    name: Schema.String,
-    reason: Schema.Literals([
-      "observation-missing",
-      "contested-observation",
-      "source-unresolvable",
-      "lock-changed",
-    ]),
-  },
-) {}
+class SkillsShImportEvidenceInvalid extends Schema.TaggedError<
+  SkillsShImportEvidenceInvalid,
+  { readonly brand: unique symbol }
+>()("SkillsShImportEvidenceInvalid", {
+  skillName: Schema.String,
+  reason: Schema.Literals([
+    "observation-missing",
+    "contested-observation",
+    "source-unresolvable",
+    "lock-changed",
+  ]),
+}) {}
 
 const lockSkillPath = (lockPath: string | undefined, name: string) => {
   if (!lockPath) return name;
@@ -300,7 +300,7 @@ export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImpo
     const first = candidates[0];
     if (!first)
       return yield* new SkillsShImportEvidenceInvalid({
-        name: "collection",
+        skillName: "collection",
         reason: "observation-missing",
       });
     const foundSkills = [];
@@ -331,7 +331,7 @@ export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImpo
       );
       if (claimVariants.size > 1)
         return yield* new SkillsShImportEvidenceInvalid({
-          name: candidate.name,
+          skillName: candidate.name,
           reason: "contested-observation",
         });
       const instance = [...matchingInstances].sort((left, right) =>
@@ -341,7 +341,7 @@ export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImpo
       const lock = instance?.locks.find((item) => setupLockGroupKey(item) === groupKey);
       if (!instance || !currentHash || !lock)
         return yield* new SkillsShImportEvidenceInvalid({
-          name: candidate.name,
+          skillName: candidate.name,
           reason: "observation-missing",
         });
       claimedMembers.push({ lock, name: candidate.name });
@@ -369,14 +369,14 @@ export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImpo
         );
       if (`sha256:${createHash("sha256").update(text).digest("hex")}` !== lock.lockContentHash)
         return yield* new SkillsShImportEvidenceInvalid({
-          name: first.name,
+          skillName: first.name,
           reason: "lock-changed",
         });
     }
     const resolution = resolveSkillsShSelectedSource(claimedMembers);
     if (resolution._tag !== "Resolved")
       return yield* new SkillsShImportEvidenceInvalid({
-        name: first.name,
+        skillName: first.name,
         reason: "source-unresolvable",
       });
     const source = resolution.source;

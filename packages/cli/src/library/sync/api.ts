@@ -146,8 +146,8 @@ export const librarySyncApi = Effect.fn("Library.librarySyncApi")(function* (opt
       });
     return invalidResponse(operation);
   };
-  const read = Effect.fn("Library.librarySyncApi.read")(function* () {
-    return yield* client.librarySync.read({}).pipe(
+  const read = Effect.suspend(() =>
+    client.librarySync.read({}).pipe(
       Effect.catch((error) => {
         return Schema.is(LibraryNotFoundResponse)(error)
           ? Effect.succeed(null)
@@ -158,8 +158,8 @@ export const librarySyncApi = Effect.fn("Library.librarySyncApi")(function* (opt
             );
       }),
       Effect.map((response) => (response === null ? null : response.library)),
-    );
-  });
+    ),
+  ).pipe(Effect.withSpan("Library.librarySyncApi.read"));
   const upload = Effect.fn("Library.librarySyncApi.upload")(function* (archive: SnapshotArchive) {
     return yield* client.librarySnapshots
       .upload({ payload: archive })

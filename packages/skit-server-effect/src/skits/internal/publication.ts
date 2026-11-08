@@ -14,26 +14,35 @@ import {
   type DatabaseSqlClient,
 } from "../../platform/cloudflare.js";
 
-class PublicationForbidden extends Schema.TaggedError<PublicationForbidden>()(
-  "Publication.Forbidden",
-  {},
-) {}
+class PublicationForbidden extends Schema.TaggedError<
+  PublicationForbidden,
+  { readonly brand: unique symbol }
+>()("Publication.Forbidden", {}) {}
 
 const ReleaseRow = Schema.Struct({ release_id: Schema.String });
 
-class SkitNotFound extends Schema.TaggedError<SkitNotFound>()("Publication.SkitNotFound", {}) {}
-class CurrentRevisionMissing extends Schema.TaggedError<CurrentRevisionMissing>()(
-  "Publication.CurrentRevisionMissing",
+class SkitNotFound extends Schema.TaggedError<SkitNotFound, { readonly brand: unique symbol }>()(
+  "Publication.SkitNotFound",
   {},
 ) {}
-class StaleRevision extends Schema.TaggedError<StaleRevision>()("Publication.StaleRevision", {}) {}
-class PublishBlocked extends Schema.TaggedError<PublishBlocked>()("Publication.PublishBlocked", {
+class CurrentRevisionMissing extends Schema.TaggedError<
+  CurrentRevisionMissing,
+  { readonly brand: unique symbol }
+>()("Publication.CurrentRevisionMissing", {}) {}
+class StaleRevision extends Schema.TaggedError<StaleRevision, { readonly brand: unique symbol }>()(
+  "Publication.StaleRevision",
+  {},
+) {}
+class PublishBlocked extends Schema.TaggedError<
+  PublishBlocked,
+  { readonly brand: unique symbol }
+>()("Publication.PublishBlocked", {
   diagnostics: Schema.Array(ValidationDiagnostic),
 }) {}
-export class ReleaseConflict extends Schema.TaggedError<ReleaseConflict>()(
-  "Publication.ReleaseConflict",
-  {},
-) {}
+export class ReleaseConflict extends Schema.TaggedError<
+  ReleaseConflict,
+  { readonly brand: unique symbol }
+>()("Publication.ReleaseConflict", {}) {}
 
 interface PublicationInput {
   readonly owner: string;
@@ -86,7 +95,7 @@ export const makePublication = (
   ) => Effect.Effect<SkitCurrentResponse | undefined, DatabaseError>,
   ownsNamespace: (principal: Principal, namespace: string) => Effect.Effect<boolean, DatabaseError>,
 ): Publication => {
-  const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
+  const db = <A, E>(operation: string, effect: Effect.Effect<A, E>) =>
     effect.pipe(databaseError(operation));
   const findRelease = Effect.fn("Publication.findRelease")(function* (
     owner: string,
@@ -169,23 +178,22 @@ export const makePublication = (
       Effect.flatMap((rows) =>
         rows.length === 1 ? Effect.void : Effect.fail(new StaleRevision()),
       ),
-      Effect.catchTag("Publication.StaleRevision", (error) =>
-        cleanup.pipe(Effect.andThen(Effect.fail(error))),
-      ),
-      Effect.catchTag("Cloudflare.DatabaseError", (insertError) =>
-        Effect.gen(function* () {
-          yield* cleanup;
-          const raced = yield* findRelease(input.owner, input.slug, input.version).pipe(
-            Effect.catch((lookupError) =>
-              Effect.logError("release conflict lookup failed", lookupError).pipe(
-                Effect.andThen(Effect.fail(insertError)),
+      Effect.catchTags({
+        "Publication.StaleRevision": (error) => cleanup.pipe(Effect.andThen(Effect.fail(error))),
+        "Cloudflare.DatabaseError": (insertError) =>
+          Effect.gen(function* () {
+            yield* cleanup;
+            const raced = yield* findRelease(input.owner, input.slug, input.version).pipe(
+              Effect.catch((lookupError) =>
+                Effect.logError("release conflict lookup failed", lookupError).pipe(
+                  Effect.andThen(Effect.fail(insertError)),
+                ),
               ),
-            ),
-          );
-          if (raced !== undefined) return yield* new ReleaseConflict();
-          return yield* insertError;
-        }),
-      ),
+            );
+            if (raced !== undefined) return yield* new ReleaseConflict();
+            return yield* insertError;
+          }),
+      }),
     );
 
     return {

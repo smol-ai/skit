@@ -1,4 +1,4 @@
-import { Deferred, Effect, Fiber, Result } from "effect";
+import { Layer, Deferred, Effect, Fiber, Result } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { HttpClientError } from "effect/http";
 import { assert, it } from "@effect/vitest";
@@ -22,7 +22,7 @@ import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.j
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 
 const listWithTransport = (input: { origin?: string; token?: string }, fetcher: TestHttpHandler) =>
-  listAuthorSkits({ list: () => listAuthorInventory(input) }).pipe(
+  listAuthorSkits({ list: listAuthorInventory(input) }).pipe(
     Effect.provide(registryHttpLayer(testHttpClientLayer(fetcher))),
   );
 
@@ -47,9 +47,12 @@ const classifiedFailures = Effect.fn("AuthorListTest.classifiedFailures")(functi
     [],
     "test",
   ).pipe(
-    Effect.provide(interaction.layer),
-    Effect.provide(registryHttpLayer(testHttpClientLayer(() => Effect.succeed(response)))),
-    Effect.provide(NodeServices.layer),
+    Effect.provide(
+      interaction.layer.pipe(
+        Layer.provideMerge(registryHttpLayer(testHttpClientLayer(() => Effect.succeed(response)))),
+        Layer.provideMerge(NodeServices.layer),
+      ),
+    ),
   );
   return yield* interaction.failures;
 });

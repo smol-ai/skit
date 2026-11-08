@@ -8,7 +8,7 @@ import type { DestinationExistsWithoutHistory } from "./failures.js";
 
 /** Registry protocol only. Workspace recovery and all local writes belong to Author. */
 export interface AuthorRegistry<E = SkitFailure, R = never, ProtocolError = E> {
-  readonly list: () => Effect.Effect<
+  readonly list: Effect.Effect<
     { readonly origin: string; readonly skits: readonly AuthorSkitSummary[] },
     E,
     R

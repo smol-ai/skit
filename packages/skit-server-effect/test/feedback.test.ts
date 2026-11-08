@@ -1,12 +1,12 @@
 import { applyD1Migrations, env, reset } from "cloudflare:test";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Order } from "effect";
 import { makeWebHandler } from "../src/http.js";
 import type { RuntimeEnv } from "../src/platform/cloudflare.js";
 
 const webPromise = <A>(evaluate: () => Promise<A>) =>
   // oxlint-disable-next-line skit/no-promise-wrappers -- Fetch-compatible Worker handlers are Promise APIs; this test helper owns that host boundary.
-  Effect.tryPromise({ try: evaluate, catch: (cause) => cause }).pipe(Effect.orDie);
+  Effect.promise(evaluate);
 
 const prepareDatabase = webPromise(async () => {
   await reset();
@@ -230,9 +230,11 @@ describe("feedback", () => {
 
         expect(response.status).toBe(201);
       }
-      expect((yield* storedFeedback).map(({ message }) => message).sort()).toEqual(
-        ["界".repeat(1_000), "\u0000".repeat(1_000)].sort(),
-      );
+      expect(
+        (yield* storedFeedback)
+          .map(({ message }) => message)
+          .sort(Order.mapInput(Order.String, String)),
+      ).toEqual(["界".repeat(1_000), "\u0000".repeat(1_000)].sort());
     }),
   );
 

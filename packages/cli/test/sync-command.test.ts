@@ -22,11 +22,16 @@ const failure = new CredentialsUnusable({ path: "/broken/auth.json", reason: "in
 
 const services = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.provide(rendererTestLayer()),
-    Effect.provide(Library.layer({ home: "/unreachable", roots: testRoots("/unreachable") })),
-    // Building the owner touches no disk; these commands fail before they capture anything.
-    Effect.provide(authorLayer("/unreachable")),
-    Effect.provide(testPlatformLayer),
+    Effect.provide(
+      rendererTestLayer().pipe(
+        Layer.provideMerge(
+          Library.layer({ home: "/unreachable", roots: testRoots("/unreachable") }),
+        ),
+        // Building the owner touches no disk; these commands fail before they capture anything.
+        Layer.provideMerge(authorLayer("/unreachable")),
+        Layer.provideMerge(testPlatformLayer),
+      ),
+    ),
     Effect.provideService(
       RegistryHttp,
       RegistryHttp.of({
@@ -108,27 +113,30 @@ it.effect.each(["connected", "connecting"] as const)(
         home,
       }).pipe(
         Effect.exit,
-        Effect.provide(rendererTestLayer()),
-        Effect.provide(authorLayer(home)),
-        Effect.provide(libraryLayer().pipe(Layer.provide(skitConfigurationLayer(home)))),
         Effect.provide(
-          registryHttpLayer(
-            testHttpClientLayer((request) =>
-              Effect.sync(() => {
-                authorizations.push(request.headers.authorization);
-                return Response.json({ error: "skit_not_found" }, { status: 404 });
-              }),
+          rendererTestLayer().pipe(
+            Layer.provideMerge(authorLayer(home)),
+            Layer.provideMerge(libraryLayer().pipe(Layer.provide(skitConfigurationLayer(home)))),
+            Layer.provideMerge(
+              registryHttpLayer(
+                testHttpClientLayer((request) =>
+                  Effect.sync(() => {
+                    authorizations.push(request.headers.authorization);
+                    return Response.json({ error: "skit_not_found" }, { status: 404 });
+                  }),
+                ),
+              ),
             ),
-          ),
-        ),
-        Effect.provide(
-          skitConfigurationLayer().pipe(
-            Layer.provide(
-              ConfigProvider.layer(
-                ConfigProvider.fromUnknown({
-                  SKIT_SERVER_URL: "https://environment.example",
-                  SKIT_TOKEN: "skit_pat_environment",
-                }),
+            Layer.provideMerge(
+              skitConfigurationLayer().pipe(
+                Layer.provide(
+                  ConfigProvider.layer(
+                    ConfigProvider.fromUnknown({
+                      SKIT_SERVER_URL: "https://environment.example",
+                      SKIT_TOKEN: "skit_pat_environment",
+                    }),
+                  ),
+                ),
               ),
             ),
           ),

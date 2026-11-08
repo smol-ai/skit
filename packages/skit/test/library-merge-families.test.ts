@@ -472,7 +472,7 @@ const manifestOf = (sides: readonly Side[]): LibraryManifest => {
   const retained_copies = sides.flatMap((side) => side.retained_copies);
   const imports = sides.flatMap((side) => side.imports);
   const entries = sides.flatMap((side) => side.entries);
-  return Schema.decodeUnknownSync(LibraryManifest)(
+  return Schema.decodeSync(LibraryManifest)(
     currentLibraryManifest({
       collections: sides.flatMap((side) => side.collections),
       skills: sides.flatMap((side) => side.skills),

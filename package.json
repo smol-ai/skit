@@ -14,7 +14,8 @@
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "lint": "pnpm --parallel --no-bail --include-workspace-root run /^lint:/",
-    "lint:code": "oxlint .",
+    "lint:code": "node scripts/oxlint.mjs .",
+    "lsp:typescript": "effect-tsgo tsc@7.0.2 --lsp --stdio",
     "lint:unused": "node scripts/check-unused.mjs",
     "lint:structure": "node scripts/check-structure.mjs",
     "skit": "node packages/cli/bin/skit.js",
@@ -30,9 +31,11 @@
     "cli:image": "bun packages/storybook/src/image/main.ts"
   },
   "devDependencies": {
+    "@effect/tsgo": "0.67.5",
     "knip": "^6.44.1",
     "oxfmt": "^0.64.0",
-    "oxlint": "^1.79.0",
+    "oxlint": "1.92.0",
+    "oxlint-tsgolint": "7.0.2006",
     "skills": "1.5.26",
     "typescript": "7.0.2",
     "typescript-parser": "npm:typescript@5.9.3",

@@ -68,7 +68,7 @@ export type Approval = typeof Approval.Type;
 // ── Errors ───────────────────────────────────────────────────────────────────────────────────────
 /** The Library moved on since the change was planned; a revision check names both revisions. */
 export class StalePlan
-  extends Schema.TaggedError<StalePlan>()("Library.StalePlan", {
+  extends Schema.TaggedError<StalePlan, { readonly brand: unique symbol }>()("Library.StalePlan", {
     message: Schema.String,
     expected: Schema.optionalKey(Schema.String.pipe(Schema.brand("Revision"))),
     actual: Schema.optionalKey(Schema.String.pipe(Schema.brand("Revision"))),
@@ -82,9 +82,12 @@ export class StalePlan
 
 /** Enabling would replace the user's own link where SKIT writes the copy; keeping both is impossible. */
 export class InstalledSkillWouldReplaceLink
-  extends Schema.TaggedError<InstalledSkillWouldReplaceLink>()("InstalledSkillWouldReplaceLink", {
-    links: Schema.Array(Schema.String),
-  })
+  extends Schema.TaggedError<InstalledSkillWouldReplaceLink, { readonly brand: unique symbol }>()(
+    "InstalledSkillWouldReplaceLink",
+    {
+      links: Schema.Array(Schema.String),
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -98,9 +101,12 @@ export class InstalledSkillWouldReplaceLink
 
 /** Policy: Library refuses a duplicate; InstalledSkills only reports that it is there. */
 export class InstalledSkillWouldDuplicate
-  extends Schema.TaggedError<InstalledSkillWouldDuplicate>()("InstalledSkillWouldDuplicate", {
-    duplicates: Schema.Array(InstalledSkills.Duplicate),
-  })
+  extends Schema.TaggedError<InstalledSkillWouldDuplicate, { readonly brand: unique symbol }>()(
+    "InstalledSkillWouldDuplicate",
+    {
+      duplicates: Schema.Array(InstalledSkills.Duplicate),
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -113,9 +119,12 @@ export class InstalledSkillWouldDuplicate
 }
 
 export class DestinationsIncomplete
-  extends Schema.TaggedError<DestinationsIncomplete>()("Library.DestinationsIncomplete", {
-    paths: Schema.Array(Schema.String),
-  })
+  extends Schema.TaggedError<DestinationsIncomplete, { readonly brand: unique symbol }>()(
+    "Library.DestinationsIncomplete",
+    {
+      paths: Schema.Array(Schema.String),
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;

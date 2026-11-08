@@ -14,7 +14,7 @@ export const ReleaseCheck = Schema.Struct({
   channel: Schema.String,
   source: Schema.String,
   available: Schema.optionalKey(Schema.String),
-  checkedAt: Schema.optionalKey(Schema.Number),
+  checkedAt: Schema.optionalKey(Schema.Finite),
   reason: Schema.optionalKey(Schema.String),
   upgrade: Schema.optionalKey(Schema.String),
 });

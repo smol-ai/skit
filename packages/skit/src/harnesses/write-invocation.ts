@@ -35,11 +35,11 @@ export function applyHarnessInvocationPolicy(
       .readFileString(path)
       .pipe(
         Effect.catchTag("PlatformError", (error) =>
-          error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+          error.reason._tag === "NotFound" ? Effect.undefined : Effect.fail(error),
         ),
       );
     if (text === undefined && adapter.required)
-      return yield* Effect.fail(new InstalledSkillFileMissing({ path }));
+      return yield* new InstalledSkillFileMissing({ path });
     const next = yield* Effect.fromResult(adapter.write(text, policy, path));
     if (next === null) {
       if (text === undefined) return false;

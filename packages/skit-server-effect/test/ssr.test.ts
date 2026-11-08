@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Data, Effect, Result } from "effect";
 import { describe, expect } from "vitest";
 import { Server } from "foldkit/experimental";
 import { flagsForRequest, renderPageEffect } from "../web/src/entry.server.js";
@@ -32,6 +32,40 @@ const unclaimedHandler = (request: Request): Promise<Response> => {
 };
 
 describe("Foldkit server rendering", () => {
+  it.effect.each(["http", "json", "schema", "transport"] as const)(
+    "reports a %s configuration failure in the typed page-request channel",
+    (kind) =>
+      Effect.gen(function* () {
+        const failed = (request: Request): Promise<Response> => {
+          if (new URL(request.url).pathname !== "/api/ui/config") return signedOutHandler(request);
+          if (kind === "transport") return Promise.reject(new Error("request refused"));
+          return Promise.resolve(
+            kind === "http"
+              ? new Response(null, { status: 503 })
+              : kind === "json"
+                ? new Response("invalid json")
+                : Response.json({ github: "invalid" }),
+          );
+        };
+        const result = yield* Effect.result(
+          flagsForRequest(new Request("https://registry.example/"), failed),
+        );
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure._tag).toBe("PageRequestFailed");
+          expect(result.failure.message.length).toBeGreaterThan(0);
+          if (kind === "http")
+            expect(result.failure.message).toBe(
+              "HTTP 503 from https://registry.example/api/ui/config",
+            );
+          if (kind === "transport") {
+            expect(result.failure.message).toBe("Error: request refused");
+            expect(result.failure.cause).toBeInstanceOf(Error);
+          }
+        }
+      }),
+  );
+
   it.effect("renders authenticated Registry state into the initial HTML", () =>
     Effect.gen(function* () {
       const result = yield* renderPageEffect(
@@ -239,10 +273,15 @@ describe("Foldkit server rendering", () => {
   );
 });
 
-const responseText = (response: Response): Effect.Effect<string, Error> =>
+class ResponseBodyFailed extends Data.TaggedError("ResponseBodyFailed")<{
+  message: string;
+  cause: unknown;
+}> {}
+
+const responseText = (response: Response): Effect.Effect<string, ResponseBodyFailed> =>
   Effect.callback((resume) => {
     response.text().then(
       (text) => resume(Effect.succeed(text)),
-      (cause) => resume(Effect.fail(new Error(String(cause)))),
+      (cause) => resume(Effect.fail(new ResponseBodyFailed({ message: String(cause), cause }))),
     );
   });

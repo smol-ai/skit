@@ -168,7 +168,7 @@ export const authorSyncApi = Effect.fn("Registry.authorSyncApi")(function* (inpu
           identity: locator,
         });
       if (!Schema.is(SkitNotFoundResponse)(existing.failure))
-        return yield* Effect.fail(failure("skit current", 200)(existing.failure));
+        return yield* failure("skit current", 200)(existing.failure);
     }),
     create: (visibility: AuthorVisibility, requestId: string) =>
       client.skits
@@ -188,9 +188,9 @@ export const authorSyncApi = Effect.fn("Registry.authorSyncApi")(function* (inpu
 
 /** Transport composition for Author; credentials are selected only for the named Registry. */
 export const authorRegistry = (home?: string) => ({
-  list: Effect.fn("Registry.listAuthor")(function* () {
+  list: Effect.gen(function* () {
     return yield* listAuthorInventory(yield* Registry.credentials({ home }));
-  }),
+  }).pipe(Effect.withSpan("Registry.listAuthor")),
   delete: Effect.fn("Registry.deleteAuthor")(function* (
     remote: AuthorRemoteHome,
     options: { readonly dryRun?: boolean },

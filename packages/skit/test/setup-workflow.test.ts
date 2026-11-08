@@ -6,6 +6,40 @@ import * as Library from "../src/library/library.js";
 import { inLibrary, libraryLayer } from "./helpers/library-store.js";
 import { skitLayer } from "../src/platform/layer.js";
 
+it.effect.each([
+  { token: "1e999", status: "malformed" },
+  { token: "42", status: "unsupported" },
+] as const)(
+  "classifies lock version $token as $status without saving invalid metadata",
+  ({ token, status }) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.realPath(
+        yield* fs.makeTempDirectoryScoped({ prefix: "skit-lock-version-" }),
+      );
+      const home = join(root, "library");
+      const skillsStateHome = join(root, "state");
+      const path = join(skillsStateHome, "skills", ".skill-lock.json");
+      yield* fs.makeDirectory(join(skillsStateHome, "skills"), { recursive: true });
+      const text = `{"version":${token},"skills":{}}`;
+      yield* fs.writeFileString(path, text);
+      const scan = yield* runSetup({
+        libraryHome: home,
+        inventory: { home: root, configHome: join(root, "config"), overrides: {} },
+        persistRoots: false,
+        probePath: "",
+        skillsStateHome,
+      }).pipe(Effect.provide(libraryLayer(home)));
+      assert.deepStrictEqual(
+        scan.locks,
+        status === "unsupported"
+          ? [{ scope: "global", path, status, entries: [], version: 42 }]
+          : [{ scope: "global", path, status, entries: [] }],
+      );
+      assert.strictEqual(yield* fs.readFileString(path), text);
+    }).pipe(Effect.provide(skitLayer)),
+);
+
 it.effect("core setup reviews, applies and undoes a local copy without frontend services", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;

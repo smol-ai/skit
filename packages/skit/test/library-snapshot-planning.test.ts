@@ -228,10 +228,10 @@ it("rejects a Skill Version that no import of its Collection backs", () => {
 it.effect("plans the pinned Git and retained edit from the literal supported wire fixture", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const head = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(LibraryResponse))(
+    const head = yield* Schema.decodeEffect(Schema.fromJsonString(LibraryResponse))(
       yield* fs.readFileString(join(import.meta.dirname, "fixtures/library-wire/portable-v8.json")),
     );
-    const archive = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SnapshotArchive))(
+    const archive = yield* Schema.decodeEffect(Schema.fromJsonString(SnapshotArchive))(
       yield* fs.readFileString(
         join(import.meta.dirname, "fixtures/library-wire/snapshot-archive.json"),
       ),

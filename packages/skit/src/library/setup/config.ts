@@ -34,7 +34,7 @@ export const readRepositoryConfig = Effect.fn("Setup.readRepositoryConfig")(func
       exclude: [] as string[],
       collections: [] as Array<{ path: string }>,
     };
-  const header = Schema.decodeUnknownResult(RepositoryConfigHeader)(text);
+  const header = Schema.decodeResult(RepositoryConfigHeader)(text);
   if (Result.isFailure(header))
     return {
       repository,
@@ -52,7 +52,7 @@ export const readRepositoryConfig = Effect.fn("Setup.readRepositoryConfig")(func
       exclude: [] as string[],
       collections: [] as Array<{ path: string }>,
     };
-  const decoded = Schema.decodeUnknownResult(RepositoryConfigDocument, {
+  const decoded = Schema.decodeResult(RepositoryConfigDocument, {
     onExcessProperty: "error",
   })(text);
   if (Result.isFailure(decoded))

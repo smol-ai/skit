@@ -59,8 +59,7 @@ export const prepareApply = Effect.fn("Library.prepareRecordedApply")(function* 
         files.build(change, again.next, libraryOriginalsPath(home)),
       );
       if (built._tag === "Failure") {
-        if (built.failure._tag !== "Library.InstalledSkillInvalid")
-          return yield* Effect.fail(built.failure);
+        if (built.failure._tag !== "Library.InstalledSkillInvalid") return yield* built.failure;
         invalidSource = { path: change.path, reason: built.failure.detail };
         break;
       }
@@ -134,7 +133,7 @@ export const saveStep = Effect.fn("Library.saveApplyStep")(function* (
   const writer = yield* LibraryWriter;
   const current = base ?? (yield* loadLibrary(writer.home));
   const state = next ?? current;
-  const operations = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
+  const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
     state.operations,
   ).pipe(
     Effect.mapError(() => new InvalidIntent({ detail: "Invalid recorded Library operation" })),

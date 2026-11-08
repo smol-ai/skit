@@ -53,10 +53,13 @@ import { makeHistoryStore, storedPath } from "./history-store.js";
 // ── Errors ─────────────────────────────────────────────────────────────────────────────────────
 
 export class AuthorHistoryInvalid
-  extends Schema.TaggedError<AuthorHistoryInvalid>()("AuthorHistoryInvalid", {
-    path: Schema.String,
-    reason: Schema.String,
-  })
+  extends Schema.TaggedError<AuthorHistoryInvalid, { readonly brand: unique symbol }>()(
+    "AuthorHistoryInvalid",
+    {
+      path: Schema.String,
+      reason: Schema.String,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -70,7 +73,10 @@ export class AuthorHistoryInvalid
 
 /** Contention is temporary; it says nothing about the validity of stored history. */
 class AuthorHistoryBusy
-  extends Schema.TaggedError<AuthorHistoryBusy>()("AuthorHistoryBusy", { path: Schema.String })
+  extends Schema.TaggedError<AuthorHistoryBusy, { readonly brand: unique symbol }>()(
+    "AuthorHistoryBusy",
+    { path: Schema.String },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -84,10 +90,13 @@ class AuthorHistoryBusy
 
 /** The saved checkpoint is no longer the one the step planned from. */
 class AuthorSyncStateConflict
-  extends Schema.TaggedError<AuthorSyncStateConflict>()("AuthorSyncStateConflict", {
-    key: SyncKey,
-    found: Sync.SyncState,
-  })
+  extends Schema.TaggedError<AuthorSyncStateConflict, { readonly brand: unique symbol }>()(
+    "AuthorSyncStateConflict",
+    {
+      key: SyncKey,
+      found: Sync.SyncState,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -101,10 +110,13 @@ class AuthorSyncStateConflict
 
 /** Another backup pass advanced this workspace's acknowledged observation. */
 class AuthorBackupStateConflict
-  extends Schema.TaggedError<AuthorBackupStateConflict>()("AuthorBackupStateConflict", {
-    key: SyncKey,
-    found: Schema.NullOr(History.RevisionId),
-  })
+  extends Schema.TaggedError<AuthorBackupStateConflict, { readonly brand: unique symbol }>()(
+    "AuthorBackupStateConflict",
+    {
+      key: SyncKey,
+      found: Schema.NullOr(History.RevisionId),
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -118,11 +130,14 @@ class AuthorBackupStateConflict
 
 /** `from → to` is not a step the sync engine takes (Sync.allowsStep). */
 class AuthorSyncStateIllegal
-  extends Schema.TaggedError<AuthorSyncStateIllegal>()("AuthorSyncStateIllegal", {
-    key: SyncKey,
-    from: Sync.SyncState,
-    to: Sync.SyncState,
-  })
+  extends Schema.TaggedError<AuthorSyncStateIllegal, { readonly brand: unique symbol }>()(
+    "AuthorSyncStateIllegal",
+    {
+      key: SyncKey,
+      from: Sync.SyncState,
+      to: Sync.SyncState,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -152,7 +167,7 @@ const PreparedWrite = Schema.Struct({
   from: History.TreeHash,
   to: History.TreeHash,
   ownerId: Schema.String,
-  revision: Schema.Number,
+  revision: Schema.Finite,
 }).pipe(Schema.brand("PreparedWrite"));
 export type PreparedWrite = typeof PreparedWrite.Type;
 
@@ -389,7 +404,15 @@ const writeHistoryEvent = Effect.fn("AuthorHistory.writeHistoryEvent")(function*
       ),
       // A journal SQLite or its schema cannot read is unusable history.
       Effect.catchTag(["SqlError", "SchemaError"], (error) =>
-        Effect.fail(new AuthorHistoryInvalid({ path, reason: String(error) })),
+        Effect.fail(
+          new AuthorHistoryInvalid({
+            path,
+            // SchemaError overrides string formatting; SqlError inherits Error's formatter.
+            reason: Schema.isSchemaError(error)
+              ? String(error)
+              : Error.prototype.toString.call(error),
+          }),
+        ),
       ),
     );
 });
@@ -557,7 +580,7 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
     }
     const journalFile = yield* links
       .lstat(journalPath)
-      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
     if (journalFile?.type === "SymbolicLink")
       return yield* new AuthorHistoryInvalid({
         path: journalPath,
@@ -569,7 +592,7 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
       Effect.map((identity) =>
         Option.getOrUndefined(Option.map(identity, (value) => value.workspaceId)),
       ),
-      Effect.catchTag("AuthorWorkspaceMetadataInvalid", () => Effect.succeed(undefined)),
+      Effect.catchTag("AuthorWorkspaceMetadataInvalid", () => Effect.undefined),
     );
     // Machine identity may need the Library writer. Never acquire that writer while holding the
     // journal permit/transaction: promotion saves history under its Library writer, so the reverse
@@ -621,12 +644,12 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
 
   const loadSyncState = Effect.gen(function* () {
     const text = yield* fs.readFileString(syncStatePath).pipe(
-      Effect.map(Option.some),
+      Effect.asSome,
       Effect.catchReason("PlatformError", "NotFound", () => Effect.succeedNone),
     );
     if (Option.isNone(text))
       return { schema: "skit.author-sync.v1", workspaces: {} } satisfies AuthorSyncState;
-    return yield* Schema.decodeUnknownEffect(AuthorSyncStateDocument)(text.value).pipe(
+    return yield* Schema.decodeEffect(AuthorSyncStateDocument)(text.value).pipe(
       Effect.mapError(
         (error) => new AuthorSyncStateInvalid({ path: syncStatePath, reason: String(error) }),
       ),

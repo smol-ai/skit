@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { D1Client } from "@effect/sql-d1";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Order } from "effect";
 import { makeWebHandler } from "../src/http.js";
 import { passwordCallbacks } from "../src/identity/internal/password.js";
 import { databaseLayer } from "../src/platform/cloudflare.js";
@@ -12,7 +12,7 @@ const web = makeWebHandler(env);
 
 const webPromise = <A>(evaluate: () => Promise<A>) =>
   // oxlint-disable-next-line skit/no-promise-wrappers -- Fetch-compatible Worker handlers are Promise APIs; this test helper owns that host boundary.
-  Effect.tryPromise({ try: evaluate, catch: (cause) => cause }).pipe(Effect.orDie);
+  Effect.promise(evaluate);
 
 const requestStatus = () =>
   webPromise(() => web.handler(new Request("https://registry.test/api/bootstrap/status")));
@@ -68,8 +68,9 @@ describe("bootstrap status", () => {
   it.effect("commits one complete identity when operator claims race", () =>
     Effect.gen(function* () {
       yield* prepareIdentityDatabase;
-      const responses = yield* Effect.all(
-        ["first", "second"].map((name, index) =>
+      const responses = yield* Effect.forEach(
+        ["first", "second"],
+        (name, index) =>
           webPromise(() =>
             web.handler(
               new Request("https://registry.test/api/bootstrap", {
@@ -88,10 +89,9 @@ describe("bootstrap status", () => {
               }),
             ),
           ),
-        ),
         { concurrency: "unbounded" },
       );
-      expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
+      expect(responses.map((response) => response.status).sort(Order.Number)).toEqual([201, 409]);
       const sql = yield* D1Client.D1Client;
       for (const table of [
         "user",

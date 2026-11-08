@@ -20,12 +20,12 @@ export class AuthorListIdentityError
 export const listAuthorSkits = Effect.fn("Author.list")(function* <E, R>(
   registry: Pick<AuthorRegistry<E, R>, "list">,
 ) {
-  const { origin, skits } = yield* registry.list();
+  const { origin, skits } = yield* registry.list;
   const inventory = yield* Effect.forEach(skits, (skit) =>
     Effect.gen(function* () {
       const separator = skit.skit_id.indexOf("/");
       if (separator < 1 || separator === skit.skit_id.length - 1)
-        return yield* Effect.fail(new AuthorListIdentityError({ identity: skit.skit_id }));
+        return yield* new AuthorListIdentityError({ identity: skit.skit_id });
       return {
         identity: skitLocator({
           schema: "skit.remote.v1",

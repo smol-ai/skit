@@ -20,7 +20,10 @@ export const ValidationDiagnostic = Schema.Struct({
 });
 export interface ValidationDiagnostic extends Schema.Schema.Type<typeof ValidationDiagnostic> {}
 
-export class IntegrityError extends Schema.TaggedError<IntegrityError>()("Integrity.Error", {
+export class IntegrityError extends Schema.TaggedError<
+  IntegrityError,
+  { readonly brand: unique symbol }
+>()("Integrity.Error", {
   code: IntegrityErrorCode,
   detail: Schema.optionalKey(Schema.String),
 }) {}
