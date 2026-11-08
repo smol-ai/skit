@@ -5,7 +5,7 @@ export interface RendererShape {
   /** A command's successful payload: JSON or rendered text, plus any declared exit code. */
   readonly result: (
     result: CommandResult,
-    options?: { readonly detail?: "summary" | "full" },
+    options?: { readonly detail?: "summary" | "full"; readonly jsonLines?: boolean },
   ) => Effect.Effect<void>;
   readonly failure: (failure: CommandFailure) => Effect.Effect<void>;
   readonly help: (text: string) => Effect.Effect<void>;

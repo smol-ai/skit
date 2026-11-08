@@ -1,7 +1,8 @@
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { authorWorkspaceLayer } from "@smolai/skit-core/author";
+import { authorWorkspaceLayer, watchAuthorWorkspace } from "@smolai/skit-core/author";
+import { authorRegistry } from "../registry/author-sync.js";
 import { authorLayer } from "../application.js";
 import { CommandMetadata, credentialStoreReadSubprocesses } from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";
@@ -134,6 +135,38 @@ const sync = Command.make(
       subprocesses: [...credentialStoreReadSubprocesses, ...workspaceSubprocesses],
     },
     outputSchemas: [outputContracts.sync],
+    exitCodes: [0, 11, 12, 13, 64, 65],
+    interactive: false,
+  }),
+  Command.provide(authorLayer),
+);
+
+const watch = Command.make("watch", { directory, json: jsonFlag }, ({ directory }) =>
+  Effect.gen(function* () {
+    const home = (yield* SkitConfiguration).skitHome;
+    const renderer = yield* Renderer;
+    return yield* watchAuthorWorkspace(directory, { home }, authorRegistry(home), (event) =>
+      renderer.result(result("authorWatch", event), { jsonLines: true }),
+    );
+  }),
+).pipe(
+  Command.withDescription(
+    "Experimental: watch one connected Author Workspace and synchronize edits until stopped.",
+  ),
+  Command.withExamples([{ command: "skit author watch ." }]),
+  Command.annotate(CommandMetadata, {
+    stability: "experimental",
+    effects: {
+      capabilities: [
+        "filesystem.read",
+        "filesystem.write",
+        "network.read",
+        "network.write",
+        "process.execute",
+      ],
+      subprocesses: [...credentialStoreReadSubprocesses, ...workspaceSubprocesses],
+    },
+    outputSchemas: [outputContracts.authorWatch],
     exitCodes: [0, 11, 12, 13, 64, 65],
     interactive: false,
   }),
@@ -276,5 +309,5 @@ export const authorCliCommand = Command.make("author").pipe(
   Command.withDescription(
     "Experimental: initialize, validate, sync and publish authored skills. Commands and output formats may change between releases.",
   ),
-  Command.withSubcommands([init, validate, sync, publish, list, remove, invocation]),
+  Command.withSubcommands([init, validate, sync, watch, publish, list, remove, invocation]),
 );

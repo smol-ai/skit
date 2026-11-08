@@ -217,6 +217,106 @@ test("separate author processes back up offline history and converge through rea
     );
     expect(await run(b, "sync")).toMatchObject({ _tag: "Success" });
     expect(await readFile(join(b.root, "crash.txt"), "utf8")).toBe("kept after SIGKILL");
+    // Exercise the shipped foreground command in separate background processes. Assertions
+    // read real guest files and the Worker/D1/R2 Registry, rather than accepting log messages
+    // as proof of convergence. This same scenario runs in disposable Linux VMs.
+    const command = resolve(serverRoot, "../cli/bin/skit.js");
+    const watchers = new Set<ReturnType<typeof spawn>>();
+    const startWatch = async (device: typeof a) => {
+      const child = spawn(
+        process.execPath,
+        [command, "author", "watch", device.root, "--home", device.home, "--json"],
+        {
+          env: { ...process.env, SKIT_SERVER_URL: url.origin, SKIT_TOKEN: token },
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+      watchers.add(child);
+      const output: string[] = [];
+      const events: Array<{
+        event: string;
+        revision_id?: string;
+        result?: { status: string; revision_id?: string };
+      }> = [];
+      const stream = createInterface({ input: child.stdout });
+      stream.on("line", (line) => {
+        output.push(line);
+        events.push(JSON.parse(line).data);
+      });
+      child.stderr.on("data", (chunk) => output.push(String(chunk)));
+      await expect
+        .poll(
+          () => {
+            if (child.exitCode !== null || child.signalCode !== null)
+              throw new Error(`Watcher exited: ${output.join("\n")}`);
+            return events.some((event) => event.event === "watching");
+          },
+          { timeout: 15_000 },
+        )
+        .toBe(true);
+      return { child, events, stream };
+    };
+    const stopWatch = async (watch: Awaited<ReturnType<typeof startWatch>>) => {
+      if (watch.child.exitCode === null && watch.child.signalCode === null) {
+        const stopped = once(watch.child, "exit");
+        watch.child.kill("SIGKILL");
+        await stopped;
+      }
+      watch.stream.close();
+      watchers.delete(watch.child);
+    };
+    try {
+      const wa = await startWatch(a);
+      const wb = await startWatch(b);
+      await writeFile(join(a.root, "watch.txt.tmp"), "automatic atomic save");
+      const { rename } = await import("node:fs/promises");
+      await rename(join(a.root, "watch.txt.tmp"), join(a.root, "watch.txt"));
+      await expect
+        .poll(async () => readFile(join(b.root, "watch.txt"), "utf8").catch(() => "missing"), {
+          timeout: 25_000,
+        })
+        .toBe("automatic atomic save");
+      wa.events.length = 0;
+      await writeFile(join(a.root, "watch.txt"), "saved before watcher SIGKILL");
+      await expect
+        .poll(() => wa.events.find((event) => event.event === "saved_locally")?.revision_id, {
+          timeout: 10_000,
+        })
+        .toBeDefined();
+      const saved = wa.events.find((event) => event.event === "saved_locally")?.revision_id;
+      if (!saved) throw new Error("Missing durable watcher observation");
+      await stopWatch(wa);
+      const restarted = await startWatch(a);
+      await expect
+        .poll(async () => readFile(join(b.root, "watch.txt"), "utf8"), { timeout: 25_000 })
+        .toBe("saved before watcher SIGKILL");
+      expect(text((await revision(saved)).tree, "watch.txt")).toBe("saved before watcher SIGKILL");
+      await expect
+        .poll(
+          async () => {
+            const head = await current();
+            return [wb, restarted].every((watch) =>
+              watch.events.some(
+                (event) =>
+                  event.result?.status === "up_to_date" && event.result.revision_id === head,
+              ),
+            );
+          },
+          { timeout: 15_000 },
+        )
+        .toBe(true);
+      const quiet = await revisionCount();
+      await new Promise((resolve) => setTimeout(resolve, 7_000));
+      expect(await revisionCount()).toBe(quiet);
+    } finally {
+      for (const child of watchers) {
+        if (child.exitCode === null && child.signalCode === null) {
+          const stopped = once(child, "exit");
+          child.kill("SIGKILL");
+          await stopped;
+        }
+      }
+    }
     await writeFile(join(a.root, "skit.json"), "{ broken descriptor");
     expect(await run(a, "sync")).toMatchObject({ _tag: "Success" });
     const invalid = await current();

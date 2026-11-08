@@ -13,10 +13,15 @@ export {
 export function renderResultFrame<K extends ContractKey>(
   result: CommandResult<K>,
   environment: TerminalEnvironment,
+  options?: { readonly jsonLines?: boolean },
 ): TerminalFrame {
   const body =
     environment.format === "json"
-      ? JSON.stringify({ schema: result.schema, data: result.encodedData }, null, 2)
+      ? JSON.stringify(
+          { schema: result.schema, data: result.encodedData },
+          null,
+          options?.jsonLines ? undefined : 2,
+        )
       : renderContract(result, {
           ...environment,
           detail: result.detail ?? environment.detail,

@@ -1,6 +1,10 @@
 import { securityOutputContracts } from "../library/security/output.js";
 import { SkillAssessmentDecision, SkillAudit } from "@smolai/skit-core/audit";
-import { InvocationMetadataGeneration, SkitValidationDiagnostic } from "@smolai/skit-core/author";
+import {
+  AuthorWatchEvent,
+  InvocationMetadataGeneration,
+  SkitValidationDiagnostic,
+} from "@smolai/skit-core/author";
 import {
   AuthorSkitDeleteResponse,
   AuthorSkitSummary,
@@ -52,6 +56,7 @@ const effectValidation = Schema.Struct({
 });
 
 export const outputContracts = {
+  authorWatch: effectOutput("skit.author.watch.v1", AuthorWatchEvent),
   setupUndo: setupOutputContracts.setupUndo,
   setupComparison: setupOutputContracts.setupComparison,
   setupReview: setupOutputContracts.setupReview,

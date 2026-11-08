@@ -4,8 +4,12 @@ import { Effect, Exit, Fiber, FileSystem, Layer, Ref, Scope } from "effect";
 import { libraryLayer } from "../../src/application.js";
 
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
-import { backupAuthorWorkspace } from "@smolai/skit-core/author";
-import { authorSyncApi } from "../../src/registry/author-sync.js";
+import {
+  backupAuthorWorkspace,
+  watchAuthorWorkspace,
+  type AuthorWatchEvent,
+} from "@smolai/skit-core/author";
+import { authorRegistry, authorSyncApi } from "../../src/registry/author-sync.js";
 import type { PlatformError } from "effect/PlatformError";
 import { syncAuthorWorkspace } from "../../src/author/sync/workflow.js";
 import { authorLayer, storedTreesAt } from "./author-history.js";
@@ -117,6 +121,23 @@ export const makeAuthorSyncWorld = Effect.fn("Test.makeAuthorSyncWorld")(functio
       workspace,
       home,
       startSync,
+      startWatch: (report: (event: AuthorWatchEvent) => Effect.Effect<void>) =>
+        Effect.gen(function* () {
+          return yield* Effect.forkIn(
+            watchAuthorWorkspace(workspace, { home }, authorRegistry(home), report).pipe(
+              Effect.provide(
+                registryCredentialLayer(remote.origin).pipe(
+                  Layer.provideMerge(
+                    registryHttpLayer(testHttpClientLayer(server.transport(name))),
+                  ),
+                  Layer.provideMerge(authorLayer(home)),
+                ),
+              ),
+              Effect.provide(libraryLayer().pipe(Layer.provide(skitConfigurationLayer(home)))),
+            ),
+            yield* Ref.get(runtime),
+          );
+        }),
       /** Complete archival uploads before a test pauses the separate current-content protocol. */
       backUp: () =>
         Effect.gen(function* () {

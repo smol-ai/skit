@@ -25,6 +25,7 @@ import { MissingRequirement } from "../shared/input-failures.js";
 import { parseAuthorDestination, skitLocator } from "./destination.js";
 import { backupAuthorHistory } from "./backup.js";
 import type { AuthorRegistry } from "./transport.js";
+import type { RemovalGrace } from "./removal-grace.js";
 
 /** A first sync names its destination and visibility; it is persisted only once connecting. */
 type Destination =
@@ -49,6 +50,8 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
     readonly home: string;
     readonly to?: string;
     readonly visibility?: AuthorVisibility;
+    /** Foreground watch owns this grace across passes; manual sync applies explicit intent. */
+    readonly removalGrace?: RemovalGrace;
   },
   registryAccess: Pick<AuthorRegistry<E, R, P>, "origin" | "connect">,
 ) {
@@ -267,15 +270,29 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
   const { local, localHash } = scanned.success;
   const state =
     destination._tag === "ConnectedRemote" ? savedState : Sync.Idle.make({ base: null });
-  const planned = yield* Sync.loadPlanInput({
+  const input = yield* Sync.loadPlanInput({
     store: history.engineStore,
     remote: registry,
     state,
     local: { hash: localHash, tree: local.tree },
-  }).pipe(
-    Effect.map((view) => Sync.plan(view)),
-    Effect.catchIf(Schema.is(History.StoreError), storeFailure),
-  );
+  }).pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure));
+  const planned = Sync.plan(input);
+  if (applying !== undefined && options.removalGrace !== undefined) {
+    const waiting = yield* options.removalGrace.check(input);
+    if (waiting !== undefined) {
+      yield* backupAuthorHistory(
+        applying.lease,
+        { workspaceId: applying.workspaceId, locator },
+        applying.observation,
+        registry,
+      ).pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure));
+      return {
+        status: "waiting_for_removal",
+        changed: false,
+        ...waiting,
+      } satisfies AuthorSyncResult;
+    }
+  }
   if (applying === undefined)
     switch (planned._tag) {
       case "UpToDate":

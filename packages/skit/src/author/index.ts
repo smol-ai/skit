@@ -47,6 +47,7 @@ export { InvocationMetadataGeneration } from "./invocation/generation.js";
 
 export { authorLayer, authorWorkspaceLayer, readAuthorWorkspace } from "./operations.js";
 export { syncAuthorWorkspace } from "./sync.js";
+export { watchAuthorWorkspace, AuthorWatchEvent } from "./watch.js";
 export { initializeAuthorWorkspace } from "./initialize.js";
 export { generateAuthorInvocation } from "./invocation.js";
 export { parseAuthorDestination } from "./destination.js";

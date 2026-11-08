@@ -712,4 +712,5 @@ export class AuthorWorkspace extends Context.Service<AuthorWorkspace, AuthorWork
   static readonly layer = Layer.effect(AuthorWorkspace, make);
 }
 
-export type { AuthorWorkspaceUnsafe, AuthorWorkspaceBusy, AuthorWriteNotPrepared };
+export { AuthorWorkspaceUnsafe };
+export type { AuthorWorkspaceBusy, AuthorWriteNotPrepared };

@@ -49,11 +49,15 @@ export function consoleRenderer(json: boolean): RendererShape {
   return {
     result: (result, options) =>
       Effect.gen(function* () {
-        const frame = renderResultFrame(result, {
-          color: terminalColorEnabled(process.stdout),
-          detail: options?.detail ?? "summary",
-          format,
-        });
+        const frame = renderResultFrame(
+          result,
+          {
+            color: terminalColorEnabled(process.stdout),
+            detail: options?.detail ?? "summary",
+            format,
+          },
+          { jsonLines: options?.jsonLines },
+        );
         yield* write(process.stdout, frame.stdout);
         if (frame.exitCode !== undefined) process.exitCode = frame.exitCode;
       }),

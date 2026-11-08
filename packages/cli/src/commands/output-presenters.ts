@@ -241,6 +241,8 @@ function renderAuthorSync(data: ContractDataForId<"skit.author.sync.v5">): strin
       return `Ready to ${data.action}; rerun with --apply`;
     case "blocked":
       return `Sync paused: ${data.deleting} of ${data.of} files removed. Remote files are unchanged. To send these deletions, rerun with --apply --allow-large-deletion.`;
+    case "waiting_for_removal":
+      return `Waiting for stable removal of ${data.deleting} file(s) before synchronizing.`;
     case "created":
       return `Connected ${data.identity.locator}; saved revision ${data.revision_id}`;
     case "up_to_date":
@@ -280,6 +282,18 @@ const contractPresenters: ContractPresenters = {
   completions: (data) => data.script,
   init: renderAuthorInit,
   authorInvocation: renderAuthorInvocation,
+  authorWatch: (data) => {
+    switch (data.event) {
+      case "watching":
+        return `Watching ${data.path}. Press Ctrl-C to stop.`;
+      case "saved_locally":
+        return `Saved locally: ${data.revision_id}`;
+      case "sync":
+        return renderAuthorSync(data.result);
+      case "retrying":
+        return `${data.operation}: ${data.message} Retrying automatically.`;
+    }
+  },
   authorDelete: renderAuthorDelete,
   publish: (data) =>
     `Published ${data.release.version}${data.release.revision_id ? ` from ${data.release.revision_id}` : ""}`,

@@ -50,5 +50,10 @@ export const AuthorSyncResult = Schema.Union([
   }),
   /** Too many local deletions; `--allow-large-deletion` approves this exact removal. */
   syncResult("blocked", { deleting: count, of: count, paths: Schema.Array(Schema.String) }),
+  syncResult("waiting_for_removal", {
+    deleting: count,
+    of: count,
+    paths: Schema.Array(Schema.String),
+  }),
 ]);
 export type AuthorSyncResult = typeof AuthorSyncResult.Type;

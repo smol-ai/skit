@@ -52,6 +52,9 @@ const program = Effect.gen(function* () {
       Command.make("build", { name }, (input) =>
         hostReady.pipe(Effect.andThen(vm.ready), Effect.andThen(vm.build(input.name))),
       ),
+      Command.make("verify-author-watch", { name }, (input) =>
+        hostReady.pipe(Effect.andThen(vm.ready), Effect.andThen(vm.verifyAuthorWatch(input.name))),
+      ),
       Command.make("auth-copy", { name }, (input) =>
         hostReady.pipe(Effect.andThen(vm.ready), Effect.andThen(vm.copyAuth(input.name))),
       ),
