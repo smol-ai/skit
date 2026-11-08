@@ -341,11 +341,15 @@ export const makeBetterAuth = (configuration: BetterAuthConfiguration, sql: Data
       rateLimit: { enabled: false },
     });
 
-    // Finish initialization inside the acquiring request before caching this service across
-    // Worker requests. Otherwise a completed request can strand Better Auth's context promise.
+    // Finish both initialization and its background schema check inside the acquiring request.
+    // Better Auth caches the check's promise too; returning while it still reads D1 can strand
+    // later session calls after this Worker request ends.
     // oxlint-disable-next-line skit/no-promise-wrappers -- Better Auth owns this Promise-only initialization boundary.
     yield* Effect.tryPromise({
-      try: () => auth.$context,
+      try: async () => {
+        const context = await auth.$context;
+        await context.checkSchema?.();
+      },
       catch: (cause) => new BetterAuthError({ operation: "initialize", cause }),
     });
 

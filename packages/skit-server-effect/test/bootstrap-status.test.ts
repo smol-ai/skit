@@ -1,14 +1,23 @@
-import { env } from "cloudflare:test";
+import { applyD1Migrations, env, reset } from "cloudflare:test";
 import { D1Client } from "@effect/sql-d1";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Order } from "effect";
+import { afterEach, beforeEach } from "vitest";
 import { makeWebHandler } from "../src/http.js";
 import { passwordCallbacks } from "../src/identity/internal/password.js";
 import { databaseLayer } from "../src/platform/cloudflare.js";
 
 const platformLayer = databaseLayer(env.DB);
 
-const web = makeWebHandler(env);
+let web: ReturnType<typeof makeWebHandler>;
+
+beforeEach(async () => {
+  await reset();
+  await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
+  web = makeWebHandler(env);
+});
+
+afterEach(() => web.dispose());
 
 const webPromise = <A>(evaluate: () => Promise<A>) =>
   // oxlint-disable-next-line skit/no-promise-wrappers -- Fetch-compatible Worker handlers are Promise APIs; this test helper owns that host boundary.
@@ -17,57 +26,9 @@ const webPromise = <A>(evaluate: () => Promise<A>) =>
 const requestStatus = () =>
   webPromise(() => web.handler(new Request("https://registry.test/api/bootstrap/status")));
 
-const prepareDatabase = Effect.flatMap(D1Client.D1Client, (sql) =>
-  sql.batch([
-    sql.unsafe("DROP TABLE IF EXISTS server_bootstrap"),
-    sql.unsafe(`CREATE TABLE server_bootstrap (
-      id TEXT PRIMARY KEY CHECK (id = 'singleton'),
-      claimed_at TEXT NOT NULL,
-      claimed_by TEXT NOT NULL
-    ) WITHOUT ROWID`),
-  ]),
-);
-
-const prepareIdentityDatabase = Effect.flatMap(D1Client.D1Client, (sql) =>
-  sql.batch([
-    sql.unsafe("DROP TABLE IF EXISTS server_bootstrap"),
-    sql.unsafe("DROP TABLE IF EXISTS server_operators"),
-    sql.unsafe("DROP TABLE IF EXISTS namespaces"),
-    sql.unsafe("DROP TABLE IF EXISTS principals"),
-    sql.unsafe("DROP TABLE IF EXISTS account"),
-    sql.unsafe("DROP TABLE IF EXISTS user"),
-    sql.unsafe(`CREATE TABLE user (
-      id TEXT PRIMARY KEY, name TEXT NOT NULL, username TEXT UNIQUE,
-      email TEXT NOT NULL UNIQUE, emailVerified INTEGER NOT NULL,
-      createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL
-    )`),
-    sql.unsafe(`CREATE TABLE account (
-      id TEXT PRIMARY KEY, accountId TEXT NOT NULL,
-      providerId TEXT NOT NULL, userId TEXT NOT NULL, password TEXT,
-      createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL
-    )`),
-    sql.unsafe(`CREATE TABLE principals (
-      principal_id TEXT PRIMARY KEY, better_auth_user_id TEXT NOT NULL UNIQUE,
-      created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-    )`),
-    sql.unsafe(`CREATE TABLE namespaces (
-      namespace_slug TEXT PRIMARY KEY, subject_kind TEXT NOT NULL,
-      subject_id TEXT NOT NULL, created_at TEXT NOT NULL
-    ) WITHOUT ROWID`),
-    sql.unsafe(`CREATE TABLE server_operators (
-      principal_id TEXT PRIMARY KEY, created_at TEXT NOT NULL
-    ) WITHOUT ROWID`),
-    sql.unsafe(`CREATE TABLE server_bootstrap (
-      id TEXT PRIMARY KEY CHECK (id = 'singleton'), claimed_at TEXT NOT NULL,
-      claimed_by TEXT NOT NULL
-    ) WITHOUT ROWID`),
-  ]),
-);
-
 describe("bootstrap status", () => {
   it.effect("commits one complete identity when operator claims race", () =>
     Effect.gen(function* () {
-      yield* prepareIdentityDatabase;
       const responses = yield* Effect.forEach(
         ["first", "second"],
         (name, index) =>
@@ -117,7 +78,6 @@ describe("bootstrap status", () => {
 
   it.effect("rolls back the whole identity when the final claim statement fails", () =>
     Effect.gen(function* () {
-      yield* prepareIdentityDatabase;
       const sql = yield* D1Client.D1Client;
       yield* sql.unsafe(`CREATE TRIGGER refuse_bootstrap BEFORE INSERT ON server_bootstrap
         BEGIN SELECT RAISE(ABORT, 'claim storage unavailable'); END`);
@@ -158,8 +118,6 @@ describe("bootstrap status", () => {
 
   it.effect("reports that an unclaimed server needs bootstrap", () =>
     Effect.gen(function* () {
-      yield* prepareDatabase;
-
       const response = yield* requestStatus();
 
       expect(response.status).toBe(200);
@@ -170,12 +128,17 @@ describe("bootstrap status", () => {
 
   it.effect("reports that a claimed server does not need bootstrap", () =>
     Effect.gen(function* () {
-      yield* prepareDatabase;
-      yield* Effect.flatMap(
-        D1Client.D1Client,
-        (sql) =>
+      yield* Effect.flatMap(D1Client.D1Client, (sql) =>
+        sql.batch([
+          sql`INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt)
+            VALUES ('user_test', 'Operator', 'operator@example.test', 1, 1, 1)`,
+          sql`INSERT INTO principals (principal_id, better_auth_user_id, created_at, updated_at)
+            VALUES ('principal_test', 'user_test', 'created', 'updated')`,
+          sql`INSERT INTO server_operators (principal_id, created_at)
+            VALUES ('principal_test', 'created')`,
           sql`INSERT INTO server_bootstrap (id, claimed_at, claimed_by)
-              VALUES ('singleton', '2026-09-11T00:00:00.000Z', 'principal_test')`,
+            VALUES ('singleton', '2026-09-11T00:00:00.000Z', 'principal_test')`,
+        ]),
       );
 
       const response = yield* requestStatus();
@@ -278,7 +241,6 @@ describe("bootstrap status", () => {
 
   it.effect("creates exactly one initial operator with a compatible credential", () =>
     Effect.gen(function* () {
-      yield* prepareIdentityDatabase;
       const post = () =>
         webPromise(() =>
           web.handler(
@@ -349,7 +311,6 @@ describe("bootstrap status", () => {
 
   it.effect("rejects malformed input, wrong origins, and wrong secrets", () =>
     Effect.gen(function* () {
-      yield* prepareIdentityDatabase;
       const post = (origin: string, body: unknown, ip: string) =>
         webPromise(() =>
           web.handler(
