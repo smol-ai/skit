@@ -32,6 +32,16 @@ identify which package manager originally installed it.
 
 ## Publishing
 
+Before creating a CLI release tag, review contract changes and finalize required
+contract version bumps under the
+[compatibility policy](./coding-standards.md#name-things-plainly). Regenerate the
+artifacts and update affected consumers and fixtures together.
+
+The release workflow checks the tagged checkout against `origin/dev` using
+`pnpm --filter @smolai/skit contracts:check --base origin/dev`. Development PR CI
+does not run this compatibility gate. Generated-artifact and payload-validation
+tests remain part of development CI.
+
 For the first publication, add a granular token with publication rights as the
 GitHub `npm` environment secret `NPM_BOOTSTRAP_TOKEN`, then dispatch
 `.github/workflows/release-cli.yml` with `bootstrap: true` and an existing CLI

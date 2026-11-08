@@ -6,6 +6,10 @@ Follow [docs/coding-standards.md](docs/coding-standards.md). Before substantial
 refactors, sketch before/after call graphs and identify the ownership change.
 Before building infrastructure utilities, investigate the installed Effect v4 APIs.
 
+Unreleased formats and contracts may evolve across PRs on `dev`. Finalize version
+bumps when preparing a release; do not bump merely because an unreleased shape
+changed. Follow the [compatibility policy](docs/coding-standards.md#name-things-plainly).
+
 A command handler never opens a store or writer; it calls an owner. Start from the state a change
 touches and its owner, not from the command.
 

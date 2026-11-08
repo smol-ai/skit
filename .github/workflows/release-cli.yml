@@ -36,7 +36,7 @@ jobs:
       - run: npm install -g npm@11.21.0
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify
-      - run: pnpm --filter @smolai/skit contracts:check
+      - run: pnpm --filter @smolai/skit contracts:check --base origin/dev
       - run: pnpm --filter @smolai/skit test
       - run: node --test scripts/build-info.test.mjs scripts/release-cli.test.mjs
       - run: node scripts/release-cli.mjs
