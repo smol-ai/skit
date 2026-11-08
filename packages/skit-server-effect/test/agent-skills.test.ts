@@ -1,14 +1,23 @@
-import { env } from "cloudflare:test";
+import { applyD1Migrations, env, reset } from "cloudflare:test";
 import { D1Client } from "@effect/sql-d1";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Schema } from "effect";
+import { afterEach, beforeEach } from "vitest";
 import { unzipSync, zipSync } from "fflate";
 import { measureSkillProjection, projectionIndex } from "@smolai/skit-core/universal/consumer";
 import { makeWebHandler } from "../src/http.js";
 import { discoverableSkills, skillArtifact } from "../src/skits/agent-skills.js";
 import { databaseLayer } from "../src/platform/cloudflare.js";
 
-const web = makeWebHandler(env);
+let web: ReturnType<typeof makeWebHandler>;
+
+beforeEach(async () => {
+  await reset();
+  await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
+  web = makeWebHandler(env);
+});
+
+afterEach(() => web.dispose());
 
 const webPromise = <A>(evaluate: () => Promise<A>) =>
   // oxlint-disable-next-line skit/no-promise-wrappers -- Fetch-compatible Worker handlers are Promise APIs; this test helper owns that host boundary.
@@ -52,19 +61,13 @@ const publishRelease = (skills: ReadonlyArray<ReturnType<typeof skill>>, sharedB
       ),
     });
     yield* webPromise(() => env.SKIT_BLOBS.put("releases/tim/tools/1.0.0.zip", archive));
-    yield* Effect.flatMap(D1Client.D1Client, (sql) =>
-      sql.batch([
-        sql.unsafe("DROP TABLE IF EXISTS releases"),
-        sql.unsafe(`CREATE TABLE releases (
-          owner_slug TEXT NOT NULL, skit_slug TEXT NOT NULL, version TEXT NOT NULL,
-          release_id TEXT NOT NULL UNIQUE, archive_object_key TEXT NOT NULL UNIQUE,
-          published_at TEXT NOT NULL, visibility TEXT NOT NULL,
-          PRIMARY KEY (owner_slug, skit_slug, version)
-        )`),
-        sql.unsafe(`INSERT INTO releases VALUES ('tim', 'tools', '1.0.0', 'release_1',
-          'releases/tim/tools/1.0.0.zip', '2026-10-01T00:00:00.000Z', 'public')`),
-      ]),
-    );
+    const digest = yield* sha256(new Uint8Array(archive));
+    const sql = yield* D1Client.D1Client;
+    yield* sql`INSERT INTO releases
+      (owner_slug, skit_slug, version, release_id, archive_object_key, published_at, visibility,
+       archive_digest, archive_bytes)
+      VALUES ('tim', 'tools', '1.0.0', 'release_1', 'releases/tim/tools/1.0.0.zip',
+              '2026-10-01T00:00:00.000Z', 'public', ${digest}, ${archive.byteLength})`;
   }).pipe(Effect.provide(Layer.orDie(databaseLayer(env.DB))));
 
 const Index = Schema.Struct({

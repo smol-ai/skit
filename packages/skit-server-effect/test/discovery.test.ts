@@ -1,12 +1,25 @@
 import { serverBuild } from "../src/platform/build-info.js";
-import { env } from "cloudflare:test";
+import { applyD1Migrations, env, reset } from "cloudflare:test";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect } from "effect";
+import { afterEach, beforeEach } from "vitest";
 import { makeWebHandler } from "../src/http.js";
 import { makeServerDiscovery, serverDiscovery } from "../src/api/discovery.js";
 
-const web = makeWebHandler(env);
-const releaseOnlyWeb = makeWebHandler(env, {});
+let web: ReturnType<typeof makeWebHandler>;
+let releaseOnlyWeb: ReturnType<typeof makeWebHandler>;
+
+beforeEach(async () => {
+  await reset();
+  await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
+  web = makeWebHandler(env);
+  releaseOnlyWeb = makeWebHandler(env, {});
+});
+
+afterEach(async () => {
+  await web.dispose();
+  await releaseOnlyWeb.dispose();
+});
 
 const fetchEffect = (path: string) =>
   // oxlint-disable-next-line skit/no-promise-wrappers -- Fetch-compatible Worker handlers are Promise APIs; this test owns that host boundary.
