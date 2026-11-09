@@ -1,7 +1,15 @@
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 import { SkitConfiguration, resolveSkitConfiguration } from "@smolai/skit-core/platform";
-import { Cause, Data, Console, Effect, Option } from "effect";
-import { CliError, CliOutput, Command, type HelpDoc } from "effect/cli";
+import { Cause, Data, Effect, Option } from "effect";
+import {
+  CliConfig,
+  CliError,
+  CliOutput,
+  Command,
+  Completions,
+  GlobalFlag,
+  type HelpDoc,
+} from "effect/cli";
 import { skitCliConfigLayer } from "./parameters.js";
 
 import { commandFailure } from "./failure-classification.js";
@@ -17,11 +25,6 @@ class CommandLineInvalid
   readonly code = "INVALID_ARGUMENT" as const;
   readonly remediation = "Run `skit --help` to review command usage.";
 }
-
-const quietConsole: Console.Console = Object.assign(Object.create(console), {
-  log: () => undefined,
-  error: () => undefined,
-});
 
 /** Render Effect's structured help model through SKIT's stable output envelope. */
 function formatHelpDocument(document: HelpDoc.HelpDoc): string {
@@ -49,26 +52,38 @@ export function runCommandTree<Name extends string, Input, ContextInput, E, R>(
   argv: readonly string[],
   version: string,
 ) {
-  let help: HelpDoc.HelpDoc | undefined;
-  let requestedVersion: string | undefined;
-  const defaults: Readonly<CliOutput.Formatter> = CliOutput.defaultFormatter({ colors: false });
-  const formatter: CliOutput.Formatter = {
-    ...defaults,
-    formatHelpDoc: (document) => {
-      help = document;
-      return "";
-    },
-    formatVersion: (_name, value) => {
-      requestedVersion = value;
-      return "";
-    },
-  };
-
   return Effect.uninterruptibleMask((restore) =>
     restore(
       Effect.scoped(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
+          // Defer implicit help until parsing succeeds: invalid input uses SKIT's failure envelope.
+          let output: CliOutput.Presenter.Event | undefined;
+          const presenter: CliOutput.Presenter = {
+            present: (event) =>
+              Effect.sync(() => {
+                output = event;
+              }),
+          };
+          // Completions still bypass Presenter in Effect. Reuse its flag and generator,
+          // with the same Renderer boundary as every other successful CLI result.
+          const cliConfig = yield* CliConfig.CliConfig.pipe(Effect.provide(skitCliConfigLayer));
+          const completions = GlobalFlag.Action({
+            flag: GlobalFlag.Completions.flag,
+            run: (shell, context) =>
+              Option.isNone(shell)
+                ? Effect.void
+                : renderer.result(
+                    result("completions", {
+                      shell: shell.value,
+                      script: Completions.generate(
+                        context.command.name,
+                        shell.value,
+                        Completions.fromCommand(context.command),
+                      ),
+                    }),
+                  ),
+          });
           // Standalone command runners share the same configuration boundary as main.
           // Keep an already resolved application snapshot when one was supplied.
           const supplied = yield* Effect.serviceOption(SkitConfiguration);
@@ -77,9 +92,13 @@ export function runCommandTree<Name extends string, Input, ContextInput, E, R>(
             : yield* resolveSkitConfiguration();
           yield* Command.runWith(command, { version, renderErrors: false })(argv).pipe(
             Effect.provideService(SkitConfiguration, configuration),
-            Effect.provideService(CliOutput.Formatter, formatter),
-            Effect.provide(skitCliConfigLayer),
-            Effect.provideService(Console.Console, quietConsole),
+            Effect.provideService(CliOutput.Presenter, presenter),
+            Effect.provideService(CliConfig.CliConfig, {
+              ...cliConfig,
+              builtIns: cliConfig.builtIns.map((flag) =>
+                flag === GlobalFlag.Completions ? completions : flag,
+              ),
+            }),
             Effect.catchIf(
               (error): error is CliError.ShowHelp =>
                 CliError.isCliError(error) && error._tag === "ShowHelp",
@@ -93,9 +112,9 @@ export function runCommandTree<Name extends string, Input, ContextInput, E, R>(
                   : Effect.void,
             ),
           );
-          if (help) yield* renderer.help(formatHelpDocument(help));
-          if (requestedVersion !== undefined)
-            yield* renderer.result(result("version", { version: requestedVersion }));
+          if (output?._tag === "Help") yield* renderer.help(formatHelpDocument(output.helpDoc));
+          if (output?._tag === "Version")
+            yield* renderer.result(result("version", { version: output.version }));
         }),
       ),
     ).pipe(

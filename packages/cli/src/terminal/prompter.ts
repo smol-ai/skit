@@ -19,7 +19,7 @@ import {
   Terminal,
 } from "effect";
 import { Prompt } from "effect/cli";
-import { terminalColors } from "./style.js";
+import { terminalColors, terminalColorEnabled } from "./style.js";
 import { fitTerminalLine, renderSkillPreview } from "./skill-preview.js";
 import { terminalText } from "./text.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
@@ -464,7 +464,11 @@ export const terminalPrompterLayer: Layer.Layer<Prompter, never, Prompt.Environm
       Effect.gen(function* () {
         const cancellation = yield* Ref.make<"back" | "interrupt">("interrupt");
         const promptTerminal = stderrTerminal(terminal, cancellation);
-        const environment = Context.add(services, Terminal.Terminal, promptTerminal);
+        const environment = Context.add(
+          Context.add(services, Terminal.Terminal, promptTerminal),
+          Prompt.Theme,
+          Prompt.makeTheme({ colors: terminalColorEnabled() }),
+        );
         return yield* prompt.pipe(
           Effect.provideContext(environment),
           Effect.catchTag("QuitError", () =>

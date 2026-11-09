@@ -102,6 +102,14 @@ export const outputStories: ReadonlyArray<OutputStory> = [
   ),
   resultStory("version", "current", result("version", { version: "0.1.0" })),
   resultStory(
+    "completions",
+    "bash",
+    result("completions", {
+      shell: "bash",
+      script: "# Bash completion for skit\ncomplete -W 'add list sync' skit\n",
+    }),
+  ),
+  resultStory(
     "library-history",
     "change",
     result("libraryHistory", {

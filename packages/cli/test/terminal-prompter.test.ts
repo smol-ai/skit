@@ -490,3 +490,21 @@ it.effect("Space keeps same-name skills from separate repositories selected toge
     expect(frames).toContain("tdd  · /work/stackseer/.agents/skills/tdd · untracked");
   }).pipe(Effect.provide(promptedWith(["space", "down", "space", "enter"]))),
 );
+
+it.effect("built-in prompt styling follows SKIT's color settings on stderr", () =>
+  Effect.gen(function* () {
+    vi.stubEnv("NO_COLOR", undefined);
+    vi.stubEnv("TERM", "xterm");
+    vi.stubEnv("FORCE_COLOR", "1");
+    yield* Effect.gen(function* () {
+      yield* (yield* Prompter).select("Harness", harnesses);
+    }).pipe(Effect.provide(promptedWith(["enter"])));
+    expect(stderr.mock.calls.map(([text]) => String(text)).join("")).toMatch(/\[[0-9;]*m/);
+    stderr.mockClear();
+    vi.stubEnv("FORCE_COLOR", "0");
+    yield* Effect.gen(function* () {
+      yield* (yield* Prompter).select("Harness", harnesses);
+    }).pipe(Effect.provide(promptedWith(["enter"])));
+    expect(stderr.mock.calls.map(([text]) => String(text)).join("")).not.toMatch(/\[[0-9;]*m/);
+  }),
+);

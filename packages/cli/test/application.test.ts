@@ -89,3 +89,38 @@ it.effect("interruption is not rendered as a command error", () =>
     if (exit._tag === "Failure") expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true);
   }),
 );
+
+it.effect("Presenter routes help, version and parse errors only through the renderer", () =>
+  Effect.gen(function* () {
+    const interaction = yield* makeScriptedInteraction([]);
+    let handled = 0;
+    const child = Command.make("run", {}, () =>
+      Effect.sync(() => {
+        handled++;
+      }),
+    );
+    const command = Command.make("skit").pipe(Command.withSubcommands([child]));
+    const run = (args: readonly string[]) =>
+      runCommandTree(command, args, "1.2.3").pipe(
+        Effect.provide(interaction.layer.pipe(Layer.provideMerge(NodeServices.layer))),
+      );
+    const help = run(["--help"]);
+    yield* help;
+    yield* help;
+    yield* run([]);
+    yield* run(["--version"]);
+    yield* run(["--completions", "bash"]);
+    yield* run(["--completions", "pwsh"]);
+    yield* run(["--unknown"]);
+    yield* run(["run"]);
+    const events = yield* interaction.events;
+    expect(events.filter((event) => event._tag === "Help")).toHaveLength(3);
+    expect(yield* interaction.results).toMatchObject([
+      { schema: "skit.version.v1", data: { version: "1.2.3" } },
+      { schema: "skit.completions.v1", data: { shell: "bash", script: expect.any(String) } },
+      { schema: "skit.completions.v1", data: { shell: "powershell", script: expect.any(String) } },
+    ]);
+    expect(yield* interaction.failures).toMatchObject([{ code: "INVALID_ARGUMENT", exitCode: 64 }]);
+    expect(handled).toBe(1);
+  }),
+);

@@ -3,7 +3,7 @@
 
 import { afterEach, describe, expect, vi } from "vitest";
 import { it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Cause, Effect } from "effect";
 import { consoleRenderer } from "../src/terminal/console-renderer.js";
 import type { CommandFailure } from "../src/commands/types.js";
 
@@ -61,3 +61,34 @@ describe("failure rendering", () => {
     }),
   );
 });
+
+it.effect.each(["stdout", "stderr"] as const)(
+  "terminal %s callback failures do not report success",
+  (channel) =>
+    Effect.gen(function* () {
+      const error = new Error("injected terminal write failure");
+      const spy = vi.spyOn(process[channel], "write").mockImplementation(((
+        _body: unknown,
+        callback: (error?: Error) => void,
+      ) => {
+        callback(error);
+        return false;
+      }) as never);
+      const renderer = consoleRenderer(false);
+      const operation =
+        channel === "stdout"
+          ? renderer.help("help")
+          : renderer.failure({
+              code: "NOT_FOUND",
+              exitCode: 11,
+              message: "missing",
+              remediation: "retry",
+            });
+      const exit = yield* Effect.exit(operation).pipe(
+        Effect.ensuring(Effect.sync(() => spy.mockRestore())),
+      );
+      expect(exit._tag).toBe("Failure");
+      if (exit._tag === "Failure") expect(Cause.squash(exit.cause)).toBe(error);
+      expect(process.exitCode).toBeUndefined();
+    }),
+);

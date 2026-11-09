@@ -67,8 +67,8 @@ const unzipList = (archive: string) =>
 const unzipEntry = (archive: string, entry: string) =>
   Effect.sync(() => execFileSync("unzip", ["-p", archive, entry], { encoding: "utf8" }));
 
-it.effect.each(["/registry/{owner}/{slug}/publish", "http://["])(
-  "publish uses discovery or its default endpoint for template %s",
+it.effect.each(["/registry/{owner}/{slug}/publish", undefined, "http://["])(
+  "publish validates discovery and uses the default only when absent: %s",
   (template) =>
     Effect.gen(function* () {
       const root = yield* scratch("skit-publish-test-");
@@ -105,14 +105,20 @@ it.effect.each(["/registry/{owner}/{slug}/publish", "http://["])(
             { status: 201 },
           );
         });
-      const result = yield* runPublish(root, "1.2.3", revision, {
+      const operation = runPublish(root, "1.2.3", revision, {
         transport: fetcher,
         credentialOrigin: "https://registry.test",
       });
+      if (template === "http://[") {
+        expect(yield* failure(operation)).toMatchObject({ _tag: "PublicationResponseError" });
+        expect(received).toEqual({});
+        return;
+      }
+      const result = yield* operation;
       expect(result.release.version).toBe("1.2.3");
       expect(result.release.revision_id).toBe(revision);
       expect(received.url).toBe(
-        template === "http://["
+        template === undefined
           ? "https://registry.test/api/skits/test/tools/releases"
           : "https://registry.test/registry/test/tools/publish",
       );

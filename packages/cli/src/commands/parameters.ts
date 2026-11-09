@@ -27,8 +27,25 @@ export const JsonOutputFlag = GlobalFlag.Setting("json-output")({
 });
 
 export const jsonRequested = (argv: readonly string[] = process.argv.slice(2)): boolean => {
-  const boundary = argv.indexOf("--");
-  return argv.slice(0, boundary === -1 ? undefined : boundary).includes("--json");
+  // Select output even when parsing fails. Effect remains responsible for validation;
+  // mirror the installed Boolean literals here and verify them against the real parser.
+  let json = false;
+  for (let index = 0; index < argv.length; index++) {
+    const token = argv[index];
+    if (token === "--") break;
+    if (token === "--no-json") json = false;
+    else if (token === "--json" || token.startsWith("--json=")) {
+      const value = token === "--json" ? argv[index + 1] : token.slice("--json=".length);
+      if (value !== undefined && ["false", "no", "off", "0", "n"].includes(value)) json = false;
+      else if (
+        value === undefined ||
+        token === "--json" ||
+        ["true", "yes", "on", "1", "y"].includes(value)
+      )
+        json = true;
+    }
+  }
+  return json;
 };
 
 export const optionalString = (name: string, description: string) =>

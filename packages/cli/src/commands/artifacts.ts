@@ -32,9 +32,10 @@ export const commandContractArtifacts = Effect.fn("CLI.commandContractArtifacts"
   const artifacts: Record<string, string> = {
     "command-manifest.json": `${JSON.stringify({ commands: definitions }, null, 2)}\n`,
   };
-  // Global --version emits its local contract independently of the version subcommand.
+  // Global output flags emit contracts independently of command handlers.
   const exposedOutputSchemas = new Set([
     outputContracts.version.id,
+    outputContracts.completions.id,
     ...documents.flatMap((command) => command.outputSchemas),
   ]);
   for (const contract of Object.values(outputContracts)) {

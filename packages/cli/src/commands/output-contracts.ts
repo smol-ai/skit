@@ -61,6 +61,13 @@ export const outputContracts = {
   usage: usageOutputContracts.usage,
   versionReport: effectOutput("skit.version.v3", VersionReport),
   version: effectOutput("skit.version.v1", Schema.Struct({ version: Schema.String })),
+  completions: effectOutput(
+    "skit.completions.v1",
+    Schema.Struct({
+      shell: Schema.Literals(["bash", "zsh", "fish", "powershell"]),
+      script: Schema.String,
+    }),
+  ),
   init: effectOutput(
     "skit.init.v1",
     Schema.Struct({

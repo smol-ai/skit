@@ -17,7 +17,7 @@ const formatElapsed = (milliseconds: number): string =>
 
 const write = (stream: NodeJS.WriteStream, body: string) =>
   Effect.callback<void>((resume) => {
-    stream.write(body, () => resume(Effect.void));
+    stream.write(body, (error) => resume(error ? Effect.die(error) : Effect.void));
   });
 
 export function consoleRenderer(json: boolean): RendererShape {
