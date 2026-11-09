@@ -4,7 +4,7 @@ import { Argument, Command, Flag } from "effect/cli";
 
 import { CommandMetadata, credentialStoreSubprocesses } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { jsonFlag, jsonRequested } from "../../commands/parameters.js";
+import { jsonFlag } from "../../commands/parameters.js";
 import { Renderer } from "../../terminal/renderer.js";
 import { result } from "../../commands/result.js";
 import { personReachable, promptsAllowed } from "../../terminal/interactivity.js";
@@ -31,7 +31,7 @@ const scopes = Flag.String("scopes").pipe(
 export const authLoginCliCommand = Command.make(
   "login",
   { registry, alias, scopes, relogin, json: jsonFlag },
-  ({ registry, alias, scopes, relogin }) =>
+  ({ registry, alias, scopes, relogin, json }) =>
     Effect.gen(function* () {
       const paths = yield* SkitConfiguration;
 
@@ -43,7 +43,7 @@ export const authLoginCliCommand = Command.make(
         scopes: Option.getOrElse(scopes, () => ["library:sync"]),
         home: selectedHome,
         relogin,
-        interactive: promptsAllowed({ json: jsonRequested() }),
+        interactive: promptsAllowed({ json }),
         browserApproval: personReachable(),
       });
       yield* renderer.result(
