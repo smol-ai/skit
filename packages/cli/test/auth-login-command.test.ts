@@ -2,6 +2,7 @@ import { Effect, Layer } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { afterEach, expect, vi } from "vitest";
+import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { authLoginCliCommand } from "../src/registry/commands/auth-login.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
@@ -16,7 +17,7 @@ afterEach(() => {
   login.mockReset();
 });
 
-it.effect("embedded login uses parsed JSON policy despite unrelated process argv", () =>
+it.effect("login uses local and global parsed JSON policy despite unrelated process argv", () =>
   Effect.gen(function* () {
     for (const key of [
       "SKIT_NO_INPUT",
@@ -34,9 +35,25 @@ it.effect("embedded login uses parsed JSON policy despite unrelated process argv
     try {
       for (const stream of streams)
         Object.defineProperty(stream, "isTTY", { value: true, configurable: true });
-      for (const json of [true, false]) {
+      const cases = [
+        { fullTree: false, argv: ["--json=true"], json: true },
+        { fullTree: false, argv: ["--json=false"], json: false },
+        { fullTree: true, argv: ["--json", "auth", "login"], json: true },
+        { fullTree: true, argv: ["--json=true", "auth", "login"], json: true },
+        { fullTree: true, argv: ["auth", "--json", "login"], json: true },
+        { fullTree: true, argv: ["auth", "login", "--json"], json: true },
+        { fullTree: true, argv: ["--json=false", "auth", "login"], json: false },
+        { fullTree: true, argv: ["--no-json", "auth", "login"], json: false },
+        { fullTree: true, argv: ["auth", "login", "--json=false"], json: false },
+        { fullTree: true, argv: ["auth", "login"], json: false },
+      ];
+      for (const { fullTree, argv, json } of cases) {
         process.argv = [process.execPath, "unrelated", `--json=${!json}`];
-        yield* runCommandTree(authLoginCliCommand, [`--json=${json}`], "test").pipe(
+        const command = fullTree
+          ? runCommandTree(skitCommand, argv, "test")
+          : runCommandTree(authLoginCliCommand, argv, "test");
+        login.mockClear();
+        yield* command.pipe(
           Effect.provide(
             Layer.mergeAll(registryHttpLayer(), terminalPrompterLayer, rendererTestLayer()).pipe(
               Layer.provideMerge(NodeServices.layer),
@@ -44,7 +61,9 @@ it.effect("embedded login uses parsed JSON policy despite unrelated process argv
           ),
           Effect.exit,
         );
-        expect(login).toHaveBeenLastCalledWith(expect.objectContaining({ interactive: !json }));
+        expect(login, JSON.stringify(argv)).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({ interactive: !json }),
+        );
       }
     } finally {
       process.argv = originalArgs;

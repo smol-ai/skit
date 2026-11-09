@@ -4,7 +4,7 @@ import { Argument, Command, Flag } from "effect/cli";
 
 import { CommandMetadata, credentialStoreSubprocesses } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { jsonFlag } from "../../commands/parameters.js";
+import { jsonFlag, JsonOutputFlag } from "../../commands/parameters.js";
 import { Renderer } from "../../terminal/renderer.js";
 import { result } from "../../commands/result.js";
 import { personReachable, promptsAllowed } from "../../terminal/interactivity.js";
@@ -34,6 +34,7 @@ export const authLoginCliCommand = Command.make(
   ({ registry, alias, scopes, relogin, json }) =>
     Effect.gen(function* () {
       const paths = yield* SkitConfiguration;
+      const globalJson = yield* Effect.serviceOption(JsonOutputFlag);
 
       const selectedHome = paths.skitHome;
       const renderer = yield* Renderer;
@@ -43,7 +44,7 @@ export const authLoginCliCommand = Command.make(
         scopes: Option.getOrElse(scopes, () => ["library:sync"]),
         home: selectedHome,
         relogin,
-        interactive: promptsAllowed({ json }),
+        interactive: promptsAllowed({ json: json || Option.getOrElse(globalJson, () => false) }),
         browserApproval: personReachable(),
       });
       yield* renderer.result(
