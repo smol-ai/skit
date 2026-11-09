@@ -1,0 +1,24 @@
+{
+  "$id": "skit.completions.v1",
+  "type": "object",
+  "properties": {
+    "shell": {
+      "type": "string",
+      "enum": [
+        "bash",
+        "zsh",
+        "fish",
+        "powershell"
+      ]
+    },
+    "script": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "shell",
+    "script"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

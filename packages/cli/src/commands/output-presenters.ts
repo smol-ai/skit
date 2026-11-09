@@ -277,6 +277,7 @@ const contractPresenters: ContractPresenters = {
                 : `Up to date on ${data.update.channel}.`,
     ].join("\n"),
   version: (data) => data.version,
+  completions: (data) => data.script,
   init: renderAuthorInit,
   authorInvocation: renderAuthorInvocation,
   authorDelete: renderAuthorDelete,
