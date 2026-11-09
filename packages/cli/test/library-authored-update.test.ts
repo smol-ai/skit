@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer } from "effect";
+import { Clock, Duration, Deferred, Effect, Fiber, FileSystem, Layer } from "effect";
 import { HttpClient, HttpClientError } from "effect/http";
 import { join } from "node:path";
 import * as Library from "@smolai/skit-core/library";
@@ -22,9 +22,21 @@ import { registryCredentialLayer } from "./helpers/registry-credential.js";
 import { testHttpClientLayer } from "./helpers/http-test-client.js";
 import { inspectLibrarySource } from "../src/library/source.js";
 import { captureDisk, assertDiskUnchanged } from "./helpers/disk-snapshot.js";
+import { DatabaseSync } from "node:sqlite";
 
 const content = (name: string, body: string) =>
   `---\nname: ${name}\ndescription: ${name} skill\n---\n${body}\n`;
+
+// A separate SQLite connection proves that the shared home writer is available.
+const assertHomeWriterAvailable = (home: string) => {
+  const database = new DatabaseSync(join(home, "lock.sqlite"));
+  try {
+    database.exec("BEGIN IMMEDIATE");
+    database.exec("ROLLBACK");
+  } finally {
+    database.close();
+  }
+};
 
 it.effect(
   "manual authored update installs valid members offline, holds exact invalid inputs, and reports backup separately",
@@ -186,29 +198,44 @@ it.effect("installation and Registry sync share removal grace while safe edits a
       const edited = "---\nname: review\ndescription: Review code.\n---\n# Safe local change\n";
       yield* world.a.edit("skills/review/SKILL.md", edited);
       yield* fs.remove(join(workspace, "skills/review/notes.txt"));
-      const waiting = yield* updateAuthorWorkspace(workspace, { home }, registry);
-      assert.strictEqual(waiting.sync?._tag, "Success");
-      if (waiting.sync?._tag === "Success")
-        assert.strictEqual(waiting.sync.success.status, "waiting_for_removal");
+      const clock = yield* Clock.Clock;
+      const waiting = yield* Deferred.make<void>();
+      const pending = yield* updateAuthorWorkspace(workspace, { home }, registry).pipe(
+        Effect.provideService(Clock.Clock, {
+          currentTimeMillisUnsafe: () => clock.currentTimeMillisUnsafe(),
+          currentTimeNanosUnsafe: () => clock.currentTimeNanosUnsafe(),
+          monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+          currentTimeMillis: clock.currentTimeMillis,
+          currentTimeNanos: clock.currentTimeNanos,
+          monotonicTimeNanos: clock.monotonicTimeNanos,
+          sleep: (duration) =>
+            (Duration.toMillis(duration) === 10_000
+              ? Deferred.succeed(waiting, undefined)
+              : Effect.void
+            ).pipe(Effect.andThen(clock.sleep(duration))),
+        }),
+        Effect.forkScoped,
+      );
+      yield* Deferred.await(waiting);
       assert.strictEqual(yield* world.a.installed("review/SKILL.md"), before);
       assert.strictEqual(
         yield* world.a.installed("review/notes.txt"),
         "Supporting input to remove",
       );
-      const current = (yield* world.server.currentHistory()).at(-1)!;
-      const primary = current.tree.find((entry) => entry.path === "skills/review/SKILL.md");
-      assert.strictEqual(primary?.kind, "file");
-      if (primary?.kind === "file")
-        assert.strictEqual(new TextDecoder().decode(primary.bytes), edited);
-      assert.isTrue(current.tree.some((entry) => entry.path === "skills/review/notes.txt"));
+      yield* Effect.sync(() => assertHomeWriterAvailable(home));
       yield* TestClock.adjust("10 seconds");
-      const updated = yield* updateAuthorWorkspace(workspace, { home }, registry);
+      const updated = yield* Fiber.join(pending);
       assert.strictEqual(updated.installation._tag, "Success");
+      assert.strictEqual(updated.sync?._tag, "Success");
+      if (updated.sync?._tag === "Success")
+        assert.strictEqual(updated.sync.success.status, "pushed");
       assert.strictEqual(
         yield* world.a.installed("review/SKILL.md"),
         before.replace("# Review", "# Safe local change"),
       );
       assert.isFalse(yield* fs.exists(join(installed, "review/notes.txt")));
+      const current = (yield* world.server.currentHistory()).at(-1)!;
+      assert.isFalse(current.tree.some((entry) => entry.path === "skills/review/notes.txt"));
       const library = yield* Library.Service;
       const saved = yield* library.read;
       const versions = (yield* world.server.currentHistory()).length;
@@ -217,4 +244,105 @@ it.effect("installation and Registry sync share removal grace while safe edits a
       assert.strictEqual((yield* world.server.currentHistory()).length, versions);
     }).pipe(Effect.provide(owners));
   }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
+);
+
+it.effect(
+  "fresh CLI owners confirm file and member removals offline without holding the Library writer",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const directory = yield* fs.realPath(
+        yield* fs.makeTempDirectoryScoped({ prefix: "skit-manual-removal-" }),
+      );
+      const root = join(directory, "source");
+      const home = join(directory, "home");
+      const agents = join(directory, "agents");
+      for (const name of ["review", "explain"]) {
+        yield* fs.makeDirectory(join(root, name), { recursive: true });
+        yield* fs.writeFileString(join(root, name, "SKILL.md"), content(name, "Initial"));
+      }
+      const config = {
+        slug: "tools",
+        skills: ["review", "explain"].map((name) => ({ name, path: name })),
+      };
+      yield* fs.writeFileString(join(root, "skit.json"), JSON.stringify(config));
+      yield* fs.writeFileString(join(root, "review/notes.txt"), "Supporting input");
+      const owners = Library.layer({
+        home,
+        roots: {
+          home: directory,
+          configHome: join(directory, "config"),
+          overrides: { codex: [agents] },
+        },
+      }).pipe(Layer.provideMerge(authorLayer({ home })));
+      yield* Effect.gen(function* () {
+        const imported = yield* initializeAuthorWorkspace(root, home);
+        const library = yield* Library.Service;
+        const plan = yield* library.plan(
+          {
+            _tag: "Enabled",
+            changes: [
+              {
+                _tag: "Enable",
+                subject: { _tag: "Collection", id: imported.entry.collection.collection_id },
+                members: "whole",
+                where: [{ kind: "global" }],
+              },
+            ],
+          },
+          { base: yield* library.read },
+        );
+        yield* library.apply({ _tag: "Apply", plan });
+        const adapters = yield* updateAdapters;
+        const clock = yield* Clock.Clock;
+        for (const change of ["file", "member"]) {
+          if (change === "file") yield* fs.remove(join(root, "review/notes.txt"));
+          else {
+            config.skills = config.skills.filter((skill) => skill.name !== "review");
+            yield* fs.writeFileString(join(root, "skit.json"), JSON.stringify(config));
+            yield* fs.remove(join(root, "review"), { recursive: true });
+          }
+          const waiting = yield* Deferred.make<void>();
+          // The real adapter constructs a new AuthorHistory owner for each invocation.
+          const pending = yield* library.update(undefined, adapters).pipe(
+            Effect.provideService(Clock.Clock, {
+              currentTimeMillisUnsafe: () => clock.currentTimeMillisUnsafe(),
+              currentTimeNanosUnsafe: () => clock.currentTimeNanosUnsafe(),
+              monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+              currentTimeMillis: clock.currentTimeMillis,
+              currentTimeNanos: clock.currentTimeNanos,
+              monotonicTimeNanos: clock.monotonicTimeNanos,
+              sleep: (duration) =>
+                (Duration.toMillis(duration) === 10_000
+                  ? Deferred.succeed(waiting, undefined)
+                  : Effect.void
+                ).pipe(Effect.andThen(clock.sleep(duration))),
+            }),
+            Effect.forkScoped,
+          );
+          yield* Deferred.await(waiting);
+          assert.isTrue(
+            yield* fs.exists(
+              join(agents, change === "file" ? "review/notes.txt" : "review/SKILL.md"),
+            ),
+          );
+          yield* Effect.sync(() => assertHomeWriterAvailable(home));
+          yield* TestClock.adjust("9 seconds");
+          assert.isTrue(yield* fs.exists(join(agents, "review/SKILL.md")));
+          yield* TestClock.adjust("1 second");
+          const result = yield* Fiber.join(pending);
+          assert.isFalse("status" in result[0]!, JSON.stringify(result));
+          assert.isFalse(
+            yield* fs.exists(join(agents, change === "file" ? "review/notes.txt" : "review")),
+          );
+          assert.strictEqual(
+            yield* fs.readFileString(join(agents, "explain/SKILL.md")),
+            content("explain", "Initial"),
+          );
+        }
+        const before = yield* library.read;
+        yield* library.update(undefined, adapters);
+        assert.strictEqual((yield* library.read).revision, before.revision);
+      }).pipe(Effect.provide(owners));
+    }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
 );

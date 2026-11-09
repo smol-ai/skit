@@ -25,7 +25,11 @@ export const refreshAuthorWorkspace = Effect.fn("Author.refreshWorkspace")(funct
 
 /** One workspace lease orders saved inputs and installation against manual sync/edits. */
 export const updateAuthoredSkills = Effect.fn("Author.updateSkills")(
-  function* (input: string, heldLease?: WorkspaceLease) {
+  function* (
+    input: string,
+    heldLease?: WorkspaceLease,
+    options: { readonly confirmRemovals?: boolean } = {},
+  ) {
     const workspaces = yield* AuthorWorkspace;
     const root = yield* workspaces.resolveRoot(input);
     if (heldLease !== undefined && heldLease.root !== root)
@@ -45,11 +49,27 @@ export const updateAuthoredSkills = Effect.fn("Author.updateSkills")(
         context: undefined,
       };
     const history = yield* AuthorHistory;
-    const saved = yield* history.refresh(root);
-    const tree = yield* history.engineStore
-      .tree(saved.treeHash)
-      .pipe(Effect.mapError(authorHistoryStoreError));
-    const removal = yield* history.inventory.refresh(lease, identity.value.workspaceId, tree);
+    const observe = Effect.gen(function* () {
+      const saved = yield* history.refresh(root);
+      const tree = yield* history.engineStore
+        .tree(saved.treeHash)
+        .pipe(Effect.mapError(authorHistoryStoreError));
+      const removal = yield* history.inventory.refresh(lease, identity.value.workspaceId, tree);
+      return { saved, tree, removal };
+    });
+    let observed = yield* observe;
+    if (
+      options.confirmRemovals &&
+      observed.removal.status === "waiting" &&
+      observed.removal.membershipReadable &&
+      (observed.removal.heldFiles.length > 0 || observed.removal.heldMembers.length > 0)
+    ) {
+      // A foreground command must get both observations in one runtime. Only the workspace
+      // lease spans this wait; Library has not opened its writer. Changed absences still hold.
+      yield* Effect.sleep("10 seconds");
+      observed = yield* observe;
+    }
+    const { saved, tree, removal } = observed;
     const library = yield* Library.Service;
     const updated = yield* library.updateAuthoredSkills({
       workspaceId: identity.value.workspaceId,
@@ -62,7 +82,12 @@ export const updateAuthoredSkills = Effect.fn("Author.updateSkills")(
     return { ...updated, revision_id: saved.id };
   },
   Effect.scoped,
-  (effect, input: string, _heldLease?: WorkspaceLease) =>
+  (
+    effect,
+    input: string,
+    _heldLease?: WorkspaceLease,
+    _options?: { readonly confirmRemovals?: boolean },
+  ) =>
     effect.pipe(
       Effect.onError(() =>
         Effect.gen(function* () {
@@ -74,7 +99,8 @@ export const updateAuthoredSkills = Effect.fn("Author.updateSkills")(
 );
 
 /** Local installation and Registry backup are independent outcomes of one workspace operation.
- * A pull/merge is installed before releasing the lease, using another stable saved observation. */
+ * Sync may advance removal authority or change local files even before failing. Always install
+ * another stable observation before releasing the lease, independently of its network outcome. */
 export const updateAuthorWorkspace = Effect.fn("Author.updateWorkspace")(function* <E, R, P>(
   input: string,
   options: { readonly home: string },
@@ -89,36 +115,34 @@ export const updateAuthorWorkspace = Effect.fn("Author.updateWorkspace")(functio
       times: 400,
     }),
   );
-  const installation = yield* updateAuthoredSkills(root, lease).pipe(Effect.result);
+  const installation = yield* updateAuthoredSkills(root, lease, { confirmRemovals: true }).pipe(
+    Effect.result,
+  );
   const workspace = yield* workspaces.read(root);
   if (workspace.connection._tag !== "Connected") return { installation, sync: undefined };
   const sync = yield* syncAuthorWorkspace(root, { ...options, apply: true }, registry, lease).pipe(
     Effect.timeout("30 seconds"),
     Effect.result,
   );
-  if (
-    sync._tag === "Success" &&
-    (sync.success.status === "pulled" || sync.success.status === "merged")
-  ) {
-    const updated = yield* updateAuthoredSkills(root, lease).pipe(Effect.result);
-    if (installation._tag === "Success" && updated._tag === "Success") {
-      const copies = [
-        ...new Map(
-          [...installation.success.installed_copies, ...updated.success.installed_copies].map(
-            (copy) => [copy.path, copy],
-          ),
-        ).values(),
-      ];
-      return {
-        installation: Result.succeed({
-          ...updated.success,
-          installed: copies.length,
-          installed_copies: copies,
-        }),
-        sync,
-      };
-    }
-    return { installation: updated, sync };
+  const updated = yield* updateAuthoredSkills(root, lease, { confirmRemovals: true }).pipe(
+    Effect.result,
+  );
+  if (installation._tag === "Success" && updated._tag === "Success") {
+    const copies = [
+      ...new Map(
+        [...installation.success.installed_copies, ...updated.success.installed_copies].map(
+          (copy) => [copy.path, copy],
+        ),
+      ).values(),
+    ];
+    return {
+      installation: Result.succeed({
+        ...updated.success,
+        installed: copies.length,
+        installed_copies: copies,
+      }),
+      sync,
+    };
   }
-  return { installation, sync };
+  return { installation: updated, sync };
 }, Effect.scoped);

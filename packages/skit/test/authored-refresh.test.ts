@@ -1,5 +1,16 @@
 import { assert, it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Fiber, FileSystem, Layer, Ref, Schedule, Scope } from "effect";
+import {
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  FileSystem,
+  Layer,
+  Ref,
+  Schedule,
+  Scope,
+  Stream,
+} from "effect";
 import { TestClock } from "effect/testing";
 import { join } from "node:path";
 import * as Library from "../src/library/library.js";
@@ -14,6 +25,9 @@ import { watchAuthorWorkspace, type AuthorWatchEvent } from "../src/author/watch
 import { AuthorWorkspace } from "../src/author/workspace.js";
 import { AuthorHistory } from "../src/author/history.js";
 import { DatabaseSync } from "node:sqlite";
+import * as History from "../src/history/history.js";
+import * as Sync from "../src/sync/sync.js";
+import { memoryStore } from "./helpers/memory-store.js";
 
 const content = (name: string, body: string) =>
   `---\nname: ${name}\ndescription: ${name} skills\n---\n${body}\n`;
@@ -588,6 +602,114 @@ it.effect(
         yield* updateAuthoredSkills(f.root);
         yield* TestClock.adjust("10 seconds");
         yield* updateAuthoredSkills(f.root);
+        assert.isFalse(yield* f.fs.exists(join(f.agents, "review/notes.txt")));
+      }).pipe(Effect.provide(f.layer));
+    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+);
+
+it.effect(
+  "a pushed sync's newly confirmed removal reaches installed copies before manual update returns",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      yield* Effect.gen(function* () {
+        yield* enable(f.root, f.home);
+        yield* f.fs.writeFileString(
+          join(f.root, "skit.remote.json"),
+          JSON.stringify({
+            schema: "skit.remote.v1",
+            origin: "https://registry.example",
+            namespace: "tim",
+            skit: "tools",
+          }),
+        );
+        const workspaces = yield* AuthorWorkspace;
+        const history = yield* AuthorHistory;
+        const root = yield* workspaces.resolveRoot(f.root);
+        const identity = yield* workspaces.readIdentity(root);
+        if (identity._tag === "None") return assert.fail("Expected registered identity");
+        const store = yield* memoryStore;
+        const current = yield* Ref.make<History.RevisionId | null>(null);
+        const remote: Sync.Remote = {
+          current: Ref.get(current),
+          revision: (id) =>
+            Effect.gen(function* () {
+              const revision = yield* store.revision(id);
+              return { revision, tree: yield* store.tree(revision.tree) };
+            }).pipe(Effect.orDie),
+          ancestors: (id) => History.ancestors(store, id).pipe(Stream.orDie),
+          post: (_id, revision, tree) =>
+            Effect.gen(function* () {
+              yield* store.putTree(tree);
+              yield* store.commit(revision);
+            }).pipe(Effect.orDie),
+          move: (expected, id) =>
+            Effect.gen(function* () {
+              const found = yield* Ref.get(current);
+              if (found !== expected) return yield* new Sync.Moved({ current: found });
+              yield* Ref.set(current, id);
+            }),
+        };
+        const api = { remote, requireAvailable: Effect.void, create: () => Effect.void };
+        yield* updateAuthorWorkspace(
+          root,
+          { home: f.home },
+          {
+            origin: Effect.succeed("https://registry.example"),
+            connect: () => Effect.succeed(api),
+          },
+        );
+        let heldLease: Parameters<typeof history.inventory.refresh>[0] | undefined;
+        const waiting = yield* Deferred.make<void>();
+        const pending = yield* updateAuthorWorkspace(
+          root,
+          { home: f.home },
+          {
+            origin: Effect.succeed("https://registry.example"),
+            connect: () =>
+              Effect.gen(function* () {
+                // An input disappears after initial installation. Start the shared grace with a
+                // stable observation, then let a slow connection elapse before sync observes it again.
+                yield* f.fs.remove(join(root, "skills/review/notes.txt"));
+                const saved = yield* history.refresh(root);
+                const tree = yield* history.engineStore.tree(saved.treeHash);
+                assert.isDefined(heldLease);
+                yield* history.inventory.refresh(heldLease!, identity.value.workspaceId, tree);
+                yield* Deferred.succeed(waiting, undefined);
+                yield* Effect.sleep("11 seconds");
+                return api;
+              }),
+          },
+        ).pipe(
+          Effect.provideService(AuthorWorkspace, {
+            ...workspaces,
+            acquire: (input) =>
+              workspaces.acquire(input).pipe(
+                Effect.tap((lease) =>
+                  Effect.sync(() => {
+                    heldLease = lease;
+                  }),
+                ),
+              ),
+          }),
+          Effect.forkScoped,
+        );
+        yield* Deferred.await(waiting);
+        assert.isTrue(yield* f.fs.exists(join(f.agents, "review/notes.txt")));
+        yield* TestClock.adjust("11 seconds");
+        const outcome = yield* Fiber.join(pending);
+        assert.strictEqual(outcome.sync?._tag, "Success");
+        if (outcome.sync?._tag === "Success")
+          assert.strictEqual(outcome.sync.success.status, "pushed");
+        assert.strictEqual(outcome.installation._tag, "Success");
+        const id = yield* Ref.get(current);
+        assert.isNotNull(id);
+        const revision = yield* store.revision(id!);
+        assert.isFalse(
+          (yield* store.tree(revision.tree)).some(
+            (entry) => entry.path === "skills/review/notes.txt",
+          ),
+        );
         assert.isFalse(yield* f.fs.exists(join(f.agents, "review/notes.txt")));
       }).pipe(Effect.provide(f.layer));
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
