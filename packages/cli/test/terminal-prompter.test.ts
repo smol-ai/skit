@@ -505,8 +505,6 @@ it.effect("built-in prompt styling follows SKIT's color settings on stderr", () 
     yield* Effect.gen(function* () {
       yield* (yield* Prompter).select("Harness", harnesses);
     }).pipe(Effect.provide(promptedWith(["enter"])));
-    expect(stderr.mock.calls.map(([text]) => String(text)).join("")).not.toMatch(
-      /\[[0-9;]*m/,
-    );
+    expect(stderr.mock.calls.map(([text]) => String(text)).join("")).not.toMatch(/\[[0-9;]*m/);
   }),
 );
