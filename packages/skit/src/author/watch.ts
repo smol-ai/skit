@@ -1,4 +1,5 @@
 import { Effect, FileSystem, Option, Ref, Schedule, Schema, Stream } from "effect";
+import { isAbsolute, relative } from "node:path";
 import { AuthorWorkspace, AuthorWorkspaceUnsafe } from "./workspace.js";
 import { AuthorHistory } from "./history.js";
 import { NoRemoteHome } from "./failures.js";
@@ -8,19 +9,37 @@ import { syncAuthorWorkspace } from "./sync.js";
 import { makeRemovalGrace } from "./removal-grace.js";
 import type { AuthorRegistry } from "./transport.js";
 import { updateAuthoredSkills } from "./operations.js";
-import { AuthoredInstallation } from "../library/refresh-authored.js";
+import { TreeEntry } from "../artifact/tree-entry.js";
+import { AuthoredInstallation, AuthoredInstalledCopy } from "../library/refresh-authored.js";
 
 export const AuthorWatchEvent = Schema.Union([
   Schema.Struct({ event: Schema.Literal("watching"), path: Schema.String }),
-  Schema.Struct({ event: Schema.Literal("saved_locally"), revision_id: Schema.String }),
+  Schema.Struct({
+    event: Schema.Literal("saved_locally"),
+    revision_id: Schema.String,
+    trigger: Schema.Literals(["filesystem", "rescan"]),
+    paths: Schema.Array(Schema.String),
+  }),
   Schema.Struct({ event: Schema.Literal("sync"), result: AuthorSyncResult }),
   Schema.Struct({
     event: Schema.Literal("installation"),
     path: Schema.String,
+    reason: Schema.Literals([
+      "startup",
+      "copies-updated",
+      "issues-changed",
+      "configuration-changed",
+    ]),
+    revision_id: Schema.optionalKey(Schema.String),
     status: Schema.Literals(["unregistered", "held", "unchanged", "updated"]),
     installed: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    installed_copies: Schema.Array(AuthoredInstalledCopy),
     messages: Schema.Array(Schema.String),
     context: Schema.optionalKey(AuthoredInstallation),
+  }),
+  Schema.Struct({
+    event: Schema.Literal("recovered"),
+    operation: Schema.Literals(["observe", "install", "sync", "events"]),
   }),
   Schema.Struct({
     event: Schema.Literal("retrying"),
@@ -59,9 +78,15 @@ export const watchAuthorWorkspace = Effect.fn("Author.watch")(function* <E, R, P
   if (Option.isNone(native)) return yield* unsafe();
   const original = native.value;
   const grace = makeRemovalGrace();
-  const previous = yield* Ref.make<string | undefined>(undefined);
+  const previous = yield* Ref.make<{ id: string; tree: readonly TreeEntry[] } | undefined>(
+    undefined,
+  );
+  const failures = yield* Ref.make(new Map<string, string>());
+  const sameEntry = Option.makeEquivalence(Schema.toEquivalence(TreeEntry));
   const previousSync = yield* Ref.make<string | undefined>(undefined);
-  const previousInstall = yield* Ref.make<string | undefined>(undefined);
+  const previousInstall = yield* Ref.make<{ issues: string; configuration: string } | undefined>(
+    undefined,
+  );
   const checkRoot = Effect.gen(function* () {
     if ((yield* fs.realPath(root)) !== root) return yield* unsafe();
     const current = nativeIdentityOf(yield* fs.stat(root));
@@ -72,28 +97,78 @@ export const watchAuthorWorkspace = Effect.fn("Author.watch")(function* <E, R, P
     )
       return yield* unsafe();
   });
+  const recovered = (operation: "observe" | "install" | "sync" | "events") =>
+    Effect.gen(function* () {
+      const hadFailure = yield* Ref.modify(failures, (current) => {
+        const next = new Map(current);
+        next.delete(operation);
+        return [current.has(operation), next] as const;
+      });
+      if (hadFailure) yield* report({ event: "recovered", operation });
+    });
   const retrying = (operation: "observe" | "install" | "sync" | "events", error: unknown) =>
-    grace.reset.pipe(
-      Effect.andThen(
-        report({
-          event: "retrying",
-          operation,
-          message: error instanceof Error ? error.message : String(error),
-        }),
-      ),
-    );
-  const observe = Effect.gen(function* () {
-    yield* checkRoot;
-    const saved = yield* history.refresh(root);
-    if ((yield* Ref.getAndSet(previous, saved.id)) !== saved.id)
-      yield* report({ event: "saved_locally", revision_id: saved.id });
-  }).pipe(Effect.catch((error) => retrying("observe", error)));
+    Effect.gen(function* () {
+      yield* grace.reset;
+      const message = error instanceof Error ? error.message : String(error);
+      const changed = yield* Ref.modify(
+        failures,
+        (current) =>
+          [current.get(operation) !== message, new Map(current).set(operation, message)] as const,
+      );
+      if (changed) yield* report({ event: "retrying", operation, message });
+    });
+  const observe = (trigger: "filesystem" | "rescan") =>
+    Effect.gen(function* () {
+      yield* checkRoot;
+      const saved = yield* history.refresh(root);
+      const before = yield* Ref.get(previous);
+      if (before?.id !== saved.id) {
+        const tree = yield* history.engineStore.tree(saved.treeHash);
+        yield* Ref.set(previous, { id: saved.id, tree });
+        if (before !== undefined) {
+          const from = new Map(before.tree.map((entry) => [entry.path, entry]));
+          const to = new Map(tree.map((entry) => [entry.path, entry]));
+          const paths = [...new Set([...from.keys(), ...to.keys()])]
+            .filter(
+              (path) =>
+                !sameEntry(
+                  Option.fromNullishOr(from.get(path)),
+                  Option.fromNullishOr(to.get(path)),
+                ),
+            )
+            .sort();
+          if (paths.length)
+            yield* report({ event: "saved_locally", revision_id: saved.id, trigger, paths });
+        }
+      }
+      yield* recovered("observe");
+    }).pipe(Effect.catch((error) => retrying("observe", error)));
   const install = Effect.gen(function* () {
     yield* checkRoot;
     const result = yield* updateAuthoredSkills(root);
-    const key = JSON.stringify(result);
-    if ((yield* Ref.getAndSet(previousInstall, key)) !== key)
-      yield* report({ event: "installation", path: root, ...result });
+    const current = {
+      issues: JSON.stringify({
+        status: result.status === "updated" ? "unchanged" : result.status,
+        messages: result.messages,
+      }),
+      configuration: JSON.stringify(result.context),
+    };
+    const before = yield* Ref.getAndSet(previousInstall, current);
+    const reason =
+      before === undefined
+        ? ("startup" as const)
+        : before.configuration !== current.configuration
+          ? ("configuration-changed" as const)
+          : result.installed > 0
+            ? ("copies-updated" as const)
+            : ("issues-changed" as const);
+    if (
+      result.installed > 0 ||
+      before?.issues !== current.issues ||
+      before?.configuration !== current.configuration
+    )
+      yield* report({ event: "installation", path: root, reason, ...result });
+    yield* recovered("install");
   }).pipe(Effect.catch((error) => retrying("install", error)));
   const synchronize = Effect.gen(function* () {
     yield* checkRoot;
@@ -110,8 +185,10 @@ export const watchAuthorWorkspace = Effect.fn("Author.watch")(function* <E, R, P
       { home: options.home, apply: true, removalGrace: grace },
       registry,
     );
-    if ((yield* Ref.getAndSet(previousSync, JSON.stringify(result))) !== JSON.stringify(result))
-      yield* report({ event: "sync", result });
+    const key = JSON.stringify(result);
+    const before = yield* Ref.getAndSet(previousSync, key);
+    if (result.status !== "up_to_date" && before !== key) yield* report({ event: "sync", result });
+    yield* recovered("sync");
   }).pipe(
     Effect.timeout("30 seconds"),
     Effect.catch((error) => retrying("sync", error)),
@@ -120,7 +197,10 @@ export const watchAuthorWorkspace = Effect.fn("Author.watch")(function* <E, R, P
   // missed events, replaced roots and a backend whose native watch temporarily fails.
   const events = fs.watch(root, { recursive: true }).pipe(
     Stream.filter((event) => {
-      const path = event.path.replaceAll("\\", "/");
+      const path = (isAbsolute(event.path) ? relative(root, event.path) : event.path).replaceAll(
+        "\\",
+        "/",
+      );
       return (
         path !== ".skit" &&
         !path.startsWith(".skit/") &&
@@ -130,20 +210,24 @@ export const watchAuthorWorkspace = Effect.fn("Author.watch")(function* <E, R, P
       );
     }),
     Stream.debounce("100 millis"),
-    Stream.map(() => undefined),
+    Stream.tap(() => recovered("events")),
+    Stream.map(() => "filesystem" as const),
     Stream.catch((error) =>
-      Stream.fromEffect(retrying("events", error)).pipe(
-        Stream.concat(Stream.fromEffect(Effect.sleep("1 second"))),
+      Stream.fromEffect(
+        retrying("events", error).pipe(
+          Effect.andThen(Effect.sleep("1 second")),
+          Effect.as("rescan" as const),
+        ),
       ),
     ),
     Stream.forever,
   );
   yield* report({ event: "watching", path: root });
-  yield* observe;
+  yield* observe("rescan");
   yield* events.pipe(
-    Stream.merge(Stream.tick("1 second")),
+    Stream.merge(Stream.tick("1 second").pipe(Stream.map(() => "rescan" as const))),
     Stream.buffer({ capacity: 1, strategy: "sliding" }),
-    Stream.runForEach(() => observe),
+    Stream.runForEach(observe),
     Effect.forkScoped,
   );
   return yield* install.pipe(

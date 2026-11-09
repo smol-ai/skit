@@ -134,9 +134,42 @@ it.live(
           ),
           Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 100 }),
         );
+        yield* Ref.get(events).pipe(
+          Effect.filterOrFail(
+            (trace) =>
+              trace.some(
+                (event) =>
+                  event.event === "installation" &&
+                  event.installed_copies.some(
+                    (copy) => copy.skill === "review" && copy.path === join(f.agents, "review"),
+                  ),
+              ),
+            () => new Error("Installed copy event has not arrived"),
+          ),
+          Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 30 }),
+        );
+        const beforeIdle = yield* Ref.get(events);
+        yield* Effect.sleep("6500 millis");
+        const trace = yield* Ref.get(events);
         assert.isTrue(
-          (yield* Ref.get(events)).some(
-            (event) => event.event === "retrying" && event.operation === "sync",
+          trace.some(
+            (event) =>
+              event.event === "saved_locally" && event.paths.includes("skills/review/SKILL.md"),
+          ),
+        );
+        assert.strictEqual(
+          trace.filter((event) => event.event === "installation").length,
+          beforeIdle.filter((event) => event.event === "installation").length,
+        );
+        assert.strictEqual(
+          trace.filter((event) => event.event === "retrying" && event.operation === "sync").length,
+          1,
+        );
+        assert.isFalse(
+          trace.some(
+            (event) =>
+              event.event === "saved_locally" &&
+              event.paths.some((path) => path.startsWith(".skit/")),
           ),
         );
       }).pipe(Effect.provide(f.layer));

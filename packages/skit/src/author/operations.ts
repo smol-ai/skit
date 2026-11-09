@@ -27,18 +27,25 @@ export const updateAuthoredSkills = Effect.fn("Author.updateSkills")(function* (
   yield* workspaces.acquire(root);
   const identity = yield* workspaces.readIdentity(root);
   if (identity._tag === "None")
-    return { status: "unregistered" as const, installed: 0, messages: [] as string[] };
+    return {
+      status: "unregistered" as const,
+      installed: 0,
+      installed_copies: [],
+      messages: [] as string[],
+      context: undefined,
+    };
   const history = yield* AuthorHistory;
   const saved = yield* history.refresh(root);
   const tree = yield* history.engineStore
     .tree(saved.treeHash)
     .pipe(Effect.mapError(authorHistoryStoreError));
   const library = yield* Library.Service;
-  return yield* library.refreshAuthored({
+  const refreshed = yield* library.refreshAuthored({
     workspaceId: identity.value.workspaceId,
     input: root,
     tree,
     revisionId: saved.id,
     savedAt: new Date(saved.revision.author.at).toISOString(),
   });
+  return { ...refreshed, revision_id: saved.id };
 }, Effect.scoped);

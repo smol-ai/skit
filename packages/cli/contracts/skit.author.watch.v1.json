@@ -31,11 +31,26 @@
         },
         "revision_id": {
           "type": "string"
+        },
+        "trigger": {
+          "type": "string",
+          "enum": [
+            "filesystem",
+            "rescan"
+          ]
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
         "event",
-        "revision_id"
+        "revision_id",
+        "trigger",
+        "paths"
       ],
       "additionalProperties": true
     },
@@ -458,6 +473,18 @@
         "path": {
           "type": "string"
         },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "startup",
+            "copies-updated",
+            "issues-changed",
+            "configuration-changed"
+          ]
+        },
+        "revision_id": {
+          "type": "string"
+        },
         "status": {
           "type": "string",
           "enum": [
@@ -471,6 +498,25 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
+        },
+        "installed_copies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "skill": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "skill",
+              "path"
+            ],
+            "additionalProperties": true
+          }
         },
         "messages": {
           "type": "array",
@@ -621,9 +667,36 @@
       "required": [
         "event",
         "path",
+        "reason",
         "status",
         "installed",
+        "installed_copies",
         "messages"
+      ],
+      "additionalProperties": true
+    },
+    {
+      "type": "object",
+      "properties": {
+        "event": {
+          "type": "string",
+          "enum": [
+            "recovered"
+          ]
+        },
+        "operation": {
+          "type": "string",
+          "enum": [
+            "observe",
+            "install",
+            "sync",
+            "events"
+          ]
+        }
+      },
+      "required": [
+        "event",
+        "operation"
       ],
       "additionalProperties": true
     },

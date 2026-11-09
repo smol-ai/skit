@@ -1,3 +1,4 @@
+import { metadataSource, metadataRevision } from "../library/presentation/skill-metadata.js";
 import { renderSecurityReview } from "../library/security/present.js";
 import { renderRepositoryPolicy } from "../library/repository/present.js";
 import type { ContractData, ContractDataForId, ContractKey } from "./output-contracts.js";
@@ -31,7 +32,6 @@ import { renderLibraryHistory } from "../library/history/present.js";
 import { renderEditImport, renderEditImportPlan } from "../library/update/retention.js";
 import {
   collectionTitle,
-  collectionDetails,
   workspaceEnableCommand,
   workspaceInitCommand,
 } from "../library/presentation/collection-source.js";
@@ -291,47 +291,75 @@ const contractPresenters: ContractPresenters = {
   authorWatch: (data) => {
     switch (data.event) {
       case "watching":
-        return `Watching ${data.path}. Press Ctrl-C to stop.`;
+        return `Watching ${metadataSource(data.path)}. Press Ctrl-C to stop.`;
       case "saved_locally":
-        return `Saved locally: ${data.revision_id}`;
-      case "sync":
-        return renderAuthorSync(data.result);
+        return `Workspace changed (${data.trigger === "filesystem" ? "filesystem event" : "rescan"}): ${data.paths.join(", ")}\nSaved revision ${metadataRevision(data.revision_id)}.`;
+      case "sync": {
+        const sync = data.result;
+        switch (sync.status) {
+          case "pushed":
+            return `Registry upload: ${metadataRevision(sync.revision_id)}.`;
+          case "pulled":
+            return `Registry download: ${sync.paths.join(", ")} (${metadataRevision(sync.revision_id)}).`;
+          case "merged":
+            return [
+              `Merged Registry changes: ${sync.paths.join(", ")} (${metadataRevision(sync.revision_id)}).`,
+              ...sync.choices.map(
+                (choice) => `  ${choice.path}: kept the ${choice.kept} version (${choice.kind})`,
+              ),
+            ].join("\n");
+          default:
+            return renderAuthorSync(sync);
+        }
+      }
       case "installation":
         return data.status === "unregistered"
-          ? `Author workspace: ${data.path}\nNot registered in this Library; installed skills are unchanged.\nTo register it: ${workspaceInitCommand(data.path)}`
+          ? `Workspace removed from the Library; installed copies unchanged. To register: ${workspaceInitCommand(data.path)}`
           : [
-              ...(data.context === undefined
-                ? []
-                : [
-                    collectionTitle(data.context.collection_label, data.context.source),
-                    ...collectionDetails(data.context.source),
-                  ]),
-              ...(data.context?.disabled_skills.length
+              ...((data.reason === "startup" || data.reason === "configuration-changed") &&
+              data.context !== undefined
                 ? [
-                    data.context.disabled_skills.length === data.context.total
-                      ? "Workspace skills are saved but disabled; the watcher will not enable them automatically."
-                      : `Not enabled from this workspace: ${data.context.disabled_skills.join(", ")}`,
+                    `${data.reason === "startup" ? "Startup" : "Library configuration changed"}: ${collectionTitle(data.context.collection_label, data.context.source)}; ${data.context.total - data.context.disabled_skills.length}/${data.context.total} skills enabled.`,
                   ]
                 : []),
-              data.status === "held"
-                ? "Keeping the previous installed skills."
-                : `Installed skills: ${data.installed} updated.`,
-              ...(data.context?.other_sources.map(
+              ...(data.context?.disabled_skills.length &&
+              (data.reason === "startup" || data.reason === "configuration-changed")
+                ? [
+                    data.context.disabled_skills.length === data.context.total
+                      ? "Workspace skills are saved but disabled."
+                      : `Disabled: ${data.context.disabled_skills.join(", ")}.`,
+                    `To enable: ${workspaceEnableCommand(data.path)}`,
+                  ]
+                : []),
+              ...data.installed_copies.map(
                 (copy) =>
-                  `${copy.skill} at ${copy.path} follows ${collectionTitle(copy.collection_label, copy.source)}.`,
-              ) ?? []),
-              ...(data.context?.other_sources.length
+                  `Updated ${copy.skill} at ${metadataSource(copy.path)}${data.revision_id ? ` (workspace revision ${metadataRevision(data.revision_id)})` : ""}.`,
+              ),
+              ...(data.reason === "startup" || data.reason === "configuration-changed"
+                ? (data.context?.other_sources.map(
+                    (copy) =>
+                      `${copy.skill} at ${metadataSource(copy.path)} follows ${collectionTitle(copy.collection_label, copy.source)}.`,
+                  ) ?? [])
+                : []),
+              ...(data.context?.other_sources.length && data.reason === "startup"
                 ? [
                     "Use skit list to choose which source to disable before enabling this workspace.",
                   ]
                 : []),
-              ...(data.context?.disabled_skills.length
-                ? [`To enable this workspace: ${workspaceEnableCommand(data.path)}`]
+              ...(data.status === "held"
+                ? ["Invalid workspace inputs; keeping the last valid installed copies."]
                 : []),
               ...data.messages,
+              ...(data.reason === "issues-changed" &&
+              data.messages.length === 0 &&
+              data.status !== "held"
+                ? ["Installation checks clear; no copies needed updating."]
+                : []),
             ].join("\n");
       case "retrying":
-        return `${data.operation}: ${data.message} Retrying automatically.`;
+        return `${data.operation}: ${data.message} Retrying automatically; repeated failures stay quiet.`;
+      case "recovered":
+        return `${data.operation}: recovered.`;
     }
   },
   authorDelete: renderAuthorDelete,

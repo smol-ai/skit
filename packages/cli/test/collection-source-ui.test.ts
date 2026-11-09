@@ -185,6 +185,8 @@ it.effect(
       const frame = renderResultFrame(
         result("authorWatch", {
           event: "installation",
+          reason: "startup",
+          installed_copies: [],
           path,
           status: "unchanged",
           installed: 0,

@@ -108,3 +108,48 @@ it.live(
     }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
   { timeout: 25_000 },
 );
+
+it.live(
+  "watch reports an offline transition once and reports recovery without idle sync messages",
+  () =>
+    Effect.gen(function* () {
+      const world = yield* makeAuthorSyncWorld();
+      yield* world.connect();
+      yield* world.a.registerAndEnable();
+      yield* world.server.setOnline("a", false);
+      const events = yield* Ref.make<readonly AuthorWatchEvent[]>([]);
+      yield* world.a.startWatch((event) => Ref.update(events, (current) => [...current, event]));
+      yield* Ref.get(events).pipe(
+        Effect.filterOrFail(
+          (trace) =>
+            trace.some((event) => event.event === "retrying" && event.operation === "sync"),
+          () => new Error("Offline event has not arrived"),
+        ),
+        Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 60 }),
+      );
+      yield* Effect.sleep("6500 millis");
+      expect(
+        (yield* Ref.get(events)).filter(
+          (event) => event.event === "retrying" && event.operation === "sync",
+        ),
+      ).toHaveLength(1);
+      yield* world.server.setOnline("a", true);
+      yield* Ref.get(events).pipe(
+        Effect.filterOrFail(
+          (trace) =>
+            trace.some((event) => event.event === "recovered" && event.operation === "sync"),
+          () => new Error("Recovery event has not arrived"),
+        ),
+        Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 60 }),
+      );
+      yield* Effect.sleep("3500 millis");
+      const trace = yield* Ref.get(events);
+      expect(
+        trace.filter((event) => event.event === "recovered" && event.operation === "sync"),
+      ).toHaveLength(1);
+      expect(
+        trace.some((event) => event.event === "sync" && event.result.status === "up_to_date"),
+      ).toBe(false);
+    }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
+  { timeout: 30_000 },
+);

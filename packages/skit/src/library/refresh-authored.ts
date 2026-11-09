@@ -16,6 +16,8 @@ import * as InstalledSkills from "./installed-skills.js";
 import { CollectionSource, readCollectionSource } from "./collection-source.js";
 import type { LibraryState } from "./library-state.js";
 
+export const AuthoredInstalledCopy = Schema.Struct({ skill: Schema.String, path: Schema.String });
+
 export const AuthoredInstallation = Schema.Struct({
   collection_label: Schema.String,
   source: Schema.optionalKey(CollectionSource),
@@ -98,7 +100,12 @@ export const refreshAuthored = Effect.fn("Library.refreshAuthored")(function* (
     ),
   );
   if (collection === undefined)
-    return { status: "unregistered" as const, installed: 0, messages: [] as string[] };
+    return {
+      status: "unregistered" as const,
+      installed: 0,
+      installed_copies: [],
+      messages: [] as string[],
+    };
   const previousImport = sourceImports(state, collection.collection_id)[0];
   const previous = state.collection_versions.find(
     (copy) => copy.collection_version_id === previousImport?.collection_version_id,
@@ -134,6 +141,7 @@ export const refreshAuthored = Effect.fn("Library.refreshAuthored")(function* (
     return {
       status: "held" as const,
       installed: 0,
+      installed_copies: [],
       messages: prepared.messages,
       context: yield* readAuthoredInstallation(state, collection.collection_id),
     };
@@ -149,7 +157,7 @@ export const refreshAuthored = Effect.fn("Library.refreshAuthored")(function* (
     });
   const current = yield* loadLibrary(writer.home);
   const messages = [...prepared.messages];
-  let installed = 0;
+  const installedCopies: Array<typeof AuthoredInstalledCopy.Type> = [];
   // One changed installed folder must not block unrelated Skills. No replacement approvals.
   for (const skill of current.skills.filter(
     (skill) => skill.collection_id === collection.collection_id,
@@ -160,18 +168,25 @@ export const refreshAuthored = Effect.fn("Library.refreshAuthored")(function* (
       return (yield* operations.apply({ _tag: "Apply", plan })).result;
     });
     if (result._tag === "Applied") {
-      installed += result.copies.filter((copy) => copy._tag === "Installed").length;
-      if (
-        result.copies.some(
-          (copy) => copy._tag === "Conflicted" || copy._tag === "Failed" || copy._tag === "Pending",
-        )
-      )
-        messages.push(`Installed copy of ${skill.name} needs attention`);
-    } else messages.push(`Installed copy of ${skill.name} needs attention`);
+      for (const copy of result.copies) {
+        if (copy._tag === "Installed")
+          installedCopies.push({ skill: skill.name, path: copy.copy.path });
+        if (copy._tag === "Failed")
+          messages.push(`${skill.name} at ${copy.path}: ${copy.cause.message}`);
+        if (copy._tag === "Conflicted" || copy._tag === "Pending")
+          messages.push(
+            `${skill.name} at ${copy.copy.path}: ${copy._tag === "Conflicted" ? "copy conflicts with the retained version; left unchanged" : "installation is pending"}`,
+          );
+      }
+    } else
+      messages.push(
+        `${skill.name}${result.failedPaths?.length ? ` at ${result.failedPaths.join(", ")}` : ""}: ${result.cause.message}`,
+      );
   }
   return {
     status: hash === previous?.hash ? ("unchanged" as const) : ("updated" as const),
-    installed,
+    installed: installedCopies.length,
+    installed_copies: installedCopies,
     messages,
     context: yield* readAuthoredInstallation(current, collection.collection_id),
   };
