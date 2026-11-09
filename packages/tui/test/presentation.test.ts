@@ -164,7 +164,7 @@ const skill = (
   revision: null,
   imported_at: null,
   source_updated_at: null,
-  collectionSource: { kind: "local", locator: `/sources/${collectionId}` },
+  collectionSource: { kind: "local", name: collectionId, locator: `/sources/${collectionId}` },
   scopes: enabled
     ? [{ scope: { kind: "global" }, invocation: "declared", label: "All projects" }]
     : [],
@@ -235,7 +235,7 @@ test("Library rows group collections, keep standalone Skills, and never sort the
   expect(skills.map((row) => row.name)).toEqual(["zulu", "solo", "alpha"]);
   expect(libraryRows(skills, "tools").map((row) => row.name)).toEqual(["alpha", "zulu"]);
   const collection = rows[1]!;
-  expect(collection.evidence).toEqual(["alpha · enabled", "zulu · not enabled"]);
+  expect(collection.evidence).toEqual(["alpha | enabled", "zulu | not enabled"]);
   if (collection.kind !== "library-collection") throw new Error("Expected a collection");
   const details = detailPresentation(collection, true);
   expect(details.source).toContain("/sources/tools");
@@ -282,7 +282,7 @@ test("confirmation keeps per-destination skill subsets and toggles collection me
         skills: ["review"],
         scope: { kind: "global" },
         destination: "All projects",
-        writes: "projection removed",
+        writes: "remove installed skill files",
         collectionLabel: "Tools",
         wholeCollection: true,
       },
@@ -291,7 +291,7 @@ test("confirmation keeps per-destination skill subsets and toggles collection me
         skills: ["test"],
         scope: { kind: "repository", root: "/work" },
         destination: "/work",
-        writes: "projection removed",
+        writes: "remove installed skill files",
       },
     ],
   };
@@ -326,7 +326,7 @@ test("probe results update display facts without mutating the passive audit item
   };
   const next = harnessProbePresentation(item, result);
   expect(next).toMatchObject({ status: "clear", harnessProbe: result });
-  expect(next.evidence).not.toContain("installation probe: not run · press p");
+  expect(next.evidence).not.toContain("installation probe: not run | press p");
   expect(item).not.toHaveProperty("harnessProbe");
   expect(detailPresentation(next, false).fields).toEqual(
     expect.arrayContaining([

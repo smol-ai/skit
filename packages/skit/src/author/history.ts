@@ -594,9 +594,8 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
       ),
       Effect.catchTag("AuthorWorkspaceMetadataInvalid", () => Effect.undefined),
     );
-    // Machine identity may need the Library writer. Never acquire that writer while holding the
-    // journal permit/transaction: promotion saves history under its Library writer, so the reverse
-    // order would deadlock.
+    // Machine identity may need the Library writer. Resolve it before taking the journal
+    // permit/transaction, so history never takes the home writer from inside a journal write.
     const identity = yield* Effect.result(
       Effect.gen(function* () {
         const settings = yield* MachineSettings.read(home);

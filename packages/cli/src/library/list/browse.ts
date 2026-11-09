@@ -1,10 +1,4 @@
-import {
-  skillMetadataLines,
-  metadataSource,
-  metadataRevision,
-  metadataDate,
-} from "../presentation/skill-metadata.js";
-import { createColors } from "picocolors";
+import { skillMetadataLines } from "../presentation/skill-metadata.js";
 import { terminalData } from "../../terminal/text.js";
 import { Effect } from "effect";
 import { resolve } from "node:path";
@@ -33,6 +27,13 @@ import {
 import { Prompter, PromptCancelled } from "../../terminal/prompter.js";
 import { Renderer } from "../../terminal/renderer.js";
 import { promptForScope } from "../presentation/scope-prompt.js";
+import {
+  collectionTitle,
+  collectionChoiceTitle,
+  collectionHint,
+  collectionEnablement,
+  collectionWarnings,
+} from "../presentation/collection-source.js";
 
 const DONE = "Done";
 const BACK_TO_COLLECTIONS = "Back to collections";
@@ -51,6 +52,12 @@ function pendingReviewText(pending: PendingLibraryChange): string {
     .map((fact, index) => {
       const policy = pending.policies[index] ?? pending.policies[0];
       return [
+        ...(fact.collectionLabel === undefined
+          ? []
+          : [
+              collectionTitle(fact.collectionLabel, fact.collectionSource),
+              collectionHint(fact.collectionSource),
+            ]),
         `  ${fact.action === "enable" ? "Enable" : "Disable"} ${fact.skills.join(", ")}`,
         ...(fact.wholeCollection
           ? [
@@ -66,7 +73,7 @@ function pendingReviewText(pending: PendingLibraryChange): string {
               `    meaning    ${policy.effectiveSummary}`,
             ]
           : []),
-        `    writes     ${fact.writes}`,
+        `    files      ${fact.writes}`,
       ].join("\n");
     })
     .join("\n\n");
@@ -119,7 +126,7 @@ const enableSkill = Effect.fn("CLI.libraryBrowse.enable")(function* (
 ) {
   const scope = yield* promptForScope(resolve(process.cwd()));
   const proposed = yield* proposeLibraryEnable(session, row, { scope });
-  return yield* applyWithConfirmation(proposed, "Projecting Skill");
+  return yield* applyWithConfirmation(proposed, "Installing skill");
 });
 
 const chooseScope = Effect.fn("CLI.libraryBrowse.chooseScope")(function* (
@@ -147,7 +154,7 @@ const changeInvocation = Effect.fn("CLI.libraryBrowse.invocation")(function* (
   const eligible = invocationEligibleScopes(row);
   if (eligible.length === 0) {
     yield* renderer.note(
-      "None of this Skill's current Bindings carries an invocation policy.",
+      "Enable this skill before changing when it may be used.",
       "Not applicable",
     );
     return session;
@@ -197,8 +204,18 @@ export const browseLibrary = Effect.fn("CLI.libraryBrowse")(function* (
       .autocomplete("Select a collection", [
         ...collections.map((row) => ({
           value: row.collectionId,
-          label: row.heading,
-          hint: `${session.skills.filter((skill) => skill.collectionId === row.collectionId).length} Skills`,
+          label: collectionChoiceTitle(row.heading, row.collectionSource),
+          hint: [
+            `${session.skills.filter((skill) => skill.collectionId === row.collectionId).length} Skills`,
+            collectionEnablement(
+              session.skills.filter((skill) => skill.collectionId === row.collectionId).length,
+              session.skills.filter(
+                (skill) => skill.collectionId === row.collectionId && skill.scopes.length > 0,
+              ).length,
+            ),
+          ]
+            .filter(Boolean)
+            .join(" | "),
         })),
         { value: DONE, label: DONE },
       ])
@@ -224,8 +241,8 @@ export const browseLibrary = Effect.fn("CLI.libraryBrowse")(function* (
             : []),
           ...rows.map((row) => ({
             value: row.skillVersionId,
-            label: row.scopes.length > 0 ? `${row.name} · enabled` : row.name,
-            hint: `${metadataSource(row.source)} · revision ${metadataRevision(row.revision)} · source updated ${metadataDate(row.source_updated_at)}`,
+            label: row.scopes.length > 0 ? `${row.name} | enabled` : row.name,
+            hint: skillMetadataLines(row).join(" | "),
           })),
           { value: BACK_TO_COLLECTIONS, label: BACK_TO_COLLECTIONS },
         ])
@@ -272,17 +289,22 @@ export const browseLibrary = Effect.fn("CLI.libraryBrowse")(function* (
         const row = session.skills.find((candidate) => candidate.skillVersionId === skillId);
         if (row === undefined) break;
         const detail = terminalData(row);
-        const renderDetail = (color: boolean) => {
-          const colors = createColors(color);
-          return [
-            colors.cyan(detail.heading),
-            `  ${colors.bold(detail.name)}`,
-            ...skillMetadataLines(detail).map((line) => `    ${colors.dim(line)}`),
-            ...(detail.invocationWarning ? [`    ${detail.invocationWarning}`] : []),
-            `  ${detail.scopes.length === 0 ? "not enabled" : detail.scopes.map((scopeRow) => scopeRow.label).join("\n  ")}`,
-          ].join("\n");
-        };
-        yield* renderer.note(renderDetail(false), "Skill", { renderBody: renderDetail });
+        const body = [
+          `Collection: ${collectionTitle(detail.heading, detail.collectionSource)}`,
+          ...skillMetadataLines(detail),
+          ...(detail.collectionSource?.authority
+            ? [`Registry: ${detail.collectionSource.authority}`]
+            : []),
+          ...(detail.scopes.length === 0
+            ? ["Enabled: No"]
+            : detail.scopes.flatMap((scopeRow) => [
+                `Enabled: ${destinationLabel(scopeRow.scope)}`,
+                `Model invocation: ${scopeRow.policy === undefined ? "Unavailable" : invocationRowSummary(scopeRow.policy)}`,
+              ])),
+          ...collectionWarnings(detail.collectionSource),
+          ...(detail.invocationWarning ? [detail.invocationWarning] : []),
+        ].join("\n");
+        yield* renderer.note(body, detail.name);
         const action = yield* prompter
           .select<"enable" | "disable" | "invocation" | "back" | "done">("What next?", [
             { value: "enable", label: "Enable" },

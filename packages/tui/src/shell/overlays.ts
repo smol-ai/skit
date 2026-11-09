@@ -47,7 +47,7 @@ export function createShellOverlays(
       border: true,
       backgroundColor: surface.canvas,
       ...panelColors(true),
-      title: panelTitle(`SKILL.md · ${name}`),
+      title: panelTitle(`SKILL.md | ${name}`),
       flexDirection: "column",
       padding: 1,
     });
@@ -130,7 +130,7 @@ export function createShellOverlays(
         const shortcut = commandField(command, "shortcut");
         return {
           name: commandField(command, "title"),
-          description: `${commandField(command, "description")}${shortcut ? `  ·  ${shortcut}` : ""}`,
+          description: `${commandField(command, "description")}${shortcut ? `  |  ${shortcut}` : ""}`,
           value: command.name,
         };
       });

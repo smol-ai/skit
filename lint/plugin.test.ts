@@ -15,6 +15,7 @@ interface Diagnostic {
 }
 
 const allRules = [
+  "no-middle-dot-delimiter",
   "no-record-any",
   "no-record-unknown",
   "no-run-skit",
@@ -32,9 +33,9 @@ const allRules = [
 ];
 
 /** Runs the plugin over one source file and returns its diagnostics, newest oxlint JSON format. */
-async function lint(source: string): Promise<Diagnostic[]> {
+async function lint(source: string, extension = "ts"): Promise<Diagnostic[]> {
   const directory = await mkdtemp(join(tmpdir(), "skit-lint-"));
-  const file = join(directory, "sample.ts");
+  const file = join(directory, `sample.${extension}`);
   await writeFile(file, source);
   await writeFile(
     join(directory, ".oxlintrc.json"),
@@ -506,5 +507,36 @@ describe("skit/no-node-fs", () => {
       { code: "skit(no-node-fs)", line: 1 },
       { code: "skit(no-node-fs)", line: 2 },
     ]);
+  });
+});
+
+describe("skit/no-middle-dot-delimiter", () => {
+  test("rejects JSX text and attributes", async () => {
+    const dot = String.fromCodePoint(0xb7);
+    expect(await lint(`<div title="one ${dot} two">one ${dot} two</div>`, "tsx")).toEqual(
+      [1, 1].map((line) => ({ code: "skit(no-middle-dot-delimiter)", line })),
+    );
+  });
+  test("rejects literal and escaped middle dots in strings and templates", async () => {
+    expect(
+      await lint(
+        [
+          `const a = "one ${String.fromCodePoint(0xb7)} two";`,
+          'const b = "one \\u00b7 two";',
+          "const c = `one " + String.fromCodePoint(0xb7) + " ${name}`;",
+          "const d = `one \\u00b7 ${name}`;",
+        ].join("\n"),
+      ),
+    ).toEqual([1, 2, 3, 4].map((line) => ({ code: "skit(no-middle-dot-delimiter)", line })));
+  });
+
+  test("allows ordinary separators and middle dots in comments", async () => {
+    expect(
+      await lint(
+        "// one " +
+          String.fromCodePoint(0xb7) +
+          ' two\nconst a = "one | two"; const b = `one (${name})`;',
+      ),
+    ).toEqual([]);
   });
 });

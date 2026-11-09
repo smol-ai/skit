@@ -7,9 +7,9 @@ const renderLibraryHistoryEvent = (event: HistoryResult["events"][number]) => {
   const summary = [...actions.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([action, count]) => `${count} ${action}`)
-    .join(" · ");
+    .join(" | ");
   const count = `${event.changes.length} ${event.changes.length === 1 ? "change" : "changes"}`;
-  return `${event.occurredAt}  ${event.type}  ${count}${summary ? ` · ${summary}` : ""}`;
+  return `${event.occurredAt}  ${event.type}  ${count}${summary ? ` | ${summary}` : ""}`;
 };
 
 export const renderLibraryHistory = (data: HistoryResult) =>

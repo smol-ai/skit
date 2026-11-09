@@ -140,7 +140,7 @@ export function createLibraryController(options: Options) {
           : [
               {
                 value: "collection",
-                label: `Enable whole collection · ${row.heading}`,
+                label: `Enable whole collection | ${row.heading}`,
                 hint: "Include new skills and remove deleted ones when you update",
               },
             ]),
@@ -202,7 +202,7 @@ export function createLibraryController(options: Options) {
           : [
               {
                 value: "collection",
-                label: `Disable whole collection · ${row.heading}`,
+                label: `Disable whole collection | ${row.heading}`,
                 hint: "Disable every skill in this collection",
               },
             ]),

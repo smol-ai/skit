@@ -123,7 +123,7 @@ export function setupPlanLines(input: {
       ? [
           `Import installed skills.sh Collections into the SKIT Library: ${summary.sources.length}`,
           ...summary.sources.flatMap(({ source, lockContentHash, names }) => [
-            `  ${source} · observed lock ${lockContentHash.slice(0, 14)} · ${names.length} skill${names.length === 1 ? "" : "s"}`,
+            `  ${source} | observed lock ${lockContentHash.slice(0, 14)} | ${names.length} skill${names.length === 1 ? "" : "s"}`,
             ...(names.length <= 5 ? [`    ${names.join(", ")}`] : []),
           ]),
         ]
@@ -133,7 +133,7 @@ export function setupPlanLines(input: {
           `Reconnect existing Library matches: ${summary.reconnects.length}`,
           ...summary.reconnects
             .slice(0, 5)
-            .map(({ name, sourcePath }) => `  ${name} · ${displayPath(sourcePath)}`),
+            .map(({ name, sourcePath }) => `  ${name} | ${displayPath(sourcePath)}`),
           ...(summary.reconnects.length > 5
             ? [`  … and ${summary.reconnects.length - 5} more`]
             : []),
@@ -144,14 +144,14 @@ export function setupPlanLines(input: {
           `Add to Library: ${summary.additions.length}`,
           ...summary.additions
             .slice(0, 5)
-            .map((selection) => `  ${selection.name} · ${displayPath(selection.sourcePath)}`),
+            .map((selection) => `  ${selection.name} | ${displayPath(selection.sourcePath)}`),
           ...(summary.additions.length > 5 ? [`  … and ${summary.additions.length - 5} more`] : []),
         ]
       : []),
     ...setupDuplicatePlanLines(summary.duplicates),
     ...(summary.manageCount ? [`Manage existing: ${summary.manageCount}`] : []),
     ...summary.authoritativeCopies.flatMap((selection) => [
-      `Authoritative copy: ${selection.name} · ${selection.sourcePath}`,
+      `Authoritative copy: ${selection.name} | ${selection.sourcePath}`,
       "  Other copies stay in place unless explicitly marked Remove.",
     ]),
     ...(summary.removals.entries.length
@@ -159,7 +159,7 @@ export function setupPlanLines(input: {
           `Remove installed copies: ${summary.removals.entries.length}`,
           ...summary.removals.entries.map(
             (entry) =>
-              `  ${entry.name} · ${entry.path}${entry.type === "SymbolicLink" ? " (symlink only; source stays)" : " (move directory to recovery)"}`,
+              `  ${entry.name} | ${entry.path}${entry.type === "SymbolicLink" ? " (symlink only; source stays)" : " (move directory to recovery)"}`,
           ),
           "Removed copies are moved into the Library's removed/ folder, under this setup's operation ID.",
           "Library entries and source files outside these locations stay in place.",
@@ -175,14 +175,14 @@ export function setupPlanLines(input: {
 
 function setupDuplicatePlanLines(duplicates: SetupReviewSummary["duplicates"]) {
   return duplicates.map(({ action, names, aliasCount }) => {
-    const examples = names.length <= 5 ? ` · ${names.join(", ")}` : "";
+    const examples = names.length <= 5 ? ` | ${names.join(", ")}` : "";
     if (action === "retain-only")
-      return `Retain only: ${skillCount(names.length)}${examples} · no new Binding or installed skill`;
+      return `Retain only: ${skillCount(names.length)}${examples} | no new Binding or installed skill`;
     if (action === "keep-both")
       return `Allow duplicate agent copies: ${skillCount(names.length)}${examples}`;
     if (action === "preserve-duplicates")
-      return `Preserve existing copies: ${aliasCount} director${aliasCount === 1 ? "y" : "ies"}${examples} · replacements verified before moving originals to recovery`;
-    return `Retire redundant symlinks: ${skillCount(names.length)} · ${aliasCount} symlink${aliasCount === 1 ? "" : "s"}${examples} · sources stay; move records saved`;
+      return `Preserve existing copies: ${aliasCount} director${aliasCount === 1 ? "y" : "ies"}${examples} | replacements verified before moving originals to recovery`;
+    return `Retire redundant symlinks: ${skillCount(names.length)} | ${aliasCount} symlink${aliasCount === 1 ? "" : "s"}${examples} | sources stay; move records saved`;
   });
 }
 
@@ -197,7 +197,7 @@ export const renderSetupAliasRecovery = Effect.fn("CLI.setup.renderAliasRecovery
     if (applied.recoveryDirectories.length)
       yield* renderer.note(
         `Sources stay in place. Symlinks and their move records are saved in:\n${applied.recoveryDirectories.join("\n")}`,
-        `Redundant symlinks retired for ${skillCount(applied.recoveryDirectories.length)}${applied.warnings.length ? ` · ${skillCount(applied.warnings.length)} preserved` : ""}`,
+        `Redundant symlinks retired for ${skillCount(applied.recoveryDirectories.length)}${applied.warnings.length ? ` | ${skillCount(applied.warnings.length)} preserved` : ""}`,
       );
   },
 );

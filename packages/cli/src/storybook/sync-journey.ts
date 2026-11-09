@@ -84,6 +84,6 @@ export const syncJourney = (failDownload: boolean) =>
         ),
       );
       yield* renderer.result(result("librarySync", synced));
-      return "3 Collections · 3 Skills · enabled on the fixture device";
+      return "3 Collections | 3 Skills | enabled on the fixture device";
     }),
   ).pipe(Effect.provide(skitLayer));

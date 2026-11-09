@@ -1,4 +1,5 @@
 import type { PlatformError } from "effect/PlatformError";
+import type { AuthoredRefresh, refreshAuthored } from "./refresh-authored.js";
 import type { RecoveryInvalid, RecoveryInspection } from "./recovery-facts.js";
 import type { LibraryChanged } from "./failures.js";
 import type {
@@ -362,6 +363,13 @@ export interface Interface {
     Effect.Success<ReturnType<typeof updateSources<E, R, F>>>,
     Effect.Error<ReturnType<typeof updateSources<E, R, F>>>,
     R
+  >;
+  /** Update an existing Author Workspace Collection from already preserved input bytes. */
+  readonly refreshAuthored: (
+    request: AuthoredRefresh,
+  ) => Effect.Effect<
+    Effect.Success<ReturnType<typeof refreshAuthored>>,
+    Effect.Error<ReturnType<typeof refreshAuthored>>
   >;
   /** Review an edited installed copy as a new Version; `apply` retains it as previewed. */
   readonly edit: (

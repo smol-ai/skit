@@ -13,7 +13,7 @@ type MachineInstance = MachineInventoryResult["machine"]["instances"][number];
 const ownerLines = (owner: MachineInstance["owner"]): readonly string[] => {
   switch (owner.kind) {
     case "pnpm":
-      return ["Managed by: pnpm · left in place", `Package: ${owner.package}@${owner.version}`];
+      return ["Managed by: pnpm | left in place", `Package: ${owner.package}@${owner.version}`];
     case "skills-sh":
       return ["Installed by: skills.sh", `Source: ${owner.source}`];
     case "skit":
@@ -102,7 +102,7 @@ const instanceFacts = (instance: MachineInstance, repository?: string): readonly
         repository !== undefined && lock.lockPath.startsWith(`${repository}${sep}`)
           ? lock.lockPath.slice(repository.length + 1)
           : compactHomePath(lock.lockPath);
-      return `Lock: ${path} · ${lock.content}`;
+      return `Lock: ${path} | ${lock.content}`;
     })
     .sort();
   return [
@@ -142,7 +142,7 @@ export function renderMachineSkills(
 ): string {
   const names = new Set(machine.instances.map((instance) => instance.name));
   const lines = [
-    `Inventory · ${names.size} Skill${names.size === 1 ? "" : "s"} · ${machine.instances.length} instance${machine.instances.length === 1 ? "" : "s"}`,
+    `Inventory | ${names.size} Skill${names.size === 1 ? "" : "s"} | ${machine.instances.length} instance${machine.instances.length === 1 ? "" : "s"}`,
   ];
   const locations = new Map<string, typeof machine.instances>();
   for (const instance of machine.instances) {
@@ -163,7 +163,7 @@ export function renderMachineSkills(
             : location;
     lines.push(
       "",
-      `${color.cyan(color.bold(locationLabel))} · ${locationNames.size} Skill${locationNames.size === 1 ? "" : "s"}${instances.length === locationNames.size ? "" : ` · ${instances.length} instances`}`,
+      `${color.cyan(color.bold(locationLabel))} | ${locationNames.size} Skill${locationNames.size === 1 ? "" : "s"}${instances.length === locationNames.size ? "" : ` | ${instances.length} instances`}`,
     );
     const ownershipGroups = new Map<string, typeof instances>();
     for (const instance of instances) {
@@ -181,7 +181,7 @@ export function renderMachineSkills(
       const skillCount = bySkill.size;
       lines.push(
         "",
-        `  ${ownership} · ${skillCount} Skill${skillCount === 1 ? "" : "s"}${instanceCount === skillCount ? "" : ` · ${instanceCount} instances`}`,
+        `  ${ownership} | ${skillCount} Skill${skillCount === 1 ? "" : "s"}${instanceCount === skillCount ? "" : ` | ${instanceCount} instances`}`,
       );
       const cohorts = new Map<
         string,
@@ -228,7 +228,7 @@ export function renderMachineSkills(
           for (const instance of cohort.instances.filter((instance) => instance.name === name))
             for (const path of instancePaths(instance, repository))
               lines.push(
-                `        ${path}${path === displayPath(instance.path, repository) ? "" : " (alias)"} ${color.dim(`· SKILL.md modified ${metadataDate(instance.skill_md_modified_at)}`)}`,
+                `        ${path}${path === displayPath(instance.path, repository) ? "" : " (alias)"} ${color.dim(`| SKILL.md modified ${metadataDate(instance.skill_md_modified_at)}`)}`,
               );
         }
       }
@@ -268,7 +268,7 @@ const renderScanScope = (machine: MachineInventoryResult["machine"]): string => 
 const inventoryFindings = (state: LibraryInventory): string[] => {
   const lines: string[] = [];
   if (state.ownershipIssues?.length) {
-    lines.push(`Ownership issues · ${state.ownershipIssues.length}`);
+    lines.push(`Ownership issues | ${state.ownershipIssues.length}`);
     for (const issue of state.ownershipIssues)
       lines.push(
         `  ${conditionHeadline(issue.code, "Local ownership issue")}`,
@@ -278,7 +278,7 @@ const inventoryFindings = (state: LibraryInventory): string[] => {
   }
   if (state.scanIssues?.length) {
     if (lines.length) lines.push("");
-    lines.push(`Scan issues · ${state.scanIssues.length}`);
+    lines.push(`Scan issues | ${state.scanIssues.length}`);
     for (const issue of state.scanIssues) {
       if (issue.code === "DANGLING_SYMLINK") {
         lines.push(
@@ -336,20 +336,20 @@ export function renderInventory(
     add(
       [...row.harnesses],
       path,
-      `  ${row.name} · managed · ${[...row.statuses].sort().map(installedSkillStatusLabel).join(", ")}\n    ${path}`,
+      `  ${row.name} | managed | ${[...row.statuses].sort().map(installedSkillStatusLabel).join(", ")}\n    ${path}`,
     );
   for (const item of state.unmanaged) {
     const paths = item.paths ?? [item.path];
     add(
       item.harnesses ?? [item.harness],
       item.path,
-      `  ${basename(item.path)} · unmanaged\n${paths.map((path) => `    ${path}`).join("\n")}${paths.length > 1 ? "\n    Shared physical copy" : ""}`,
+      `  ${basename(item.path)} | unmanaged\n${paths.map((path) => `    ${path}`).join("\n")}${paths.length > 1 ? "\n    Shared physical copy" : ""}`,
     );
   }
   const lines: string[] = [];
   for (const [root, group] of groups)
     lines.push(
-      `${[...group.harnesses].sort().map(harnessLabel).join(", ") || "Former skills directory"} · ${root}`,
+      `${[...group.harnesses].sort().map(harnessLabel).join(", ") || "Former skills directory"} | ${root}`,
       ...group.rows,
       "",
     );
@@ -358,7 +358,7 @@ export function renderInventory(
   if (findings.length) lines.push("", ...findings);
   const library = lines.join("\n").trimEnd();
   if (!machine) return library;
-  const summary = `Installed skills ·${managed.size} managed · ${state.unmanaged.length} unmanaged`;
+  const summary = `Installed skills |${managed.size} managed | ${state.unmanaged.length} unmanaged`;
   return [
     renderMachineSkills(machine, color),
     summary,

@@ -26,7 +26,7 @@ export const fileProvenance = Effect.fn("Audit.fileProvenance")(function* (
   if (pnpm)
     return {
       confidence: "exact" as const,
-      source: `pnpm · ${pnpm.package}@${pnpm.version}`,
+      source: `pnpm | ${pnpm.package}@${pnpm.version}`,
       evidence: pnpm.ledgerPath,
     };
   const markerPath = join(dirname(path), ".skit-ownership.json");

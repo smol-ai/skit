@@ -124,7 +124,7 @@ const filterableMultiSelect = <Value extends string>(
     ...(hasRemoval ? ["Ctrl+R remove/undo"] : []),
     "Space toggle",
     "Ctrl+A all/none",
-  ].join(" · ");
+  ].join(" | ");
   const initialSelected = new Set(
     items.flatMap((item, index) => (item.selected && !item.disabled ? [index] : [])),
   );
@@ -206,7 +206,7 @@ const filterableMultiSelect = <Value extends string>(
           : item.label;
       const indent = item.group === undefined ? "" : "    ";
       lines.push(
-        `${indent}${active} ${checked} ${label}${removed ? color.red("  · Remove") : ""}${item.hint ? color.dim(`  · ${item.hint}`) : ""}`,
+        `${indent}${active} ${checked} ${label}${removed ? color.red("  | Remove") : ""}${item.hint ? color.dim(`  | ${item.hint}`) : ""}`,
       );
       for (const line of item.description?.split("\n") ?? [])
         lines.push(`${indent}    ${color.dim(line)}`);
@@ -218,7 +218,7 @@ const filterableMultiSelect = <Value extends string>(
       ? `${visible.indexOf(page[0]) + 1}–${visible.indexOf(page.at(-1)!) + 1}`
       : "0";
     const footer = color.dim(
-      `  ${range} of ${visible.length}${visible.length !== items.length ? ` matches (${items.length} total)` : ""} · ${state.selected.size} selected${page.length < visible.length ? " · ↑↓ scroll" : ""}`,
+      `  ${range} of ${visible.length}${visible.length !== items.length ? ` matches (${items.length} total)` : ""} | ${state.selected.size} selected${page.length < visible.length ? " | ↑↓ scroll" : ""}`,
     );
     return [...lines.slice(0, Math.max(1, maxLines - 1)), footer];
   };

@@ -203,7 +203,7 @@ for (const failurePhase of ["install", "source-cleanup"] as const) {
                     withStatus: (status, operation) =>
                       failurePhase === "source-cleanup" &&
                       typeof status !== "string" &&
-                      status.pending === `${collection.label} · Fetching and inspecting Source`
+                      status.pending === `${collection.label} | Fetching and inspecting Source`
                         ? operation.pipe(
                             Effect.ensuring(
                               Effect.gen(function* () {

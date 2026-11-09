@@ -96,9 +96,14 @@ export const libraryQueries = (
     list: Effect.fn("Library.list")((options?: { readonly base: Snapshot }) =>
       Effect.gen(function* () {
         const view = yield* viewFor(options);
+        const subjects = yield* view.readSubjects();
         return {
-          subjects: yield* view.readSubjects(),
-          collections: view.collections,
+          subjects,
+          collections: view.collections.map((collection) => ({
+            ...collection,
+            collectionSource: subjects.find((subject) => subject.id === collection.id)
+              ?.collectionSource,
+          })),
           installedSkills: view.installedSkills,
           placements: view.placements,
           enabledEverywhere: view.enabledEverywhere,

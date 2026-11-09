@@ -161,7 +161,7 @@ it.effect("does not attribute an unrecorded user alias to pnpm", () =>
       (item) => item.instance.path === alias,
     );
     expect(row?.choice.disabled).toBe(true);
-    expect(row?.details).toContain("Left in place · no setup action");
+    expect(row?.details).toContain("Left in place | no setup action");
     expect((yield* setupRemovablePaths(options, scan)).get(alias)).toEqual([alias]);
   }).pipe(Effect.provide(skitLayer)),
 );
@@ -195,7 +195,7 @@ it.effect("reports pnpm copies but excludes acquisition, setup selection and rem
       (item) => item.instance.name === "demo-guide",
     );
     expect(row?.choice.disabled).toBe(true);
-    expect(row?.details).toContain("Managed by pnpm · left in place");
+    expect(row?.details).toContain("Managed by pnpm | left in place");
     expect((yield* setupRemovablePaths(options, scan)).has(f.skill)).toBe(false);
     const add = yield* Effect.result(home.owned(importSource(f.alias)));
     expect(add._tag).toBe("Failure");

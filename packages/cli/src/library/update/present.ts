@@ -38,7 +38,7 @@ export function renderUpdate(data: UpdateResult): string {
     lines.push(item.label, ...skillChangeLines(item), ...sourceDiagnosticLines(item.diagnostics));
   for (const item of failures)
     lines.push(
-      `${item.label} · failed while ${item.phase === "source" ? "fetching or retaining Source" : "updating installed skills"}`,
+      `${item.label} | failed while ${item.phase === "source" ? "fetching or retaining Source" : "updating installed skills"}`,
       `  Source: ${item.source}`,
       ...(item.source_imported
         ? ["  Source snapshot retained; this Collection did not finish updating."]
@@ -59,7 +59,7 @@ export function renderUpdatePlan(data: UpdatePlan): string {
   const lines = ["Update plan"];
   for (const item of data)
     lines.push(
-      `${item.label} · ${item.changed ? "update available" : "current"}`,
+      `${item.label} | ${item.changed ? "update available" : "current"}`,
       ...skillChangeLines(item),
       ...sourceDiagnosticLines(item.diagnostics),
     );

@@ -9,5 +9,5 @@ export const largeCollectionWarning = (count: number): string | undefined =>
 export function descriptionLoadMessage(
   load: Effect.Success<ReturnType<Library.Interface["descriptionLoad"]>>,
 ): string {
-  return `${load.skills} skills · ${load.characters.toLocaleString("en-US")} description characters${load.unknown ? ` · ${load.unknown} unmeasured` : ""}`;
+  return `${load.skills} skills | ${load.characters.toLocaleString("en-US")} description characters${load.unknown ? ` | ${load.unknown} unmeasured` : ""}`;
 }

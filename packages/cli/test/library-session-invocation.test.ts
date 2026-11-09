@@ -149,7 +149,7 @@ it.effect(
       expect(disabled.pending?.plan.changes[0]?.subject_id).toBe(row.skillId);
       expect(disabled.pending?.facts[0]).toMatchObject({
         action: "disable",
-        writes: "projection removed",
+        writes: "remove installed skill files",
       });
       expect(renderSetEnabled(disabled.pending!.plan.changes[0]!, false)).toBe(
         "Would disable review",

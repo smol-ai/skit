@@ -37,9 +37,12 @@ export const removeCliCommand = Command.make(
     }),
 ).pipe(
   Command.withDescription(
-    "Remove a Collection from your Library and the skills SKIT installed from it.",
+    "Remove a Collection from your Library and the skills SKIT installed from it. Select an Author Workspace by its path; its authored files remain.",
   ),
-  Command.withExamples([{ command: "skit remove owner/tools --dry-run" }]),
+  Command.withExamples([
+    { command: "skit remove owner/tools --dry-run" },
+    { command: "skit remove ~/dev/skills --dry-run" },
+  ]),
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read", "filesystem.write"] },
     outputSchemas: [removeOutputContracts.remove, removeOutputContracts.removePlan],

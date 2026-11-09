@@ -29,6 +29,12 @@ import {
 import { renderRecoveryList, renderRecovery } from "../library/recovery/present.js";
 import { renderLibraryHistory } from "../library/history/present.js";
 import { renderEditImport, renderEditImportPlan } from "../library/update/retention.js";
+import {
+  collectionTitle,
+  collectionDetails,
+  workspaceEnableCommand,
+  workspaceInitCommand,
+} from "../library/presentation/collection-source.js";
 
 type ContractPresenters = {
   [K in ContractKey]: (data: ContractData<K>, context: RenderContext) => string;
@@ -47,7 +53,7 @@ function renderValidation(data: ContractDataForId<"skit.validate.v3">): string {
     headline,
     "",
     ...data.diagnostics.flatMap((diagnostic) => [
-      `${severityHeadline(diagnostic.severity)}${diagnostic.path ? ` · ${diagnostic.path}` : ""}`,
+      `${severityHeadline(diagnostic.severity)}${diagnostic.path ? ` | ${diagnostic.path}` : ""}`,
       `  ${diagnostic.message}`,
     ]),
   ].join("\n");
@@ -59,7 +65,7 @@ function renderAuthorInit(data: ContractDataForId<"skit.init.v1">): string {
     lines.push("Library Entry remains removed; run `skit author init --register` to restore it");
   if (data.discovered?.skillEntries.length) {
     lines.push("", "Discovered Skills:");
-    for (const skill of data.discovered.skillEntries) lines.push(`  ${skill.name} · ${skill.path}`);
+    for (const skill of data.discovered.skillEntries) lines.push(`  ${skill.name} | ${skill.path}`);
   }
   return lines.join("\n");
 }
@@ -102,7 +108,7 @@ function authoredSkitLabel(identity: string): string {
 
 function renderAuthorList(data: ContractDataForId<"skit.author.list.v2">): string {
   const registry = registryLabel(data.registry);
-  if (!data.skits.length) return `No authored SKITs · ${registry}`;
+  if (!data.skits.length) return `No authored SKITs | ${registry}`;
   const rows = data.skits.map((skit) => [
     authoredSkitLabel(skit.identity),
     skit.visibility,
@@ -119,7 +125,7 @@ function renderAuthorList(data: ContractDataForId<"skit.author.list.v2">): strin
       .join("  ")
       .trimEnd();
   return [
-    `${data.skits.length} authored ${data.skits.length === 1 ? "SKIT" : "SKITs"} · ${registry}`,
+    `${data.skits.length} authored ${data.skits.length === 1 ? "SKIT" : "SKITs"} | ${registry}`,
     "",
     format(headings),
     ...rows.map(format),
@@ -290,6 +296,40 @@ const contractPresenters: ContractPresenters = {
         return `Saved locally: ${data.revision_id}`;
       case "sync":
         return renderAuthorSync(data.result);
+      case "installation":
+        return data.status === "unregistered"
+          ? `Author workspace: ${data.path}\nNot registered in this Library; installed skills are unchanged.\nTo register it: ${workspaceInitCommand(data.path)}`
+          : [
+              ...(data.context === undefined
+                ? []
+                : [
+                    collectionTitle(data.context.collection_label, data.context.source),
+                    ...collectionDetails(data.context.source),
+                  ]),
+              ...(data.context?.disabled_skills.length
+                ? [
+                    data.context.disabled_skills.length === data.context.total
+                      ? "Workspace skills are saved but disabled; the watcher will not enable them automatically."
+                      : `Not enabled from this workspace: ${data.context.disabled_skills.join(", ")}`,
+                  ]
+                : []),
+              data.status === "held"
+                ? "Keeping the previous installed skills."
+                : `Installed skills: ${data.installed} updated.`,
+              ...(data.context?.other_sources.map(
+                (copy) =>
+                  `${copy.skill} at ${copy.path} follows ${collectionTitle(copy.collection_label, copy.source)}.`,
+              ) ?? []),
+              ...(data.context?.other_sources.length
+                ? [
+                    "Use skit list to choose which source to disable before enabling this workspace.",
+                  ]
+                : []),
+              ...(data.context?.disabled_skills.length
+                ? [`To enable this workspace: ${workspaceEnableCommand(data.path)}`]
+                : []),
+              ...data.messages,
+            ].join("\n");
       case "retrying":
         return `${data.operation}: ${data.message} Retrying automatically.`;
     }

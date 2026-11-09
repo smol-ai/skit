@@ -1,3 +1,4 @@
+import { skillMetadataLines } from "../src/library/presentation/skill-metadata.js";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { ListResult } from "../src/library/list/output.js";
@@ -119,9 +120,8 @@ it.effect(
         revision: "1".repeat(40),
         source_updated_at: "2026-04-20T00:00:00.000Z",
       });
-      expect(renderLibraryList(listing)).toContain(
-        "Source updated: 2026-04-20 · Imported: 2026-05-01",
-      );
+      expect(renderLibraryList(listing)).toContain("Source updated: 2026-04-20");
+      expect(renderLibraryList(listing)).toContain("Imported: 2026-05-01");
       const unavailable = yield* readLibrarySkillMetadata(
         {
           ...selected,
@@ -280,3 +280,30 @@ skills:
       });
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+it("formats metadata dates locally and omits absent provenance", () => {
+  const previous = process.env.TZ;
+  process.env.TZ = "Australia/Melbourne";
+  try {
+    expect(
+      skillMetadataLines({
+        source: "/workspace",
+        revision: null,
+        source_updated_at: null,
+        imported_at: "2026-11-08T21:17:28.100Z",
+      }),
+    ).toEqual(["Source: /workspace", "Imported: 2026-11-09"]);
+    expect(
+      skillMetadataLines({
+        source: null,
+        revision: "saved-revision",
+        source_updated_at: null,
+        saved_at: "2026-11-08T21:17:28.100Z",
+        imported_at: null,
+      }),
+    ).toEqual(["Revision: saved-revision", "Saved: 2026-11-09"]);
+  } finally {
+    if (previous === undefined) delete process.env.TZ;
+    else process.env.TZ = previous;
+  }
+});

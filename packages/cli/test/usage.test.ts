@@ -80,7 +80,7 @@ test("summarizes by name without dumping paths, scan internals, or test-fixture 
     ],
   };
   const body = renderUsage(report);
-  expect(body).toContain("Skill activity · 7 days");
+  expect(body).toContain("Skill activity (7 days)");
   expect(body.match(/^example\s+/gm)).toHaveLength(1);
   expect(body).toMatch(/example\s+claude-code, codex\s+3\s+1\s+2\s+7 Oct/);
   expect(body).not.toMatch(/\b(?:Reads|Calls|Loads)\b/);

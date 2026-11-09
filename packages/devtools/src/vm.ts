@@ -355,6 +355,7 @@ export const makeVm = Effect.gen(function* () {
           name,
           `cd "$HOME/skit"
         node packages/cli/bin/skit.js author watch --help
+        pnpm --filter @smolai/skit-core exec vitest run test/authored-refresh.test.ts
         pnpm --filter @smolai/skit exec vitest run --config vitest.unit.config.ts test/author-watch.test.ts
         pnpm --filter @smolai/skit-server-effect exec vitest run --config vitest.e2e.config.ts test/e2e-author-sync.test.ts`,
           {},

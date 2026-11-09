@@ -21,7 +21,7 @@ export const landingView = (origin: string, account: Html, h: HtmlBuilder<Messag
             [
               h.p(
                 [h.Class("text-sm font-medium text-muted-foreground")],
-                ["Open source · MIT licensed"],
+                ["Open source | MIT licensed"],
               ),
               h.h1(
                 [

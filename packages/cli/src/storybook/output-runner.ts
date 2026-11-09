@@ -43,7 +43,7 @@ function renderStory(story: OutputStory, environment: TerminalEnvironment): stri
   const frame = storyFrame(story, environment);
   return [
     `\u001b[1m${outputStoryKey(story)}\u001b[0m`,
-    `${environment.format} · ${environment.detail}${environment.color ? " · color" : ""}`,
+    `${environment.format} | ${environment.detail}${environment.color ? " | color" : ""}`,
     ...(frame.stdout ? ["", "stdout", frame.stdout.trimEnd()] : []),
     ...(frame.stderr ? ["", "stderr", frame.stderr.trimEnd()] : []),
     ...(frame.exitCode === undefined ? [] : ["", `exit ${frame.exitCode}`]),

@@ -5,7 +5,7 @@ import { emptyLibraryState } from "../../library-state.js";
 import { InstalledSkillWouldDuplicate } from "../../library-plan.js";
 import type { SkillMetadata } from "./skill-metadata.js";
 import { collectionVersionPath } from "../../collection-version.js";
-import { versionBacking, type SourceIdentity } from "../../library-contracts.js";
+import { versionBacking } from "../../library-contracts.js";
 import { ImportContentInvalid } from "../../failures.js";
 import { type InstallScope } from "../../scope.js";
 import { Effect, FileSystem, Result } from "effect";
@@ -14,6 +14,7 @@ import { LibrarySubjectNotFound, resolveLibrarySubject } from "../../subject-res
 import type { InvocationOption } from "./invocation-option.js";
 import { invocationReadModel, type InvocationReadModel } from "./invocation.js";
 import type { AuthorInvocationRead } from "./invocation-source.js";
+import type { CollectionSource } from "../../collection-source.js";
 import { scopeRowLabel, destinationLabel } from "./read-model.js";
 import { failureDetails, type FailureDetails } from "../../../shared/failure.js";
 import { setEnabledOutcomes, type SetEnabledIntent, type SetEnabledPlan } from "./set-enabled.js";
@@ -34,7 +35,7 @@ export interface LibrarySkillRow extends SkillMetadata {
   readonly collectionId: string;
   readonly heading: string;
   readonly hasCollection?: boolean;
-  readonly collectionSource?: { readonly kind: SourceIdentity["kind"]; readonly locator: string };
+  readonly collectionSource?: CollectionSource;
   readonly scopes: readonly ScopeRow[];
 }
 
@@ -45,12 +46,13 @@ interface PreviewFacts {
   readonly destination: string;
   readonly invocation?: InvocationOption;
   readonly writes:
-    | "projection created"
-    | "projection removed"
+    | "install skill files"
+    | "remove installed skill files"
     | "nothing to change"
     | "copies checked for repair";
   readonly wholeCollection?: boolean;
   readonly collectionLabel?: string;
+  readonly collectionSource?: CollectionSource;
 }
 
 export interface PendingLibraryChange {
@@ -99,6 +101,7 @@ const sessionFromSnapshot = Effect.fn("LibrarySession.read")(function* (
     revision: row.revision,
     source_updated_at: row.source_updated_at,
     imported_at: row.imported_at,
+    ...(row.saved_at === undefined ? {} : { saved_at: row.saved_at }),
     name: row.name,
     skillId: row.id,
     skillVersionId: row.versionId,
@@ -115,7 +118,7 @@ const sessionFromSnapshot = Effect.fn("LibrarySession.read")(function* (
         return {
           scope,
           invocation,
-          label: `${destinationLabel(scope)} · Author preference unavailable`,
+          label: `${destinationLabel(scope)} | Author preference unavailable`,
         };
       const policy = invocationReadModel({
         skill: row.name,
@@ -192,8 +195,8 @@ const factFromPlan = (plan: SetEnabledPlan["changes"][number]): PreviewFacts => 
   writes: !plan.changed
     ? "nothing to change"
     : plan.action === "enable"
-      ? "projection created"
-      : "projection removed",
+      ? "install skill files"
+      : "remove installed skill files",
 });
 
 const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
@@ -223,25 +226,35 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
     } satisfies LibrarySessionState & { readonly outcome: LibraryActionOutcome };
   const pending: PendingLibraryChange = {
     plan: attempted.success,
-    facts: attempted.success.changes.map((plan) => ({
-      ...factFromPlan(plan),
-      ...(plan.repair
-        ? {
-            writes:
-              plan.action === "enable"
-                ? ("copies checked for repair" as const)
-                : ("projection removed" as const),
-          }
-        : {}),
-      ...(intent.members === "whole"
-        ? {
-            wholeCollection: true,
-            collectionLabel:
-              context?.collections.find((collection) => collection.id === plan.subject_id)?.label ??
-              plan.subject_id,
-          }
-        : {}),
-    })),
+    facts: attempted.success.changes.map((plan) => {
+      const collection = context?.collections.find(
+        (item) =>
+          item.id === plan.subject_id ||
+          item.members.some((member) => member.id === plan.subject_id),
+      );
+      return {
+        ...factFromPlan(plan),
+        ...(collection === undefined
+          ? {}
+          : { collectionLabel: collection.label, collectionSource: collection.collectionSource }),
+        ...(plan.repair
+          ? {
+              writes:
+                plan.action === "enable"
+                  ? ("copies checked for repair" as const)
+                  : ("remove installed skill files" as const),
+            }
+          : {}),
+        ...(intent.members === "whole"
+          ? {
+              wholeCollection: true,
+              collectionLabel:
+                context?.collections.find((collection) => collection.id === plan.subject_id)
+                  ?.label ?? plan.subject_id,
+            }
+          : {}),
+      };
+    }),
     policies,
   };
   if (attempted.success.changes.every((plan) => !plan.changed && !plan.repair))

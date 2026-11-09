@@ -72,7 +72,7 @@ it.effect("adds selected skills and takes ownership only of eligible global copi
     expect(prompts.map((prompt) => prompt.kind)).toEqual(["multiselect", "multiselect", "confirm"]);
     expect(prompts[1]?.choices.map((choice) => choice.value)).toEqual(["repo-only", "review"]);
     expect(prompts[1]?.choices.find((choice) => choice.value === "repo-only")).toMatchObject({
-      group: "Repository · ~/repository",
+      group: "Repository | ~/repository",
       selected: false,
     });
     expect(yield* interaction.remaining).toBe(0);
@@ -267,7 +267,7 @@ it.effect("keeps every conflicting Claude copy visible and manages only the chos
     );
     expect(
       (yield* interaction.steps).find((step) => step.title === setupStepTitles.confirm)?.body,
-    ).toContain(`Authoritative copy: ${names[0]} · ${chosenPath}`);
+    ).toContain(`Authoritative copy: ${names[0]} | ${chosenPath}`);
   }).pipe(Effect.provide(skitLayer)),
 );
 

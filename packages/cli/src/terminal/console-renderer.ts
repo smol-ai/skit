@@ -83,7 +83,7 @@ export function consoleRenderer(json: boolean): RendererShape {
       const color = terminalColors();
       return note(
         terminalText(body),
-        `${color.dim(`Step ${index} of ${total} ·`)} ${color.bold(terminalText(title))}`,
+        `${color.dim(`Step ${index} of ${total} |`)} ${color.bold(terminalText(title))}`,
       );
     },
     updateStatus: (message) =>
@@ -108,7 +108,7 @@ export function consoleRenderer(json: boolean): RendererShape {
                 Effect.gen(function* () {
                   const elapsed = (yield* Clock.currentTimeMillis) - started;
                   const message = timed
-                    ? `${statusMessage} · ${formatElapsed(elapsed)}`
+                    ? `${statusMessage} | ${formatElapsed(elapsed)}`
                     : statusMessage;
                   yield* write(
                     process.stderr,
@@ -124,7 +124,7 @@ export function consoleRenderer(json: boolean): RendererShape {
                 yield* clearStatus;
                 const elapsed = (yield* Clock.currentTimeMillis) - started;
                 const duration = formatElapsed(elapsed);
-                const suffix = timed ? ` · ${duration}` : "";
+                const suffix = timed ? ` | ${duration}` : "";
                 if (typeof status !== "string" && Exit.isSuccess(exit)) {
                   const message = terminalText(
                     typeof status.complete === "string"
@@ -133,7 +133,7 @@ export function consoleRenderer(json: boolean): RendererShape {
                   );
                   yield* write(process.stderr, `✓ ${message}${suffix}\n`);
                 } else if (timed) {
-                  yield* write(process.stderr, `✖ ${pending} · Incomplete${suffix}\n`);
+                  yield* write(process.stderr, `✖ ${pending} | Incomplete${suffix}\n`);
                 }
               }),
             ),

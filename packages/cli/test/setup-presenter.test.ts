@@ -61,7 +61,7 @@ it("shows all physical copies, groups actual sources, and leaves conflicts and C
   expect(rows).toHaveLength(instances.length);
   const choices = rows.map((row) => row.choice);
   expect(choices.find((item) => item.label === "align-me")).toMatchObject({
-    group: "Local source · ~/Work/skills",
+    group: "Local source | ~/Work/skills",
     selected: false,
   });
   expect(rows.find((row) => row.instance.name === "align-me")?.details).toContain(
@@ -72,13 +72,13 @@ it("shows all physical copies, groups actual sources, and leaves conflicts and C
   ).toBe(true);
   const conflicting = choices.filter((item) => item.label === "different");
   expect(conflicting.map((item) => item.group)).toEqual([
-    "Copies · different · global · choose one",
-    "Copies · different · global · choose one",
+    "Copies | different | global | choose one",
+    "Copies | different | global | choose one",
   ]);
   expect(choices.slice(0, 2)).toEqual(conflicting);
   expect(
     choices
-      .filter((item) => item.group === "Codex local skills · ~/.codex/skills")
+      .filter((item) => item.group === "Codex local skills | ~/.codex/skills")
       .every((item) => !item.selected),
   ).toBe(true);
   expect(
@@ -99,7 +99,7 @@ it("shows all physical copies, groups actual sources, and leaves conflicts and C
     disabled: true,
   });
   expect(choices.find((item) => item.label === "plugin")).toMatchObject({
-    group: "Plugins · Codex curated",
+    group: "Plugins | Codex curated",
     selected: false,
   });
   expect(new Set(choices.map((item) => item.value)).size).toBe(instances.length);
@@ -219,6 +219,6 @@ it("rolls up collections with more than five skill names", () => {
     { color: false, detail: "summary" },
   );
 
-  expect(output).toContain("example/large-collection · 6 skills\n    6 committed");
-  expect(output).not.toContain("example/large-collection · 6 skills\n    skill-1");
+  expect(output).toContain("example/large-collection | 6 skills\n    6 committed");
+  expect(output).not.toContain("example/large-collection | 6 skills\n    skill-1");
 });

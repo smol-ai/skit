@@ -7,14 +7,24 @@ import { AuthorSyncResult } from "./sync-result.js";
 import { syncAuthorWorkspace } from "./sync.js";
 import { makeRemovalGrace } from "./removal-grace.js";
 import type { AuthorRegistry } from "./transport.js";
+import { updateAuthoredSkills } from "./operations.js";
+import { AuthoredInstallation } from "../library/refresh-authored.js";
 
 export const AuthorWatchEvent = Schema.Union([
   Schema.Struct({ event: Schema.Literal("watching"), path: Schema.String }),
   Schema.Struct({ event: Schema.Literal("saved_locally"), revision_id: Schema.String }),
   Schema.Struct({ event: Schema.Literal("sync"), result: AuthorSyncResult }),
   Schema.Struct({
+    event: Schema.Literal("installation"),
+    path: Schema.String,
+    status: Schema.Literals(["unregistered", "held", "unchanged", "updated"]),
+    installed: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    messages: Schema.Array(Schema.String),
+    context: Schema.optionalKey(AuthoredInstallation),
+  }),
+  Schema.Struct({
     event: Schema.Literal("retrying"),
-    operation: Schema.Literals(["observe", "sync", "events"]),
+    operation: Schema.Literals(["observe", "install", "sync", "events"]),
     message: Schema.String,
   }),
 ]);
@@ -22,7 +32,8 @@ export type AuthorWatchEvent = typeof AuthorWatchEvent.Type;
 
 /**
  * One connected workspace's foreground lifetime. Event hints and rescans save observations
- * independently of bounded network passes. Only sync owns the workspace lease and file writes.
+ * independently of bounded network passes. One foreground loop orders installation before sync;
+ * a separate history-only observer can keep saving while that loop waits for the network.
  */
 export const watchAuthorWorkspace = Effect.fn("Author.watch")(function* <E, R, P, R2>(
   input: string,
@@ -50,6 +61,7 @@ export const watchAuthorWorkspace = Effect.fn("Author.watch")(function* <E, R, P
   const grace = makeRemovalGrace();
   const previous = yield* Ref.make<string | undefined>(undefined);
   const previousSync = yield* Ref.make<string | undefined>(undefined);
+  const previousInstall = yield* Ref.make<string | undefined>(undefined);
   const checkRoot = Effect.gen(function* () {
     if ((yield* fs.realPath(root)) !== root) return yield* unsafe();
     const current = nativeIdentityOf(yield* fs.stat(root));
@@ -60,7 +72,7 @@ export const watchAuthorWorkspace = Effect.fn("Author.watch")(function* <E, R, P
     )
       return yield* unsafe();
   });
-  const retrying = (operation: "observe" | "sync" | "events", error: unknown) =>
+  const retrying = (operation: "observe" | "install" | "sync" | "events", error: unknown) =>
     grace.reset.pipe(
       Effect.andThen(
         report({
@@ -76,6 +88,13 @@ export const watchAuthorWorkspace = Effect.fn("Author.watch")(function* <E, R, P
     if ((yield* Ref.getAndSet(previous, saved.id)) !== saved.id)
       yield* report({ event: "saved_locally", revision_id: saved.id });
   }).pipe(Effect.catch((error) => retrying("observe", error)));
+  const install = Effect.gen(function* () {
+    yield* checkRoot;
+    const result = yield* updateAuthoredSkills(root);
+    const key = JSON.stringify(result);
+    if ((yield* Ref.getAndSet(previousInstall, key)) !== key)
+      yield* report({ event: "installation", path: root, ...result });
+  }).pipe(Effect.catch((error) => retrying("install", error)));
   const synchronize = Effect.gen(function* () {
     yield* checkRoot;
     const workspace = yield* workspaces.read(root);
@@ -127,5 +146,8 @@ export const watchAuthorWorkspace = Effect.fn("Author.watch")(function* <E, R, P
     Stream.runForEach(() => observe),
     Effect.forkScoped,
   );
-  return yield* synchronize.pipe(Effect.repeat(Schedule.spaced("3 seconds")));
+  return yield* install.pipe(
+    Effect.andThen(synchronize),
+    Effect.repeat(Schedule.spaced("3 seconds")),
+  );
 }, Effect.scoped);

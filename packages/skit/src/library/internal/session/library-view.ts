@@ -24,8 +24,9 @@ import { Effect } from "effect";
 import { enabledCollections } from "./set-enabled-request.js";
 import { librarySubjects } from "../../subject-resolution.js";
 import { readDescriptionLoad } from "./description-load.js";
-import { readLibrarySkillMetadata, sourceIdentityLabel } from "./skill-metadata.js";
+import { readLibrarySkillMetadata } from "./skill-metadata.js";
 import { makeLibrarySkillInvocationReader } from "./invocation-source.js";
+import { readCollectionSource } from "../../collection-source.js";
 
 /** Internal constructor: derive a read model from the same snapshot used by a prepared action. */
 export const libraryView = (current: LibraryState, originalsPath: string) => {
@@ -33,9 +34,6 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
   const placements = structuredClone(enabledCollections(state));
   const skills = state.skills.map((skill) => {
     const collection = state.collections.find((item) => item.collection_id === skill.collection_id);
-    const source =
-      collection?.upstream?.source_identity ??
-      state.imports.find((item) => item.collection_id === skill.collection_id)?.source_identity;
     return {
       id: skill.skill_id,
       name: skill.name,
@@ -46,9 +44,6 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
         hash: version.artifact_hash,
       })),
       collectionLabel: collection?.label,
-      ...(source === undefined
-        ? {}
-        : { collectionSource: { kind: source.kind, locator: sourceIdentityLabel(source) } }),
     };
   });
   const names = new Map(state.skills.map((skill) => [skill.skill_id, skill.name]));
@@ -82,14 +77,27 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
   }));
   const readFacts = Effect.fn("LibraryView.readFacts")(function* () {
     const metadata = yield* readLibrarySkillMetadata(state, originalsPath);
+    const sources = new Map(
+      yield* Effect.forEach(state.collections, (collection) =>
+        Effect.map(
+          readCollectionSource(state, collection),
+          (source) => [collection.collection_id, source] as const,
+        ),
+      ),
+    );
     return yield* Effect.forEach(skills, (skill) => {
       const provenance = metadata.get(skill.id);
+      const collectionSource = sources.get(skill.collectionId);
       if (provenance === undefined)
         return Effect.die(`Missing metadata for retained Skill ${skill.id}`);
       return Effect.succeed(
         structuredClone({
           ...skill,
           ...provenance,
+          ...(collectionSource?.kind === "authored-workspace"
+            ? { source: collectionSource.locator || "Author workspace" }
+            : {}),
+          ...(collectionSource === undefined ? {} : { collectionSource }),
           scopes: placements
             .filter((placement) => placement.skillIds.includes(skill.id))
             .map((placement) => ({
@@ -159,14 +167,35 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
     }),
     readSubjects: Effect.fn("LibraryView.readSubjects")(function* () {
       const facts = yield* readFacts();
-      return librarySubjects(state).map((subject) => ({
-        id: subject.subjectId,
-        kind: subject.kind,
-        label: subject.label,
-        skills: facts.filter((skill) =>
-          subject.skills.some((member) => member.skill_id === skill.id),
-        ),
-      }));
+      return yield* Effect.forEach(librarySubjects(state), (subject) =>
+        Effect.gen(function* () {
+          const members = facts.filter((skill) =>
+            subject.skills.some((member) => member.skill_id === skill.id),
+          );
+          const collectionSource =
+            members[0]?.collectionSource ??
+            (subject.kind === "collection"
+              ? yield* readCollectionSource(state, subject.collection)
+              : undefined);
+          return {
+            id: subject.subjectId,
+            kind: subject.kind,
+            label: subject.label,
+            ...(collectionSource === undefined ? {} : { collectionSource }),
+            skills: members,
+            enabledSkills: members
+              .filter((skill) => skill.scopes.length > 0)
+              .map((skill) => skill.id),
+            scopes: [
+              ...new Map(
+                members
+                  .flatMap((skill) => skill.scopes)
+                  .map(({ scope }) => [JSON.stringify(scope), scope]),
+              ).values(),
+            ],
+          };
+        }),
+      );
     }),
     /** What is enabled for every project on this device, labelled, and the Skills it enables. */
     enabledEverywhere: structuredClone({

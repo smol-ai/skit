@@ -27,13 +27,13 @@ function renderEvent(
         `${message} (${kind})`,
         ...choices.map((choice) => {
           const hint = stableHint(choice.hint, cwd);
-          return `  ${choice.value} — ${choice.label}${hint ? ` · ${hint}` : ""}`;
+          return `  ${choice.value} — ${choice.label}${hint ? ` | ${hint}` : ""}`;
         }),
       ].join("\n"),
     PromptAnswered: ({ answer }) =>
       `answered ${typeof answer === "object" ? answer.join(", ") : String(answer)}`,
     Note: ({ title, body, renderBody }) => `${title}\n${renderBody?.(environment.color) ?? body}`,
-    Step: ({ index, total, title, body }) => `Step ${index} of ${total} · ${title}\n${body}`,
+    Step: ({ index, total, title, body }) => `Step ${index} of ${total} | ${title}\n${body}`,
     StatusStarted: ({ message }) => `${message}…`,
     StatusUpdated: ({ message }) => `${message}…`,
     StatusEnded: () => "status cleared",

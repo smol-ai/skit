@@ -15,11 +15,11 @@ export function renderDoctorListingBudget(
   return Match.value(budget).pipe(
     Match.tagsExhaustive({
       Unavailable: (b) => [
-        `  ${color.yellow("!")} ${label} · budget unavailable`,
+        `  ${color.yellow("!")} ${label} | budget unavailable`,
         `      ${color.dim(b.detail)}`,
       ],
       DemandOnly: (b) => [
-        `  ${label} · ~${amount(b.demand)} ${b.unit === "characters" ? "characters" : "tokens"} · limit unknown`,
+        `  ${label} | ~${amount(b.demand)} ${b.unit === "characters" ? "characters" : "tokens"} | limit unknown`,
         ...(context.detail === "full"
           ? [b.basis, ...b.coverage].map((line) => `      ${color.dim(line)}`)
           : []),
@@ -28,7 +28,7 @@ export function renderDoctorListingBudget(
         const unit = b.unit === "characters" ? "characters" : "tokens";
         const outside = b.demand > b.limit;
         const lines = [
-          `  ${outside ? color.yellow("! Over budget") : color.green("✓ Within budget")} · ${label} · ~${amount(b.demand)} / ${amount(b.limit)} ${unit} · ${((b.demand / b.limit) * 100).toFixed(1)}%`,
+          `  ${outside ? color.yellow("! Over budget") : color.green("✓ Within budget")} | ${label} | ~${amount(b.demand)} / ${amount(b.limit)} ${unit} | ${((b.demand / b.limit) * 100).toFixed(1)}%`,
         ];
         for (const warning of b.warnings ?? []) lines.push(`      ${color.yellow(warning)}`);
         if (b.shortened)
@@ -50,7 +50,7 @@ export function renderDoctorListingBudget(
           lines.push(`      ${color.dim("Skills over 1% of budget, before trimming:")}`);
           for (const skill of large) {
             lines.push(
-              `        ${color.bold(skill.name)} · ~${amount(skill.demand)} ${unit} · ${((skill.demand / b.limit) * 100).toFixed(1)}%`,
+              `        ${color.bold(skill.name)} | ~${amount(skill.demand)} ${unit} | ${((skill.demand / b.limit) * 100).toFixed(1)}%`,
             );
             if (
               context.detail === "full" ||
@@ -95,7 +95,7 @@ export function renderDoctorBudgetSelection(
     };
     const unit = budget.unit === "characters" ? "characters" : "tokens";
     return [
-      `${harnessLabel(budget.harness).padEnd(11)} ${bar(after)} ${((after / budget.limit) * 100).toFixed(0)}% · ~${amount(Math.round(after))} / ${amount(budget.limit)} ${unit}`,
+      `${harnessLabel(budget.harness).padEnd(11)} ${bar(after)} ${((after / budget.limit) * 100).toFixed(0)}% | ~${amount(Math.round(after))} / ${amount(budget.limit)} ${unit}`,
     ];
   });
 }

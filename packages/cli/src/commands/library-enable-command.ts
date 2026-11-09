@@ -84,12 +84,20 @@ export const setEnabledCliCommand = (enabled: boolean) => {
       }),
   ).pipe(
     Command.withDescription(
-      `${enabled ? "Enable" : "Disable"} Skills from your Library for every harness at a scope.`,
+      `${enabled ? "Enable" : "Disable"} Skills from your Library for every harness at a scope. Select an Author Workspace by its path.`,
     ),
     Command.withExamples(
       enabled
-        ? [{ command: "skit enable review" }, { command: "skit enable owner/tools --all" }]
-        : [{ command: "skit disable review" }, { command: "skit disable owner/tools --all" }],
+        ? [
+            { command: "skit enable review" },
+            { command: "skit enable owner/tools --all" },
+            { command: "skit enable ~/dev/skills --all --global" },
+          ]
+        : [
+            { command: "skit disable review" },
+            { command: "skit disable owner/tools --all" },
+            { command: "skit disable ~/dev/skills --all --global" },
+          ],
     ),
     Command.annotate(CommandMetadata, {
       effects: { capabilities: ["filesystem.read", "filesystem.write"] },

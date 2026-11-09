@@ -6,6 +6,7 @@ import { InvocationPolicy } from "../../../artifact/invocation-policy.js";
 import { InstallDestination } from "../../../installed-skills/destination.js";
 import { Schema } from "effect";
 import { DuplicateCopy, DuplicateScanError } from "../../duplicates.js";
+import { CollectionSource } from "../../collection-source.js";
 
 // The published output contract constrains every map value. Use string keys for this
 // wire view: Effect 4's JSON Schema exporter otherwise opens records whose custom
@@ -14,6 +15,8 @@ const invocationPolicies = Schema.optionalKey(Schema.Record(Schema.String, Invoc
 
 export const SetEnabledChange = Schema.Struct({
   subject_id: Schema.String,
+  collection_label: Schema.optionalKey(Schema.String),
+  collection_source: Schema.optionalKey(CollectionSource),
   skills: Schema.Array(Schema.String),
   scope: InstallScope,
   action: Schema.Literals(["enable", "disable"]),

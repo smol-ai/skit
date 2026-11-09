@@ -26,21 +26,21 @@ const usage = (instance: SetupSkillInstance) =>
 
 const sourceGroup = (instance: SetupSkillInstance, home: string): string => {
   if (instance.owner.kind === "pnpm")
-    return `pnpm · ${instance.owner.package}@${instance.owner.version}`;
+    return `pnpm | ${instance.owner.package}@${instance.owner.version}`;
   if (instance.git.repository)
-    return `Repository · ${compactHomePath(instance.git.repository, home)}`;
+    return `Repository | ${compactHomePath(instance.git.repository, home)}`;
   const owner = instance.owner;
-  if (owner.kind === "harness") return `Plugins · ${owner.source}`;
-  if (owner.kind === "skills-sh") return `Known source · ${owner.source}`;
+  if (owner.kind === "harness") return `Plugins | ${owner.source}`;
+  if (owner.kind === "skills-sh") return `Known source | ${owner.source}`;
   if (owner.kind === "skit" && owner.membership.kind === "in-library" && owner.membership.source)
-    return `Known source · ${owner.membership.source}`;
-  if (owner.kind === "authored") return `Known source · ${owner.skitLocator}`;
+    return `Known source | ${owner.membership.source}`;
+  if (owner.kind === "authored") return `Known source | ${owner.skitLocator}`;
   const sources = [...new Set(instance.locks.map((lock) => lock.entry.source))];
-  if (sources.length === 1) return `Known source · ${sources[0]}`;
+  if (sources.length === 1) return `Known source | ${sources[0]}`;
   const parent = dirname(instance.path);
-  if (parent === join(home, ".claude", "skills")) return "Claude local skills · ~/.claude/skills";
-  if (parent === join(home, ".codex", "skills")) return "Codex local skills · ~/.codex/skills";
-  return `Local source · ${compactHomePath(parent, home)}`;
+  if (parent === join(home, ".claude", "skills")) return "Claude local skills | ~/.claude/skills";
+  if (parent === join(home, ".codex", "skills")) return "Codex local skills | ~/.codex/skills";
+  return `Local source | ${compactHomePath(parent, home)}`;
 };
 
 const groupOrder = (group: string) =>
@@ -56,19 +56,19 @@ const groupOrder = (group: string) =>
   ].findIndex((prefix) => group.startsWith(prefix));
 
 const candidateStatus = (instance: SetupSkillInstance, candidate?: SetupOnboardingCandidate) => {
-  if (instance.owner.kind === "pnpm") return "Managed by pnpm · left in place";
+  if (instance.owner.kind === "pnpm") return "Managed by pnpm | left in place";
   if (instance.owner.kind === "skit")
     return instance.owner.membership.kind === "in-library"
       ? "Already managed in Library"
-      : "Managed copy missing from Library · inspect before changing";
-  if (instance.owner.kind === "authored") return "Authored SKIT source · kept in place";
+      : "Managed copy missing from Library | inspect before changing";
+  if (instance.owner.kind === "authored") return "Authored SKIT source | kept in place";
   if (candidate?.action === "blocked" && candidate.reason !== "divergent-copies")
-    return `Blocked · ${candidate.reason.replaceAll("-", " ")} · preview to inspect`;
-  if (candidate?.action === "bind-existing-entry") return "Exact Library match · reconnect";
+    return `Blocked | ${candidate.reason.replaceAll("-", " ")} | preview to inspect`;
+  if (candidate?.action === "bind-existing-entry") return "Exact Library match | reconnect";
   if (candidate?.action === "import-observed-collection") return "Add installed copy to Library";
   if (candidate?.action === "repository-owned")
     return "Add to Library; project files stay in place";
-  return candidate ? undefined : "Left in place · no setup action";
+  return candidate ? undefined : "Left in place | no setup action";
 };
 
 /** Show discovered copies that still need attention, including blocked content. */
@@ -88,9 +88,9 @@ export const setupReviewSkillChoices = (
       const status = candidateStatus(instance, candidate);
       const disabled = !selectable;
       const copyContext = differing.length
-        ? "Content differs · Space selects this copy; other copies stay in place"
+        ? "Content differs | Space selects this copy; other copies stay in place"
         : identical.length
-          ? `Duplicate content · ${identical.length} independent cop${identical.length === 1 ? "y" : "ies"}`
+          ? `Duplicate content | ${identical.length} independent cop${identical.length === 1 ? "y" : "ies"}`
           : undefined;
       const sources = [
         ...new Set([
@@ -125,10 +125,10 @@ export const setupReviewSkillChoices = (
             ...(instance.git.status !== "outside-git" ? [instance.git.status] : []),
             ...sources,
             ...(disabled ? ["inspect"] : []),
-          ].join(" · ") || undefined,
+          ].join(" | ") || undefined,
         searchText: details,
         group: differing.length
-          ? `Copies · ${instance.name} · ${instance.git.repository ? compactHomePath(instance.git.repository, home) : "global"} · choose one`
+          ? `Copies | ${instance.name} | ${instance.git.repository ? compactHomePath(instance.git.repository, home) : "global"} | choose one`
           : sourceGroup(instance, home),
         disabled,
         // Guided setup starts from the same selection `skit setup --apply` takes.

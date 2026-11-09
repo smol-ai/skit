@@ -492,7 +492,7 @@
         "watch"
       ],
       "stability": "experimental",
-      "summary": "Experimental: watch one connected Author Workspace and synchronize edits until stopped.",
+      "summary": "Experimental: watch one connected Author Workspace, synchronize edits and update enabled installed skills until stopped.",
       "effects": {
         "capabilities": [
           "filesystem.read",
@@ -1186,7 +1186,7 @@
         "disable"
       ],
       "stability": "stable",
-      "summary": "Disable Skills from your Library for every harness at a scope.",
+      "summary": "Disable Skills from your Library for every harness at a scope. Select an Author Workspace by its path.",
       "effects": {
         "capabilities": [
           "filesystem.read",
@@ -1208,7 +1208,8 @@
       "interactive": true,
       "examples": [
         "skit disable review",
-        "skit disable owner/tools --all"
+        "skit disable owner/tools --all",
+        "skit disable ~/dev/skills --all --global"
       ],
       "positionals": [
         {
@@ -1299,7 +1300,7 @@
         "enable"
       ],
       "stability": "stable",
-      "summary": "Enable Skills from your Library for every harness at a scope.",
+      "summary": "Enable Skills from your Library for every harness at a scope. Select an Author Workspace by its path.",
       "effects": {
         "capabilities": [
           "filesystem.read",
@@ -1321,7 +1322,8 @@
       "interactive": true,
       "examples": [
         "skit enable review",
-        "skit enable owner/tools --all"
+        "skit enable owner/tools --all",
+        "skit enable ~/dev/skills --all --global"
       ],
       "positionals": [
         {
@@ -2529,7 +2531,7 @@
         "remove"
       ],
       "stability": "stable",
-      "summary": "Remove a Collection from your Library and the skills SKIT installed from it.",
+      "summary": "Remove a Collection from your Library and the skills SKIT installed from it. Select an Author Workspace by its path; its authored files remain.",
       "effects": {
         "capabilities": [
           "filesystem.read",
@@ -2549,7 +2551,8 @@
       ],
       "interactive": false,
       "examples": [
-        "skit remove owner/tools --dry-run"
+        "skit remove owner/tools --dry-run",
+        "skit remove ~/dev/skills --dry-run"
       ],
       "positionals": [
         {

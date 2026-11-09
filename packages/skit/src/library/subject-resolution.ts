@@ -2,6 +2,7 @@ import { Data, Effect } from "effect";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 import { sourceImports } from "./library-contracts.js";
 import type { LibraryState } from "./library-state.js";
+import { sourceIdentityLabel } from "./source-identity.js";
 
 type Collection = LibraryState["collections"][number];
 type Skill = LibraryState["skills"][number];
@@ -44,7 +45,8 @@ class LibrarySubjectAmbiguous
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  readonly remediation = "Use a Skill or Collection ID to select one subject.";
+  readonly remediation =
+    "Run skit list to choose the source, or use its workspace path or full source locator.";
   get message(): string {
     return `More than one retained Skill or Collection matches ${this.query}`;
   }
@@ -87,6 +89,15 @@ export const matchingLibrarySubjects = (
         subject.skill.versions.some((version) => version.skill_version_id === query)),
   );
   if (identityMatches.length > 0) return identityMatches;
+  const sourceMatches = subjects.filter((subject) => {
+    if (subject.kind !== "collection") return false;
+    const latest = sourceImports(state, subject.subjectId)[0];
+    const source = subject.collection.upstream?.source_identity ?? latest?.source_identity;
+    return source?.kind === "authored-workspace"
+      ? latest?.input.value === query
+      : source !== undefined && sourceIdentityLabel(source) === query;
+  });
+  if (sourceMatches.length > 0) return sourceMatches;
 
   // Labels shown by `skit list` name top-level subjects. Prefer that visible namespace over a
   // same-named contained Skill, while an otherwise-unmatched member label still selects the Skill

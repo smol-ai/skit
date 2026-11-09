@@ -10,7 +10,7 @@ export const renderRecovery = (data: RecoveryOutput) =>
     `File recovery: ${data.phase} (Library bindings and settings are unchanged)`,
     ...data.entries.map(
       (entry) =>
-        `${entry.name} · ${entry.status} · ${entry.path}\n  ${entry.reason}\n  Saved: ${entry.recoveryPath}`,
+        `${entry.name} | ${entry.status} | ${entry.path}\n  ${entry.reason}\n  Saved: ${entry.recoveryPath}`,
     ),
     ...(data.legacy
       ? [

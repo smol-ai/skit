@@ -6,3 +6,4 @@ export {
 } from "./internal/session/skill-metadata.js";
 export type { LibrarySubjectNotFound, LibrarySubjectAmbiguous } from "./subject-resolution.js";
 export type { WorkspaceClaim } from "./internal/session/workspace-claims.js";
+export { CollectionSource } from "./collection-source.js";

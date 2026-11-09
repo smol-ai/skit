@@ -31,7 +31,7 @@ export function renderCheck(data: CheckResult) {
     if (!originalIntact) return [`✖ ${item.label} has damaged retained bytes`];
     if (problems.length)
       return [
-        `! ${item.label} needs attention · ${problems.map((member) => `${member.skill_name}: ${member.status}`).join(", ")}`,
+        `! ${item.label} needs attention | ${problems.map((member) => `${member.skill_name}: ${member.status}`).join(", ")}`,
       ];
     if (item.source_status === "changed") return [`↑ ${item.label} has updates available`];
     return [`? ${item.label} could not be fully checked`];

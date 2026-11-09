@@ -48,36 +48,19 @@ import { AuthorVisibility, AuthorRemoteHome, normalizeRemote } from "./remote.js
 
 import { writeWorkspaceTree } from "./write-tree.js";
 import type { PreparedWrite } from "./history.js";
+import {
+  WorkspaceId,
+  Identity,
+  readAuthorIdentity,
+  readAuthorRemote,
+} from "./workspace-metadata.js";
+export { WorkspaceId, Identity } from "./workspace-metadata.js";
 
 // ── Vocabulary ─────────────────────────────────────────────────────────────────────────────────
 
 /** realPath(resolve(input)) of an existing directory. Minted only by AuthorWorkspace.resolveRoot. */
 const WorkspaceRoot = Schema.String.pipe(Schema.brand("WorkspaceRoot"));
 export type WorkspaceRoot = typeof WorkspaceRoot.Type;
-
-/** `workspace_<32 hex>`. Device-local, never portable (ADR-0026). */
-export const WorkspaceId = Schema.String.check(Schema.isPattern(/^workspace_[a-f0-9]{32}$/u)).pipe(
-  Schema.brand("WorkspaceId"),
-);
-export type WorkspaceId = typeof WorkspaceId.Type;
-
-/**
- * The workspace's device-local identity. Whether its Collection is in the Library is the
- * Library's state, never stored here: a workspace is registered while the Library retains a
- * Collection imported from it.
- */
-export const Identity = Schema.Struct({ workspaceId: WorkspaceId });
-export type Identity = typeof Identity.Type;
-
-/**
- * .skit/workspace.json, skit.author-workspace.v1. Files written by 0.3.0 carry a `registration`
- * key; it is read and ignored, and never written again.
- */
-const WorkspaceDocument = Schema.Struct({
-  schema: Schema.Literal("skit.author-workspace.v1"),
-  workspace_id: WorkspaceId,
-  registration: Schema.optionalKey(Schema.Literals(["registered", "removing", "removed"])),
-});
 
 /** Saved recovery state must be readable before sync may change files or the Registry. */
 export class AuthorSyncStateInvalid
@@ -415,43 +398,7 @@ const make = Effect.gen(function* () {
     return WorkspaceRoot.make(real);
   });
 
-  const readIdentity = Effect.fn("AuthorWorkspace.readIdentity")(function* (root: WorkspaceRoot) {
-    const file = identityPath(root);
-    const text = yield* fs.readFileString(file).pipe(
-      Effect.asSome,
-      Effect.catchReason("PlatformError", "NotFound", () => Effect.succeedNone),
-    );
-    if (Option.isNone(text)) return Option.none<Identity>();
-    const document = yield* Schema.decodeEffect(Schema.fromJsonString(WorkspaceDocument), {
-      onExcessProperty: "error",
-    })(text.value).pipe(Effect.mapError(() => new AuthorWorkspaceMetadataInvalid({ path: file })));
-    return Option.some(Identity.make({ workspaceId: document.workspace_id }));
-  });
-
-  /** skit.remote.json, canonical or invalid. Any read failure but absence is invalid metadata. */
-  const readRemote = Effect.fn("AuthorWorkspace.readRemote")(function* (root: WorkspaceRoot) {
-    const file = remotePath(root);
-    const invalid = () => new AuthorRemoteMetadataInvalid({ path: file });
-    const text = yield* fs.readFileString(file).pipe(
-      Effect.asSome,
-      Effect.catchTag("PlatformError", (error) =>
-        isErrno(error, "ENOENT") ? Effect.succeedNone : Effect.fail(invalid()),
-      ),
-    );
-    if (Option.isNone(text)) return Option.none<AuthorRemoteHome>();
-    const document = yield* Schema.decodeEffect(Schema.fromJsonString(AuthorRemoteHome), {
-      onExcessProperty: "error",
-    })(text.value).pipe(Effect.mapError(invalid));
-    const normalized = yield* normalizeRemote(document).pipe(
-      Effect.catchTags({
-        AuthorDestinationInvalid: () => Effect.fail(invalid()),
-        AuthorDestinationMalformed: () => Effect.fail(invalid()),
-        InsecureOrigin: () => Effect.fail(invalid()),
-      }),
-    );
-    if (!sameRemote(document, normalized)) return yield* invalid();
-    return Option.some(normalized);
-  });
+  const readIdentity = readAuthorIdentity;
 
   /** .skit/connection.json as a Connecting checkpoint, canonical or invalid. */
   const decodeCheckpoint = Effect.fn("AuthorWorkspace.decodeCheckpoint")(function* (
@@ -473,7 +420,7 @@ const make = Effect.gen(function* () {
 
   const read = Effect.fn("AuthorWorkspace.read")(function* (root: WorkspaceRoot) {
     const identity = yield* readIdentity(root);
-    const remote = yield* readRemote(root);
+    const remote = yield* readAuthorRemote(root);
     const file = connectionPath(root);
     const text = yield* fs.readFileString(file).pipe(
       Effect.asSome,
@@ -699,8 +646,8 @@ const make = Effect.gen(function* () {
 
   const service: AuthorWorkspaceShape = {
     resolveRoot,
-    read,
-    readIdentity,
+    read: (root) => read(root).pipe(Effect.provide(context)),
+    readIdentity: (root) => readIdentity(root).pipe(Effect.provide(context)),
     acquire: (root) => acquire(root).pipe(Effect.provide(context)),
   };
   return service;

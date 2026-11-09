@@ -72,7 +72,7 @@ export const terminalSyncProgress = (
       renderer.withStatus({ ...syncStatus(phase), persist: "timed" }, operation),
     tick: ({ phase, completed }) =>
       renderer.updateStatus(
-        `${syncStatus(phase).pending}${"total" in phase ? ` · ${completed}/${phase.total}` : ""}`,
+        `${syncStatus(phase).pending}${"total" in phase ? ` | ${completed}/${phase.total}` : ""}`,
       ),
   },
   restore: {
@@ -80,7 +80,7 @@ export const terminalSyncProgress = (
       renderer.withStatus({ ...restoreStatus(phase), persist: "timed" }, operation),
     tick: ({ phase, completed, subject }) =>
       renderer.updateStatus(
-        `${restoreStatus(phase).pending}${"total" in phase ? ` · ${completed}/${phase.total}` : ""}${subject === undefined ? "" : ` · ${subject}`}`,
+        `${restoreStatus(phase).pending}${"total" in phase ? ` | ${completed}/${phase.total}` : ""}${subject === undefined ? "" : ` | ${subject}`}`,
       ),
   },
 });

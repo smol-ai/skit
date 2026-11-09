@@ -74,7 +74,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
     const listing = yield* Schema.decodeUnknownEffect(ListResult)(rendered[0]?.data);
     assert.strictEqual(listing.subjects[0]?.subject_id, collection.collection?.collection_id);
     assert.strictEqual(listing.subjects[0]?.label, "tim/skills");
-    assert.match(renderLibraryList(listing), /^tim\/skills\n/);
+    assert.match(renderLibraryList(listing), /^tim\/skills \(Registry release\)\n/);
     assert.deepStrictEqual(
       listing.subjects[0]?.skills.map((skill) => skill.name),
       ["review"],
@@ -190,7 +190,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     assert.strictEqual(prompts[0]?.message, "Select where to disable Skills");
     assert.deepStrictEqual(prompts[0]?.choices[0], {
       value: `all:${collection.collection?.collection_id}`,
-      label: `${collection.collection?.label} — everywhere enabled`,
+      label: `${collection.collection?.label} (Local directory: ${join(root, "installed")}) — everywhere enabled`,
       hint: `global, repository ${root}`,
     });
     assert.strictEqual(prompts[2]?.message, "Select Skills to disable");
@@ -198,7 +198,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
       {
         value: "review",
         label: "review",
-        hint: `${collection.collection?.label} · global, ${collection.collection?.label} · repository ${root}`,
+        hint: `${collection.collection?.label} (Local directory: ${join(root, "installed")}) | global, ${collection.collection?.label} (Local directory: ${join(root, "installed")}) | repository ${root}`,
       },
     ]);
     assert.strictEqual((yield* interaction.results).length, 2);
@@ -208,7 +208,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     for (const result of yield* interaction.results) {
       assert.strictEqual(result.schema, "skit.disable.v8");
       assert.ok(
-        renderSetEnabled(result.data as Parameters<typeof renderSetEnabled>[0], true).startsWith(
+        renderSetEnabled(result.data as Parameters<typeof renderSetEnabled>[0], true).includes(
           "Disabled review",
         ),
       );

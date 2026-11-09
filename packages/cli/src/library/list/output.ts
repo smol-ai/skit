@@ -1,7 +1,8 @@
-import { SkillMetadata } from "@smolai/skit-core/library/queries";
+import { SkillMetadata, CollectionSource } from "@smolai/skit-core/library/queries";
 import { Schema } from "effect";
 import { CollectionId, SkillId, SkillVersionId } from "@smolai/skit-core/universal/consumer";
 import { Hash } from "@smolai/skit-core/shared";
+import { InstallScope } from "@smolai/skit-core/library";
 
 export const ListResult = Schema.Struct({
   subjects: Schema.Array(
@@ -9,6 +10,9 @@ export const ListResult = Schema.Struct({
       subject_id: Schema.String,
       subject_kind: Schema.Literals(["collection", "skill"]),
       label: Schema.String,
+      collection_source: Schema.optionalKey(CollectionSource),
+      enabled_skills: Schema.optionalKey(Schema.Array(Schema.String)),
+      scopes: Schema.optionalKey(Schema.Array(InstallScope)),
       skills: Schema.Array(
         Schema.Struct({
           ...SkillMetadata.fields,

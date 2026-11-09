@@ -6,11 +6,14 @@ import { collectionVersionPath } from "../../collection-version.js";
 import { type LibraryState } from "../../library-state.js";
 import { type SkitDescriptor } from "../../../artifact/schemas.js";
 import { Effect, FileSystem, Option, Schema } from "effect";
+import { readAuthoredInputs } from "../content/authored-inputs.js";
 import { join } from "node:path";
 
 export const SkillMetadata = Schema.Struct({
   source: Schema.NullOr(Schema.String),
   revision: Schema.NullOr(Schema.String),
+  /** When Author History observed the selected member inputs, if preserved. */
+  saved_at: Schema.optionalKey(Schema.String),
   source_updated_at: Schema.NullOr(Schema.String),
   /** When the selected bytes were acquired; this is not a source modification time. */
   imported_at: Schema.NullOr(Schema.String),
@@ -38,6 +41,7 @@ export const readLibrarySkillMetadata = Effect.fn("Library.readSkillMetadata")(f
 ) {
   const metadata = new Map<string, SkillMetadata>();
   const descriptors = new Map<string, SkitDescriptor | undefined>();
+  const authoredInputs = new Map<string, Effect.Success<ReturnType<typeof readAuthoredInputs>>>();
   for (const skill of state.skills) {
     const selected = currentSkillVersion(state, skill);
     const backing = selected === undefined ? undefined : versionBacking(state, skill, selected);
@@ -77,11 +81,34 @@ export const readLibrarySkillMetadata = Effect.fn("Library.readSkillMetadata")(f
         );
       sourceUpdated = validTimestamp(descriptor?.source_updated_at) ?? sourceUpdated;
     }
+    let importedAt = sourceImport?.imported_at;
+    let revision = sourceImport?.revision ?? null;
+    let savedAt: string | null = null;
+    if (source?.kind === "authored-workspace" && backing !== undefined) {
+      if (!authoredInputs.has(backing.copy.hash))
+        authoredInputs.set(
+          backing.copy.hash,
+          yield* readAuthoredInputs(collectionVersionPath(originalsPath, backing.copy.hash)),
+        );
+      const selection = authoredInputs
+        .get(backing.copy.hash)
+        ?.selections.find(
+          (item) =>
+            item.declaration.name === skill.name &&
+            item.declaration.path === backing.member.source_path,
+        );
+      if (selection?.imported_at !== undefined) importedAt = selection.imported_at;
+      if (selection !== undefined && "revision_id" in selection.source) {
+        revision = selection.source.revision_id;
+        savedAt = validTimestamp(selection.source.saved_at);
+      }
+    }
     metadata.set(skill.skill_id, {
       source: source === undefined ? null : sourceIdentityLabel(source),
-      revision: sourceImport?.revision ?? null,
+      revision,
+      ...(savedAt === null ? {} : { saved_at: savedAt }),
       source_updated_at: sourceUpdated,
-      imported_at: validTimestamp(sourceImport?.imported_at),
+      imported_at: validTimestamp(importedAt),
     });
   }
   return metadata;

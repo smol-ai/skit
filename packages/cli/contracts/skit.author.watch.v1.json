@@ -452,6 +452,187 @@
         "event": {
           "type": "string",
           "enum": [
+            "installation"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "unregistered",
+            "held",
+            "unchanged",
+            "updated"
+          ]
+        },
+        "installed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "context": {
+          "type": "object",
+          "properties": {
+            "collection_label": {
+              "type": "string"
+            },
+            "source": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "github",
+                    "git",
+                    "registry",
+                    "url",
+                    "archive",
+                    "local",
+                    "authored-workspace",
+                    "well-known"
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                },
+                "locator": {
+                  "type": "string"
+                },
+                "authority": {
+                  "type": "string"
+                },
+                "revision": {
+                  "type": "string"
+                },
+                "workspace_status": {
+                  "type": "string",
+                  "enum": [
+                    "connected",
+                    "unconnected",
+                    "unavailable",
+                    "identity-mismatch"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "name",
+                "locator"
+              ],
+              "additionalProperties": true
+            },
+            "disabled_skills": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "total": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "other_sources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "skill": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "collection_label": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "github",
+                          "git",
+                          "registry",
+                          "url",
+                          "archive",
+                          "local",
+                          "authored-workspace",
+                          "well-known"
+                        ]
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "locator": {
+                        "type": "string"
+                      },
+                      "authority": {
+                        "type": "string"
+                      },
+                      "revision": {
+                        "type": "string"
+                      },
+                      "workspace_status": {
+                        "type": "string",
+                        "enum": [
+                          "connected",
+                          "unconnected",
+                          "unavailable",
+                          "identity-mismatch"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "name",
+                      "locator"
+                    ],
+                    "additionalProperties": true
+                  }
+                },
+                "required": [
+                  "skill",
+                  "path",
+                  "collection_label"
+                ],
+                "additionalProperties": true
+              }
+            }
+          },
+          "required": [
+            "collection_label",
+            "disabled_skills",
+            "total",
+            "other_sources"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "event",
+        "path",
+        "status",
+        "installed",
+        "messages"
+      ],
+      "additionalProperties": true
+    },
+    {
+      "type": "object",
+      "properties": {
+        "event": {
+          "type": "string",
+          "enum": [
             "retrying"
           ]
         },
@@ -459,6 +640,7 @@
           "type": "string",
           "enum": [
             "observe",
+            "install",
             "sync",
             "events"
           ]

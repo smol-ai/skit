@@ -53,7 +53,7 @@ export function scopeRowLabel(scopeRow: InvocationScopeRow): string {
   return [
     destinationLabel(scopeRow.scope),
     ...(scopeRow.policy ? [invocationRowSummary(scopeRow.policy)] : []),
-  ].join(" · ");
+  ].join(" | ");
 }
 
 export { destinationLabel };

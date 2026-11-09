@@ -195,7 +195,7 @@ export function estimateCodexListing(
     basis:
       unit === "characters"
         ? "Context window unknown; using Codex's 8,000-character fallback."
-        : `${input.model ?? "Configured model"} · context ${input.contextWindow?.toLocaleString("en-US") ?? "unknown"}; native budget overrides take precedence.`,
+        : `${input.model ?? "Configured model"} | context ${input.contextWindow?.toLocaleString("en-US") ?? "unknown"}; native budget overrides take precedence.`,
     coverage: [
       "Includes native discoverable built-ins and other enabled skills. Path aliases are estimated; full instructions loaded later are additional.",
     ],

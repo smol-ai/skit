@@ -22,7 +22,7 @@ export function renderDoctor(data: typeof DoctorReport.Type, context: RenderCont
   let hasCollisions = data.codex.findings.some((finding) => finding.kind !== "layered-name");
   for (const issue of data.issues) {
     findings.push(
-      `  ${color.red("✕")} ${conditionHeadline(issue.code, "Local library issue")}${issue.target ? color.dim(` · .${issue.target}`) : ""}`,
+      `  ${color.red("✕")} ${conditionHeadline(issue.code, "Local library issue")}${issue.target ? color.dim(` | .${issue.target}`) : ""}`,
     );
     if (issue.path) findings.push(`      ${path(issue.path)}`);
     else if (issue.skillId) findings.push(`      ${color.dim(issue.skillId)}`);
@@ -31,8 +31,8 @@ export function renderDoctor(data: typeof DoctorReport.Type, context: RenderCont
   }
   for (const finding of data.codex.findings) {
     findings.push(
-      `  ${color.yellow("!")} ${color.bold(finding.name)} ${color.dim(`· Codex · ${finding.instances.length} entries`)}`,
-      `      ${finding.kind === "layered-name" ? "Same skill name at different scopes (layered)" : finding.kind === "duplicate-name" ? "Same skill name" : "Different skill names share this display name"} · ${finding.documents === "identical" ? "identical SKILL.md" : finding.documents === "different" ? "different SKILL.md" : "content comparison unavailable"}`,
+      `  ${color.yellow("!")} ${color.bold(finding.name)} ${color.dim(`| Codex | ${finding.instances.length} entries`)}`,
+      `      ${finding.kind === "layered-name" ? "Same skill name at different scopes (layered)" : finding.kind === "duplicate-name" ? "Same skill name" : "Different skill names share this display name"} | ${finding.documents === "identical" ? "identical SKILL.md" : finding.documents === "different" ? "different SKILL.md" : "content comparison unavailable"}`,
       ...finding.instances.flatMap((instance) => {
         const locations: readonly import("@smolai/skit-core/library/routing").SkillAlias[] =
           instance.aliases?.length
@@ -40,7 +40,7 @@ export function renderDoctor(data: typeof DoctorReport.Type, context: RenderCont
             : [{ path: instance.path, via: "unknown-root" }];
         return locations.map(
           (alias) =>
-            `      ${path(alias.path)}${alias.via === "symlink" ? ` → ${path(dirname(instance.canonicalPath))} ${color.dim(`(symlink${alias.linkPath && alias.linkPath !== alias.path ? ` at ${compactHomePath(alias.linkPath)}` : ""})`)}` : color.dim(` (${alias.via})`)} ${color.dim(`· ${instance.scope}${instance.pluginId ? ` · plugin ${instance.pluginId}` : ""} · ${instance.skitManaged ? "SKIT projection" : "not tracked by SKIT"}`)}`,
+            `      ${path(alias.path)}${alias.via === "symlink" ? ` → ${path(dirname(instance.canonicalPath))} ${color.dim(`(symlink${alias.linkPath && alias.linkPath !== alias.path ? ` at ${compactHomePath(alias.linkPath)}` : ""})`)}` : color.dim(` (${alias.via})`)} ${color.dim(`| ${instance.scope}${instance.pluginId ? ` | plugin ${instance.pluginId}` : ""} | ${instance.skitManaged ? "Installed by SKIT" : "not tracked by SKIT"}`)}`,
         );
       }),
       ...(finding.kind !== "layered-name" &&
@@ -63,13 +63,13 @@ export function renderDoctor(data: typeof DoctorReport.Type, context: RenderCont
     for (const skill of check.skills) {
       for (const error of skill.errors)
         findings.push(
-          `  ${color.yellow("!")} ${harnessLabel(check.harness)} · ${color.bold(skill.name)}`,
+          `  ${color.yellow("!")} ${harnessLabel(check.harness)} | ${color.bold(skill.name)}`,
           `      ${error}`,
           ...(skill.path ? [`      ${path(skill.path)}`] : []),
         );
       for (const warning of skill.warnings)
         findings.push(
-          `  ${color.yellow("!")} ${harnessLabel(check.harness)} · ${color.bold(skill.name)}`,
+          `  ${color.yellow("!")} ${harnessLabel(check.harness)} | ${color.bold(skill.name)}`,
           `      ${warning}`,
           ...(skill.path ? [`      ${path(skill.path)}`] : []),
         );
@@ -78,8 +78,8 @@ export function renderDoctor(data: typeof DoctorReport.Type, context: RenderCont
     if (collisions.length) hasCollisions = true;
     for (const { name, paths, selectedPath } of collisions) {
       findings.push(
-        `  ${color.yellow("!")} ${color.bold(name)} ${color.dim(`· OpenCode · ${paths.length} locations`)}`,
-        "      Same skill name · OpenCode selects one copy",
+        `  ${color.yellow("!")} ${color.bold(name)} ${color.dim(`| OpenCode | ${paths.length} locations`)}`,
+        "      Same skill name | OpenCode selects one copy",
       );
       findings.push(
         ...[...paths].sort().map((value) => {
@@ -89,7 +89,7 @@ export function renderDoctor(data: typeof DoctorReport.Type, context: RenderCont
               item.aliases.some((alias) => alias.path === dirname(value)),
           );
           const aliases = location?.aliases.filter((alias) => alias.via === "symlink") ?? [];
-          return `      ${path(value)}${value === selectedPath ? color.dim(" · selected") : ""}${aliases.length ? `\n${aliases.map((alias) => `      ${path(alias.path)} → ${path(location?.canonicalPath ?? dirname(value))} ${color.dim("(symlink)")}`).join("\n")}` : ""}`;
+          return `      ${path(value)}${value === selectedPath ? color.dim(" | selected") : ""}${aliases.length ? `\n${aliases.map((alias) => `      ${path(alias.path)} → ${path(location?.canonicalPath ?? dirname(value))} ${color.dim("(symlink)")}`).join("\n")}` : ""}`;
         }),
       );
     }
@@ -97,7 +97,7 @@ export function renderDoctor(data: typeof DoctorReport.Type, context: RenderCont
       ...check.findings
         .filter((finding) => finding._tag === "Warning")
         .map(
-          (warning) => `  ${color.yellow("!")} ${harnessLabel(check.harness)} · ${warning.message}`,
+          (warning) => `  ${color.yellow("!")} ${harnessLabel(check.harness)} | ${warning.message}`,
         ),
     );
   }
@@ -118,13 +118,13 @@ export function renderDoctor(data: typeof DoctorReport.Type, context: RenderCont
         : color.yellow("!");
   const codex = data.codex;
   lines.push(
-    `  ${status(codex.status, Boolean(codex.findings.some((finding) => finding.kind !== "layered-name") || codex.errors.length))} ${"Codex".padEnd(14)} ${codex.status === "checked" ? `${codex.instances.length} enabled skill${codex.instances.length === 1 ? "" : "s"}` : codex.status === "missing" ? "not installed" : "not checked"}${codex.version ? color.dim(` · ${codex.version}`) : ""}`,
+    `  ${status(codex.status, Boolean(codex.findings.some((finding) => finding.kind !== "layered-name") || codex.errors.length))} ${"Codex".padEnd(14)} ${codex.status === "checked" ? `${codex.instances.length} enabled skill${codex.instances.length === 1 ? "" : "s"}` : codex.status === "missing" ? "not installed" : "not checked"}${codex.version ? color.dim(` | ${codex.version}`) : ""}`,
   );
   if (codex.status !== "checked" && codex.status !== "missing")
     lines.push(`      ${color.dim(codex.detail ?? codex.status)}`);
   if (context.detail === "full")
     lines.push(
-      ...codex.instances.map((instance) => `      ${instance.name} · ${path(instance.path)}`),
+      ...codex.instances.map((instance) => `      ${instance.name} | ${path(instance.path)}`),
     );
   for (const check of data.harnesses) {
     const warning = Boolean(
@@ -132,14 +132,14 @@ export function renderDoctor(data: typeof DoctorReport.Type, context: RenderCont
       check.skills.some((skill) => skill.warnings.length || skill.errors.length),
     );
     lines.push(
-      `  ${status(check.status, warning)} ${harnessLabel(check.harness).padEnd(14)} ${check.status === "checked" ? `${check.skills.length} ${check.coverage === "callable-commands" ? `callable command${check.skills.length === 1 ? "" : "s"}` : `skill${check.skills.length === 1 ? "" : "s"}`}` : check.status === "missing" ? "not installed" : "not checked"}${check.version ? color.dim(` · ${check.version}`) : ""}`,
+      `  ${status(check.status, warning)} ${harnessLabel(check.harness).padEnd(14)} ${check.status === "checked" ? `${check.skills.length} ${check.coverage === "callable-commands" ? `callable command${check.skills.length === 1 ? "" : "s"}` : `skill${check.skills.length === 1 ? "" : "s"}`}` : check.status === "missing" ? "not installed" : "not checked"}${check.version ? color.dim(` | ${check.version}`) : ""}`,
     );
     if (check.status === "checked") {
       if (context.detail === "full")
         lines.push(
           ...check.skills.map(
             (skill) =>
-              `      ${skill.name}${skill.id && skill.id !== skill.name ? ` · ID: ${skill.id}` : ""}${skill.path ? ` · ${path(skill.path)}` : ""}`,
+              `      ${skill.name}${skill.id && skill.id !== skill.name ? ` | ID: ${skill.id}` : ""}${skill.path ? ` | ${path(skill.path)}` : ""}`,
           ),
         );
     } else if (check.status !== "missing")
@@ -150,14 +150,14 @@ export function renderDoctor(data: typeof DoctorReport.Type, context: RenderCont
   if (hasCollisions)
     lines.push(
       "  Inspect the listed copies and their ownership before disabling or removing one.",
-      `  ${color.cyan("skit inventory")} ${color.dim("· inspect discovered copies and ownership")}`,
+      `  ${color.cyan("skit inventory")} ${color.dim("| inspect discovered copies and ownership")}`,
     );
   else if (data.issues.length)
     lines.push(
-      `  ${color.cyan("skit inventory")} ${color.dim("· inspect affected paths and ownership")}`,
+      `  ${color.cyan("skit inventory")} ${color.dim("| inspect affected paths and ownership")}`,
     );
   lines.push(
-    `  ${color.cyan("skit doctor --json")} ${color.dim("· full lists, paths and native diagnostics")}`,
+    `  ${color.cyan("skit doctor --json")} ${color.dim("| full lists, paths and native diagnostics")}`,
   );
   return lines.join("\n");
 }

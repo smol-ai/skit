@@ -37,9 +37,9 @@ function renderSetupCollections(data: ContractDataForId<"skit.setup.v8">): strin
       .sort()
       .map(harnessLabel);
     return [
-      `  ${collection.label} · ${names.length} skill${names.length === 1 ? "" : "s"}${collection.instances.length === names.length ? "" : ` · ${collection.instances.length} instances`}`,
+      `  ${collection.label} | ${names.length} skill${names.length === 1 ? "" : "s"}${collection.instances.length === names.length ? "" : ` | ${collection.instances.length} instances`}`,
       ...(names.length <= setupExpandedSkillLimit ? [`    ${names.join(", ")}`] : []),
-      `    ${states.join(" · ")}${harnesses.length ? ` · ${harnesses.join(", ")}` : ""}`,
+      `    ${states.join(" | ")}${harnesses.length ? ` | ${harnesses.join(", ")}` : ""}`,
     ];
   };
 
@@ -57,7 +57,7 @@ function renderSetupCollections(data: ContractDataForId<"skit.setup.v8">): strin
       "Repository collections (inferred)",
       ...repositories.flatMap((collection) =>
         renderCollection({
-          label: `${basename(collection.repository)} · ${relative(collection.repository, collection.root) || "."}`,
+          label: `${basename(collection.repository)} | ${relative(collection.repository, collection.root) || "."}`,
           instances: collection.instances,
         }),
       ),
@@ -69,9 +69,9 @@ function renderSetupCollections(data: ContractDataForId<"skit.setup.v8">): strin
     lines.push(
       ...(lines.length ? [""] : []),
       "Loose skills",
-      `  ${names.length} skill${names.length === 1 ? "" : "s"}${loose.length === names.length ? "" : ` · ${loose.length} instances`}`,
+      `  ${names.length} skill${names.length === 1 ? "" : "s"}${loose.length === names.length ? "" : ` | ${loose.length} instances`}`,
       ...(names.length <= setupExpandedSkillLimit ? [`    ${names.join(", ")}`] : []),
-      `    ${[...scopes.entries()].map(([scope, count]) => `${count} ${scope}`).join(" · ")}`,
+      `    ${[...scopes.entries()].map(([scope, count]) => `${count} ${scope}`).join(" | ")}`,
     );
   }
   return lines;
@@ -95,9 +95,9 @@ function renderSetupInstalledSkills(
       .sort()
       .map(harnessLabel);
     return [
-      `  ${displayName} · ${names.length} skill${names.length === 1 ? "" : "s"}${installedSkills.length === names.length ? "" : ` · ${installedSkills.length} installed copies`}`,
+      `  ${displayName} | ${names.length} skill${names.length === 1 ? "" : "s"}${installedSkills.length === names.length ? "" : ` | ${installedSkills.length} installed copies`}`,
       ...(names.length <= setupExpandedSkillLimit ? [`    ${names.join(", ")}`] : []),
-      `    ${counts.join(" · ")}${harnesses.length ? ` · ${harnesses.join(", ")}` : ""}`,
+      `    ${counts.join(" | ")}${harnesses.length ? ` | ${harnesses.join(", ")}` : ""}`,
     ];
   });
 }
@@ -114,8 +114,8 @@ function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v8">
     });
     const names = collection.skills.map((skill) => skill.name);
     return [
-      `  ${collection.namespace}/${collection.skit} · ${collection.repository}`,
-      `    ${names.length} authored skill${names.length === 1 ? "" : "s"} · library ${collection.collectionId ? "present" : "missing"}${installedSkillSummary.length ? ` · ${installedSkillSummary.join(" · ")} installed cop${installedSkills.length === 1 ? "y" : "ies"}` : ""}`,
+      `  ${collection.namespace}/${collection.skit} | ${collection.repository}`,
+      `    ${names.length} authored skill${names.length === 1 ? "" : "s"} | library ${collection.collectionId ? "present" : "missing"}${installedSkillSummary.length ? ` | ${installedSkillSummary.join(" | ")} installed cop${installedSkills.length === 1 ? "y" : "ies"}` : ""}`,
       ...(names.length <= setupExpandedSkillLimit ? [`    ${names.join(", ")}`] : []),
       `    ${collection.origin}`,
     ];
@@ -144,7 +144,7 @@ function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v8">): st
       ...libraryMatches
         .sort((left, right) => left.path.localeCompare(right.path))
         .flatMap((instance) => [
-          `  ${instance.name} · ${instance.git.status}`,
+          `  ${instance.name} | ${instance.git.status}`,
           `    ${instance.path}`,
           `    matches ${[...new Set(instance.contentIdentity.libraryMatches.map((match) => match.name))].join(", ")}`,
         ]),
@@ -156,7 +156,7 @@ function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v8">): st
       ...duplicates.flatMap((instances) => {
         const names = [...new Set(instances.map((instance) => instance.name))].sort();
         return [
-          `  ${names.join(", ")} · ${instances.length} identical instances`,
+          `  ${names.join(", ")} | ${instances.length} identical instances`,
           ...instances.map((instance) => `    ${instance.path}`),
         ];
       }),
@@ -218,7 +218,7 @@ function renderSetupApplied(data: ContractDataForId<"skit.setup.applied.v4">): s
       "Copies",
       ...data.installedSkills.map(
         (installedSkill) =>
-          `  ${installedSkill.name} · ${installedSkill.destination} · ${installedSkill.status} · ${installedSkill.path}`,
+          `  ${installedSkill.name} | ${installedSkill.destination} | ${installedSkill.status} | ${installedSkill.path}`,
       ),
     );
   if (data.changes?.length)
@@ -227,7 +227,7 @@ function renderSetupApplied(data: ContractDataForId<"skit.setup.applied.v4">): s
     lines.push(
       "",
       "Left alone",
-      ...data.leftAlone.map((skill) => `  ${skill.name} · ${skill.reason}`),
+      ...data.leftAlone.map((skill) => `  ${skill.name} | ${skill.reason}`),
     );
   if (data.aliasRecoveryDirectories?.length)
     lines.push(
@@ -240,33 +240,33 @@ function renderSetupApplied(data: ContractDataForId<"skit.setup.applied.v4">): s
     lines.push(
       "",
       "Existing copies left in place",
-      ...backupWarnings.map((kept) => `  ${kept.name} · ${kept.message}`),
+      ...backupWarnings.map((kept) => `  ${kept.name} | ${kept.message}`),
     );
   return lines.join("\n");
 }
 
 export function renderSetup(data: ContractDataForId<"skit.setup.v8">): string {
   const lines = [
-    `Observed ${data.instances.length} skill instance(s) in ${data.repositories.length} repositories across ${data.machineConfig.repositoryRoots.length} configured root(s)${data.machineConfig.persisted ? " · roots saved for this machine" : ""}`,
-    `Scan ${data.scan.complete ? "complete" : "incomplete"} · ${data.scan.directoriesExamined} directories examined · repository depth ${data.scan.repositorySearchDepth}`,
+    `Observed ${data.instances.length} skill instance(s) in ${data.repositories.length} repositories across ${data.machineConfig.repositoryRoots.length} configured root(s)${data.machineConfig.persisted ? " | roots saved for this machine" : ""}`,
+    `Scan ${data.scan.complete ? "complete" : "incomplete"} | ${data.scan.directoriesExamined} directories examined | repository depth ${data.scan.repositorySearchDepth}`,
     "",
     ...(data.scan.issues?.length
       ? [
           "Discovery issues",
-          ...data.scan.issues.map((issue) => `  ${issue.code} · ${issue.path}`),
+          ...data.scan.issues.map((issue) => `  ${issue.code} | ${issue.path}`),
           "",
         ]
       : []),
     "Harnesses",
     ...data.probes.map(
-      (probe) => `  ${harnessLabel(probe.harness)} · ${probe.status} · ${probe.command}`,
+      (probe) => `  ${harnessLabel(probe.harness)} | ${probe.status} | ${probe.command}`,
     ),
   ];
   if (data.repositories.length) {
     lines.push("", `Repositories (${data.repositories.length})`);
     for (const repository of data.repositories)
       lines.push(
-        `  ${repository.path} · ${repository.skills.length} skill${repository.skills.length === 1 ? "" : "s"} discovered`,
+        `  ${repository.path} | ${repository.skills.length} skill${repository.skills.length === 1 ? "" : "s"} discovered`,
       );
   }
   const configuredRepositories = data.repositoryConfigs.filter(
@@ -276,7 +276,7 @@ export function renderSetup(data: ContractDataForId<"skit.setup.v8">): string {
     lines.push("", "Repository discovery config");
     for (const config of configuredRepositories)
       lines.push(
-        `  ${config.repository} · ${config.status} · ${config.exclude.length} exclusion${config.exclude.length === 1 ? "" : "s"} · ${config.collections.length} collection root${config.collections.length === 1 ? "" : "s"}\n    ${config.path}`,
+        `  ${config.repository} | ${config.status} | ${config.exclude.length} exclusion${config.exclude.length === 1 ? "" : "s"} | ${config.collections.length} collection root${config.collections.length === 1 ? "" : "s"}\n    ${config.path}`,
       );
   }
   if (data.authoredCollections.length)
@@ -296,7 +296,7 @@ export function renderSetup(data: ContractDataForId<"skit.setup.v8">): string {
   const contentMatches = renderSetupContentMatches(data);
   if (contentMatches.length) lines.push("", ...contentMatches);
   if (data.onboarding.candidates.length) {
-    lines.push("", `Onboarding plan · ${data.onboarding.planId.slice(0, 12)}`);
+    lines.push("", `Onboarding plan | ${data.onboarding.planId.slice(0, 12)}`);
     const actions = new Map<
       (typeof data.onboarding.candidates)[number]["action"],
       (typeof data.onboarding.candidates)[number][]
@@ -313,18 +313,18 @@ export function renderSetup(data: ContractDataForId<"skit.setup.v8">): string {
     ] as const) {
       const candidates = actions.get(action);
       if (!candidates) continue;
-      lines.push(`  ${action} · ${candidates.length} skill${candidates.length === 1 ? "" : "s"}`);
+      lines.push(`  ${action} | ${candidates.length} skill${candidates.length === 1 ? "" : "s"}`);
       if (candidates.length <= 5)
         for (const candidate of candidates)
           lines.push(
-            `    ${candidate.name}${candidate.action === "blocked" ? ` · ${candidate.reason}` : candidate.action === "manage-locally" && candidate.sourceSelection === "required" ? " · choose source copy" : ""}\n      ${candidate.paths.join("\n      ")}`,
+            `    ${candidate.name}${candidate.action === "blocked" ? ` | ${candidate.reason}` : candidate.action === "manage-locally" && candidate.sourceSelection === "required" ? " | choose source copy" : ""}\n      ${candidate.paths.join("\n      ")}`,
           );
       else if (action === "blocked") {
         const reasons = new Map<string, number>();
         for (const candidate of candidates)
           if (candidate.action === "blocked")
             reasons.set(candidate.reason, (reasons.get(candidate.reason) ?? 0) + 1);
-        for (const [reason, count] of reasons) lines.push(`    ${count} · ${reason}`);
+        for (const [reason, count] of reasons) lines.push(`    ${count} | ${reason}`);
       }
     }
   }
@@ -342,12 +342,12 @@ export function renderSetup(data: ContractDataForId<"skit.setup.v8">): string {
     for (const item of data.instances) {
       const ownerLabel =
         item.owner.kind === "pnpm"
-          ? `Managed by pnpm · ${item.owner.package}@${item.owner.version} · left in place`
+          ? `Managed by pnpm | ${item.owner.package}@${item.owner.version} | left in place`
           : item.owner.kind === "authored"
             ? "author-source"
             : item.owner.kind;
       lines.push(
-        `  ${item.name} · ${item.scope} · ${ownerLabel} · ${item.git.status}${item.harnesses.length ? ` · ${item.harnesses.map(harnessLabel).join(", ")}` : ""}\n    ${item.path}`,
+        `  ${item.name} | ${item.scope} | ${ownerLabel} | ${item.git.status}${item.harnesses.length ? ` | ${item.harnesses.map(harnessLabel).join(", ")}` : ""}\n    ${item.path}`,
       );
     }
   }
@@ -355,7 +355,7 @@ export function renderSetup(data: ContractDataForId<"skit.setup.v8">): string {
     lines.push(
       "",
       "skills.sh locks",
-      ...data.locks.map((lock) => `  ${lock.scope} · ${lock.status}\n    ${lock.path}`),
+      ...data.locks.map((lock) => `  ${lock.scope} | ${lock.status}\n    ${lock.path}`),
     );
   if (data.brokenLinks.length)
     lines.push(
@@ -371,7 +371,7 @@ export const renderSetupComparison = (data: ContractData<"setupComparison">) =>
   [
     ...data.copies.map(
       (copy) =>
-        `${copy.name} · ${copy.path}\n${copy.currentHash}\n${copy.markdown}${copy.truncated ? "\n[Preview truncated]" : ""}`,
+        `${copy.name} | ${copy.path}\n${copy.currentHash}\n${copy.markdown}${copy.truncated ? "\n[Preview truncated]" : ""}`,
     ),
     ...data.actions.map(
       (action) => `${action.rel}: ${action.argv.map((arg) => JSON.stringify(arg)).join(" ")}`,

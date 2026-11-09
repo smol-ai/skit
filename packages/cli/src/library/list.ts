@@ -13,11 +13,17 @@ export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
       subject_id: subject.id,
       subject_kind: subject.kind,
       label: subject.label,
+      ...(subject.collectionSource === undefined
+        ? {}
+        : { collection_source: subject.collectionSource }),
+      enabled_skills: subject.enabledSkills,
+      scopes: subject.scopes,
       skills: subject.skills.map((skill) => ({
         source: skill.source,
         revision: skill.revision,
         source_updated_at: skill.source_updated_at,
         imported_at: skill.imported_at,
+        ...(skill.saved_at === undefined ? {} : { saved_at: skill.saved_at }),
         name: skill.name,
         skill_id: skill.id,
         ...(skill.versionId === undefined ? {} : { selected_skill_version_id: skill.versionId }),

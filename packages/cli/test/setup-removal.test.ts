@@ -130,9 +130,9 @@ it.effect(
       const plan = (yield* interaction.steps).find(
         (step) => step.title === setupStepTitles.confirm,
       )!.body;
-      expect(plan).toContain(`copied · ${f.copy}`);
-      expect(plan).toContain(`linked · ${f.link} (symlink only; source stays)`);
-      expect(plan).not.toContain(`linked · ${f.source}`);
+      expect(plan).toContain(`copied | ${f.copy}`);
+      expect(plan).toContain(`linked | ${f.link} (symlink only; source stays)`);
+      expect(plan).not.toContain(`linked | ${f.source}`);
       expect(yield* f.fs.exists(f.copy)).toBe(false);
       expect(yield* f.fs.exists(f.link)).toBe(false);
       expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain("Original contents");
@@ -284,6 +284,6 @@ it.effect("removing one duplicate row preserves the independent copy in another 
       (step) => step.title === setupStepTitles.confirm,
     )!.body;
     expect(plan).toContain("Remove installed copies: 1");
-    expect(plan).not.toContain(`copied · ${otherCopy}`);
+    expect(plan).not.toContain(`copied | ${otherCopy}`);
   }).pipe(Effect.provide(skitLayer)),
 );

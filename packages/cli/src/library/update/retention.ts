@@ -8,7 +8,7 @@ export const renderEditImportPlan = (data: ContractData<"projectionRetentionPlan
     `Destination: ${data.original_path}`,
     ...data.installed_skills.map(
       (installedSkill) =>
-        `${installedSkill.destination} · ${installedSkill.path} · ${installedSkill.agreement}`,
+        `${installedSkill.destination} | ${installedSkill.path} | ${installedSkill.agreement}`,
     ),
   ].join("\n");
 
@@ -20,6 +20,6 @@ export const renderEditImport = (data: ContractData<"projectionRetention">) =>
     `Previous Version: ${data.previous_skill_version_id}`,
     ...data.installed_skills.map(
       (installedSkill) =>
-        `${installedSkill.destination} · ${installedSkill.path} · ${installedSkill.status}`,
+        `${installedSkill.destination} | ${installedSkill.path} | ${installedSkill.status}`,
     ),
   ].join("\n");

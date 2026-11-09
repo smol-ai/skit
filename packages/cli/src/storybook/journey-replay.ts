@@ -29,7 +29,7 @@ export function journeyFrames(
           `${color.cyan("?")} ${color.bold(prompt.message)}`,
           ...prompt.choices.map(
             (choice, index) =>
-              `  ${index === 0 ? color.cyan("❯") : " "} ${choice.selected && !choice.disabled ? color.green("☒") : color.dim("☐")} ${choice.disabled ? color.dim(choice.label) : index === 0 ? color.bold(choice.label) : choice.label}${choice.hint ? color.dim(` · ${choice.hint}`) : ""}`,
+              `  ${index === 0 ? color.cyan("❯") : " "} ${choice.selected && !choice.disabled ? color.green("☒") : color.dim("☐")} ${choice.disabled ? color.dim(choice.label) : index === 0 ? color.bold(choice.label) : choice.label}${choice.hint ? color.dim(` | ${choice.hint}`) : ""}`,
           ),
         ].join("\n");
   for (const [index, event] of journey.events.entries()) {
@@ -58,7 +58,7 @@ export function journeyFrames(
       Step: ({ index, total, title, body }) => {
         output += renderNoteFrame(
           body,
-          `${color.dim(`Step ${index} of ${total} ·`)} ${color.bold(title)}`,
+          `${color.dim(`Step ${index} of ${total} |`)} ${color.bold(title)}`,
           environment.format,
         ).stderr;
         label = title;

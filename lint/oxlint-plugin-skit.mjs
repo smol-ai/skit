@@ -826,6 +826,33 @@ const effectRules = {
 export default {
   meta: { name: "skit" },
   rules: {
+    "no-middle-dot-delimiter": {
+      meta: {
+        type: "problem",
+        docs: { description: "Disallow middle dots in presentation strings" },
+        messages: {
+          forbidden:
+            "Do not use a middle dot as a delimiter. Use labels, parentheses, newlines, or a plain separator.",
+        },
+      },
+      create(context) {
+        const check = (node, value) => {
+          if (typeof value === "string" && value.includes(String.fromCodePoint(0xb7)))
+            context.report({ node, messageId: "forbidden" });
+        };
+        return {
+          Literal(node) {
+            check(node, node.value);
+          },
+          TemplateElement(node) {
+            check(node, node.value.cooked ?? node.value.raw);
+          },
+          JSXText(node) {
+            check(node, node.value);
+          },
+        };
+      },
+    },
     ...effectRules,
     ...effectHygieneRules,
     ...libraryRules,

@@ -48,7 +48,7 @@ export type InvocationReadModel = typeof InvocationReadModel.Type;
 function policyLabel(policy: InvocationPolicy): string {
   if (policy === "implicit") return "Automatically";
   if (policy === "explicit") return "Only when asked";
-  return "Agent default";
+  return "Harness default";
 }
 
 function policyExplanation(policy: InvocationPolicy): string {
@@ -173,7 +173,7 @@ export function invocationPolicyChoices(model: InvocationReadModel): InvocationP
       value: "declared",
       label:
         preference === "Not specified"
-          ? "Author preference — none (agent default)"
+          ? "Author preference — none (harness default)"
           : `Author preference — ${preference.toLowerCase()}`,
     },
     { value: "implicit", label: policyLabel("implicit") },
@@ -208,5 +208,5 @@ export function invocationRowSummary(model: InvocationReadModel): string {
   )
     return "Varies by agent";
   if (common.policySource === "harness-default") return policyLabel(common.effectivePolicy);
-  return `${policyLabel(common.effectivePolicy)} · ${common.policySource === "local-override" ? "you" : "author"}`;
+  return `${policyLabel(common.effectivePolicy)} | ${common.policySource === "local-override" ? "you" : "author"}`;
 }

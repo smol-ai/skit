@@ -135,7 +135,7 @@ const previewDoctorCleanup = Effect.scoped(
         (yield* document) !== bytes
       )
         return yield* Effect.die("The cleanup preview changed the Library or installed bytes");
-      return `Preview only · ${after.state.enabled.length} Skill remains enabled`;
+      return `Preview only | ${after.state.enabled.length} Skill remains enabled`;
     }).pipe(
       Effect.provide(
         Library.layer({ home, roots: configuration }).pipe(
@@ -165,26 +165,26 @@ export const journeyStories: ReadonlyArray<
 > = [
   {
     name: "doctor/cleanup-preview",
-    initialState: "Codex listing ~12,000 / 10,000 tokens · no retained usage transcripts",
+    initialState: "Codex listing ~12,000 / 10,000 tokens | no retained usage transcripts",
     answers: [{ labels: ["review"] }],
     run: previewDoctorCleanup.pipe(Effect.provide(skitConfigurationLayer())),
     finalState: (state) => state,
   },
   {
     name: "preview-enable-portable-collection",
-    initialState: "1 Collection · 1 Skill · 0 Bindings",
+    initialState: "1 Collection | 1 Skill | 0 Bindings",
     answers: [{ label: "review-tools" }, "global"],
     run: previewEnable.pipe(
       Effect.map(
         (state) =>
-          `${state.skills.length} Skill · ${state.skills.flatMap((skill) => skill.scopes).length} Bindings`,
+          `${state.skills.length} Skill | ${state.skills.flatMap((skill) => skill.scopes).length} Bindings`,
       ),
     ),
     finalState: (state) => state,
   },
   {
     name: "library-sync/fresh-device",
-    initialState: "Empty fixture device · remote has 3 Collections and 3 enabled Skills",
+    initialState: "Empty fixture device | remote has 3 Collections and 3 enabled Skills",
     answers: [],
     run: syncJourney(false),
     finalState: (state) => state,
@@ -192,7 +192,7 @@ export const journeyStories: ReadonlyArray<
   {
     name: "library-sync/download-failed",
     expectedOutcome: "failure",
-    initialState: "Empty fixture device · Registry rejects the second download",
+    initialState: "Empty fixture device | Registry rejects the second download",
     answers: [],
     run: syncJourney(true),
     finalState: (state) => state,

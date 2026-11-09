@@ -73,10 +73,10 @@ export const presentDoctorCleanup = Effect.fn("Doctor.cleanup")(function* (
       terminalColorEnabled(),
     );
   const chosen = yield* prompter.multiselect(
-    `Skills to disable · last ${days} days`,
+    `Skills to disable | last ${days} days`,
     candidates.map((c) => ({
       value: c.id,
-      label: c.scope.kind === "global" ? c.name : `${c.name} · in ${c.scope.root}`,
+      label: c.scope.kind === "global" ? c.name : `${c.name} | in ${c.scope.root}`,
       hint: `${Math.max(...excessive.map((b) => ((c.costs[b.harness] ?? 0) / b.limit) * 100)).toFixed(1)}% of budget`,
       detail: `Collection: ${c.collectionLabel}`,
       selected: c.selected,

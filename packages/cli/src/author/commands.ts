@@ -151,7 +151,7 @@ const watch = Command.make("watch", { directory, json: jsonFlag }, ({ directory 
   }),
 ).pipe(
   Command.withDescription(
-    "Experimental: watch one connected Author Workspace and synchronize edits until stopped.",
+    "Experimental: watch one connected Author Workspace, synchronize edits and update enabled installed skills until stopped.",
   ),
   Command.withExamples([{ command: "skit author watch ." }]),
   Command.annotate(CommandMetadata, {

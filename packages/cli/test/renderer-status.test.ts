@@ -34,7 +34,7 @@ it.effect("resumes changing status after printing a plan and clears it on failur
         "Planning",
         Effect.gen(function* () {
           yield* renderer.note("One Collection to add", "Library sync plan");
-          yield* renderer.updateStatus("Downloading Skill copies · 1/2");
+          yield* renderer.updateStatus("Downloading Skill copies | 1/2");
           yield* Deferred.succeed(ready, undefined);
           yield* Deferred.await(finish);
           return yield* Effect.fail("download failed");
@@ -44,7 +44,7 @@ it.effect("resumes changing status after printing a plan and clears it on failur
     yield* Deferred.await(ready);
     yield* TestClock.adjust(80);
     expect(writes.join("")).toContain("Library sync plan");
-    expect(writes.join("")).toContain("Downloading Skill copies · 1/2");
+    expect(writes.join("")).toContain("Downloading Skill copies | 1/2");
     yield* Deferred.succeed(finish, undefined);
     yield* Fiber.join(fiber).pipe(Effect.flip);
     expect(writes.at(-1)).toBe("\r\u001b[2K");
@@ -93,7 +93,7 @@ for (const tty of [true, false]) {
       yield* TestClock.adjust(2350);
       yield* Deferred.succeed(finish, undefined);
       expect(yield* Fiber.join(fiber)).toBe(42);
-      expect(writes.at(-1)).toBe("✓ Fetched example/skills · 2.4s\n");
+      expect(writes.at(-1)).toBe("✓ Fetched example/skills | 2.4s\n");
       if (!tty) expect(writes).toHaveLength(1);
     }),
   );
@@ -121,7 +121,7 @@ it.effect("persists elapsed time on failure without changing the failure", () =>
     yield* TestClock.adjust(1200);
     yield* Deferred.succeed(finish, undefined);
     expect(yield* Fiber.join(fiber).pipe(Effect.flip)).toBe("unavailable");
-    expect(writes).toEqual(["✖ Fetching example/skills · Incomplete · 1.2s\n"]);
+    expect(writes).toEqual(["✖ Fetching example/skills | Incomplete | 1.2s\n"]);
   }),
 );
 
@@ -154,6 +154,6 @@ it.effect("persists an incomplete timed step when interrupted", () =>
     yield* Deferred.await(ready);
     yield* TestClock.adjust(1500);
     yield* Fiber.interrupt(fiber);
-    expect(writes).toEqual(["✖ Fetching example/skills · Incomplete · 1.5s\n"]);
+    expect(writes).toEqual(["✖ Fetching example/skills | Incomplete | 1.5s\n"]);
   }),
 );

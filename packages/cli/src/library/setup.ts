@@ -235,7 +235,7 @@ const chooseDiscoveredSkills = Effect.fn("CLI.setup.chooseDiscoveredSkills")(fun
     const path = preview.documentPath;
     return {
       ...row.choice,
-      searchText: `${row.details} · SKILL.md modified ${modified?.slice(0, 10) ?? "unavailable"}`,
+      searchText: `${row.details} | SKILL.md modified ${modified?.slice(0, 10) ?? "unavailable"}`,
       preview: () =>
         preview.content.pipe(
           Effect.map(

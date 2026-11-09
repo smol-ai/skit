@@ -165,7 +165,7 @@ for (const yaml of [false, true]) {
         audited.skills.find((entry) => entry.location === join(f.alias, "SKILL.md"))?.provenance,
       ).toEqual({
         confidence: "exact",
-        source: "pnpm · @acme/demo@1.0.0",
+        source: "pnpm | @acme/demo@1.0.0",
         evidence: f.ledgerPath,
       });
       expect((yield* Effect.result(leavePnpmSkill(f.alias)))._tag).toBe("Failure");

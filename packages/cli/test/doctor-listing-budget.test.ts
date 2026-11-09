@@ -32,15 +32,15 @@ const render = (value: ListingBudget, detail: "summary" | "full" = "summary") =>
 test("doctor prints full demand and strict >1% contributors whether within or outside budget", () => {
   const within = render(budget);
   expect(within).toContain("Within budget");
-  expect(within).toContain("3,000 / 10,000 tokens · 30.0%");
-  expect(within).toContain("large · ~101 tokens");
+  expect(within).toContain("3,000 / 10,000 tokens | 30.0%");
+  expect(within).toContain("large | ~101 tokens");
   expect(within).not.toContain("exact-cutoff");
   expect(within).not.toContain("provenance");
   expect(within).not.toContain("coverage note");
   const outside = render({ ...budget, demand: 12000, fitted: 10000, shortened: 3, omitted: 1 });
   expect(outside).toContain("Over budget");
   expect(outside).toContain("12,000 / 10,000");
-  expect(outside).toContain("large · ~101");
+  expect(outside).toContain("large | ~101");
   expect(outside).toContain("3 descriptions shortened");
   expect(outside).toContain("1 skill omitted");
   const full = render(budget, "full");
@@ -89,14 +89,14 @@ test("cleanup bars show demand after the selected savings in native units", () =
   const before = renderDoctorBudgetSelection([over], {}, 80);
   const after = renderDoctorBudgetSelection([over], { codex: 2650 }, 80);
   expect(before).toHaveLength(1);
-  expect(before[0]).toContain("124% · ~12,400 / 10,000 tokens");
+  expect(before[0]).toContain("124% | ~12,400 / 10,000 tokens");
   expect(before[0]).toContain("▓");
-  expect(after[0]).toContain("98% · ~9,750 / 10,000 tokens");
+  expect(after[0]).toContain("98% | ~9,750 / 10,000 tokens");
   expect(after[0]).not.toContain("▓");
   expect(
     renderDoctorBudgetSelection([{ ...over, harness: "claude-code", unit: "characters" }], {
       "claude-code": 2650,
     }).join("\n"),
   ).toContain("9,750 / 10,000 characters");
-  expect(renderDoctorBudgetSelection([over], { codex: 20000 })[0]).toContain("0% · ~0");
+  expect(renderDoctorBudgetSelection([over], { codex: 20000 })[0]).toContain("0% | ~0");
 });

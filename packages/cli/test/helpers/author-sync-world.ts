@@ -1,13 +1,12 @@
 import { LinkStat } from "@smolai/skit-core/platform";
 import { dirname, join } from "node:path";
 import { Effect, Exit, Fiber, FileSystem, Layer, Ref, Scope } from "effect";
-import { libraryLayer } from "../../src/application.js";
-
-import { skitConfigurationLayer } from "@smolai/skit-core/platform";
+import * as Library from "@smolai/skit-core/library";
 import {
   backupAuthorWorkspace,
   watchAuthorWorkspace,
   type AuthorWatchEvent,
+  initializeAuthorWorkspace,
 } from "@smolai/skit-core/author";
 import { authorRegistry, authorSyncApi } from "../../src/registry/author-sync.js";
 import type { PlatformError } from "effect/PlatformError";
@@ -61,6 +60,15 @@ export const makeAuthorSyncWorld = Effect.fn("Test.makeAuthorSyncWorld")(functio
   const makeDevice = Effect.fn("Test.makeAuthorDevice")(function* (name: AuthorDevice) {
     const workspace = join(root, name, "workspace");
     const home = join(root, name, "home");
+    const installed = join(root, name, "agents");
+    const library = Library.layer({
+      home,
+      roots: {
+        home: join(root, name, "device-home"),
+        configHome: join(root, name, "config"),
+        overrides: { codex: [installed] },
+      },
+    });
     yield* fs.makeDirectory(join(workspace, "skills/review"), { recursive: true });
     yield* fs.makeDirectory(home, { recursive: true });
     yield* fs.writeFileString(
@@ -110,7 +118,7 @@ export const makeAuthorSyncWorld = Effect.fn("Test.makeAuthorSyncWorld")(functio
             Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem),
             Effect.provideService(LinkStat, yield* LinkStat),
             // A first sync without workspace.json adopts an id from this home's Library (A3).
-            Effect.provide(libraryLayer().pipe(Layer.provide(skitConfigurationLayer(home)))),
+            Effect.provide(library),
           ),
         ),
         yield* Ref.get(runtime),
@@ -120,6 +128,28 @@ export const makeAuthorSyncWorld = Effect.fn("Test.makeAuthorSyncWorld")(functio
       name,
       workspace,
       home,
+      installed: (path: string) => fs.readFileString(join(installed, path)),
+      registerAndEnable: () =>
+        Effect.gen(function* () {
+          const imported = yield* initializeAuthorWorkspace(workspace, home);
+          const owner = yield* Library.Service;
+          const base = yield* owner.read;
+          const plan = yield* owner.plan(
+            {
+              _tag: "Enabled",
+              changes: [
+                {
+                  _tag: "Enable",
+                  subject: { _tag: "Collection", id: imported.entry.collection.collection_id },
+                  members: "whole",
+                  where: [{ kind: "global" }],
+                },
+              ],
+            },
+            { base },
+          );
+          yield* owner.apply({ _tag: "Apply", plan });
+        }).pipe(Effect.scoped, Effect.provide(library.pipe(Layer.provideMerge(authorLayer(home))))),
       startSync,
       startWatch: (report: (event: AuthorWatchEvent) => Effect.Effect<void>) =>
         Effect.gen(function* () {
@@ -133,7 +163,7 @@ export const makeAuthorSyncWorld = Effect.fn("Test.makeAuthorSyncWorld")(functio
                   Layer.provideMerge(authorLayer(home)),
                 ),
               ),
-              Effect.provide(libraryLayer().pipe(Layer.provide(skitConfigurationLayer(home)))),
+              Effect.provide(library),
             ),
             yield* Ref.get(runtime),
           );

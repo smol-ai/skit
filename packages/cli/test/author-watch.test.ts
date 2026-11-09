@@ -12,9 +12,21 @@ it.live(
     Effect.gen(function* () {
       const world = yield* makeAuthorSyncWorld();
       yield* world.connect();
+      yield* world.a.registerAndEnable();
+      yield* world.b.registerAndEnable();
+      // The declared explicit invocation policy adds native metadata to installed SKILL.md.
+      const expectedInstalled = (yield* world.b.installed("review/SKILL.md")).replace(
+        "# Review",
+        "# Automatically synchronized",
+      );
       const fs = yield* FileSystem.FileSystem;
+      const observed: AuthorWatchEvent[] = [];
       yield* world.a.startWatch(() => Effect.void);
-      yield* world.b.startWatch(() => Effect.void);
+      yield* world.b.startWatch((event) =>
+        Effect.sync(() => {
+          observed.push(event);
+        }),
+      );
       const content =
         "---\nname: review\ndescription: Review code.\n---\n# Automatically synchronized\n";
       const target = join(world.a.workspace, "skills/review/SKILL.md");
@@ -27,6 +39,17 @@ it.live(
         ),
         Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 150 }),
       );
+      yield* world.b.installed("review/SKILL.md").pipe(
+        Effect.filterOrFail(
+          (value) => value === expectedInstalled,
+          () =>
+            new Error(
+              `second installed copy has not advanced: ${JSON.stringify(observed.slice(-12))}`,
+            ),
+        ),
+        Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 150 }),
+      );
+      expect(yield* world.a.installed("review/SKILL.md")).toEqual(expectedInstalled);
       expect(yield* world.missing(yield* world.copies())).toEqual([]);
       expect(
         (yield* world.server.revisions()).some(({ tree }) =>

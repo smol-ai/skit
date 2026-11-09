@@ -21,7 +21,7 @@ export function renderInstalledSkillChange(
     uninstall: "Uninstall: nothing enables it here",
     install: "Install from Library",
   }[fact.status];
-  return `${terminalData(fact.name)} · ${terminalData(label)} · ${terminalData(displayPath(fact.path))}`;
+  return `${terminalData(fact.name)} | ${terminalData(label)} | ${terminalData(displayPath(fact.path))}`;
 }
 
 export function renderSetupVersionChoice(
@@ -44,7 +44,7 @@ export function renderReviewedChanges(
 ) {
   return fact.status !== "native-delete" &&
     choices.some((choice) => choice.skillId === fact.skillId)
-    ? `${terminalData(fact.name)} · Install selected version · ${terminalData(displayPath(fact.path))}`
+    ? `${terminalData(fact.name)} | Install selected version | ${terminalData(displayPath(fact.path))}`
     : renderInstalledSkillChange(fact, displayPath);
 }
 
@@ -58,5 +58,5 @@ export function renderChangeResult(outcome: InstalledSkillChangeResult) {
     uninstalled: "Uninstalled",
     installed: "Installed",
   }[outcome.status];
-  return `${terminalData(outcome.name)} · ${label} · ${terminalData(outcome.path)}${outcome.reason ? ` · ${terminalData(outcome.reason)}` : ""}`;
+  return `${terminalData(outcome.name)} | ${label} | ${terminalData(outcome.path)}${outcome.reason ? ` | ${terminalData(outcome.reason)}` : ""}`;
 }

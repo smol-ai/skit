@@ -25,7 +25,7 @@ export function renderUsage(report: UsageReport): string {
     (Date.parse(report.window.end) - Date.parse(report.window.start)) / 86400000,
   );
   const lines = [
-    `Skill activity · ${days} ${days === 1 ? "day" : "days"}`,
+    `Skill activity (${days} ${days === 1 ? "day" : "days"})`,
     `${dateLabel(report.window.start)} – ${dateLabel(report.window.end)} (UTC)`,
     ...(report.project ? [`Project: ${safe(report.project)}`] : []),
     "",

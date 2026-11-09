@@ -165,7 +165,7 @@ export function mountStorybook(
       height: "100%",
       border: true,
       borderColor: colors.accent,
-      title: ` PREVIEW · ${selectedItem()?.key ?? "NO MATCH"} `,
+      title: ` PREVIEW | ${selectedItem()?.key ?? "NO MATCH"} `,
       padding: 1,
     });
     previewScroll = new ScrollBoxRenderable(renderer, {
@@ -205,7 +205,7 @@ export function mountStorybook(
   }
 
   async function updatePreview(content: string, token: number): Promise<void> {
-    previewBox.title = ` PREVIEW · ${selectedItem()?.key ?? "NO MATCH"} `;
+    previewBox.title = ` PREVIEW | ${selectedItem()?.key ?? "NO MATCH"} `;
     replacePreviewText("");
     previewScroll.scrollTo(0);
     renderer.requestRender();
@@ -220,15 +220,15 @@ export function mountStorybook(
   }
 
   function updateChrome(): void {
-    header.content = ` SKIT OUTPUTS · ${items.length} stories · ${format.toUpperCase()} / ${detail.toUpperCase()} · colour ${previewColor ? `ON (${palette.source} palette)` : "OFF (ctrl+l)"}`;
-    const step = playback ? ` · ${playback.index + 1}/${playback.frames.length}` : "";
+    header.content = ` SKIT OUTPUTS | ${items.length} stories | ${format.toUpperCase()} / ${detail.toUpperCase()} | colour ${previewColor ? `ON (${palette.source} palette)` : "OFF (ctrl+l)"}`;
+    const step = playback ? ` | ${playback.index + 1}/${playback.frames.length}` : "";
     previewBox.title = ` ${transcript ? "TRANSCRIPT" : "PREVIEW"}${step} `;
     footer.content =
       focus === "catalog"
-        ? " ↑↓/wheel browse · type search · tab preview · ctrl+f format · ctrl+d detail · ctrl+l colour · esc clear · ctrl+c quit"
+        ? " ↑↓/wheel browse | type search | tab preview | ctrl+f format | ctrl+d detail | ctrl+l colour | esc clear | ctrl+c quit"
         : !playback
-          ? " tab search · ctrl+f format · ctrl+d detail · ctrl+l colour · ↑↓ scroll JSON"
-          : ` ← prev · →/enter next · space ${playback?.playing ? "pause" : "play"} · home restart · t ${transcript ? "preview" : "transcript"} · ctrl+l colour · tab search\n ${playback?.frame?.label ?? selectedItem()?.key ?? ""} · ${recorded?.initialState ?? ""}${playback && playback.index === playback.frames.length - 1 ? ` · ${recorded?.finalState ?? ""}` : ""}`;
+          ? " tab search | ctrl+f format | ctrl+d detail | ctrl+l colour | ↑↓ scroll JSON"
+          : ` ← prev | →/enter next | space ${playback?.playing ? "pause" : "play"} | home restart | t ${transcript ? "preview" : "transcript"} | ctrl+l colour | tab search\n ${playback?.frame?.label ?? selectedItem()?.key ?? ""} | ${recorded?.initialState ?? ""}${playback && playback.index === playback.frames.length - 1 ? ` | ${recorded?.finalState ?? ""}` : ""}`;
     previewBox.borderColor = focus === "preview" ? colors.accent : colors.border;
   }
 

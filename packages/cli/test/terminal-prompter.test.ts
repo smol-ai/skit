@@ -12,6 +12,7 @@ import { Prompter, terminalPrompterLayer, type Choice } from "../src/terminal/pr
 
 import { setupDiscoveredSkillChoices } from "../src/library/setup/skills.js";
 import { classifySetupOnboarding, type SetupSkillInstance } from "@smolai/skit-core/library/setup";
+import { collectionChoiceTitle } from "../src/library/presentation/collection-source.js";
 
 type Key =
   | "up"
@@ -97,6 +98,31 @@ afterEach(() => {
 });
 
 describe("the terminal prompter", () => {
+  it.effect("finds one of two connected same-name workspaces by its path", () =>
+    Effect.gen(function* () {
+      const selected = yield* (yield* Prompter).autocomplete("Select a collection", [
+        {
+          value: "other",
+          label: collectionChoiceTitle("skills", {
+            kind: "authored-workspace",
+            name: "tim/skills",
+            locator: "/tmp/other/skills",
+            workspace_status: "connected",
+          }),
+        },
+        {
+          value: "code",
+          label: collectionChoiceTitle("skills", {
+            kind: "authored-workspace",
+            name: "tim/skills",
+            locator: "/tmp/code/skills",
+            workspace_status: "connected",
+          }),
+        },
+      ]);
+      assert.strictEqual(selected, "code");
+    }).pipe(Effect.provide(promptedWith(["c", "o", "d", "e", "enter"]))),
+  );
   const removable = [
     { value: "keep", label: "Keep", selected: true, removeValue: "remove-keep" },
     { value: "other", label: "Other", removeValue: "remove-other" },
@@ -121,7 +147,7 @@ describe("the terminal prompter", () => {
           .filter((frame) => frame.includes("\u001b[?25l"));
         expect(frames.every((frame) => (frame.match(/[☐☒]/g) ?? []).length <= 8)).toBe(true);
         expect(frames.every((frame) => frame.split("\n").length <= 22)).toBe(true);
-        expect(frames[0]).toContain("1–8 of 30 · 1 selected · ↑↓ scroll");
+        expect(frames[0]).toContain("1–8 of 30 | 1 selected | ↑↓ scroll");
         expect(frames.some((frame) => frame.includes("23–30 of 30"))).toBe(true);
         expect(frames.some((frame) => frame.includes("After: 100%"))).toBe(true);
         expect(frames.some((frame) => frame.includes("❯ ☒ Candidate 29"))).toBe(true);
@@ -169,7 +195,7 @@ describe("the terminal prompter", () => {
       );
       expect(selected).toEqual(["alpha", "codex"]);
       const frames = stderr.mock.calls.map(([frame]) => String(frame)).join("\n");
-      expect(frames).toContain("1–1 of 1 matches (2 total) · 2 selected");
+      expect(frames).toContain("1–1 of 1 matches (2 total) | 2 selected");
       expect(frames).toContain("Selected: alpha, codex");
     }).pipe(Effect.provide(promptedWith(["c", "o", "d", "e", "x", "space", "enter"]))),
   );
@@ -178,7 +204,7 @@ describe("the terminal prompter", () => {
       const chosen = yield* (yield* Prompter).multiselect("Manage skills", removable);
       expect(chosen).toEqual(["remove-keep", "other"]);
       expect(stderr.mock.calls.map(([frame]) => String(frame)).join("\n")).toContain(
-        "✕ Keep  · Remove",
+        "✕ Keep  | Remove",
       );
     }).pipe(Effect.provide(promptedWith(["ctrl+r", "ctrl+a", "enter"]))),
   );
@@ -264,7 +290,7 @@ describe("the terminal prompter", () => {
       // oxlint-disable-next-line no-control-regex -- Strip terminal ANSI styling before asserting layout.
       const plain = frame.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "");
       expect(plain).toContain(
-        "  ─ Local\n    ❯ ☒ Review  · modified today\n        /skills/review",
+        "  ─ Local\n    ❯ ☒ Review  | modified today\n        /skills/review",
       );
       expect(plain).not.toContain("/skills/lint");
     }).pipe(Effect.provide(promptedWith(["enter"]))),
@@ -424,7 +450,7 @@ it.effect("keeps blocked skills previewable and bulk selection leaves conflicts 
         label: "Invalid marker",
         disabled: true,
         selected: true,
-        description: "Used by Claude · blocked",
+        description: "Used by Claude | blocked",
         preview: () => Effect.succeed("Blocked content"),
       },
       {
@@ -443,7 +469,7 @@ it.effect("keeps blocked skills previewable and bulk selection leaves conflicts 
     ]);
     expect(chosen).toEqual(["codex", "normal"]);
     const frames = stderr.mock.calls.map(([frame]) => String(frame)).join("\n");
-    expect(frames).toContain("Used by Claude · blocked");
+    expect(frames).toContain("Used by Claude | blocked");
     expect(frames).toContain("Blocked content");
   }).pipe(
     Effect.provide(
@@ -486,8 +512,8 @@ it.effect("Space keeps same-name skills from separate repositories selected toge
     );
     expect(selected).toEqual(instances.map((instance) => `tdd\0${instance.path}`));
     const frames = stderr.mock.calls.map(([frame]) => String(frame)).join("\n");
-    expect(frames).toContain("tdd  · /work/fullres/.agents/skills/tdd · committed");
-    expect(frames).toContain("tdd  · /work/stackseer/.agents/skills/tdd · untracked");
+    expect(frames).toContain("tdd  | /work/fullres/.agents/skills/tdd | committed");
+    expect(frames).toContain("tdd  | /work/stackseer/.agents/skills/tdd | untracked");
   }).pipe(Effect.provide(promptedWith(["space", "down", "space", "enter"]))),
 );
 

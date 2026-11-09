@@ -5,6 +5,54 @@
     "subject_id": {
       "type": "string"
     },
+    "collection_label": {
+      "type": "string"
+    },
+    "collection_source": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "github",
+            "git",
+            "registry",
+            "url",
+            "archive",
+            "local",
+            "authored-workspace",
+            "well-known"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "locator": {
+          "type": "string"
+        },
+        "authority": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        },
+        "workspace_status": {
+          "type": "string",
+          "enum": [
+            "connected",
+            "unconnected",
+            "unavailable",
+            "identity-mismatch"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "locator"
+      ],
+      "additionalProperties": true
+    },
     "skills": {
       "type": "array",
       "items": {

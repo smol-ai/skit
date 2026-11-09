@@ -107,7 +107,7 @@ export function claudeListingResult(
     demand: costs.reduce((n, e) => n + e.demand, 0),
     entries: costs,
     collections: [...collections.values()],
-    basis: `${settings.model ?? "Model unspecified"} (${settings.modelSource}) · ${settings.limitSource}`,
+    basis: `${settings.model ?? "Model unspecified"} (${settings.modelSource}) | ${settings.limitSource}`,
     coverage: [...coverage, ...settings.notes],
   };
   if (settings.limit === null) return { _tag: "DemandOnly", ...common };

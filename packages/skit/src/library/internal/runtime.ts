@@ -47,6 +47,7 @@ import { StalePlan, type Approval } from "../library-plan.js";
 import { planIntent } from "../plan-changes.js";
 import { removeCollection } from "./session/remove.js";
 import { updateSources } from "./session/update-sources.js";
+import { refreshAuthored } from "../refresh-authored.js";
 import { openEditImport } from "./session/edit.js";
 import { libraryQueries, acceptLibrarySecurityFinding } from "./session/queries.js";
 import { refreshInventory, refreshMachineInventory } from "../inventory.js";
@@ -300,6 +301,12 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
     apply: applyFor,
     import: imports,
     startup,
+    refreshAuthored: (request) =>
+      owned(
+        refreshAuthored(structuredClone(request), operations).pipe(
+          Effect.provideService(InstalledSkills.Service, files),
+        ),
+      ),
     content,
     sync: (options, transport) => operation(syncLibrary(syncing, roots, options, transport)),
     syncSession: (request, options) => operation(openSyncSession(syncing, roots, request, options)),

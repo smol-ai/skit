@@ -125,7 +125,7 @@ export function auditPresentation(report: AuditReportV1Alpha4) {
       kind === "skill"
         ? (staticAudit?.findings ?? []).map((finding) => {
             const location = finding.location;
-            return `${finding.confidence} confidence · ${location.path ?? capability.location ?? "unknown"}:${location.line}:${location.column} · ${location.excerpt}`;
+            return `${finding.confidence} confidence | ${location.path ?? capability.location ?? "unknown"}:${location.line}:${location.column} | ${location.excerpt}`;
           })
         : [];
     const status: AuditItem["status"] = related.some((finding) => finding.severity === "error")
@@ -136,7 +136,7 @@ export function auditPresentation(report: AuditReportV1Alpha4) {
     const evidence = [
       `Scope: ${{ user: "User configuration", project: "Project configuration", legacy: "Legacy configuration" }[capability.scope]}`,
       `harnesses: ${capability.harnessIds.join(", ") || "none"}`,
-      `Provenance: ${{ exact: "Exact match", matched: "Inferred match", unknown: "Unknown" }[capability.provenance.confidence]} · ${capability.provenance.source ?? "source unavailable"}`,
+      `Provenance: ${{ exact: "Exact match", matched: "Inferred match", unknown: "Unknown" }[capability.provenance.confidence]} | ${capability.provenance.source ?? "source unavailable"}`,
       ...related.map((finding) => `${finding.severity}: ${finding.problem}`),
       ...staticFindings,
       ...riskFlags.map(() => "Risk indicator detected; inspect the supporting evidence."),
@@ -232,7 +232,7 @@ export function auditPresentation(report: AuditReportV1Alpha4) {
         status: "clear",
         summary: `${harness.entryIds.length} audit entries across ${roots.length} configuration or content roots.`,
         evidence: [
-          "installation probe: not run · press p",
+          "installation probe: not run | press p",
           `audit profile: ${harness.profileId}`,
           `audit profile version: ${harness.profileVersion}`,
           ...detectionSources.map((root) => `detection source: ${root}`),
@@ -302,7 +302,7 @@ function libraryRow(row: LibrarySkillRow): LibraryRow {
     evidence: [
       ...(enabled
         ? row.scopes.map((scopeRow) => scopeRow.label)
-        : ["not active anywhere · press e to enable"]),
+        : ["not active anywhere | press e to enable"]),
       ...(row.invocationWarning ? [row.invocationWarning] : []),
     ],
     agents: enabled ? ["every agent"] : [],
@@ -339,9 +339,9 @@ export function libraryRows(
         name: members[0]!.heading,
         location: collectionId,
         status: "clear",
-        summary: `${members.length} Skill${members.length === 1 ? "" : "s"} · ${enabled} enabled`,
+        summary: `${members.length} Skill${members.length === 1 ? "" : "s"} | ${enabled} enabled`,
         evidence: members.map(
-          (row) => `${row.name} · ${row.scopes.length ? "enabled" : "not enabled"}`,
+          (row) => `${row.name} | ${row.scopes.length ? "enabled" : "not enabled"}`,
         ),
         agents: [],
       };
@@ -444,7 +444,7 @@ export function detailPresentation(
               ? "executable"
               : "location",
           item.kind === "harness"
-            ? (item.harnessProbe?.executablePath ?? "not probed · press p")
+            ? (item.harnessProbe?.executablePath ?? "not probed | press p")
             : item.location,
         ),
         ...(library
@@ -497,7 +497,7 @@ export function detailPresentation(
     budget:
       item.kind === "harness" ? budgets.find((budget) => budget.harness === item.name) : undefined,
     evidenceTitle: collection ? "Skills" : "Evidence",
-    evidence: item.evidence.map((line) => `· ${line}`).join("\n"),
+    evidence: item.evidence.map((line) => `| ${line}`).join("\n"),
     evidenceLast: collection,
     shortcuts: collection
       ? ([
@@ -565,9 +565,9 @@ export function confirmationPresentation(
       ? "confirm enable"
       : "confirm disable",
     help: canShowSkills
-      ? `Enter apply · Esc cancel · s ${showSkills ? "hide" : "show"} Skills`
+      ? `Enter apply | Esc cancel | s ${showSkills ? "hide" : "show"} Skills`
       : compact
-        ? "Enter apply · Esc cancel · PgUp/PgDn scroll"
+        ? "Enter apply | Esc cancel | PgUp/PgDn scroll"
         : "enter apply   esc cancel — nothing is written until you apply",
   };
 }
@@ -607,17 +607,17 @@ export function inventoryPresentation(
     subtitle:
       section.key === "library"
         ? collectionId === undefined
-          ? `${items.length} Collections · ${skills.length} Skills`
-          : `${collectionHeading ?? "Collection"} · ${items.length} Skills`
-        : `${section.key === "skills" && skillGroup ? skillGroup.label : section.subtitle} · ${items.length} entries · ${findings} findings`,
+          ? `${items.length} Collections | ${skills.length} Skills`
+          : `${collectionHeading ?? "Collection"} | ${items.length} Skills`
+        : `${section.key === "skills" && skillGroup ? skillGroup.label : section.subtitle} | ${items.length} entries | ${findings} findings`,
     listTitle:
       section.key === "library"
         ? collectionId === undefined
           ? "collections"
           : (collectionHeading ?? "collection")
         : section.key === "skills" && skillGroup
-          ? `skills / ${skillGroup.label} · ${items.length}`
-          : `${section.key} · ${items.length}`,
+          ? `skills / ${skillGroup.label} | ${items.length}`
+          : `${section.key} | ${items.length}`,
     showDescription: !(section.key === "library" && collectionId !== undefined),
     emptyMessage:
       section.key === "library"
