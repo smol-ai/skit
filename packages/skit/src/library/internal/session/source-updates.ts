@@ -10,7 +10,11 @@ import {
 } from "../../subject-resolution.js";
 import { sourceFromUpstream } from "./upstream-source.js";
 import type { inspectResolvedSource } from "../../source-inspection.js";
-export type SourceInspection = Effect.Success<ReturnType<typeof inspectResolvedSource>>;
+export type SourceInspection = Effect.Success<ReturnType<typeof inspectResolvedSource>> & {
+  readonly messages?: readonly string[];
+};
+import { inspectAuthoredSkills } from "../../update-authored-skills.js";
+import type * as InstalledSkills from "../../installed-skills.js";
 
 interface LibraryProgressSubject {
   readonly id: string;
@@ -140,7 +144,10 @@ export const resolveUpdate = Effect.fn("Library.resolveCollectionUpdate")(functi
       subject_id: subject.subjectId,
       label: subject.label,
     });
-  const input = yield* subjectSource(subject, sourceImport.input.value);
+  const input: SkitSource =
+    sourceImport.source_identity.kind === "authored-workspace"
+      ? { type: "local", path: sourceImport.input.value }
+      : yield* subjectSource(subject, sourceImport.input.value);
   return { acquisition: sourceImport, priorTree, input };
 });
 
@@ -152,24 +159,30 @@ const previewCollectionUpdate = Effect.fn("Library.previewCollectionUpdate")(fun
     input: SkitSource,
     previousSkillPaths?: readonly string[],
   ) => Effect.Effect<SourceInspection, E, R>,
+  authored?: { readonly home: string; readonly active: InstalledSkills.Interface["active"] },
 ) {
   const {
     acquisition: sourceImport,
     priorTree: tree,
     input,
   } = yield* resolveUpdate(state, subject);
-  const inspected = yield* inspectSource(
-    input,
-    tree.members.map((member) => member.source_path),
-  );
+  const isAuthored = sourceImport.source_identity.kind === "authored-workspace";
+  const inspected =
+    isAuthored && authored !== undefined
+      ? yield* inspectAuthoredSkills(authored.home, state, sourceImport, yield* authored.active)
+      : yield* inspectSource(
+          input,
+          tree.members.map((member) => member.source_path),
+        );
   const members = ("members" in inspected ? inspected.members : undefined) ?? [];
   return {
     subject_id: subject.subjectId,
     subject_kind: subject.kind,
     current_snapshot_digest: tree.hash,
-    available_snapshot_digest: inspected.snapshot_digest,
+    ...(isAuthored ? {} : { available_snapshot_digest: inspected.snapshot_digest }),
     changed: tree.hash !== inspected.snapshot_digest,
     label: subject.label,
+    ...(inspected.messages === undefined ? {} : { messages: inspected.messages }),
     ...("diagnostics" in inspected && inspected.diagnostics?.length
       ? { diagnostics: inspected.diagnostics }
       : {}),
@@ -196,7 +209,8 @@ const selectSubjects = Effect.fn("Library.selectUpdates")(function* (
       (subject) =>
         latestSourceImport(state, subject) !== undefined &&
         subject.kind === "collection" &&
-        subject.collection.upstream !== undefined,
+        (subject.collection.upstream !== undefined ||
+          latestSourceImport(state, subject)?.source_identity.kind === "authored-workspace"),
     );
   return matches;
 });
@@ -209,9 +223,10 @@ export const previewSourceUpdates = Effect.fn("Library.previewSourceUpdates")(fu
     input: SkitSource,
     previousSkillPaths?: readonly string[],
   ) => Effect.Effect<SourceInspection, E, R>,
+  authored?: { readonly home: string; readonly active: InstalledSkills.Interface["active"] },
 ) {
   return yield* Effect.forEach(yield* selectSubjects(state, query), (subject) =>
-    previewCollectionUpdate(state, subject, inspectSource),
+    previewCollectionUpdate(state, subject, inspectSource, authored),
   );
 });
 export { selectSubjects };

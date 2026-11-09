@@ -697,7 +697,7 @@ it.effect("a skill renamed on one device keeps the other device's concurrent edi
       skill("release-notes", "Link every pull request.\n"),
       "remote",
     );
-    yield* world.a.sync();
+    yield* world.a.sync(false, true);
     yield* world.b.sync();
     yield* world.a.sync();
     for (const device of [world.a, world.b]) {
@@ -734,7 +734,7 @@ it.effect("a folder emptied by sync is removed, but one holding an ignored file 
     // B keeps a private, ignored note inside one of the folders A is about to delete.
     yield* fs.writeFileString(join(world.b.workspace, "extra/kept/notes.local"), "private\n");
     yield* fs.remove(join(world.a.workspace, "extra"), { recursive: true });
-    yield* world.a.sync();
+    yield* world.a.sync(false, true);
     yield* world.b.sync();
     expect(yield* fs.exists(join(world.b.workspace, "extra/gone"))).toBe(false);
     expect(yield* fs.exists(join(world.b.workspace, "extra/kept/SKILL.md"))).toBe(false);
@@ -917,7 +917,7 @@ it.effect("an interrupted pull never moves current and the next sync pulls again
     yield* world.b.sync();
     yield* fs.remove(join(world.b.workspace, "notes/deleted.txt"));
     yield* world.b.edit("notes/new.txt", "remote addition");
-    yield* world.b.sync();
+    yield* world.b.sync(false, true);
     const revisions = (yield* world.server.currentHistory()).length;
     const beforePull = (yield* world.server.events()).length;
     const reachedApply = yield* Deferred.make<void>();
@@ -1093,7 +1093,7 @@ it.effect("edit beats local deletion, and the deleting tree stays on the server"
     yield* world.a.edit("notes/shared.txt", "remote edit", "remote");
     yield* world.a.sync();
     const before = (yield* world.server.currentHistory()).length;
-    expect(yield* world.b.sync()).toMatchObject({
+    expect(yield* world.b.sync(false, true)).toMatchObject({
       status: "merged",
       choices: [{ path: "notes/shared.txt", kind: "delete_modify", kept: "remote" }],
     });
@@ -1204,7 +1204,7 @@ it.effect("a merge stopped by a newer edit keeps remote changes for the next mer
     const localBase = yield* world.server.current();
     yield* world.b.edit("notes/remote.txt", "remote addition");
     yield* fs.remove(join(world.b.workspace, "notes/deleted.txt"));
-    yield* world.b.sync();
+    yield* world.b.sync(false, true);
     yield* world.a.edit("notes/a.txt", "first local save");
     yield* world.a.backUp();
     const gate = yield* world.server.gate("a", "after-post");
@@ -1302,11 +1302,11 @@ it.effect("repeatedly interrupted pulls keep real edits and finish remote deleti
     yield* world.b.edit("notes/2.txt", "second downloaded file");
     yield* world.b.edit("notes/edited.txt", "remote: downloaded edit\nlocal: original\n");
     yield* fs.remove(join(world.b.workspace, "notes/deleted.txt"));
-    yield* world.b.sync();
+    yield* world.b.sync(false, true);
 
     for (const path of ["notes/1.txt", "notes/2.txt"]) {
       const written = yield* Deferred.make<void>();
-      const pending = yield* world.a.startSync().pipe(
+      const pending = yield* world.a.startSync(false, true, true).pipe(
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
           link: Effect.fn("Test.interruptRepeatedPull")(function* (from, to) {
@@ -1331,7 +1331,7 @@ it.effect("repeatedly interrupted pulls keep real edits and finish remote deleti
       }
     }
 
-    expect((yield* world.a.sync()).status).toBe("merged");
+    expect((yield* world.a.sync(false, true)).status).toBe("merged");
     expect(yield* world.a.read("notes/edited.txt")).toBe(
       "remote: downloaded edit\nlocal: real local edit\n",
     );
@@ -1545,7 +1545,7 @@ it.effect("an empty workspace blocks deletion until that removal is allowed", ()
     const fs = yield* FileSystem.FileSystem;
     yield* world.connect();
     const before = yield* world.b.files();
-    const revisions = (yield* world.server.revisions()).length;
+    const revisions = (yield* world.server.currentHistory()).length;
     for (const file of yield* world.a.files()) yield* fs.remove(join(world.a.workspace, file.path));
     const blocked = {
       status: "blocked",
@@ -1558,7 +1558,7 @@ it.effect("an empty workspace blocks deletion until that removal is allowed", ()
     expect(yield* world.a.preview()).toEqual(blocked);
     yield* world.a.restart();
     expect(yield* world.a.sync()).toEqual(blocked);
-    expect((yield* world.server.revisions()).length).toBe(revisions);
+    expect((yield* world.server.currentHistory()).length).toBe(revisions);
     yield* world.b.sync();
     expect(yield* world.b.files()).toEqual(before);
     // Approval is per invocation, never a persisted automatic preference.
@@ -1568,7 +1568,7 @@ it.effect("an empty workspace blocks deletion until that removal is allowed", ()
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("large partial deletion blocks while ordinary small deletion still syncs", () =>
+it.effect("large partial deletion blocks and small deletion waits unless explicitly allowed", () =>
   Effect.gen(function* () {
     const world = yield* makeAuthorSyncWorld();
     const fs = yield* FileSystem.FileSystem;
@@ -1585,9 +1585,10 @@ it.effect("large partial deletion blocks while ordinary small deletion still syn
     });
     yield* world.b.sync();
     expect(yield* world.b.files()).toEqual(before);
-    // Restore three files: five deliberate removals are below the bulk guard.
+    // Below the bulk threshold, removal still needs grace or an explicit allowance.
     for (let i = 5; i < 8; i++) yield* world.a.edit(`notes/${i}.txt`, "keep me");
-    expect((yield* world.a.sync()).status).toBe("pushed");
+    expect((yield* world.a.sync()).status).toBe("waiting_for_removal");
+    expect((yield* world.a.sync(false, true)).status).toBe("pushed");
     yield* world.b.sync();
     yield* expectConverged(world);
   }).pipe(Effect.provide(testPlatformLayer)),

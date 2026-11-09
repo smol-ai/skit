@@ -15,6 +15,11 @@ import { prepareAuthored } from "./internal/content/prepare-authored.js";
 import * as InstalledSkills from "./installed-skills.js";
 import { CollectionSource, readCollectionSource } from "./collection-source.js";
 import type { LibraryState } from "./library-state.js";
+import type { RemovalDecision } from "../author/inventory.js";
+import { inspectAuthorWorkspace } from "../author/inspect.js";
+import { readSkitDescriptor } from "../artifact/skit.js";
+import { installedSkillHash } from "./installed-skill-hash.js";
+import type { InstallDestination } from "../installed-skills/destination.js";
 
 export const AuthoredInstalledCopy = Schema.Struct({ skill: Schema.String, path: Schema.String });
 
@@ -74,24 +79,23 @@ const readAuthoredInstallation = Effect.fn("Library.readAuthoredInstallation")(f
 });
 
 /** Bytes already preserved by Author history; the Library never reads the editable root. */
-export interface AuthoredRefresh {
+export interface AuthoredSkillsUpdate {
   readonly workspaceId: string;
   readonly input: string;
   readonly tree: readonly TreeEntry[];
   readonly revisionId: string;
   readonly savedAt: string;
+  readonly removal: RemovalDecision;
 }
 
-/** Select and install complete valid/last-valid input closures under the existing writer. */
-export const refreshAuthored = Effect.fn("Library.refreshAuthored")(function* (
-  request: AuthoredRefresh,
-  operations: Pick<Interface, "read" | "plan" | "apply">,
+/** Both preview and update select the same complete inputs in scoped temporary storage. */
+const prepareAuthoredUpdate = Effect.fn("Library.prepareAuthoredUpdate")(function* (
+  home: string,
+  request: AuthoredSkillsUpdate,
+  state: LibraryState,
+  active: readonly InstallDestination[],
 ) {
-  const writer = yield* LibraryWriter;
   const fs = yield* FileSystem.FileSystem;
-  const installedSkills = yield* InstalledSkills.Service;
-  const active = yield* installedSkills.active;
-  const state = yield* loadLibrary(writer.home);
   const collection = state.collections.find((candidate) =>
     sourceImports(state, candidate.collection_id).some(
       (item) =>
@@ -99,13 +103,7 @@ export const refreshAuthored = Effect.fn("Library.refreshAuthored")(function* (
         item.source_identity.workspace_id === request.workspaceId,
     ),
   );
-  if (collection === undefined)
-    return {
-      status: "unregistered" as const,
-      installed: 0,
-      installed_copies: [],
-      messages: [] as string[],
-    };
+  if (collection === undefined) return undefined;
   const previousImport = sourceImports(state, collection.collection_id)[0];
   const previous = state.collection_versions.find(
     (copy) => copy.collection_version_id === previousImport?.collection_version_id,
@@ -114,7 +112,7 @@ export const refreshAuthored = Effect.fn("Library.refreshAuthored")(function* (
   for (const entry of captured)
     if (!isCanonicalRelativePath(entry.path))
       return yield* new TreeError({ reason: { _tag: "EscapedPath", path: entry.path } });
-  const staging = yield* fs.makeTempDirectoryScoped({ prefix: "skit-authored-refresh-" });
+  const staging = yield* fs.makeTempDirectoryScoped({ prefix: "skit-authored-update-" });
   for (const entry of captured) {
     if (entry.kind !== "file") continue;
     const path = join(staging, entry.path);
@@ -124,7 +122,7 @@ export const refreshAuthored = Effect.fn("Library.refreshAuthored")(function* (
   const previousRoot =
     previous === undefined
       ? undefined
-      : yield* readCollectionVersion(libraryOriginalsPath(writer.home), previous.hash);
+      : yield* readCollectionVersion(libraryOriginalsPath(home), previous.hash);
   const importedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
   const prepared = yield* prepareAuthored(
     staging,
@@ -136,7 +134,40 @@ export const refreshAuthored = Effect.fn("Library.refreshAuthored")(function* (
     active.map((destination) =>
       destination === "agents" ? ("codex" as const) : ("claude-code" as const),
     ),
+    request.removal,
   );
+  return {
+    collection,
+    previous,
+    importedAt,
+    root: prepared.root,
+    messages: prepared.messages,
+    hash: prepared.root === undefined ? previous?.hash : yield* originalTreeHash(prepared.root),
+  };
+});
+
+/** Select and install complete valid/last-valid input closures under the existing writer. */
+export const updateAuthoredSkills = Effect.fn("Library.updateAuthoredSkills")(function* (
+  request: AuthoredSkillsUpdate,
+  operations: Pick<Interface, "read" | "plan" | "apply">,
+) {
+  const writer = yield* LibraryWriter;
+  const state = yield* loadLibrary(writer.home);
+  const installedSkills = yield* InstalledSkills.Service;
+  const prepared = yield* prepareAuthoredUpdate(
+    writer.home,
+    request,
+    state,
+    yield* installedSkills.active,
+  );
+  if (prepared === undefined)
+    return {
+      status: "unregistered" as const,
+      installed: 0,
+      installed_copies: [],
+      messages: [] as string[],
+    };
+  const { collection, previous, importedAt } = prepared;
   if (prepared.root === undefined)
     return {
       status: "held" as const,
@@ -145,7 +176,7 @@ export const refreshAuthored = Effect.fn("Library.refreshAuthored")(function* (
       messages: prepared.messages,
       context: yield* readAuthoredInstallation(state, collection.collection_id),
     };
-  const hash = yield* originalTreeHash(prepared.root);
+  const hash = prepared.hash!;
   if (hash !== previous?.hash)
     yield* importAuthoredCollection({
       root: prepared.root,
@@ -166,7 +197,15 @@ export const refreshAuthored = Effect.fn("Library.refreshAuthored")(function* (
       const base = yield* operations.read;
       const plan = yield* operations.plan({ _tag: "Install", skills: [skill.skill_id] }, { base });
       return (yield* operations.apply({ _tag: "Apply", plan })).result;
-    });
+    }).pipe(
+      Effect.catchTag("UninstallConflict", (error) =>
+        Effect.sync(() => {
+          messages.push(`${skill.name}: ${error.message}`);
+          return undefined;
+        }),
+      ),
+    );
+    if (result === undefined) continue;
     if (result._tag === "Applied") {
       for (const copy of result.copies) {
         if (copy._tag === "Installed")
@@ -191,3 +230,72 @@ export const refreshAuthored = Effect.fn("Library.refreshAuthored")(function* (
     context: yield* readAuthoredInstallation(current, collection.collection_id),
   };
 });
+
+/** A preview cannot name a future Collection Version: changed members have not been saved as
+ * Author revisions yet. The private preview provenance is never imported or installed. */
+export const inspectAuthoredSkills = Effect.fn("Library.inspectAuthoredSkills")(function* (
+  home: string,
+  state: LibraryState,
+  sourceImport: LibraryState["imports"][number],
+  active: readonly InstallDestination[],
+) {
+  const identity = sourceImport.source_identity;
+  if (identity.kind !== "authored-workspace")
+    return yield* Effect.die("Expected an authored Source");
+  const { tree, removal } = yield* inspectAuthorWorkspace(
+    sourceImport.input.value,
+    home,
+    identity.workspace_id,
+  );
+  const prepared = yield* prepareAuthoredUpdate(
+    home,
+    {
+      workspaceId: identity.workspace_id,
+      input: sourceImport.input.value,
+      tree,
+      revisionId: "preview",
+      savedAt: new Date(0).toISOString(),
+      removal,
+    },
+    state,
+    active,
+  );
+  if (prepared === undefined) return yield* Effect.die("Expected a registered Author Workspace");
+  const previous = prepared.previous!;
+  if (prepared.root === undefined)
+    return {
+      kind: "authored" as const,
+      snapshot_digest: previous.hash,
+      skills: previous.members.map((member) => ({
+        name:
+          state.skills.find(
+            (skill) =>
+              skill.collection_id === sourceImport.collection_id &&
+              skill.path === member.source_path,
+          )?.name ?? member.source_path,
+        verbatim_path: member.source_path,
+      })),
+      members: previous.members,
+      messages: prepared.messages,
+    };
+  const descriptor = yield* readSkitDescriptor(prepared.root);
+  const selectedRoot = prepared.root;
+  return {
+    kind: "authored" as const,
+    snapshot_digest: prepared.hash!,
+    skills: descriptor.skills.map((skill) => ({ name: skill.name, verbatim_path: skill.path })),
+    members: yield* Effect.forEach(descriptor.skills, (skill) =>
+      Effect.gen(function* () {
+        return {
+          source_path: skill.path,
+          artifact_hash: yield* installedSkillHash({
+            collectionVersionPath: selectedRoot,
+            sourcePath: skill.path,
+            shared: skill.shared,
+          }),
+        };
+      }),
+    ),
+    messages: prepared.messages,
+  };
+}, Effect.scoped);

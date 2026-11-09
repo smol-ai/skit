@@ -79,14 +79,20 @@ export const updateCliCommand = Command.make(
       );
     }),
 ).pipe(
-  Command.withDescription("Update sources from their recorded origins."),
+  Command.withDescription("Update sources and installed skills; sync connected Author Workspaces."),
   Command.withExamples([
     { command: "skit update --dry-run" },
     { command: "skit update my-skill --from-projection claude-code --dry-run" },
   ]),
   Command.annotate(CommandMetadata, {
     effects: {
-      capabilities: ["filesystem.read", "filesystem.write", "network.read", "process.execute"],
+      capabilities: [
+        "filesystem.read",
+        "filesystem.write",
+        "network.read",
+        "network.write",
+        "process.execute",
+      ],
       subprocesses: [...sourceFetchSubprocesses, ...credentialStoreReadSubprocesses],
     },
     outputSchemas: [

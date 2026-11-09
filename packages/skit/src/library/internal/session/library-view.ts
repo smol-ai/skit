@@ -29,7 +29,11 @@ import { makeLibrarySkillInvocationReader } from "./invocation-source.js";
 import { readCollectionSource } from "../../collection-source.js";
 
 /** Internal constructor: derive a read model from the same snapshot used by a prepared action. */
-export const libraryView = (current: LibraryState, originalsPath: string) => {
+export const libraryView = (
+  current: LibraryState,
+  originalsPath: string,
+  authored?: Parameters<typeof previewSourceUpdates>[3],
+) => {
   const state = structuredClone(current);
   const placements = structuredClone(enabledCollections(state));
   const skills = state.skills.map((skill) => {
@@ -120,7 +124,7 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
         input: SkitSource,
         previousSkillPaths?: readonly string[],
       ) => Effect.Effect<SourceInspection, E, R>,
-    ) => previewSourceUpdates(state, query, inspectSource),
+    ) => previewSourceUpdates(state, query, inspectSource, authored),
     checkSubjects: <E, R>(
       query: string | undefined,
       options: {

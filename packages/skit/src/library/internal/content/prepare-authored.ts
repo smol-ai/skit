@@ -18,6 +18,7 @@ import {
   readAuthoredInputs,
 } from "./authored-inputs.js";
 import type { HarnessName } from "../../../harnesses/contracts.js";
+import type { RemovalDecision } from "../../../author/inventory.js";
 
 const within = (path: string, root: string) =>
   root === "." || path === root || path.startsWith(`${root}/`);
@@ -68,6 +69,7 @@ export const prepareAuthored = Effect.fn("Library.prepareAuthored")(function* (
   },
   previousCollection: { readonly root: string; readonly importedAt: string } | undefined,
   harnesses: readonly HarnessName[],
+  removal?: RemovalDecision,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const previousRoot = previousCollection?.root;
@@ -108,7 +110,12 @@ export const prepareAuthored = Effect.fn("Library.prepareAuthored")(function* (
     const previous =
       metadata?.selections.find((item) => item.declaration.path === stored.path)?.declaration ??
       stored;
-    if (!members.some((member) => member.path === previous.path)) {
+    if (
+      !members.some((member) => member.path === previous.path) &&
+      (removal === undefined ||
+        !removal.membershipReadable ||
+        (!removal.allowAllRemovals && !removal.removedMembers.includes(previous.path)))
+    ) {
       members.push(previous);
       messages.push(`Keeping ${previous.name}: membership removal awaits confirmation`);
     }
@@ -135,9 +142,13 @@ export const prepareAuthored = Effect.fn("Library.prepareAuthored")(function* (
                 ),
             ),
           ];
-    // Until the shared inventory owner supplies explicit removal authority, missing supporting
-    // files are held too. Repeated saves, elapsed time and restart never approve disappearance.
-    const missing = previousPaths.filter((path) => !currentPaths.has(path));
+    // Author supplies removal authority. Without it, keep every missing supporting input.
+    const missing = previousPaths.filter(
+      (path) =>
+        !currentPaths.has(path) &&
+        (removal === undefined ||
+          (!removal.allowAllRemovals && !removal.removedFiles.includes(path))),
+    );
     const candidate =
       present && missing.length === 0
         ? yield* Effect.gen(function* () {

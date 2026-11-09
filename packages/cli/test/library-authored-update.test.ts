@@ -1,0 +1,220 @@
+import { assert, it } from "@effect/vitest";
+import { Effect, FileSystem, Layer } from "effect";
+import { HttpClient, HttpClientError } from "effect/http";
+import { join } from "node:path";
+import * as Library from "@smolai/skit-core/library";
+import {
+  authorLayer,
+  initializeAuthorWorkspace,
+  updateAuthorWorkspace,
+} from "@smolai/skit-core/author";
+import { skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { testPlatformLayer } from "./helpers/platform.js";
+import { updateAdapters } from "../src/library/update/adapters.js";
+import { renderUpdate } from "../src/library/update/present.js";
+import { updateExitCode } from "../src/library/update/exit-code.js";
+import { RegistryHttp, registryClient } from "../src/registry/registry-http.js";
+import { registryHttpLayer } from "../src/registry/registry-http.js";
+import { authorRegistry } from "../src/registry/author-sync.js";
+import { TestClock } from "effect/testing";
+import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
+import { registryCredentialLayer } from "./helpers/registry-credential.js";
+import { testHttpClientLayer } from "./helpers/http-test-client.js";
+import { inspectLibrarySource } from "../src/library/source.js";
+import { captureDisk, assertDiskUnchanged } from "./helpers/disk-snapshot.js";
+
+const content = (name: string, body: string) =>
+  `---\nname: ${name}\ndescription: ${name} skill\n---\n${body}\n`;
+
+it.effect(
+  "manual authored update installs valid members offline, holds exact invalid inputs, and reports backup separately",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const directory = yield* fs.realPath(
+        yield* fs.makeTempDirectoryScoped({ prefix: "skit-manual-authored-" }),
+      );
+      const root = join(directory, "source");
+      const home = join(directory, "home");
+      const agents = join(directory, "agents");
+      for (const name of ["review", "explain"]) {
+        yield* fs.makeDirectory(join(root, name), { recursive: true });
+        yield* fs.writeFileString(join(root, name, "SKILL.md"), content(name, "Initial"));
+      }
+      yield* fs.writeFileString(
+        join(root, "skit.json"),
+        JSON.stringify({
+          slug: "tools",
+          skills: ["review", "explain"].map((name) => ({ name, path: name })),
+        }),
+      );
+      const layer = Library.layer({
+        home,
+        roots: {
+          home: directory,
+          configHome: join(directory, "config"),
+          overrides: { codex: [agents] },
+        },
+      }).pipe(
+        Layer.provideMerge(authorLayer({ home })),
+        Layer.provideMerge(skitConfigurationLayer(home)),
+      );
+      yield* Effect.gen(function* () {
+        const imported = yield* initializeAuthorWorkspace(root, home);
+        const library = yield* Library.Service;
+        const base = yield* library.read;
+        const plan = yield* library.plan(
+          {
+            _tag: "Enabled",
+            changes: [
+              {
+                _tag: "Enable",
+                subject: { _tag: "Collection", id: imported.entry.collection.collection_id },
+                members: "whole",
+                where: [{ kind: "global" }],
+              },
+            ],
+          },
+          { base },
+        );
+        yield* library.apply({ _tag: "Apply", plan });
+        yield* fs.writeFileString(
+          join(root, "skit.remote.json"),
+          JSON.stringify({
+            schema: "skit.remote.v1",
+            origin: "https://registry.example",
+            namespace: "tim",
+            skit: "tools",
+          }),
+        );
+        const initial = yield* fs.readFileString(join(agents, "review/SKILL.md"));
+        yield* fs.writeFileString(
+          join(root, "review/SKILL.md"),
+          "---\nname: review\n---\nInvalid without description\n",
+        );
+        const expected = content("explain", "Valid offline edit");
+        yield* fs.writeFileString(join(root, "explain/SKILL.md"), expected);
+        const adapters = yield* updateAdapters;
+        const disk = yield* captureDisk([root, home, agents]);
+        const preview = yield* library.previewSourceUpdates(undefined, inspectLibrarySource);
+        assert.strictEqual(preview.length, 1);
+        assert.strictEqual(preview[0]!.changed, true);
+        assert.deepStrictEqual(preview[0]!.updated, ["explain"]);
+        assert.include(preview[0]!.messages?.join("\n") ?? "", "review");
+        assert.isUndefined(preview[0]!.available_snapshot_digest);
+        yield* assertDiskUnchanged(disk);
+        const elsewhere = yield* Library.Service.pipe(
+          Effect.provide(
+            Library.layer({
+              home: join(directory, "other-home"),
+              roots: { home: directory, configHome: join(directory, "config"), overrides: {} },
+            }),
+          ),
+        );
+        const outcomes = yield* library
+          .update(undefined, adapters)
+          .pipe(Effect.provideService(Library.Service, elsewhere));
+        assert.strictEqual(outcomes.length, 1, JSON.stringify(outcomes));
+        assert.isFalse("status" in outcomes[0]!, JSON.stringify(outcomes));
+        assert.strictEqual((yield* elsewhere.read)._tag, "Absent");
+        assert.strictEqual(yield* fs.readFileString(join(agents, "review/SKILL.md")), initial);
+        assert.strictEqual(yield* fs.readFileString(join(agents, "explain/SKILL.md")), expected);
+        const result = outcomes[0]!;
+        assert.isFalse("status" in result);
+        if ("status" in result) return assert.fail(JSON.stringify(result));
+        assert.strictEqual(result.sync_status, "failed");
+        assert.isDefined(result.sync_error);
+        assert.include(renderUpdate(outcomes), "local update completed; Registry sync failed");
+        assert.strictEqual(updateExitCode(outcomes), 1);
+        const before = yield* library.read;
+        yield* library.update(undefined, adapters);
+        assert.strictEqual((yield* library.read).revision, before.revision);
+        assert.strictEqual(
+          (yield* library.previewSourceUpdates(undefined, inspectLibrarySource))[0]!.changed,
+          false,
+        );
+      }).pipe(
+        Effect.provide(layer),
+        Effect.provideService(RegistryHttp, {
+          client: Effect.succeed(
+            registryClient(
+              HttpClient.make((request) =>
+                Effect.fail(
+                  new HttpClientError.HttpClientError({
+                    reason: new HttpClientError.TransportError({
+                      request,
+                      cause: new Error("Registry offline"),
+                    }),
+                  }),
+                ),
+              ),
+            ),
+          ),
+        }),
+      );
+    }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
+);
+
+it.effect("installation and Registry sync share removal grace while safe edits advance", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const world = yield* makeAuthorSyncWorld();
+    yield* world.a.edit("skills/review/notes.txt", "Supporting input to remove");
+    yield* world.connect();
+    yield* world.a.registerAndEnable();
+    const { home, workspace } = world.a;
+    const installed = join(workspace, "..", "agents");
+    const owners = Library.layer({
+      home,
+      roots: {
+        home: join(home, "device"),
+        configHome: join(home, "config"),
+        overrides: { codex: [installed] },
+      },
+    }).pipe(
+      Layer.provideMerge(authorLayer({ home })),
+      Layer.provideMerge(
+        registryCredentialLayer("https://registry.example").pipe(
+          Layer.provideMerge(registryHttpLayer(testHttpClientLayer(world.server.transport("a")))),
+        ),
+      ),
+    );
+    yield* Effect.gen(function* () {
+      const registry = authorRegistry(home);
+      yield* updateAuthorWorkspace(workspace, { home }, registry);
+      const before = yield* world.a.installed("review/SKILL.md");
+      const edited = "---\nname: review\ndescription: Review code.\n---\n# Safe local change\n";
+      yield* world.a.edit("skills/review/SKILL.md", edited);
+      yield* fs.remove(join(workspace, "skills/review/notes.txt"));
+      const waiting = yield* updateAuthorWorkspace(workspace, { home }, registry);
+      assert.strictEqual(waiting.sync?._tag, "Success");
+      if (waiting.sync?._tag === "Success")
+        assert.strictEqual(waiting.sync.success.status, "waiting_for_removal");
+      assert.strictEqual(yield* world.a.installed("review/SKILL.md"), before);
+      assert.strictEqual(
+        yield* world.a.installed("review/notes.txt"),
+        "Supporting input to remove",
+      );
+      const current = (yield* world.server.currentHistory()).at(-1)!;
+      const primary = current.tree.find((entry) => entry.path === "skills/review/SKILL.md");
+      assert.strictEqual(primary?.kind, "file");
+      if (primary?.kind === "file")
+        assert.strictEqual(new TextDecoder().decode(primary.bytes), edited);
+      assert.isTrue(current.tree.some((entry) => entry.path === "skills/review/notes.txt"));
+      yield* TestClock.adjust("10 seconds");
+      const updated = yield* updateAuthorWorkspace(workspace, { home }, registry);
+      assert.strictEqual(updated.installation._tag, "Success");
+      assert.strictEqual(
+        yield* world.a.installed("review/SKILL.md"),
+        before.replace("# Review", "# Safe local change"),
+      );
+      assert.isFalse(yield* fs.exists(join(installed, "review/notes.txt")));
+      const library = yield* Library.Service;
+      const saved = yield* library.read;
+      const versions = (yield* world.server.currentHistory()).length;
+      yield* updateAuthorWorkspace(workspace, { home }, registry);
+      assert.strictEqual((yield* library.read).revision, saved.revision);
+      assert.strictEqual((yield* world.server.currentHistory()).length, versions);
+    }).pipe(Effect.provide(owners));
+  }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
+);

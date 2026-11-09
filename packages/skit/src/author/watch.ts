@@ -6,11 +6,10 @@ import { NoRemoteHome } from "./failures.js";
 import { nativeIdentityOf, sameNativeIdentity } from "../artifact/tree.js";
 import { AuthorSyncResult } from "./sync-result.js";
 import { syncAuthorWorkspace } from "./sync.js";
-import { makeRemovalGrace } from "./removal-grace.js";
 import type { AuthorRegistry } from "./transport.js";
 import { updateAuthoredSkills } from "./operations.js";
 import { TreeEntry } from "../artifact/tree-entry.js";
-import { AuthoredInstallation, AuthoredInstalledCopy } from "../library/refresh-authored.js";
+import { AuthoredInstallation, AuthoredInstalledCopy } from "../library/update-authored-skills.js";
 
 export const AuthorWatchEvent = Schema.Union([
   Schema.Struct({ event: Schema.Literal("watching"), path: Schema.String }),
@@ -77,7 +76,6 @@ export const watchAuthorWorkspace = Effect.fn("Author.watch")(function* <E, R, P
     });
   if (Option.isNone(native)) return yield* unsafe();
   const original = native.value;
-  const grace = makeRemovalGrace();
   const previous = yield* Ref.make<{ id: string; tree: readonly TreeEntry[] } | undefined>(
     undefined,
   );
@@ -108,7 +106,7 @@ export const watchAuthorWorkspace = Effect.fn("Author.watch")(function* <E, R, P
     });
   const retrying = (operation: "observe" | "install" | "sync" | "events", error: unknown) =>
     Effect.gen(function* () {
-      yield* grace.reset;
+      if (operation === "observe" || operation === "install") yield* history.inventory.reset(root);
       const message = error instanceof Error ? error.message : String(error);
       const changed = yield* Ref.modify(
         failures,
@@ -180,11 +178,7 @@ export const watchAuthorWorkspace = Effect.fn("Author.watch")(function* <E, R, P
       workspace.connection.remote.skit !== remote.skit
     )
       return yield* unsafe();
-    const result = yield* syncAuthorWorkspace(
-      root,
-      { home: options.home, apply: true, removalGrace: grace },
-      registry,
-    );
+    const result = yield* syncAuthorWorkspace(root, { home: options.home, apply: true }, registry);
     const key = JSON.stringify(result);
     const before = yield* Ref.getAndSet(previousSync, key);
     if (result.status !== "up_to_date" && before !== key) yield* report({ event: "sync", result });

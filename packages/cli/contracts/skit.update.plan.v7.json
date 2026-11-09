@@ -22,6 +22,12 @@
         "type": "string",
         "pattern": "^sha256:[a-f0-9]{64}$"
       },
+      "messages": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
       "changed": {
         "type": "boolean"
       },
@@ -89,7 +95,6 @@
       "subject_id",
       "subject_kind",
       "current_snapshot_digest",
-      "available_snapshot_digest",
       "changed",
       "label",
       "enabled",

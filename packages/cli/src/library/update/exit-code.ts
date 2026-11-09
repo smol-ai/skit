@@ -3,6 +3,7 @@ import type { UpdateResult } from "./output.js";
 /** Preserve a uniform failure code; mixed success or failure types use the batch code. */
 export function updateExitCode(outcomes: UpdateResult): number {
   const failures = outcomes.filter((item) => "status" in item);
+  if (outcomes.some((item) => "sync_error" in item && item.sync_error !== undefined)) return 1;
   if (failures.length === 0) return 0;
   const code = failures[0]!.error.exitCode;
   return failures.length === outcomes.length &&

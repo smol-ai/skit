@@ -19,6 +19,19 @@ import {
 
 /** The existing acquisition adapter's imported-content facts; no storage or lifecycle is exposed. */
 export interface SourceUpdateAdapters<E, R, F extends { readonly remediation: string }> {
+  readonly updateAuthoredSkills: (
+    input: string,
+    owner: { readonly library: Interface; readonly home: string },
+  ) => Effect.Effect<
+    {
+      readonly installed: number;
+      readonly messages: readonly string[];
+      readonly sync_status?: string;
+      readonly sync_error?: F;
+    },
+    E,
+    R
+  >;
   readonly importSource: (
     input: SkitSource,
     previousSkillPaths: readonly string[],
@@ -67,7 +80,7 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <
   F extends { readonly remediation: string },
 >(
   home: string,
-  library: Pick<Interface, "read" | "plan" | "apply" | "import">,
+  library: Interface,
   state: LibraryState,
   before: LibrarySubject,
   adapters: SourceUpdateAdapters<E, R, F>,
@@ -79,30 +92,48 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <
   let sourceImported = false;
   return yield* Effect.scoped(
     Effect.gen(function* () {
-      const { priorTree, input } = yield* resolveUpdate(state, before);
+      const { priorTree, input, acquisition } = yield* resolveUpdate(state, before);
       source = sourceLocator(input);
       const subject = { id: before.subjectId, label: before.label };
-      const imported = yield* progress.around(
-        { kind: "source", subject },
-        adapters.importSource(
-          input,
-          priorTree.members.map((member) => member.source_path),
-          library.import,
-        ),
-        (value) => ({
-          kind: "source-inspected",
-          changed: value.snapshot_digest !== priorTree.hash,
-        }),
-      );
+      const authored =
+        acquisition.source_identity.kind === "authored-workspace"
+          ? yield* adapters.updateAuthoredSkills(acquisition.input.value, { library, home })
+          : undefined;
+      const imported =
+        authored === undefined
+          ? yield* progress.around(
+              { kind: "source", subject },
+              adapters.importSource(
+                input,
+                priorTree.members.map((member) => member.source_path),
+                library.import,
+              ),
+              (value) => ({
+                kind: "source-inspected",
+                changed: value.snapshot_digest !== priorTree.hash,
+              }),
+            )
+          : yield* Effect.gen(function* () {
+              const current = yield* loadLibrary(home);
+              const latest = latestSourceImport(current, before);
+              const version =
+                current.collection_versions.find(
+                  (item) => item.collection_version_id === latest?.collection_version_id,
+                ) ?? priorTree;
+              return {
+                snapshot_digest: version.hash,
+                collection_version_id: version.collection_version_id,
+              };
+            });
       sourceImported = true;
       const changed = imported.snapshot_digest !== priorTree.hash;
-      let installed = 0;
+      let installed = authored?.installed ?? 0;
       const collectionId =
         before.kind === "collection" ? before.collection.collection_id : before.skill.collection_id;
       // Install the Collection's members where this device installs, even when the Source is
       // current: a previous run may have retained this snapshot before installing failed or
       // temporary-source cleanup interrupted it. New members follow an enabled Collection.
-      {
+      if (authored === undefined) {
         const current = yield* library.read;
         const members =
           current._tag === "Present"
@@ -142,6 +173,13 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <
         changed,
         installed: installed,
         label: before.label,
+        ...(authored === undefined
+          ? {}
+          : {
+              messages: authored.messages,
+              ...(authored.sync_status === undefined ? {} : { sync_status: authored.sync_status }),
+              ...(authored.sync_error === undefined ? {} : { sync_error: authored.sync_error }),
+            }),
         ...("diagnostics" in imported && imported.diagnostics?.length
           ? { diagnostics: imported.diagnostics }
           : {}),
@@ -236,19 +274,19 @@ export const updateSources = Effect.fn("Library.updateSources")(function* <
   F extends { readonly remediation: string },
 >(
   home: string,
-  library: Pick<Interface, "read" | "plan" | "apply" | "import">,
+  library: Interface,
   query: string | undefined,
   adapters: SourceUpdateAdapters<E, R, F>,
 ) {
-  return yield* writeLibrary(
-    home,
-    Effect.gen(function* () {
-      const snapshot = yield* library.read;
-      const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
-      const selected = yield* selectSubjects(state, query);
-      return yield* Effect.forEach(selected, (subject) =>
-        updateCollection(home, library, state, subject, adapters),
-      );
-    }),
-  );
+  const snapshot = yield* library.read;
+  const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
+  const selected = yield* selectSubjects(state, query);
+  return yield* Effect.forEach(selected, (subject) => {
+    const update = updateCollection(home, library, state, subject, adapters);
+    // Authored refresh takes workspace ownership before its short Library writer. Ordinary
+    // sources retain the existing Library transaction around acquisition and installation.
+    return latestSourceImport(state, subject)?.source_identity.kind === "authored-workspace"
+      ? update
+      : writeLibrary(home, update);
+  });
 }, Effect.scoped);

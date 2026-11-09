@@ -14,6 +14,7 @@ import { suggestDoctorCleanup, type CleanupBudget } from "./cleanup-selection.js
 import type { UsageReport } from "../../usage/contracts.js";
 import type { InventoryRootOptions } from "../../routing/roots.js";
 import type { SourceInspection } from "./source-updates.js";
+import type * as InstalledSkills from "../../installed-skills.js";
 
 /**
  * Passive reports from the configured Library. An explicit base keeps displayed choices
@@ -24,6 +25,7 @@ export const libraryQueries = (
   home: string,
   roots: InventoryRootOptions,
   platform: Context.Context<TreeRequirements | Digest.Digest | HttpClient.HttpClient>,
+  files: InstalledSkills.Interface,
 ) => {
   const viewFor = (options?: { readonly base: Snapshot }) =>
     Effect.map(
@@ -32,6 +34,7 @@ export const libraryQueries = (
         libraryView(
           snapshot._tag === "Present" ? snapshot.state : emptyLibraryState(),
           join(home, "originals"),
+          { home, active: files.active },
         ),
     );
   return {

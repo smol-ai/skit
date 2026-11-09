@@ -24,16 +24,40 @@ export function renderUpdate(data: UpdateResult): string {
   const successful = data.filter((item) => "changed" in item);
   const updated = successful.filter((item) => item.changed);
   const current = successful.length - updated.length;
+  const syncFailed = successful.some((item) => item.sync_error !== undefined);
+  const authorMessages = successful.flatMap((item) => [
+    ...(item.messages ?? []).map((message) => `${item.label}: ${message}`),
+    ...(item.sync_error === undefined
+      ? []
+      : [
+          `${item.label}: local update completed; Registry sync failed: ${item.sync_error.message}`,
+          `  ${item.sync_error.remediation}`,
+        ]),
+    ...(item.sync_status === "blocked" || item.sync_status === "waiting_for_removal"
+      ? [
+          `${item.label}: Registry sync ${item.sync_status === "blocked" ? "paused for removal approval" : "waiting for removal confirmation"}`,
+        ]
+      : []),
+  ]);
   if (updated.length === 0 && failures.length === 0)
     return [
-      successful.some((item) => item.installed > 0)
-        ? `Sources are current; installed skills updated\n${plural(current, "Source")} checked; no retained snapshots changed.`
-        : `Everything is current\n${plural(current, "Source")} checked; no retained snapshots or installed skills changed.`,
+      syncFailed
+        ? "Local updates complete; Registry sync failed"
+        : successful.some((item) => item.installed > 0)
+          ? `Sources are current; installed skills updated\n${plural(current, "Source")} checked; no retained snapshots changed.`
+          : `Everything is current\n${plural(current, "Source")} checked; no retained snapshots or installed skills changed.`,
       ...successful.flatMap((item) =>
         item.diagnostics?.length ? [item.label, ...sourceDiagnosticLines(item.diagnostics)] : [],
       ),
+      ...authorMessages,
     ].join("\n");
-  const lines = [failures.length ? "Update finished with failures" : "Update complete"];
+  const lines = [
+    failures.length
+      ? "Update finished with failures"
+      : syncFailed
+        ? "Local updates complete; Registry sync failed"
+        : "Update complete",
+  ];
   for (const item of successful.filter((item) => item.changed || item.diagnostics?.length))
     lines.push(item.label, ...skillChangeLines(item), ...sourceDiagnosticLines(item.diagnostics));
   for (const item of failures)
@@ -48,6 +72,7 @@ export function renderUpdate(data: UpdateResult): string {
       ...(item.source_imported ? [`  Run \`skit update ${item.subject_id}\` to retry it.`] : []),
     );
   lines.push(
+    ...authorMessages,
     "",
     `${plural(updated.length, "Source")} updated${current ? `; ${current} already current` : ""}${failures.length ? `; ${failures.length} failed` : ""}.`,
   );
@@ -62,6 +87,7 @@ export function renderUpdatePlan(data: UpdatePlan): string {
       `${item.label} | ${item.changed ? "update available" : "current"}`,
       ...skillChangeLines(item),
       ...sourceDiagnosticLines(item.diagnostics),
+      ...(item.messages ?? []).map((message) => `  ${message}`),
     );
   const updates = data.filter((item) => item.changed).length;
   lines.push(

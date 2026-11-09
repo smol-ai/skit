@@ -5,6 +5,8 @@ import {
   AuthorSyncStateInvalid,
   AuthorWorkspaceConflict,
   type Connecting,
+  type WorkspaceLease,
+  AuthorWorkspaceUnsafe,
 } from "./workspace.js";
 import { AuthorHistory, authorHistoryStoreError } from "./history.js";
 import {
@@ -25,7 +27,6 @@ import { MissingRequirement } from "../shared/input-failures.js";
 import { parseAuthorDestination, skitLocator } from "./destination.js";
 import { backupAuthorHistory } from "./backup.js";
 import type { AuthorRegistry } from "./transport.js";
-import type { RemovalGrace } from "./removal-grace.js";
 
 /** A first sync names its destination and visibility; it is persisted only once connecting. */
 type Destination =
@@ -50,16 +51,21 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
     readonly home: string;
     readonly to?: string;
     readonly visibility?: AuthorVisibility;
-    /** Foreground watch owns this grace across passes; manual sync applies explicit intent. */
-    readonly removalGrace?: RemovalGrace;
   },
   registryAccess: Pick<AuthorRegistry<E, R, P>, "origin" | "connect">,
+  heldLease?: WorkspaceLease,
 ) {
   const workspaces = yield* AuthorWorkspace;
   const history = yield* AuthorHistory;
   const root = yield* workspaces.resolveRoot(rootInput);
   // Applying holds the workspace lease for the whole command; a preview takes none (A8).
-  const lease = options.apply ? yield* workspaces.acquire(root) : undefined;
+  if (heldLease !== undefined && heldLease.root !== root)
+    return yield* new AuthorWorkspaceUnsafe({
+      path: root,
+      reason: "the workspace lease belongs to a different root",
+    });
+  const lease = options.apply ? (heldLease ?? (yield* workspaces.acquire(root))) : undefined;
+  if (lease !== undefined) yield* lease.revision;
   const workspace = yield* workspaces.read(root);
   const { connection } = workspace;
   if (connection._tag === "Connected" && options.to)
@@ -267,32 +273,99 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
       ).pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure));
     return yield* scanned.failure;
   }
-  const { local, localHash } = scanned.success;
+  const { local } = scanned.success;
+  let localHash = scanned.success.localHash;
   const state =
     destination._tag === "ConnectedRemote" ? savedState : Sync.Idle.make({ base: null });
-  const input = yield* Sync.loadPlanInput({
+  let input = yield* Sync.loadPlanInput({
     store: history.engineStore,
     remote: registry,
     state,
     local: { hash: localHash, tree: local.tree },
   }).pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure));
-  const planned = Sync.plan(input);
-  if (applying !== undefined && options.removalGrace !== undefined) {
-    const waiting = yield* options.removalGrace.check(input);
-    if (waiting !== undefined) {
-      yield* backupAuthorHistory(
-        applying.lease,
-        { workspaceId: applying.workspaceId, locator },
-        applying.observation,
-        registry,
-      ).pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure));
-      return {
-        status: "waiting_for_removal",
-        changed: false,
-        ...waiting,
-      } satisfies AuthorSyncResult;
+  const removal =
+    applying === undefined
+      ? undefined
+      : yield* history.inventory.refresh(
+          applying.lease,
+          applying.workspaceId,
+          local.tree,
+          options.allowLargeDeletion,
+          input._tag === "Writing"
+            ? [input.from]
+            : input._tag === "Sending"
+              ? [...(input.base === null ? [] : [input.base.tree]), input.sent.tree]
+              : input.base === null
+                ? []
+                : [input.base.tree],
+        );
+  let waitingForRemoval:
+    | Extract<AuthorSyncResult, { status: "waiting_for_removal" | "blocked" }>
+    | undefined;
+  const replay =
+    input._tag === "Writing" ? input.to : input._tag === "Sending" ? input.sent.tree : undefined;
+  // A saved operation may finish its own removals. Fresh missing inputs are still guarded,
+  // and replay grants no removal authority to the separate Library installation pass.
+  const replayingRemoval =
+    replay !== undefined &&
+    removal !== undefined &&
+    removal.heldFiles.every((path) => !replay.some((entry) => entry.path === path)) &&
+    removal.heldMembers.every(
+      (member) =>
+        !replay.some((entry) => entry.path === member || entry.path.startsWith(`${member}/`)),
+    );
+  if (
+    !replayingRemoval &&
+    Sync.plan(input)._tag !== "UpToDate" &&
+    applying !== undefined &&
+    removal !== undefined &&
+    (removal.heldFiles.length > 0 || removal.heldMembers.length > 0)
+  ) {
+    yield* backupAuthorHistory(
+      applying.lease,
+      { workspaceId: applying.workspaceId, locator },
+      applying.observation,
+      registry,
+    ).pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure));
+    const waiting = {
+      status: removal.status === "blocked" ? "blocked" : "waiting_for_removal",
+      changed: false,
+      deleting: removal.heldFiles.length || removal.heldMembers.length,
+      of:
+        removal.heldFiles.length > 0
+          ? removal.inventory.files.length + removal.heldFiles.length
+          : removal.inventory.members.length + removal.heldMembers.length,
+      paths: removal.heldFiles.length > 0 ? removal.heldFiles : removal.heldMembers,
+    } satisfies AuthorSyncResult;
+    waitingForRemoval = waiting;
+    // While a non-bulk removal waits, independent local edits may still advance the current
+    // remote. Carry missing paths from the accepted sync base. A concurrent remote change
+    // waits too: applying a merged tree here would put held deletions back into the workspace.
+    if (
+      input._tag !== "Idle" ||
+      removal.status === "blocked" ||
+      input.base === null ||
+      input.current?.id !== input.base.id
+    )
+      return waiting;
+    const held = new Set(removal.heldFiles);
+    if (removal.heldMembers.length > 0) {
+      held.add("skit.json");
+      held.add("README.md");
     }
+    const carried = input.base.tree.filter(
+      (entry) =>
+        held.has(entry.path) ||
+        (entry.kind === "directory" && [...held].some((path) => path.startsWith(`${entry.path}/`))),
+    );
+    const tree = new Map(local.tree.map((entry) => [entry.path, entry]));
+    for (const entry of carried) tree.set(entry.path, entry);
+    const safe = [...tree.values()];
+    if (History.treePathIssue(safe) !== undefined) return waiting;
+    localHash = yield* history.saveTree(safe);
+    input = { ...input, local: { hash: localHash, tree: safe } };
   }
+  const planned = Sync.plan(input);
   if (applying === undefined)
     switch (planned._tag) {
       case "UpToDate":
@@ -317,7 +390,12 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
         return { status: "ready", changed: false, action: "merge" } satisfies AuthorSyncResult;
     }
   const key = { workspaceId: applying.workspaceId, locator };
-  if (planned._tag === "Blocked" && !options.allowLargeDeletion)
+  const approvedRemoval =
+    planned._tag === "Blocked" &&
+    removal !== undefined &&
+    (removal.allowAllRemovals ||
+      planned.removal.paths.every((path) => removal.removedFiles.includes(path)));
+  if (planned._tag === "Blocked" && !approvedRemoval)
     return { status: "blocked", changed: false, ...planned.removal } satisfies AuthorSyncResult;
   yield* backupAuthorHistory(applying.lease, key, applying.observation, registry).pipe(
     Effect.catchIf(Schema.is(History.StoreError), storeFailure),
@@ -334,9 +412,7 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
     merger: authorTree({ excluded: new Set(), previouslyExcluded: new Set() }),
     decide: authorDecider,
     // Approval covers exactly the removal this sync found; any other removal still blocks.
-    ...(options.allowLargeDeletion && planned._tag === "Blocked"
-      ? { approved: planned.removal }
-      : {}),
+    ...(approvedRemoval && planned._tag === "Blocked" ? { approved: planned.removal } : {}),
     // Every checkpoint step advances the lease.
     save: (next) =>
       Effect.gen(function* () {
@@ -367,6 +443,8 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
   yield* backupAuthorHistory(applying.lease, key, completed, registry).pipe(
     Effect.catchIf(Schema.is(History.StoreError), storeFailure),
   );
+  if (waitingForRemoval !== undefined)
+    return { ...waitingForRemoval, changed: outcome.status !== "up_to_date" };
   if (destination._tag !== "ConnectedRemote")
     return {
       status: "created",

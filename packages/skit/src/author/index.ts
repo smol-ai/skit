@@ -45,7 +45,12 @@ export type { DescriptorMalformed, ReadmeFrontmatterMissing } from "../artifact/
 export { SkitValidationDiagnostic } from "../artifact/validation-diagnostic.js";
 export { InvocationMetadataGeneration } from "./invocation/generation.js";
 
-export { authorLayer, authorWorkspaceLayer, readAuthorWorkspace } from "./operations.js";
+export {
+  authorLayer,
+  authorWorkspaceLayer,
+  readAuthorWorkspace,
+  updateAuthorWorkspace,
+} from "./operations.js";
 export { syncAuthorWorkspace } from "./sync.js";
 export { watchAuthorWorkspace, AuthorWatchEvent } from "./watch.js";
 export { initializeAuthorWorkspace } from "./initialize.js";

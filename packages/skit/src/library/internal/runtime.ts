@@ -47,7 +47,7 @@ import { StalePlan, type Approval } from "../library-plan.js";
 import { planIntent } from "../plan-changes.js";
 import { removeCollection } from "./session/remove.js";
 import { updateSources } from "./session/update-sources.js";
-import { refreshAuthored } from "../refresh-authored.js";
+import { updateAuthoredSkills } from "../update-authored-skills.js";
 import { openEditImport } from "./session/edit.js";
 import { libraryQueries, acceptLibrarySecurityFinding } from "./session/queries.js";
 import { refreshInventory, refreshMachineInventory } from "../inventory.js";
@@ -232,7 +232,7 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
   const syncing = { ...operations, content };
   const editing = { ...operations, import: imports };
   const operation = Effect.provide(importing);
-  const queries = libraryQueries(read, home, roots, importing);
+  const queries = libraryQueries(read, home, roots, importing, files);
   const library: Interface = {
     addSource: (request) =>
       operation(addSource({ import: imports, descriptionLoad: queries.descriptionLoad }, request)),
@@ -249,7 +249,7 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
         operation(readLibrarySkillContent(read, home, skillVersionId)),
     },
     remove: (options) => operation(removeCollection(operations, options)),
-    update: (query, adapters) => operation(updateSources(home, editing, query, adapters)),
+    update: (query, adapters) => operation(updateSources(home, library, query, adapters)),
     edit: (query, selector) => operation(openEditImport(home, editing, query, selector)),
     check: (query, options) => operation(queries.check(query, options)),
     previewSourceUpdates: (query, inspect) =>
@@ -301,9 +301,9 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
     apply: applyFor,
     import: imports,
     startup,
-    refreshAuthored: (request) =>
+    updateAuthoredSkills: (request) =>
       owned(
-        refreshAuthored(structuredClone(request), operations).pipe(
+        updateAuthoredSkills(structuredClone(request), operations).pipe(
           Effect.provideService(InstalledSkills.Service, files),
         ),
       ),

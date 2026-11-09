@@ -14,6 +14,7 @@ import {
 import { Clock, Effect, FileSystem, Option, Path } from "effect";
 
 import { workspaceIdFromClaims } from "./library-claims.js";
+import { AuthorHistory, authorHistoryStoreError } from "./history.js";
 
 /**
  * What the Library already says about this folder: no other Collection may claim it, and a
@@ -75,6 +76,13 @@ export const initializeAuthorWorkspace = Effect.fn("Author.initialize")(function
     assessmentContext: "import",
   });
   const workspace = Option.isNone(identity) ? yield* lease.register(claims.adopt) : identity.value;
+  const history = yield* AuthorHistory;
+  const saved = yield* history.refresh(root);
+  const tree = yield* history.engineStore
+    .tree(saved.treeHash)
+    .pipe(Effect.mapError(authorHistoryStoreError));
+  // Explicit registration/import accepts this inventory; later automatic passes cannot do so.
+  yield* history.inventory.refresh(lease, workspace.workspaceId, tree, true);
   const entry = yield* library.import.authored({
     root: folder,
     source: { type: "local", path: folder },

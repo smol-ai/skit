@@ -3205,12 +3205,13 @@
         "update"
       ],
       "stability": "stable",
-      "summary": "Update sources from their recorded origins.",
+      "summary": "Update sources and installed skills; sync connected Author Workspaces.",
       "effects": {
         "capabilities": [
           "filesystem.read",
           "filesystem.write",
           "network.read",
+          "network.write",
           "process.execute"
         ],
         "subprocesses": [
