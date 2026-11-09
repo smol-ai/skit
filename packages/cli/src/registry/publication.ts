@@ -1,7 +1,8 @@
 import { Data, Effect, Predicate, Schema } from "effect";
-import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http";
+import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import type { RegistryTransportError } from "./registry-http.js";
+import { validateAuthenticationOrigin } from "./accounts.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 import {
   SkitContractError,
@@ -59,7 +60,14 @@ export const publishRelease = Effect.fn("Registry.publishRelease")(function* (
   },
 ) {
   const { remote, token, root, version, revision } = input;
-  const base = remote.origin.replace(/\/$/, "");
+  const base = yield* validateAuthenticationOrigin(remote.origin).pipe(
+    Effect.mapError(
+      () =>
+        new PublicationResponseError({
+          message: "Publication requires HTTPS or a local development Registry.",
+        }),
+    ),
+  );
   const owner = remote.namespace;
   const slug = remote.skit;
   const bytes = input.archive;
@@ -75,14 +83,26 @@ export const publishRelease = Effect.fn("Registry.publishRelease")(function* (
       discovery = yield* http.execute(HttpClientRequest.get(`${base}/.well-known/skit`));
     if (discovery.status < 200 || discovery.status >= 300) return undefined;
     const template = stringField(yield* discovery.json, "publish");
-    return template === undefined
-      ? undefined
-      : URL.parse(
-          template
-            .replace("{owner}", encodeURIComponent(owner))
-            .replace("{slug}", encodeURIComponent(slug)),
-          base,
-        )?.toString();
+    if (template === undefined) return undefined;
+    const destination = URL.parse(
+      template
+        .replace("{owner}", encodeURIComponent(owner))
+        .replace("{slug}", encodeURIComponent(slug)),
+      base,
+    );
+    if (
+      destination === null ||
+      destination.origin !== base ||
+      !["https:", "http:"].includes(destination.protocol) ||
+      destination.username !== "" ||
+      destination.password !== "" ||
+      destination.hash !== ""
+    )
+      return yield* new PublicationResponseError({
+        message:
+          "Registry discovery returned an invalid publication destination; it must use the selected Registry origin without URL credentials or a fragment.",
+      });
+    return destination.toString();
   }).pipe(
     Effect.catchTags({
       RegistryTransportError: () => Effect.undefined,
@@ -95,6 +115,8 @@ export const publishRelease = Effect.fn("Registry.publishRelease")(function* (
     httpClient: HttpClient.mapRequest(http, HttpClientRequest.setUrl(publishUrl)),
   }).pipe(Effect.provide(authenticatedApiMiddleware(token)));
   return yield* client.publication.publish({ params: { owner, slug }, payload: body }).pipe(
+    // Publication never delegates its credential or upload to a redirect target.
+    Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
     Effect.catchTag(
       "HttpClientError",
       (
