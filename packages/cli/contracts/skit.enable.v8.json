@@ -5,6 +5,54 @@
     "subject_id": {
       "type": "string"
     },
+    "collection_label": {
+      "type": "string"
+    },
+    "collection_source": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "github",
+            "git",
+            "registry",
+            "url",
+            "archive",
+            "local",
+            "authored-workspace",
+            "well-known"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "locator": {
+          "type": "string"
+        },
+        "authority": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        },
+        "workspace_status": {
+          "type": "string",
+          "enum": [
+            "connected",
+            "unconnected",
+            "unavailable",
+            "identity-mismatch"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "locator"
+      ],
+      "additionalProperties": true
+    },
     "skills": {
       "type": "array",
       "items": {
@@ -52,8 +100,7 @@
     "action": {
       "type": "string",
       "enum": [
-        "enable",
-        "disable"
+        "enable"
       ]
     },
     "invocation": {
@@ -154,13 +201,123 @@
           "path": {
             "type": "string"
           },
-          "message": {
-            "type": "string"
+          "reason": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "_tag": {
+                    "type": "string",
+                    "enum": [
+                      "EntryLimitExceeded"
+                    ]
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "count": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "_tag",
+                  "limit",
+                  "count"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_tag": {
+                    "type": "string",
+                    "enum": [
+                      "Unreadable"
+                    ]
+                  },
+                  "error": {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "PlatformError"
+                        ]
+                      },
+                      "reason": {
+                        "type": "object",
+                        "properties": {
+                          "_tag": {
+                            "type": "string",
+                            "enum": [
+                              "AlreadyExists",
+                              "BadResource",
+                              "Busy",
+                              "InvalidData",
+                              "NotFound",
+                              "PermissionDenied",
+                              "TimedOut",
+                              "UnexpectedEof",
+                              "Unknown",
+                              "WouldBlock",
+                              "WriteZero",
+                              "BadArgument"
+                            ]
+                          },
+                          "module": {
+                            "type": "string"
+                          },
+                          "method": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "syscall": {
+                            "type": "string"
+                          },
+                          "pathOrDescriptor": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "_tag",
+                          "module",
+                          "method"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "reason"
+                    ],
+                    "additionalProperties": true
+                  }
+                },
+                "required": [
+                  "_tag",
+                  "error"
+                ],
+                "additionalProperties": true
+              }
+            ]
           }
         },
         "required": [
           "path",
-          "message"
+          "reason"
         ],
         "additionalProperties": true
       }
@@ -231,19 +388,24 @@
           "type": "object",
           "properties": {
             "code": {
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "NOT_FOUND",
+                "CONFLICT",
+                "INVALID_ARGUMENT",
+                "VALIDATION_FAILED",
+                "TARGET_COLLISION",
+                "AUTHENTICATION_REQUIRED",
+                "OPERATION_FAILED"
+              ]
             },
-            "message": {
-              "type": "string"
-            },
-            "remediation": {
-              "type": "string"
+            "cause": {
+              "$ref": "#/definitions/ApplyFailure"
             }
           },
           "required": [
             "code",
-            "message",
-            "remediation"
+            "cause"
           ],
           "additionalProperties": true
         }
@@ -294,5 +456,3017 @@
     "installed_skills"
   ],
   "additionalProperties": true,
+  "definitions": {
+    "SchemaIssueFact": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          }
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "MissingKey"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "UnexpectedKey"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "InvalidType"
+                  ]
+                },
+                "expected": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "Declaration",
+                          "Null",
+                          "Undefined",
+                          "Void",
+                          "Never",
+                          "Unknown",
+                          "Any",
+                          "String",
+                          "Number",
+                          "Boolean",
+                          "BigInt",
+                          "Symbol",
+                          "Literal",
+                          "UniqueSymbol",
+                          "ObjectKeyword",
+                          "Enum",
+                          "TemplateLiteral",
+                          "Arrays",
+                          "Objects",
+                          "Union",
+                          "Suspend"
+                        ]
+                      },
+                      "values": {
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": true
+                  }
+                }
+              },
+              "required": [
+                "_tag",
+                "expected"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "InvalidValue"
+                  ]
+                },
+                "check": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "payload": {}
+                  },
+                  "required": [
+                    "id",
+                    "payload"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "Forbidden"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "OneOf"
+                  ]
+                },
+                "matches": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "_tag",
+                "matches"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "SchemaFailureEncoded": {
+      "type": "object",
+      "properties": {
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SchemaIssueFact"
+          }
+        }
+      },
+      "required": [
+        "issues"
+      ],
+      "additionalProperties": true
+    },
+    "CollectionVersionArchiveInvalidReason": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "InvalidShape"
+              ]
+            },
+            "failure": {
+              "$ref": "#/definitions/SchemaFailureEncoded"
+            }
+          },
+          "required": [
+            "_tag",
+            "failure"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "InvalidBase64"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "DuplicatePath"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "ByteLimitExceeded"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "encoded-file",
+                "tree"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "actual": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "_tag",
+            "kind",
+            "path",
+            "limit",
+            "actual"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "UnsafeSymlink"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "target": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path",
+            "target"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "ChildOfNonDirectory"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "MissingParent"
+              ]
+            },
+            "unreachable": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "_tag",
+            "unreachable"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "HashMismatch"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "archive",
+                "materialized"
+              ]
+            },
+            "expected": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "actual": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "_tag",
+            "kind",
+            "expected",
+            "actual"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "Library.SnapshotArchiveInvalidEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "Library.SnapshotArchiveInvalid"
+          ]
+        },
+        "reason": {
+          "$ref": "#/definitions/CollectionVersionArchiveInvalidReason"
+        }
+      },
+      "required": [
+        "_tag",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "SourceProcess.OutputTooLargeEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "SourceProcess.OutputTooLarge"
+          ]
+        },
+        "invocation": {
+          "type": "string"
+        },
+        "stream": {
+          "type": "string",
+          "enum": [
+            "stdout",
+            "stderr"
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "actual": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "_tag",
+        "invocation",
+        "stream",
+        "limit",
+        "actual"
+      ],
+      "additionalProperties": true
+    },
+    "SourceProcess.TimedOutEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "SourceProcess.TimedOut"
+          ]
+        },
+        "invocation": {
+          "type": "string"
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "_tag",
+        "invocation",
+        "timeoutMs"
+      ],
+      "additionalProperties": true
+    },
+    "TreeErrorReason": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "GitCommandFailed"
+              ]
+            },
+            "command": {
+              "type": "string"
+            },
+            "exitCode": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "_tag",
+            "command",
+            "exitCode"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "GitInspectionFailed"
+              ]
+            },
+            "issue": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "ProcessFailed"
+                      ]
+                    },
+                    "failure": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/definitions/SourceProcess.OutputTooLargeEncoded"
+                        },
+                        {
+                          "$ref": "#/definitions/SourceProcess.TimedOutEncoded"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": [
+                                "PlatformError"
+                              ]
+                            },
+                            "reason": {
+                              "type": "object",
+                              "properties": {
+                                "_tag": {
+                                  "type": "string",
+                                  "enum": [
+                                    "AlreadyExists",
+                                    "BadResource",
+                                    "Busy",
+                                    "InvalidData",
+                                    "NotFound",
+                                    "PermissionDenied",
+                                    "TimedOut",
+                                    "UnexpectedEof",
+                                    "Unknown",
+                                    "WouldBlock",
+                                    "WriteZero",
+                                    "BadArgument"
+                                  ]
+                                },
+                                "module": {
+                                  "type": "string"
+                                },
+                                "method": {
+                                  "type": "string"
+                                },
+                                "description": {
+                                  "type": "string"
+                                },
+                                "syscall": {
+                                  "type": "string"
+                                },
+                                "pathOrDescriptor": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "number"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "_tag",
+                                "module",
+                                "method"
+                              ],
+                              "additionalProperties": true
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "reason"
+                          ],
+                          "additionalProperties": true
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "failure"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "ExitCode"
+                      ]
+                    },
+                    "operation": {
+                      "type": "string"
+                    },
+                    "exitCode": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "stderr": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "operation",
+                    "exitCode",
+                    "stderr"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "InvalidUtf8"
+                      ]
+                    },
+                    "operation": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "operation"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "IncompleteOutput"
+                      ]
+                    },
+                    "operation": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "operation"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "DuplicatePaths"
+                      ]
+                    },
+                    "paths": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "paths"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "UnexpectedPaths"
+                      ]
+                    },
+                    "paths": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "requested": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "paths",
+                    "requested"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "EmbeddedRepositories"
+                      ]
+                    },
+                    "paths": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "paths"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "Unavailable"
+                      ]
+                    },
+                    "root": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "root"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "NativeFilenameAmbiguous"
+                      ]
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "names": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "path",
+                    "names"
+                  ],
+                  "additionalProperties": true
+                }
+              ]
+            }
+          },
+          "required": [
+            "_tag",
+            "issue"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "EmbeddedRepository"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "Submodule"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "IgnoredRoot"
+              ]
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "FullyExcludedRoot"
+              ]
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "EscapedPath"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "InvalidSymlink"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "UnsupportedEntry"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "ChangedDuringRead"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "NormalizedPathCollision"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "firstPath": {
+              "type": "string"
+            },
+            "secondPath": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path",
+            "firstPath",
+            "secondPath"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "NativeIdentityMissing"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "entryType": {
+              "type": "string",
+              "enum": [
+                "File",
+                "Directory",
+                "SymbolicLink",
+                "BlockDevice",
+                "CharacterDevice",
+                "FIFO",
+                "Socket",
+                "Unknown"
+              ]
+            }
+          },
+          "required": [
+            "_tag",
+            "path",
+            "entryType"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "RootNotDirectory"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "entryType": {
+              "type": "string",
+              "enum": [
+                "File",
+                "Directory",
+                "SymbolicLink",
+                "BlockDevice",
+                "CharacterDevice",
+                "FIFO",
+                "Socket",
+                "Unknown"
+              ]
+            }
+          },
+          "required": [
+            "_tag",
+            "path",
+            "entryType"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "CannotRetain"
+              ]
+            },
+            "entryType": {
+              "type": "string",
+              "enum": [
+                "File",
+                "Directory",
+                "SymbolicLink",
+                "BlockDevice",
+                "CharacterDevice",
+                "FIFO",
+                "Socket",
+                "Unknown"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "entryType",
+            "path"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "InvalidLibraryStateEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "InvalidLibraryState"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "SchemaInvalid"
+                  ]
+                },
+                "failure": {
+                  "$ref": "#/definitions/SchemaFailureEncoded"
+                }
+              },
+              "required": [
+                "_tag",
+                "failure"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ArchiveInvalid"
+                  ]
+                },
+                "failure": {
+                  "$ref": "#/definitions/Library.SnapshotArchiveInvalidEncoded"
+                }
+              },
+              "required": [
+                "_tag",
+                "failure"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "InvalidData"
+                  ]
+                },
+                "issue": {
+                  "type": "string"
+                },
+                "tree": {
+                  "$ref": "#/definitions/TreeErrorReason"
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "UnsupportedVersion"
+                  ]
+                },
+                "version": {
+                  "type": "number"
+                },
+                "oldest": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "current": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "_tag",
+                "oldest",
+                "current"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "MissingRecord"
+                  ]
+                },
+                "record": {
+                  "type": "string",
+                  "enum": [
+                    "pending-operation",
+                    "sync-step",
+                    "sync-program",
+                    "imported-collection",
+                    "folder-evidence",
+                    "installed-row",
+                    "library-state"
+                  ]
+                },
+                "at": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "record"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ContentChanged"
+                  ]
+                },
+                "entry": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ContentMissing"
+                  ]
+                },
+                "entry": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "entry"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "InvalidSymlink"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "path",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "Library.InvalidIntentEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "Library.InvalidIntent"
+          ]
+        },
+        "intent": {
+          "type": "string",
+          "enum": [
+            "AcceptFinding",
+            "RefreshInventory",
+            "Manage",
+            "Sync"
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "intent"
+      ],
+      "additionalProperties": true
+    },
+    "Library.SetEnabledInvalidEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "Library.SetEnabledInvalid"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "invocation-when-disabling",
+            "subject-absent",
+            "all-with-skill",
+            "all-with-selected-skills",
+            "selected-skills-with-skill",
+            "selection-required",
+            "selected-skill-absent",
+            "nothing-selected"
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "StalePlanReason": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "SnapshotRequired"
+              ]
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "SnapshotChanged"
+              ]
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "LibraryChanged"
+              ]
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "ReviewedStateChanged"
+              ]
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "PlanChanged"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "apply",
+                "destinations"
+              ]
+            }
+          },
+          "required": [
+            "_tag",
+            "kind"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "PlanInvalid"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "intent",
+                "acceptance",
+                "manage"
+              ]
+            }
+          },
+          "required": [
+            "_tag",
+            "kind"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "OperationMissing"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "undo",
+                "install",
+                "sync-publication"
+              ]
+            }
+          },
+          "required": [
+            "_tag",
+            "kind"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "OperationAlreadyRecorded"
+              ]
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "EvidenceChanged"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "undo",
+                "undo-staging",
+                "undo-successor",
+                "recovery",
+                "recovery-entry",
+                "manage",
+                "installed",
+                "inventory-backup"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "kind"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "ContentChanged"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "skill",
+                "edit",
+                "reviewed",
+                "undo-source"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "skillName": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "kind"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "MissingRecord"
+              ]
+            },
+            "record": {
+              "type": "string",
+              "enum": [
+                "undo-source",
+                "installed-row",
+                "installed-folder",
+                "selected-version",
+                "edited-copy"
+              ]
+            },
+            "at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "record"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "DestinationOccupied"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "undo-source",
+                "undo-destination"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "kind",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "SessionNotOpen"
+              ]
+            },
+            "action": {
+              "type": "string",
+              "enum": [
+                "propose",
+                "confirm"
+              ]
+            }
+          },
+          "required": [
+            "_tag",
+            "action"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "SyncChanged"
+              ]
+            },
+            "part": {
+              "type": "string",
+              "enum": [
+                "manifest",
+                "base",
+                "target"
+              ]
+            }
+          },
+          "required": [
+            "_tag",
+            "part"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "SyncPlanInvalid"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "library-mismatch",
+                "receipt-missing",
+                "receipt-mismatch",
+                "unexpected-receipt"
+              ]
+            }
+          },
+          "required": [
+            "_tag",
+            "reason"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "InstalledBytesChanged"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "reviewed",
+                "recorded",
+                "installed"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "kind",
+            "path"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "Library.StalePlanEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "Library.StalePlan"
+          ]
+        },
+        "reason": {
+          "$ref": "#/definitions/StalePlanReason"
+        },
+        "expected": {
+          "type": "string"
+        },
+        "actual": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "Library.CollectionRemovalMissingEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "Library.CollectionRemovalMissing"
+          ]
+        },
+        "collection_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "collection_id"
+      ],
+      "additionalProperties": true
+    },
+    "InstalledSkillFailureReason": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "InvalidTree"
+              ]
+            },
+            "reason": {
+              "$ref": "#/definitions/TreeErrorReason"
+            }
+          },
+          "required": [
+            "_tag",
+            "reason"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "SharedPathOutsideSkill"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "DestinationAppeared"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "IdentityChanged"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "HashChanged"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "skillId": {
+              "type": "string"
+            },
+            "verification": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path",
+            "skillId",
+            "verification"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "EvidenceChanged"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "VersionMissing"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "former",
+                "enabled"
+              ]
+            }
+          },
+          "required": [
+            "_tag",
+            "kind"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "BackingMissing"
+              ]
+            },
+            "skillName": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "skillName"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "DescriptorInvalid"
+              ]
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "DescriptorSkillMissing"
+              ]
+            },
+            "skillName": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "skillName"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "ContentChanged"
+              ]
+            },
+            "skillName": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "skillName"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "InputsChanged"
+              ]
+            },
+            "skillName": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "skillName"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "InstalledSkillInvalidReason": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/InstalledSkillFailureReason"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "DestinationsUnknown"
+              ]
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "NotSkillFolder"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "ManageTargetChanged"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "ManageContentMismatch"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "ApplyStopped"
+              ]
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "BackupNotReviewed"
+              ]
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "Library.InstalledSkillInvalidEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "Library.InstalledSkillInvalid"
+          ]
+        },
+        "reason": {
+          "$ref": "#/definitions/InstalledSkillInvalidReason"
+        }
+      },
+      "required": [
+        "_tag",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "InstalledSkillFailureEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "InstalledSkillFailure"
+          ]
+        },
+        "reason": {
+          "$ref": "#/definitions/InstalledSkillFailureReason"
+        }
+      },
+      "required": [
+        "_tag",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "SkillsDirectoryNotWritableEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "SkillsDirectoryNotWritable"
+          ]
+        },
+        "root": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "root"
+      ],
+      "additionalProperties": true
+    },
+    "UnsafeInstalledSkillNameEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "UnsafeInstalledSkillName"
+          ]
+        },
+        "skillName": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "skillName"
+      ],
+      "additionalProperties": true
+    },
+    "OwnershipMarkerDisagreesEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "OwnershipMarkerDisagrees"
+          ]
+        },
+        "skillId": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "skillId",
+        "target"
+      ],
+      "additionalProperties": true
+    },
+    "UninstallConflictEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "UninstallConflict"
+          ]
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "path"
+      ],
+      "additionalProperties": true
+    },
+    "UnsafeInstalledSkillBackupsEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "UnsafeInstalledSkillBackups"
+          ]
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "path"
+      ],
+      "additionalProperties": true
+    },
+    "HarnessMetadataInvalidEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "HarnessMetadataInvalid"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "SKILL.md frontmatter",
+            "Codex metadata",
+            "OpenCode metadata"
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "path",
+        "kind"
+      ],
+      "additionalProperties": true
+    },
+    "InstalledSkillFileMissingEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "InstalledSkillFileMissing"
+          ]
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "path"
+      ],
+      "additionalProperties": true
+    },
+    "TreeErrorEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "TreeError"
+          ]
+        },
+        "reason": {
+          "$ref": "#/definitions/TreeErrorReason"
+        }
+      },
+      "required": [
+        "_tag",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "DuplicateScanIncompleteEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "DuplicateScanIncomplete"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "EntryLimitExceeded"
+                  ]
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "_tag",
+                "limit",
+                "count"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "Unreadable"
+                  ]
+                },
+                "error": {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "PlatformError"
+                      ]
+                    },
+                    "reason": {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "AlreadyExists",
+                            "BadResource",
+                            "Busy",
+                            "InvalidData",
+                            "NotFound",
+                            "PermissionDenied",
+                            "TimedOut",
+                            "UnexpectedEof",
+                            "Unknown",
+                            "WouldBlock",
+                            "WriteZero",
+                            "BadArgument"
+                          ]
+                        },
+                        "module": {
+                          "type": "string"
+                        },
+                        "method": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "syscall": {
+                          "type": "string"
+                        },
+                        "pathOrDescriptor": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "_tag",
+                        "module",
+                        "method"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "reason"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "_tag",
+                "error"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "path",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "DescriptorIssue": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "JsonSyntax"
+              ]
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "line": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "column": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "YamlSyntax"
+              ]
+            },
+            "errors": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "ALIAS_PROPS",
+                      "BAD_ALIAS",
+                      "BAD_DIRECTIVE",
+                      "BAD_DQ_ESCAPE",
+                      "BAD_INDENT",
+                      "BAD_PROP_ORDER",
+                      "BAD_SCALAR_START",
+                      "BLOCK_AS_IMPLICIT_KEY",
+                      "BLOCK_IN_FLOW",
+                      "DUPLICATE_KEY",
+                      "IMPOSSIBLE",
+                      "KEY_OVER_1024_CHARS",
+                      "MISSING_CHAR",
+                      "MULTILINE_IMPLICIT_KEY",
+                      "MULTIPLE_ANCHORS",
+                      "MULTIPLE_DOCS",
+                      "MULTIPLE_TAGS",
+                      "NON_STRING_KEY",
+                      "RESOURCE_EXHAUSTION",
+                      "TAB_AS_INDENT",
+                      "TAG_RESOLVE_FAILED",
+                      "UNEXPECTED_TOKEN",
+                      "BAD_COLLECTION_TYPE"
+                    ]
+                  },
+                  "start": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "line": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "column": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "code",
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": true
+              }
+            }
+          },
+          "required": [
+            "_tag",
+            "errors"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "YamlValue"
+              ]
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "Schema"
+              ]
+            },
+            "failure": {
+              "$ref": "#/definitions/SchemaFailureEncoded"
+            }
+          },
+          "required": [
+            "_tag",
+            "failure"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "DescriptorMalformedEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "DescriptorMalformed"
+          ]
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "json",
+            "yaml"
+          ]
+        },
+        "issue": {
+          "$ref": "#/definitions/DescriptorIssue"
+        }
+      },
+      "required": [
+        "_tag",
+        "format",
+        "issue"
+      ],
+      "additionalProperties": true
+    },
+    "DuplicateSkillNamesEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "DuplicateSkillNames"
+          ]
+        }
+      },
+      "required": [
+        "_tag"
+      ],
+      "additionalProperties": true
+    },
+    "DuplicateSkillPathsEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "DuplicateSkillPaths"
+          ]
+        }
+      },
+      "required": [
+        "_tag"
+      ],
+      "additionalProperties": true
+    },
+    "ConflictingInvocationDeclarationEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "ConflictingInvocationDeclaration"
+          ]
+        },
+        "skill": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "skill"
+      ],
+      "additionalProperties": true
+    },
+    "ReadmeFrontmatterMissingEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "ReadmeFrontmatterMissing"
+          ]
+        }
+      },
+      "required": [
+        "_tag"
+      ],
+      "additionalProperties": true
+    },
+    "Library.DestinationsIncompleteEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "Library.DestinationsIncomplete"
+          ]
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "_tag",
+        "paths"
+      ],
+      "additionalProperties": true
+    },
+    "InstalledSkillWouldDuplicateEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "InstalledSkillWouldDuplicate"
+          ]
+        },
+        "duplicates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "harness": {
+                "type": "string"
+              },
+              "canonicalPath": {
+                "type": "string"
+              },
+              "aliases": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "via": {
+                      "type": "string",
+                      "enum": [
+                        "symlink",
+                        "directory",
+                        "unknown-root"
+                      ]
+                    },
+                    "linkPath": {
+                      "type": "string"
+                    },
+                    "linkTarget": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "via"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "documentHash": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "harness",
+              "canonicalPath",
+              "aliases",
+              "documentHash"
+            ],
+            "additionalProperties": true
+          }
+        }
+      },
+      "required": [
+        "_tag",
+        "duplicates"
+      ],
+      "additionalProperties": true
+    },
+    "InstalledSkillWouldReplaceLinkEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "InstalledSkillWouldReplaceLink"
+          ]
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "_tag",
+        "links"
+      ],
+      "additionalProperties": true
+    },
+    "SharedTargetCollisionEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "SharedTargetCollision"
+          ]
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "target"
+      ],
+      "additionalProperties": true
+    },
+    "ProjectedPathCollisionEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "ProjectedPathCollision"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "file",
+            "file-or-directory"
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "path",
+        "kind"
+      ],
+      "additionalProperties": true
+    },
+    "HomeBusyEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "HomeBusy"
+          ]
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "path"
+      ],
+      "additionalProperties": true
+    },
+    "LibraryChangedEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "LibraryChanged"
+          ]
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "path"
+      ],
+      "additionalProperties": true
+    },
+    "ApplyFailure": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "PlatformError"
+              ]
+            },
+            "reason": {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "AlreadyExists",
+                    "BadResource",
+                    "Busy",
+                    "InvalidData",
+                    "NotFound",
+                    "PermissionDenied",
+                    "TimedOut",
+                    "UnexpectedEof",
+                    "Unknown",
+                    "WouldBlock",
+                    "WriteZero",
+                    "BadArgument"
+                  ]
+                },
+                "module": {
+                  "type": "string"
+                },
+                "method": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "syscall": {
+                  "type": "string"
+                },
+                "pathOrDescriptor": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "_tag",
+                "module",
+                "method"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "required": [
+            "_tag",
+            "reason"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "$ref": "#/definitions/InvalidLibraryStateEncoded"
+        },
+        {
+          "$ref": "#/definitions/Library.InvalidIntentEncoded"
+        },
+        {
+          "$ref": "#/definitions/Library.SetEnabledInvalidEncoded"
+        },
+        {
+          "$ref": "#/definitions/Library.StalePlanEncoded"
+        },
+        {
+          "$ref": "#/definitions/Library.CollectionRemovalMissingEncoded"
+        },
+        {
+          "$ref": "#/definitions/Library.InstalledSkillInvalidEncoded"
+        },
+        {
+          "$ref": "#/definitions/InstalledSkillFailureEncoded"
+        },
+        {
+          "$ref": "#/definitions/SkillsDirectoryNotWritableEncoded"
+        },
+        {
+          "$ref": "#/definitions/UnsafeInstalledSkillNameEncoded"
+        },
+        {
+          "$ref": "#/definitions/OwnershipMarkerDisagreesEncoded"
+        },
+        {
+          "$ref": "#/definitions/UninstallConflictEncoded"
+        },
+        {
+          "$ref": "#/definitions/UnsafeInstalledSkillBackupsEncoded"
+        },
+        {
+          "$ref": "#/definitions/HarnessMetadataInvalidEncoded"
+        },
+        {
+          "$ref": "#/definitions/InstalledSkillFileMissingEncoded"
+        },
+        {
+          "$ref": "#/definitions/TreeErrorEncoded"
+        },
+        {
+          "$ref": "#/definitions/DuplicateScanIncompleteEncoded"
+        },
+        {
+          "$ref": "#/definitions/DescriptorMalformedEncoded"
+        },
+        {
+          "$ref": "#/definitions/DuplicateSkillNamesEncoded"
+        },
+        {
+          "$ref": "#/definitions/DuplicateSkillPathsEncoded"
+        },
+        {
+          "$ref": "#/definitions/ConflictingInvocationDeclarationEncoded"
+        },
+        {
+          "$ref": "#/definitions/ReadmeFrontmatterMissingEncoded"
+        },
+        {
+          "$ref": "#/definitions/Library.DestinationsIncompleteEncoded"
+        },
+        {
+          "$ref": "#/definitions/InstalledSkillWouldDuplicateEncoded"
+        },
+        {
+          "$ref": "#/definitions/InstalledSkillWouldReplaceLinkEncoded"
+        },
+        {
+          "$ref": "#/definitions/SharedTargetCollisionEncoded"
+        },
+        {
+          "$ref": "#/definitions/ProjectedPathCollisionEncoded"
+        },
+        {
+          "$ref": "#/definitions/HomeBusyEncoded"
+        },
+        {
+          "$ref": "#/definitions/LibraryChangedEncoded"
+        }
+      ]
+    }
+  },
   "$schema": "http://json-schema.org/draft-07/schema#"
 }

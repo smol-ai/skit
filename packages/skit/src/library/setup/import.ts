@@ -1,32 +1,10 @@
-import { Data, Effect, Schema } from "effect";
+import { SetupImportInvalid } from "../failures.js";
+import { Array, Effect, Schema } from "effect";
 import { sourceLocator } from "../../sources/resolve.js";
 import { type ImportRequest } from "../import-collection.js";
 import { type MachineId } from "../entity-ids.js";
 import { SetupKnownSourceSelection, type SetupResult } from "./contract.js";
 import { prepareSkillsShImportEvidence } from "./skills-sh/lock-source.js";
-import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
-
-class SetupImportInvalid
-  extends Data.TaggedError("SetupImportInvalid")<{
-    skillName: string;
-    reason:
-      | "duplicate-selection"
-      | "candidate-not-found"
-      | "candidate-not-importable"
-      | "observation-missing"
-      | "contested-observation"
-      | "source-unresolvable"
-      | "lock-changed";
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Set up again and review the current plan.";
-  get message(): string {
-    return `Cannot import ${this.skillName} during setup: ${this.reason}`;
-  }
-}
 
 /**
  * The import each selected Collection group makes, from one revalidated observation: one request
@@ -44,7 +22,7 @@ export const setupImportRequests = Effect.fn("Setup.importRequests")(function* (
   const selected = new Set<string>();
   const groups = new Map<
     string,
-    Array<
+    Array.NonEmptyArray<
       Extract<
         (typeof current.onboarding.candidates)[number],
         { action: "import-observed-collection" }

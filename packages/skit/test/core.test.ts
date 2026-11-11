@@ -479,10 +479,7 @@ it.effect("Author content fails closed when a detected Git worktree cannot be qu
     }).pipe(Effect.result);
     expect(result).toMatchObject({ failure: { _tag: "TreeError" } });
     if (Result.isFailure(result)) {
-      expect(result.failure).toMatchObject({ reason: { _tag: "GitInspectionFailed" } });
-      expect(result.failure.message).toContain(
-        "Unable to evaluate Git ignore rules for Artifact content",
-      );
+      expect(result.failure).toMatchObject({ reason: { _tag: "GitCommandFailed", exitCode: 128 } });
     }
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -499,7 +496,6 @@ it.effect("Author content rejects a SKIT root ignored by an enclosing worktree",
 
     const failure = yield* authorFailure(root);
     expect(failure).toMatchObject({ reason: { _tag: "IgnoredRoot" } });
-    expect(failure.message).toContain("The SKIT root is ignored by the enclosing Git repository");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -516,9 +512,6 @@ it.effect("Author content rejects embedded Git repositories explicitly", () =>
     expect(failure).toMatchObject({
       reason: { _tag: "EmbeddedRepository", path: "vendored" },
     });
-    expect(failure.message).toContain(
-      "Embedded Git repository is not valid Artifact content: vendored",
-    );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -557,9 +550,6 @@ it.effect("Author content rejects registered Git submodules explicitly", () =>
 
     const failure = yield* authorFailure(root);
     expect(failure).toMatchObject({ reason: { _tag: "Submodule", path: "vendored" } });
-    expect(failure.message).toContain(
-      "Registered Git submodule is not valid Artifact content: vendored",
-    );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -572,7 +562,6 @@ it.effect("Author content rejects a worktree whose files are all ignored", () =>
 
     const failure = yield* authorFailure(root);
     expect(failure).toMatchObject({ reason: { _tag: "FullyExcludedRoot" } });
-    expect(failure.message).toContain("Git excludes every file in the SKIT root");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 

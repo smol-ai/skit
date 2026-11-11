@@ -1,3 +1,4 @@
+import { defineCommand } from "./definition.js";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import * as Library from "@smolai/skit-core/library";
 import { UsageHarness } from "@smolai/skit-core/library/usage";
@@ -12,7 +13,7 @@ import { homeFlag, jsonFlag, optionalString } from "./parameters.js";
 import { Renderer } from "../terminal/renderer.js";
 import { encodeResult as result } from "./encode-result.js";
 
-export const usageCliCommand = Command.make(
+export const usageCliCommand = defineCommand(
   "usage",
   {
     json: jsonFlag,
@@ -73,7 +74,6 @@ export const usageCliCommand = Command.make(
     stability: "experimental",
     effects: { capabilities: ["filesystem.read"] },
     outputSchemas: [usageOutputContracts.usage],
-    exitCodes: [0, 12, 64, 65],
     interactive: false,
   }),
 );

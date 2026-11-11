@@ -1,0 +1,393 @@
+{
+  "$id": "skit.author.sync.v5",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "first_sync_ready"
+          ]
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "identity": {
+          "type": "object",
+          "properties": {
+            "authority": {
+              "type": "string"
+            },
+            "namespace": {
+              "type": "string"
+            },
+            "skit": {
+              "type": "string"
+            },
+            "locator": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "authority",
+            "namespace",
+            "skit",
+            "locator"
+          ],
+          "additionalProperties": true
+        },
+        "visibility": {
+          "type": "string",
+          "enum": [
+            "private",
+            "unlisted",
+            "public"
+          ]
+        },
+        "file_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "create_skit",
+              "save_revision",
+              "record_remote_home"
+            ]
+          }
+        }
+      },
+      "required": [
+        "status",
+        "changed",
+        "identity",
+        "visibility",
+        "file_count",
+        "effects"
+      ],
+      "additionalProperties": true
+    },
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "created"
+          ]
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "identity": {
+          "type": "object",
+          "properties": {
+            "authority": {
+              "type": "string"
+            },
+            "namespace": {
+              "type": "string"
+            },
+            "skit": {
+              "type": "string"
+            },
+            "locator": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "authority",
+            "namespace",
+            "skit",
+            "locator"
+          ],
+          "additionalProperties": true
+        },
+        "visibility": {
+          "type": "string",
+          "enum": [
+            "private",
+            "unlisted",
+            "public"
+          ]
+        },
+        "revision_id": {
+          "type": "string"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "remote_home_recorded": {
+          "type": "boolean"
+        },
+        "published": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "status",
+        "changed",
+        "identity",
+        "visibility",
+        "revision_id",
+        "paths",
+        "remote_home_recorded",
+        "published"
+      ],
+      "additionalProperties": true
+    },
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "ready"
+          ]
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "pull",
+            "push",
+            "merge"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "changed",
+        "action"
+      ],
+      "additionalProperties": true
+    },
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "up_to_date"
+          ]
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "revision_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "changed",
+        "revision_id"
+      ],
+      "additionalProperties": true
+    },
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "pulled"
+          ]
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "revision_id": {
+          "type": "string"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "status",
+        "changed",
+        "revision_id",
+        "paths"
+      ],
+      "additionalProperties": true
+    },
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "pushed"
+          ]
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "revision_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "changed",
+        "revision_id"
+      ],
+      "additionalProperties": true
+    },
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "merged"
+          ]
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "revision_id": {
+          "type": "string"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "choices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "both_modified",
+                  "delete_modify",
+                  "binary",
+                  "descriptor"
+                ]
+              },
+              "kept": {
+                "type": "string",
+                "enum": [
+                  "local",
+                  "remote"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "kind",
+              "kept"
+            ],
+            "additionalProperties": true
+          }
+        }
+      },
+      "required": [
+        "status",
+        "changed",
+        "revision_id",
+        "paths",
+        "choices"
+      ],
+      "additionalProperties": true
+    },
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "blocked"
+          ]
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "deleting": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "of": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "status",
+        "changed",
+        "deleting",
+        "of",
+        "paths"
+      ],
+      "additionalProperties": true
+    },
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "waiting_for_removal"
+          ]
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "deleting": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "of": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "status",
+        "changed",
+        "deleting",
+        "of",
+        "paths"
+      ],
+      "additionalProperties": true
+    }
+  ],
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

@@ -1,6 +1,5 @@
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 import { SkitConfiguration, resolveSkitConfiguration } from "@smolai/skit-core/platform";
-import { Cause, Data, Effect, Option } from "effect";
+import { Cause, Effect, Option } from "effect";
 import {
   CliConfig,
   CliError,
@@ -15,16 +14,7 @@ import { skitCliConfigLayer } from "./parameters.js";
 import { commandFailure } from "./failure-classification.js";
 import { Renderer } from "../terminal/renderer.js";
 import { result } from "./result.js";
-
-/** The command line did not parse; the parser's own sentences are the message. */
-class CommandLineInvalid
-  extends Data.TaggedError("CommandLineInvalid")<{ message: string }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "INVALID_ARGUMENT" as const;
-  readonly remediation = "Run `skit --help` to review command usage.";
-}
+import { CommandLineInvalid } from "./input-failures.js";
 
 /** Render Effect's structured help model through SKIT's stable output envelope. */
 function formatHelpDocument(document: HelpDoc.HelpDoc): string {
@@ -106,7 +96,7 @@ export function runCommandTree<Name extends string, Input, ContextInput, E, R>(
                 request.errors.length
                   ? Effect.fail(
                       new CommandLineInvalid({
-                        message: request.errors.map((error) => error.message).join("\n"),
+                        errors: request.errors,
                       }),
                     )
                   : Effect.void,

@@ -58,7 +58,7 @@ export const checkManageSelection = Effect.fn("Manage.checkSelection")(function*
   if (conflict.kind !== "retirable")
     return yield* Effect.fail(
       selection.approvedSymlinks
-        ? new StalePlan({ message: "The Library changed since this was previewed" })
+        ? new StalePlan({ reason: { _tag: "ReviewedStateChanged" } })
         : invalid("aliases-not-retirable"),
     );
   return {
@@ -79,8 +79,7 @@ export const recordDuplicateSymlinks = Effect.fn("Manage.recordDuplicateSymlinks
   approved?: readonly ApprovedSymlink[],
 ) {
   const paths = duplicateSymlinksToBackUp(sourcePath, duplicates);
-  if (!paths.length)
-    return yield* new StalePlan({ message: "The Library changed since this was previewed" });
+  if (!paths.length) return yield* new StalePlan({ reason: { _tag: "ReviewedStateChanged" } });
   const links = yield* LinkStat;
   const fs = yield* FileSystem.FileSystem;
   const symlinks = yield* Effect.forEach(paths, (path) =>
@@ -88,7 +87,7 @@ export const recordDuplicateSymlinks = Effect.fn("Manage.recordDuplicateSymlinks
       yield* leavePnpmSkill(path);
       const info = yield* links.identity.lstat(path);
       if (info.type !== "SymbolicLink")
-        return yield* new StalePlan({ message: "The Library changed since this was previewed" });
+        return yield* new StalePlan({ reason: { _tag: "ReviewedStateChanged" } });
       const canonicalPath = yield* fs.realPath(path);
       const linkTarget = yield* fs.readLink(path);
       if (
@@ -97,13 +96,13 @@ export const recordDuplicateSymlinks = Effect.fn("Manage.recordDuplicateSymlinks
           duplicate.aliases.some((alias) => alias.path === path && alias.linkTarget !== linkTarget),
         )
       )
-        return yield* new StalePlan({ message: "The Library changed since this was previewed" });
+        return yield* new StalePlan({ reason: { _tag: "ReviewedStateChanged" } });
       return { path, canonicalPath, linkTarget, dev: info.dev, ino: info.ino };
     }).pipe(
       Effect.catchTag("PlatformError", (error) =>
         Effect.fail(
           error.reason._tag === "NotFound"
-            ? new StalePlan({ message: "The Library changed since this was previewed" })
+            ? new StalePlan({ reason: { _tag: "ReviewedStateChanged" } })
             : error,
         ),
       ),
@@ -116,6 +115,6 @@ export const recordDuplicateSymlinks = Effect.fn("Manage.recordDuplicateSymlinks
       [...symlinks].sort((left, right) => left.path.localeCompare(right.path)),
     )
   )
-    return yield* new StalePlan({ message: "The Library changed since this was previewed" });
+    return yield* new StalePlan({ reason: { _tag: "ReviewedStateChanged" } });
   return symlinks;
 });

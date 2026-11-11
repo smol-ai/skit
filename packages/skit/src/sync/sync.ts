@@ -21,7 +21,7 @@ import { Clock, DateTime, Effect, Option, Schema, Stream } from "effect";
 import * as History from "../history/history.js";
 import * as Merge from "./merge.js";
 import { TreeEntry } from "../artifact/tree-entry.js";
-import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
+import { RemoteInvalid, InvalidTree, Unsettled, type SyncFailure } from "./failures.js";
 import { parentDirectories } from "../shared/relative-path.js";
 
 export const Idle = Schema.TaggedStruct("Idle", { base: Schema.NullOr(History.RevisionId) });
@@ -40,22 +40,6 @@ export const Writing = Schema.TaggedStruct("Writing", {
 });
 export const SyncState = Schema.Union([Idle, Sending, Writing]);
 export type SyncState = typeof SyncState.Type;
-
-const sameState = Schema.toEquivalence(SyncState);
-
-/**
- * Whether {@link run} ever saves `to` right after `from`. `Idle { base: null }` is where a SKIT
- * starts, never a step. An unfinished write only finishes into the state it names, or is
- * prepared again for a different tree with the same base and next state (the recovered merge).
- */
-export const allowsStep = (from: SyncState, to: SyncState): boolean => {
-  if (to._tag === "Idle" && to.base === null) return false;
-  if (from._tag !== "Writing") return true;
-  return (
-    sameState(to, from.next) ||
-    (to._tag === "Writing" && to.base === from.base && sameState(to.next, from.next))
-  );
-};
 
 /**
  * Files the device deleted since its base: how many, out of how many it knew, and which. Too many
@@ -76,57 +60,10 @@ export class Moved extends Schema.TaggedError<Moved, { readonly brand: unique sy
   },
 ) {}
 
-/** The Registry sent a revision or tree that does not match its identity. */
-class RemoteInvalid
-  extends Schema.TaggedError<RemoteInvalid, { readonly brand: unique symbol }>()(
-    "Sync.RemoteInvalid",
-    {
-      id: History.RevisionId,
-      reason: Schema.String,
-    },
-  )
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  get message() {
-    return `The Registry sent revision ${this.id} in a form that does not match it: ${this.reason}`;
-  }
-  readonly remediation = "Sync again; if it keeps failing, report the Registry's response.";
-}
-
-class InvalidTree
-  extends Schema.TaggedError<InvalidTree, { readonly brand: unique symbol }>()("Sync.InvalidTree", {
-    path: Schema.String,
-    message: Schema.String,
-  })
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Keep the local files and history; report this invalid sync tree.";
-}
-
 const checkTree = (tree: History.Tree) => {
   const issue = History.treePathIssue(tree);
-  return issue === undefined ? Effect.void : Effect.fail(new InvalidTree(issue));
+  return issue === undefined ? Effect.void : Effect.fail(new InvalidTree({ issue }));
 };
-
-/** Other devices kept moving `current` while this one tried to sync. */
-class Unsettled
-  extends Schema.TaggedError<Unsettled, { readonly brand: unique symbol }>()("Sync.Unsettled", {
-    steps: Schema.Int,
-  })
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly retryable = true;
-  get message() {
-    return `Sync did not settle after ${this.steps} steps while other devices kept changing the SKIT`;
-  }
-  readonly remediation = "Sync again; nothing was lost.";
-}
 
 /** A revision with its tree. */
 export interface LoadedRevision {
@@ -139,32 +76,26 @@ export interface LoadedRevision {
  * The Registry's side of one SKIT. Failures other than {@link Moved} are the caller's own. A plain
  * value: the caller builds one per sync from its Registry client.
  */
-export interface Remote {
-  readonly current: Effect.Effect<History.RevisionId | null, SkitFailure>;
+export interface Remote<E> {
+  readonly current: Effect.Effect<History.RevisionId | null, E>;
   readonly revision: (
     id: History.RevisionId,
-  ) => Effect.Effect<
-    { readonly revision: History.Revision; readonly tree: History.Tree },
-    SkitFailure
-  >;
+  ) => Effect.Effect<{ readonly revision: History.Revision; readonly tree: History.Tree }, E>;
   /** Revisions reachable from `id`, starting there, without their trees. */
   readonly ancestors: (
     id: History.RevisionId,
-  ) => Stream.Stream<
-    { readonly id: History.RevisionId; readonly revision: History.Revision },
-    SkitFailure
-  >;
+  ) => Stream.Stream<{ readonly id: History.RevisionId; readonly revision: History.Revision }, E>;
   /** Record a revision. Idempotent; never moves `current`. */
   readonly post: (
     id: History.RevisionId,
     revision: History.Revision,
     tree: History.Tree,
-  ) => Effect.Effect<void, SkitFailure>;
+  ) => Effect.Effect<void, E>;
   /** Point `current` at `id`, only if it still points at `expected`. */
   readonly move: (
     expected: History.RevisionId | null,
     id: History.RevisionId,
-  ) => Effect.Effect<void, Moved | SkitFailure>;
+  ) => Effect.Effect<void, Moved | E>;
 }
 
 /**
@@ -231,14 +162,19 @@ const knownPaths = (tree: History.Tree) =>
  * many of the base's files, as ADR-0026 defines bulk removal (every known file, or more than five
  * and more than half), is `Blocked` unless `approved` is that exact removal.
  */
-export const plan = (input: PlanInput, approved?: Removal): Plan => {
-  if (input._tag === "Writing") return { _tag: "Write", input };
+export const plan = (input: PlanInput, approved?: Removal): Plan =>
+  input._tag === "Writing" ? { _tag: "Write", input } : planCurrent(input, approved);
+
+const planCurrent = (
+  input: Exclude<PlanInput, { readonly _tag: "Writing" }>,
+  approved?: Removal,
+): Exclude<Plan, { readonly _tag: "Write" }> => {
   const current = input.current;
   if (input._tag === "Sending") {
     const sent = input.sent;
     // The move landed: the device holds `sent`, so plan from there.
     if (current?.id === sent.id)
-      return plan({ _tag: "Idle", local: input.local, base: sent, current }, approved);
+      return planCurrent({ _tag: "Idle", local: input.local, base: sent, current }, approved);
     // The move never landed. Removal safety was decided when the revision was first planned.
     if (current === null || current.id === input.base?.id)
       return { _tag: "Push", ours: { _tag: "Sent", sent }, expected: current?.id ?? null };
@@ -250,7 +186,9 @@ export const plan = (input: PlanInput, approved?: Removal): Plan => {
     return { _tag: "Merge", base: input.base, ours, theirs: current };
   }
   const base = input.base;
-  const guarded = (next: Plan): Plan => {
+  const guarded = (
+    next: Exclude<Plan, { readonly _tag: "Write" }>,
+  ): Exclude<Plan, { readonly _tag: "Write" }> => {
     if (base === null) return next;
     const kept = new Set(knownPaths(input.local.tree));
     const known = knownPaths(base.tree);
@@ -302,7 +240,7 @@ const loadRevision = Effect.fn("Sync.loadRevision")(function* (
  * Registry, beside the device's tree. A `current` the device does not hold yet is fetched, checked
  * against its identity, and stored shallowly.
  */
-export const loadPlanInput = Effect.fn("Sync.loadPlanInput")(function* ({
+export const loadPlanInput = Effect.fn("Sync.loadPlanInput")(function* <E>({
   store,
   remote,
   state,
@@ -311,24 +249,51 @@ export const loadPlanInput = Effect.fn("Sync.loadPlanInput")(function* ({
   /** The device's history. */
   readonly store: History.Store;
   /** The Registry's side of the SKIT. */
-  readonly remote: Remote;
+  readonly remote: Remote<E>;
   readonly state: SyncState;
   /** The device's tree. */
   readonly local: { readonly hash: History.TreeHash; readonly tree: History.Tree };
-}): Effect.fn.Return<PlanInput, History.StoreError | SkitFailure> {
-  if (state._tag === "Writing") {
-    const from = yield* store.tree(state.from);
-    const to = yield* store.tree(state.to);
-    yield* checkTree(from);
-    yield* checkTree(to);
-    return {
-      _tag: "Writing",
-      state,
-      local,
-      from,
-      to,
-    };
-  }
+}): Effect.fn.Return<PlanInput, History.StoreError | SyncFailure | E> {
+  return state._tag === "Writing"
+    ? yield* loadWritingInput(store, state, local)
+    : yield* loadCurrentInput({ store, remote, state, local });
+});
+
+const loadWritingInput = Effect.fn("Sync.loadWritingInput")(function* (
+  store: History.Store,
+  state: typeof Writing.Type,
+  local: { readonly hash: History.TreeHash; readonly tree: History.Tree },
+) {
+  const from = yield* store.tree(state.from);
+  const to = yield* store.tree(state.to);
+  yield* checkTree(from);
+  yield* checkTree(to);
+  return {
+    _tag: "Writing",
+    state,
+    local,
+    from,
+    to,
+  } satisfies Extract<PlanInput, { readonly _tag: "Writing" }>;
+});
+
+const loadCurrentInput = Effect.fn("Sync.loadCurrentInput")(function* <E>({
+  store,
+  remote,
+  state,
+  local,
+}: {
+  /** The device's history. */
+  readonly store: History.Store;
+  /** The Registry's side of the SKIT. */
+  readonly remote: Remote<E>;
+  readonly state: typeof Idle.Type | typeof Sending.Type;
+  /** The device's tree. */
+  readonly local: { readonly hash: History.TreeHash; readonly tree: History.Tree };
+}): Effect.fn.Return<
+  Exclude<PlanInput, { readonly _tag: "Writing" }>,
+  History.StoreError | SyncFailure | E
+> {
   const currentId = yield* remote.current;
   const current =
     currentId === null
@@ -337,15 +302,21 @@ export const loadPlanInput = Effect.fn("Sync.loadPlanInput")(function* ({
           Effect.catchTag("History.StoreMissing", () =>
             Effect.gen(function* () {
               const fetched = yield* remote.revision(currentId);
-              if ((yield* store.putTree(fetched.tree)) !== fetched.revision.tree)
+              const actualTree = yield* store.putTree(fetched.tree);
+              if (actualTree !== fetched.revision.tree)
                 return yield* new RemoteInvalid({
                   id: currentId,
-                  reason: "its tree does not match the revision",
+                  reason: {
+                    _tag: "TreeMismatch",
+                    expected: fetched.revision.tree,
+                    actual: actualTree,
+                  },
                 });
-              if ((yield* store.commit(fetched.revision)) !== currentId)
+              const actualRevision = yield* store.commit(fetched.revision);
+              if (actualRevision !== currentId)
                 return yield* new RemoteInvalid({
                   id: currentId,
-                  reason: "its identity does not match",
+                  reason: { _tag: "RevisionMismatch", actual: actualRevision },
                 });
               return yield* loadRevision(store, currentId);
             }),
@@ -392,7 +363,10 @@ const lastEdit = (
   );
 
 /** {@link lastEdit} for a revision, reading a merge's ancestry from the Registry as needed. */
-const editedAt = Effect.fn("Sync.editedAt")(function* (remote: Remote, start: LoadedRevision) {
+const editedAt = Effect.fn("Sync.editedAt")(function* <E>(
+  remote: Remote<E>,
+  start: LoadedRevision,
+) {
   if (start.revision.parents.length < 2) return DateTime.makeUnsafe(start.revision.author.at);
   const known = yield* remote.ancestors(start.id).pipe(
     Stream.scan(
@@ -429,11 +403,19 @@ type Outcome =
     }
   | { readonly status: "blocked"; readonly removal: Removal };
 
-export interface RunOptions<Prepared, SaveError, WriteError, R> {
+/** A fresh write selects its destination; recovery can only replace the pending trees. */
+export type WriteRequest =
+  | { readonly from: typeof Idle.Type | typeof Sending.Type; readonly to: typeof Writing.Type }
+  | {
+      readonly from: typeof Writing.Type;
+      readonly trees: { readonly from: History.TreeHash; readonly to: History.TreeHash };
+    };
+
+export interface RunOptions<Prepared, SaveError, WriteError, R, RemoteError> {
   /** The device's history, where the engine records revisions and stores trees it fetched. */
   readonly store: History.Store;
   /** The Registry's side of the SKIT. */
-  readonly remote: Remote;
+  readonly remote: Remote<RemoteError>;
   readonly state: SyncState;
   /** The device's tree, already in its store. */
   readonly local: History.TreeHash;
@@ -448,21 +430,19 @@ export interface RunOptions<Prepared, SaveError, WriteError, R> {
   }) => Merge.Decider;
   /** A removal the user approved; it applies only if the removal is exactly this one. */
   readonly approved?: Removal;
-  /** Save the state durably before returning. Every step but the one into Writing. */
-  readonly save: (
-    state: Exclude<SyncState, { readonly _tag: "Writing" }>,
-  ) => Effect.Effect<void, SaveError, R>;
-  /**
-   * Save a Writing durably before returning, and return what proves it was saved. The engine
-   * hands that to the one {@link RunOptions.write} the Writing names.
-   */
-  readonly prepareWrite: (state: typeof Writing.Type) => Effect.Effect<Prepared, SaveError, R>;
-  /** Make the device's files `to`, if they are still `from`, under the Writing `prepared` saved. */
+  /** Save a normal checkpoint transition; finishing Writing belongs to the prepared operation. */
+  readonly save: (change: {
+    readonly from: typeof Idle.Type | typeof Sending.Type;
+    readonly to: (typeof Writing.Type)["next"];
+  }) => Effect.Effect<void, SaveError, R>;
+  /** Save the exact Writing durably before returning its operation. */
+  readonly prepareWrite: (change: WriteRequest) => Effect.Effect<Prepared, SaveError, R>;
+  /** Apply the prepared operation and return the next checkpoint it saved. */
   readonly write: (
     prepared: Prepared,
     from: History.Tree,
     to: History.Tree,
-  ) => Effect.Effect<void, WriteError, R>;
+  ) => Effect.Effect<(typeof Writing.Type)["next"], WriteError, R>;
 }
 
 export interface RunResult {
@@ -523,9 +503,13 @@ const authoredTree = (input: Extract<PlanInput, { readonly _tag: "Writing" }>) =
  * re-reads `current` and plans again. Returns the state it last saved and what happened, with the
  * strongest status of any step: merged, then pushed, then pulled.
  */
-export const run = <Prepared, SaveError, WriteError, R>(
-  options: RunOptions<Prepared, SaveError, WriteError, R>,
-): Effect.Effect<RunResult, SaveError | WriteError | History.StoreError | SkitFailure, R> =>
+export const run = <Prepared, SaveError, WriteError, R, RemoteError>(
+  options: RunOptions<Prepared, SaveError, WriteError, R, RemoteError>,
+): Effect.Effect<
+  RunResult,
+  SaveError | WriteError | History.StoreError | SyncFailure | RemoteError,
+  R
+> =>
   Effect.gen(function* () {
     const { store, remote } = options;
     const start = { hash: options.local, tree: yield* store.tree(options.local) };
@@ -549,91 +533,93 @@ export const run = <Prepared, SaveError, WriteError, R>(
       );
     const stronger = (progress: Progress, status: Progress["status"]) =>
       strength.indexOf(status) > strength.indexOf(progress.status) ? status : progress.status;
-    const saved = <S extends Exclude<SyncState, { readonly _tag: "Writing" }>>(state: S) =>
-      options.save(state).pipe(Effect.as(state));
 
     const step = (
       progress: Progress,
       steps: number,
-    ): Effect.Effect<RunResult, SaveError | WriteError | History.StoreError | SkitFailure, R> =>
+    ): Effect.Effect<
+      RunResult,
+      SaveError | WriteError | History.StoreError | SyncFailure | RemoteError,
+      R
+    > =>
       Effect.gen(function* () {
         if (steps === MAX_STEPS) return yield* new Unsettled({ steps });
-        const next = plan(
-          yield* loadPlanInput({ store, remote, state: progress.state, local: progress.local }),
+        const state = progress.state;
+        if (state._tag === "Writing") {
+          const input = yield* loadWritingInput(store, state, progress.local);
+          const authored = authoredTree(input);
+          yield* checkTree(authored);
+          // A real edit made during an unfinished write keeps its original ancestry, without
+          // claiming the already downloaded files as new authored content.
+          const edited = (yield* store.putTree(authored)) !== state.from;
+          if (edited) {
+            const recorded = yield* History.record(
+              store,
+              authored,
+              state.base === null ? [] : [state.base],
+              options.author,
+            );
+            yield* remote.post(recorded.id, recorded.revision, authored);
+          }
+          // Apply pending changes to the authored input, not our own partial application.
+          // Otherwise removing one child during a directory replacement looks like a newer
+          // structural edit and can defeat the pending file. Real edits still participate.
+          const target = yield* loadRevision(
+            store,
+            state.next._tag === "Sending" ? state.next.revision : state.next.base,
+          );
+          const merged = Merge.runDecided(
+            options.merger,
+            {
+              base: Option.some(input.from),
+              ours: Option.some(authored),
+              theirs: Option.some(input.to),
+            },
+            options.decide({
+              ours: DateTime.makeUnsafe(options.author.at),
+              theirs: yield* editedAt(remote, target),
+            }),
+          );
+          const files = History.sortTree(Option.getOrElse(merged.value, () => []));
+          yield* checkTree(files);
+          const hash = yield* store.putTree(files);
+          // The merged tree is not the one the interrupted Writing names: save a Writing for
+          // exactly this write before it starts, so it is recoverable too (A12).
+          const prepared = yield* options.prepareWrite({
+            from: state,
+            trees: { from: progress.local.hash, to: hash },
+          });
+          const completed = yield* options.write(prepared, progress.local.tree, files);
+          return yield* step(
+            {
+              ...progress,
+              state: completed,
+              local: { hash, tree: files },
+              choices: [...progress.choices, ...merged.choices],
+              status: stronger(
+                progress,
+                edited || state.merged || state.next._tag === "Sending" ? "merged" : "pulled",
+              ),
+            },
+            steps + 1,
+          );
+        }
+        const next = planCurrent(
+          yield* loadCurrentInput({ store, remote, state, local: progress.local }),
           options.approved,
         );
+        const saved = <S extends (typeof Writing.Type)["next"]>(
+          from: typeof Idle.Type | typeof Sending.Type,
+          to: S,
+        ) => options.save({ from, to }).pipe(Effect.as(to));
         switch (next._tag) {
-          case "Write": {
-            const { state } = next.input;
-            const authored = authoredTree(next.input);
-            yield* checkTree(authored);
-            // A real edit made during an unfinished write keeps its original ancestry, without
-            // claiming the already downloaded files as new authored content.
-            const edited = (yield* store.putTree(authored)) !== state.from;
-            if (edited) {
-              const recorded = yield* History.record(
-                store,
-                authored,
-                state.base === null ? [] : [state.base],
-                options.author,
-              );
-              yield* remote.post(recorded.id, recorded.revision, authored);
-            }
-            // Apply pending changes to the authored input, not our own partial application.
-            // Otherwise removing one child during a directory replacement looks like a newer
-            // structural edit and can defeat the pending file. Real edits still participate.
-            const target = yield* loadRevision(
-              store,
-              state.next._tag === "Sending" ? state.next.revision : state.next.base,
-            );
-            const merged = Merge.runDecided(
-              options.merger,
-              {
-                base: Option.some(next.input.from),
-                ours: Option.some(authored),
-                theirs: Option.some(next.input.to),
-              },
-              options.decide({
-                ours: DateTime.makeUnsafe(options.author.at),
-                theirs: yield* editedAt(remote, target),
-              }),
-            );
-            const files = History.sortTree(Option.getOrElse(merged.value, () => []));
-            yield* checkTree(files);
-            const hash = yield* store.putTree(files);
-            // The merged tree is not the one the interrupted Writing names: save a Writing for
-            // exactly this write before it starts, so it is recoverable too (A12).
-            const prepared = yield* options.prepareWrite(
-              Writing.make({
-                base: state.base,
-                from: progress.local.hash,
-                to: hash,
-                next: state.next,
-                merged: true,
-              }),
-            );
-            yield* options.write(prepared, progress.local.tree, files);
-            return yield* step(
-              {
-                ...progress,
-                state: yield* saved(state.next),
-                local: { hash, tree: files },
-                choices: [...progress.choices, ...merged.choices],
-                status: stronger(
-                  progress,
-                  edited || state.merged || state.next._tag === "Sending" ? "merged" : "pulled",
-                ),
-              },
-              steps + 1,
-            );
-          }
           case "Blocked":
             return { state: progress.state, outcome: { status: "blocked", removal: next.removal } };
           case "UpToDate": {
-            const state =
-              progress.state._tag === "Idle" && progress.state.base === next.base
-                ? progress.state
-                : yield* saved(Idle.make({ base: next.base }));
+            const completed =
+              state._tag === "Idle" && state.base === next.base
+                ? state
+                : yield* saved(state, { _tag: "Idle", base: next.base });
             const before = new Map(start.tree.map((entry) => [entry.path, entry]));
             const after = new Map(progress.local.tree.map((entry) => [entry.path, entry]));
             const paths = [...new Set([...before.keys(), ...after.keys()])]
@@ -652,24 +638,28 @@ export const run = <Prepared, SaveError, WriteError, R>(
                 : progress.status === "pulled"
                   ? { status: "pulled", revision, paths }
                   : { status: progress.status, revision };
-            return { state, outcome };
+            return { state: completed, outcome };
           }
           case "Pull": {
-            const prepared = yield* options.prepareWrite(
-              Writing.make({
-                base:
-                  progress.state._tag === "Sending" ? progress.state.revision : progress.state.base,
+            const prepared = yield* options.prepareWrite({
+              from: state,
+              to: Writing.make({
+                base: state._tag === "Sending" ? state.revision : state.base,
                 from: progress.local.hash,
                 to: next.current.revision.tree,
                 next: { _tag: "Idle", base: next.current.id },
                 merged: false,
               }),
+            });
+            const completed = yield* options.write(
+              prepared,
+              progress.local.tree,
+              next.current.tree,
             );
-            yield* options.write(prepared, progress.local.tree, next.current.tree);
             return yield* step(
               {
                 ...progress,
-                state: yield* saved(Idle.make({ base: next.current.id })),
+                state: completed,
                 local: { hash: next.current.revision.tree, tree: next.current.tree },
                 status: stronger(progress, "pulled"),
               },
@@ -678,13 +668,16 @@ export const run = <Prepared, SaveError, WriteError, R>(
           }
           case "Push": {
             const ours = yield* send(next.ours, progress.local.tree);
-            const sending = yield* saved(Sending.make({ base: next.expected, revision: ours.id }));
+            const sending = yield* saved(
+              state,
+              Sending.make({ base: next.expected, revision: ours.id }),
+            );
             const landed = yield* moved(next.expected, ours.id);
             return yield* step(
               landed
                 ? {
                     ...progress,
-                    state: yield* saved(Idle.make({ base: ours.id })),
+                    state: yield* saved(sending, { _tag: "Idle", base: ours.id }),
                     status: stronger(progress, "pushed"),
                   }
                 : { ...progress, state: sending },
@@ -717,21 +710,23 @@ export const run = <Prepared, SaveError, WriteError, R>(
             // Keep the file write recoverable before it can change anything. Once complete,
             // the merge is a send whose base is theirs until its move lands.
             const sending = Sending.make({ base: theirs.id, revision: recorded.id });
-            const prepared = yield* options.prepareWrite(
-              Writing.make({
+            const prepared = yield* options.prepareWrite({
+              from: state,
+              to: Writing.make({
                 base: next.base?.id ?? null,
                 from: progress.local.hash,
                 to: recorded.revision.tree,
                 next: sending,
                 merged: true,
               }),
-            );
-            yield* options.write(prepared, progress.local.tree, tree);
-            yield* saved(sending);
+            });
+            const completed = yield* options.write(prepared, progress.local.tree, tree);
             const landed = yield* moved(theirs.id, recorded.id);
             return yield* step(
               {
-                state: landed ? yield* saved(Idle.make({ base: recorded.id })) : sending,
+                state: landed
+                  ? yield* saved(completed, { _tag: "Idle", base: recorded.id })
+                  : completed,
                 local: { hash: recorded.revision.tree, tree },
                 status: "merged",
                 choices: [...progress.choices, ...merged.choices],
@@ -747,3 +742,6 @@ export const run = <Prepared, SaveError, WriteError, R>(
       0,
     );
   }).pipe(Effect.withSpan("Sync.run"));
+
+// The failure union names these types in downstream declarations; construction stays with Sync.
+export type { RemoteInvalid, InvalidTree, Unsettled };

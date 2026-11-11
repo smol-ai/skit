@@ -1,0 +1,59 @@
+{
+  "$id": "skit.author.invocation.v1",
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string"
+    },
+    "dryRun": {
+      "type": "boolean"
+    },
+    "generated": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "skill": {
+            "type": "string"
+          },
+          "harness": {
+            "type": "string",
+            "enum": [
+              "claude-code",
+              "codex"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "policy": {
+            "type": "string",
+            "enum": [
+              "explicit",
+              "implicit",
+              "host-policy"
+            ]
+          },
+          "changed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "skill",
+          "harness",
+          "path",
+          "policy",
+          "changed"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "path",
+    "dryRun",
+    "generated"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

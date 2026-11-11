@@ -24,7 +24,7 @@ const typeIdFilter = <const Prefix extends string>(prefix: Prefix) =>
         return false;
       }
     },
-    { message: `Expected a canonical ${prefix} TypeID` },
+    { representation: { id: "skit/schema/typeid", payload: { prefix } } },
   );
 
 const entityId = <const Prefix extends string>(prefix: Prefix) =>
@@ -83,18 +83,18 @@ export const LegacyMachineId = Schema.String.check(Schema.isUUID(7)).pipe(
 export type LegacyMachineId = typeof LegacyMachineId.Type;
 type MigratedEntity = keyof typeof EntityIdPrefixes;
 
+const UuidHex = Schema.String.check(Schema.isPattern(/^[a-f0-9]{32}$/i));
+const UuidTimestamp = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 0xffffffffffff }));
+
 const uuidBytes = (uuid: string): Uint8Array => {
-  const hex = uuid.replaceAll("-", "");
-  if (!/^[a-f0-9]{32}$/i.test(hex)) throw new Error(`Invalid UUID: ${uuid}`);
+  const hex = Schema.decodeSync(UuidHex)(uuid.replaceAll("-", ""));
   return Uint8Array.from(hex.match(/.{2}/g)!.map((byte) => Number.parseInt(byte, 16)));
 };
 
 const timestampBytes = (source: string | Date): Uint8Array => {
   if (typeof source === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-7/i.test(source))
     return uuidBytes(source).slice(0, 6);
-  const milliseconds = BigInt(new Date(source).getTime());
-  if (milliseconds < 0n || milliseconds > 0xffffffffffffn)
-    throw new Error(`Timestamp outside UUIDv7 range: ${String(source)}`);
+  const milliseconds = BigInt(Schema.decodeSync(UuidTimestamp)(new Date(source).getTime()));
   return Uint8Array.from({ length: 6 }, (_, index) =>
     Number((milliseconds >> BigInt((5 - index) * 8)) & 0xffn),
   );

@@ -1,50 +1,85 @@
-import { isAbsolute, relative, sep } from "node:path";
+import { auditProbeFailure } from "../../platform/probe-failures.js";
 import type { ContractDataForId } from "../../commands/output-contracts.js";
+import { Block } from "../../terminal/blocks.js";
 import type { RenderContext } from "../../terminal/contracts.js";
-import { capabilityLabel, severityHeadline } from "./language.js";
+import { auditFinding } from "./findings.js";
+import { capabilityLabel } from "./language.js";
 
-export function renderAuditV1Alpha4(
+export function presentAuditV1Alpha4(
   report: ContractDataForId<"skit.experimental.audit.v1alpha4">,
   context: RenderContext,
-): string {
-  const displayPath = (path: string) => {
-    const fromHome = relative(report.roots.home, path);
-    return fromHome === ""
-      ? "~"
-      : fromHome !== ".." && !fromHome.startsWith(`..${sep}`) && !isAbsolute(fromHome)
-        ? `~/${fromHome.split(sep).join("/")}`
-        : path;
-  };
-  const lines = [
-    `SKIT audit — ${report.summary.findings ? `${report.summary.findings} ${report.summary.findings === 1 ? "issue" : "issues"}` : "clean"}`,
-    `${report.summary.harnesses} detected harnesses in ${report.roots.cwd}`,
-    `Skills: ${report.summary.skills}`,
-    `Plugins: ${report.summary.plugins}`,
-    `MCP servers: ${report.summary.mcpServers}`,
-    `Rules: ${report.summary.rules}`,
-    `Marketplaces: ${report.summary.marketplaces}`,
-  ];
-  for (const finding of report.findings)
-    lines.push(
-      "",
-      severityHeadline(finding.severity),
-      ...(finding.unresolvedSubject ? [`  ${finding.unresolvedSubject}`] : []),
-      `  Problem: ${finding.problem}`,
-      ...(finding.locations.length === 1
-        ? [`  Where:   ${displayPath(finding.locations[0])}`]
-        : ["  Where:", ...finding.locations.map((path) => `    ${displayPath(path)}`)]),
-    );
-  if (context.detail === "full")
-    for (const [kind, capabilities] of [
+): Block[] {
+  const capabilities = (
+    [
       ["skill", report.skills],
       ["plugin", report.plugins],
       ["mcp-server", report.mcpServers],
       ["rule", report.rules],
       ["marketplace", report.marketplaces],
-    ] as const)
-      for (const capability of capabilities)
-        lines.push(
-          `${capabilityLabel(kind)}\t${capability.harnessIds.join(",")}\t${capability.name}\t${capability.location ?? "unresolved"}`,
-        );
-  return lines.join("\n");
+    ] as const
+  ).flatMap(([kind, found]) =>
+    found.map((capability) => [
+      [capabilityLabel(kind)],
+      [capability.harnessIds.join(",")],
+      [capability.name],
+      [capability.location ?? { dim: "unresolved" }],
+    ]),
+  );
+  return [
+    Block.Heading({
+      text: `SKIT audit — ${report.summary.findings ? `${report.summary.findings} ${report.summary.findings === 1 ? "issue" : "issues"}` : "clean"}`,
+    }),
+    Block.Note({
+      text: [
+        `${report.summary.harnesses} detected ${report.summary.harnesses === 1 ? "harness" : "harnesses"} in `,
+        { path: report.roots.cwd },
+      ],
+    }),
+    Block.Fields({
+      rows: [
+        { label: "Skills", value: [String(report.summary.skills)] },
+        { label: "Plugins", value: [String(report.summary.plugins)] },
+        { label: "MCP servers", value: [String(report.summary.mcpServers)] },
+        { label: "Rules", value: [String(report.summary.rules)] },
+        { label: "Marketplaces", value: [String(report.summary.marketplaces)] },
+      ],
+    }),
+    ...(report.probes.length
+      ? [
+          Block.Group({
+            title: "Probes",
+            children: [
+              Block.Table({
+                columns: [{ title: "Harness" }, { title: "Status" }, { title: "Result" }],
+                rows: report.probes.map((probe) => [
+                  [probe.harnessId],
+                  [probe.status],
+                  [
+                    probe.failure
+                      ? auditProbeFailure(probe.failure)
+                      : Object.entries(probe.observed ?? {})
+                          .map(([key, count]) => `${key}: ${count}`)
+                          .join(", "),
+                  ],
+                ]),
+              }),
+            ],
+          }),
+        ]
+      : []),
+    ...report.findings.map(auditFinding),
+    ...(context.detail === "full" && capabilities.length
+      ? [
+          Block.Table({
+            columns: [
+              { title: "Capability" },
+              { title: "Harnesses" },
+              { title: "Name" },
+              { title: "Location" },
+            ],
+            rows: capabilities,
+          }),
+        ]
+      : []),
+  ];
 }

@@ -84,7 +84,7 @@ const recoveryContainer = Effect.fn("Library.setup.recoveryContainer")(function*
   const exists = yield* fs.exists(path);
   if (!exists) yield* fs.makeDirectory(path, { mode: 0o700 });
   if ((yield* links.identity.lstat(path)).type !== "Directory")
-    return yield* new InvalidLibraryState({ path, detail: "recovery directory is redirected" });
+    return yield* new InvalidLibraryState({ path, reason: { _tag: "InvalidSymlink" } });
 });
 
 /** Every folder moved aside into `directory`, or the first that is not as recorded. */

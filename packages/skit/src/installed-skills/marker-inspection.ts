@@ -4,6 +4,7 @@ import type { PlatformError } from "effect/PlatformError";
 import { join } from "node:path";
 import { OwnershipMarker } from "./ownership-marker.js";
 import { StoredOwnershipMarker } from "./ownership-marker-compat.js";
+import { OwnershipMarkerInvalidReason } from "./marker-failures.js";
 
 const OwnershipMarkerDocument = Schema.fromJsonString(Schema.Unknown);
 
@@ -17,17 +18,17 @@ export function readOwnershipMarker(
 
 export const OwnershipMarkerInspection = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("absent") }),
-  Schema.Struct({ kind: Schema.Literal("invalid"), detail: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("invalid"), reason: OwnershipMarkerInvalidReason }),
   Schema.Struct({ kind: Schema.Literal("valid"), marker: OwnershipMarker }),
 ]);
 export type OwnershipMarkerInspection = typeof OwnershipMarkerInspection.Type;
 
 export function parseOwnershipMarker(value: unknown): OwnershipMarkerInspection {
   if (!value || typeof value !== "object" || Array.isArray(value))
-    return { kind: "invalid", detail: "Ownership marker must be a JSON object" };
+    return { kind: "invalid", reason: { _tag: "NotObject" } };
   const decoded = Schema.decodeUnknownOption(StoredOwnershipMarker)(value);
   if (decoded._tag === "Some") return { kind: "valid", marker: decoded.value };
-  return { kind: "invalid", detail: "Ownership marker has invalid typed fields" };
+  return { kind: "invalid", reason: { _tag: "InvalidFields" } };
 }
 
 export function inspectOwnershipMarker(
@@ -43,6 +44,6 @@ export function inspectOwnershipMarker(
     const parsed = Schema.decodeOption(OwnershipMarkerDocument)(text);
     return parsed._tag === "Some"
       ? parseOwnershipMarker(parsed.value)
-      : ({ kind: "invalid", detail: "Ownership marker is invalid JSON" } as const);
+      : ({ kind: "invalid", reason: { _tag: "InvalidJson" } } as const);
   });
 }

@@ -3,8 +3,8 @@ import { Cause, Effect, FileSystem } from "effect";
 import { TestClock } from "effect/testing";
 import { join } from "node:path";
 import * as History from "@smolai/skit-core/history";
-import { authorLayer, refreshWorkspace } from "./helpers/author-history.js";
-import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
+import { authorLayer, refreshWorkspace } from "../src/platform/author-sync-fixture/history.js";
+import { makeAuthorSyncWorld } from "../src/platform/author-sync-fixture/world.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
 for (const winner of ["file", "directory"] as const)
@@ -69,10 +69,11 @@ for (const direction of ["file-to-directory", "directory-to-file"] as const)
         const initial = direction === "file-to-directory" ? "notes" : "notes/a.txt";
         yield* world.a.edit(initial, "original", "remote");
         yield* world.connect();
-        yield* fs.remove(join(world.b.workspace, "notes"), { recursive: true });
+        yield* world.b.remove("notes");
         const downloaded = direction === "file-to-directory" ? "notes/a.txt" : "notes";
         yield* world.b.edit(downloaded, "remote change", "remote");
-        yield* world.b.sync();
+        expect((yield* world.b.sync()).status).toBe("waiting_for_removal");
+        expect((yield* world.b.sync(false, true)).status).toBe("pushed");
         let stopped = false;
         const result = yield* Effect.exit(
           world.a.sync().pipe(
@@ -96,8 +97,7 @@ for (const direction of ["file-to-directory", "directory-to-file"] as const)
         expect(stopped).toBe(true);
         yield* world.a.restart();
         yield* TestClock.adjust("1 minute");
-        if (direction === "directory-to-file")
-          yield* fs.remove(join(world.a.workspace, "notes"), { recursive: true });
+        if (direction === "directory-to-file") yield* world.a.remove("notes");
         const edited = direction === "file-to-directory" ? "notes/own.txt" : "notes";
         yield* world.a.edit(edited, "editor change", "remote");
         for (let retry = 0; retry < 2; retry++) {

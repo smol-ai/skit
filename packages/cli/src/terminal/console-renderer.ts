@@ -1,16 +1,22 @@
+import { Block, renderBlocks } from "./blocks.js";
+import type { TerminalFrame } from "./contracts.js";
+import { resultExitCode } from "../commands/exit-code.js";
 import { Clock, Effect, Exit, Fiber, Layer } from "effect";
 import { Renderer, type RendererShape } from "./renderer.js";
 import {
   renderFailureFrame,
   renderHelpFrame,
   renderNoteFrame,
+  renderStepFrame,
   renderResultFrame,
 } from "../commands/output-frame.js";
-import { terminalColors, terminalColorEnabled } from "./style.js";
+import { terminalColorEnabled } from "./style.js";
 import { automationMarker } from "./interactivity.js";
 
 import { CLEAR_STATUS_LINE, STATUS_FRAME_MS, renderStatusLine } from "./status.js";
 import { terminalText } from "./text.js";
+import { compactHome } from "./home-path.js";
+import { homedir } from "node:os";
 
 const formatElapsed = (milliseconds: number): string =>
   milliseconds < 1000 ? `${milliseconds}ms` : `${(milliseconds / 1000).toFixed(1)}s`;
@@ -21,7 +27,10 @@ const write = (stream: NodeJS.WriteStream, body: string) =>
   });
 
 export function consoleRenderer(json: boolean): RendererShape {
-  const format = json ? "json" : "human";
+  const format: "json" | "human" = json ? "json" : "human";
+  const home = homedir();
+  // Status and progress text, as a person reads it.
+  const shown = (text: string) => compactHome(terminalText(text), home);
   let statusVisible = false;
   let statusMessage = "";
   const clearStatus = Effect.suspend(() => {
@@ -30,8 +39,13 @@ export function consoleRenderer(json: boolean): RendererShape {
     return write(process.stderr, CLEAR_STATUS_LINE);
   });
 
-  const note = (body: string, title: string, frameFormat: typeof format = format) => {
-    const frame = renderNoteFrame(body, title, frameFormat);
+  const noteEnvironment = () => ({
+    format,
+    home,
+    color: terminalColorEnabled(),
+    ...(process.stderr.columns ? { width: process.stderr.columns } : {}),
+  });
+  const note = (frame: TerminalFrame) => {
     return Effect.suspend(() => {
       if (!frame.stderr) return Effect.void;
       const resumeStatus = statusVisible;
@@ -49,42 +63,39 @@ export function consoleRenderer(json: boolean): RendererShape {
   return {
     result: (result, options) =>
       Effect.gen(function* () {
-        const frame = renderResultFrame(result, {
-          color: terminalColorEnabled(process.stdout),
-          detail: options?.detail ?? "summary",
-          format,
-        });
+        const frame = renderResultFrame(
+          result,
+          {
+            color: terminalColorEnabled(process.stdout),
+            detail: options?.detail ?? "summary",
+            format,
+            home,
+            ...(process.stdout.columns ? { width: process.stdout.columns } : {}),
+          },
+          { jsonLines: options?.jsonLines },
+        );
         yield* write(process.stdout, frame.stdout);
-        if (frame.exitCode !== undefined) process.exitCode = frame.exitCode;
+        process.exitCode = resultExitCode(result, Number(process.exitCode ?? 0));
       }),
     failure: (failure) =>
       Effect.gen(function* () {
-        const frame = renderFailureFrame(failure, format);
+        const frame = renderFailureFrame(failure, {
+          format,
+          home,
+          color: terminalColorEnabled(process.stderr),
+          ...(process.stderr.columns ? { width: process.stderr.columns } : {}),
+        });
         yield* write(process.stderr, frame.stderr);
         process.exitCode = frame.exitCode;
       }),
     help: (text) => write(process.stdout, renderHelpFrame(text, format).stdout),
-    note: (body, title, options) => {
-      const color = terminalColors();
-      return note(
-        options?.renderBody(terminalColorEnabled()) ?? terminalText(body),
-        color.cyan(color.bold(terminalText(title))),
-      );
-    },
-    instruction: (body, title) => {
-      const color = terminalColors();
-      return note(terminalText(body), color.cyan(color.bold(terminalText(title))), "human");
-    },
-    step: ({ index, total, title }, body) => {
-      const color = terminalColors();
-      return note(
-        terminalText(body),
-        `${color.dim(`Step ${index} of ${total} ·`)} ${color.bold(terminalText(title))}`,
-      );
-    },
+    note: (body, title) => note(renderNoteFrame(body, title, noteEnvironment())),
+    instruction: (body, title) =>
+      note(renderNoteFrame(body, title, { ...noteEnvironment(), format: "human" })),
+    step: (step, body) => note(renderStepFrame(step, body, noteEnvironment())),
     updateStatus: (message) =>
       Effect.sync(() => {
-        if (statusVisible) statusMessage = terminalText(message);
+        if (statusVisible) statusMessage = shown(message);
       }),
     withStatus: (status, operation) => {
       if (json) return operation;
@@ -95,7 +106,7 @@ export function consoleRenderer(json: boolean): RendererShape {
       return Effect.scoped(
         Effect.gen(function* () {
           const started = yield* Clock.currentTimeMillis;
-          const pending = terminalText(typeof status === "string" ? status : status.pending);
+          const pending = shown(typeof status === "string" ? status : status.pending);
           let frame = 0;
           statusMessage = pending;
           statusVisible = interactive;
@@ -104,7 +115,7 @@ export function consoleRenderer(json: boolean): RendererShape {
                 Effect.gen(function* () {
                   const elapsed = (yield* Clock.currentTimeMillis) - started;
                   const message = timed
-                    ? `${statusMessage} · ${formatElapsed(elapsed)}`
+                    ? `${statusMessage} | ${formatElapsed(elapsed)}`
                     : statusMessage;
                   yield* write(
                     process.stderr,
@@ -120,16 +131,22 @@ export function consoleRenderer(json: boolean): RendererShape {
                 yield* clearStatus;
                 const elapsed = (yield* Clock.currentTimeMillis) - started;
                 const duration = formatElapsed(elapsed);
-                const suffix = timed ? ` · ${duration}` : "";
+                const suffix = timed ? ` | ${duration}` : "";
                 if (typeof status !== "string" && Exit.isSuccess(exit)) {
-                  const message = terminalText(
+                  const message = shown(
                     typeof status.complete === "string"
                       ? status.complete
                       : status.complete(exit.value),
                   );
-                  yield* write(process.stderr, `✓ ${message}${suffix}\n`);
+                  yield* write(
+                    process.stderr,
+                    `${renderBlocks([Block.Status({ tone: "ok", text: [message + suffix] })], noteEnvironment())}\n`,
+                  );
                 } else if (timed) {
-                  yield* write(process.stderr, `✖ ${pending} · Incomplete${suffix}\n`);
+                  yield* write(
+                    process.stderr,
+                    `${renderBlocks([Block.Status({ tone: "error", text: [`${pending} | Incomplete${suffix}`] })], noteEnvironment())}\n`,
+                  );
                 }
               }),
             ),

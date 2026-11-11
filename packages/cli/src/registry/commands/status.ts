@@ -1,3 +1,4 @@
+import { defineCommand } from "../../commands/definition.js";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Effect } from "effect";
 import { Command } from "effect/cli";
@@ -9,7 +10,7 @@ import { jsonFlag, optionalString } from "../../commands/parameters.js";
 import { Renderer } from "../../terminal/renderer.js";
 import { result } from "../../commands/result.js";
 
-export const authStatusCliCommand = Command.make(
+export const authStatusCliCommand = defineCommand(
   "status",
   {
     registry: optionalString("registry", "Show one Registry credential."),
@@ -34,7 +35,6 @@ export const authStatusCliCommand = Command.make(
       subprocesses: credentialStoreReadSubprocesses,
     },
     outputSchemas: [outputContracts.authStatus],
-    exitCodes: [0, 11, 12, 64],
     interactive: false,
   }),
 );

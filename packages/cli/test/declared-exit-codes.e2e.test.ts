@@ -1,7 +1,4 @@
-// The exit codes command-manifest.json publishes, checked against the binary that produces them.
-//
-// Three commands under-declared what they could do. These reproduce each one, so a regression
-// shows up as a wrong number rather than as a caller branching on a contract that was never true.
+// The manifest publishes one process-status policy, checked against actual binary outcomes.
 
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -10,10 +7,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { Schema } from "effect";
+import { CommandError } from "../src/commands/error-output.js";
 
 const bin = join(import.meta.dirname, "..", "bin", "skit.js");
 const FailureDocument = Schema.fromJsonString(
-  Schema.Struct({ error: Schema.Struct({ code: Schema.String, message: Schema.String }) }),
+  Schema.Struct({ schema: Schema.Literal("skit.error.v2"), error: CommandError }),
 );
 
 function run(args: readonly string[], options: { home: string; cwd?: string }) {
@@ -25,23 +23,23 @@ function run(args: readonly string[], options: { home: string; cwd?: string }) {
 }
 
 /** The structured error envelope, which is the contract callers parse. */
-function failure(result: { stderr: string }): { code: string; message: string } {
+function failure(result: { stderr: string }) {
   return Schema.decodeSync(FailureDocument)(result.stderr).error;
 }
 
 const CommandManifest = Schema.fromJsonString(
   Schema.Struct({
-    commands: Schema.Array(
-      Schema.Struct({ path: Schema.Array(Schema.String), exitCodes: Schema.Array(Schema.Int) }),
-    ),
+    exitCodes: Schema.Struct({
+      success: Schema.Literal(0),
+      failure: Schema.Literal(1),
+      invalidUsage: Schema.Literal(2),
+    }),
   }),
 );
 const commandManifest = Schema.decodeSync(CommandManifest)(
   readFileSync(join(import.meta.dirname, "../contracts/command-manifest.json"), "utf8"),
 );
-const declaredFor = (...path: string[]) =>
-  commandManifest.commands.find((command) => command.path.join("\0") === path.join("\0"))
-    ?.exitCodes ?? [];
+const declaredCodes = Object.values(commandManifest.exitCodes);
 
 async function home() {
   return mkdtemp(join(tmpdir(), "skit-exit-codes-"));
@@ -59,9 +57,9 @@ describe("declared exit codes match the binary", () => {
   test("auth status reports CONFLICT when credentials cannot be read", async () => {
     const result = run(["auth", "status", "--json"], { home: await unreadableCredentials() });
 
-    expect(result.status).toBe(12);
+    expect(result.status).toBe(1);
     expect(failure(result).code).toBe("CONFLICT");
-    expect(declaredFor("auth", "status")).toContain(12);
+    expect(declaredCodes).toContain(1);
   });
 
   test("auth logout reports CONFLICT when credentials cannot be read", async () => {
@@ -69,8 +67,8 @@ describe("declared exit codes match the binary", () => {
       home: await unreadableCredentials(),
     });
 
-    expect(result.status).toBe(12);
-    expect(declaredFor("auth", "logout")).toContain(12);
+    expect(result.status).toBe(1);
+    expect(declaredCodes).toContain(1);
   });
 
   test("update reports VALIDATION_FAILED for a malformed Library state", async () => {
@@ -89,28 +87,27 @@ describe("declared exit codes match the binary", () => {
 
     const result = run(["update", "nope", "--json"], { home: directory });
 
-    expect(result.status).toBe(65);
+    expect(result.status).toBe(1);
     expect(failure(result).code).toBe("VALIDATION_FAILED");
-    expect(declaredFor("update")).toContain(65);
+    expect(declaredCodes).toContain(1);
   });
 
-  // Naming these moved them off the shared exit 1. An unsafe source string is a rejected
-  // argument, not an unexpected failure, and add declares 64.
+  // Rejected source arguments use invalid usage, while JSON retains the domain code.
   test.each([
     { label: "unsafe characters", source: "https://example.com/a b.zip" },
     { label: "embedded credentials", source: "https://user:pw@example.com/a.zip" },
   ])("add rejects a source with $label as INVALID_ARGUMENT", async ({ source }) => {
     const result = run(["add", source], { home: await home() });
-    expect(result.status).toBe(64);
-    expect(declaredFor("add")).toContain(64);
+    expect(result.status).toBe(2);
+    expect(declaredCodes).toContain(2);
   });
 
   // A non-current schemaVersion is invalid state, not a compatibility case. It is reported as
-  // a validation failure on the same declared code as any other unreadable ledger.
+  // a validation failure on the shared failure status, with its precise JSON code.
   test.each([
     { handler: "check", args: ["check"] },
     { handler: "enable", args: ["enable", "nope"] },
-  ])("$handler reports VALIDATION_FAILED for a non-current ledger", async ({ handler, args }) => {
+  ])("$handler reports VALIDATION_FAILED for a non-current ledger", async ({ args }) => {
     const directory = await home();
     await writeFile(
       join(directory, "state.json"),
@@ -126,19 +123,19 @@ describe("declared exit codes match the binary", () => {
 
     const result = run([...args, "--json"], { home: directory });
 
-    expect(result.status).toBe(65);
+    expect(result.status).toBe(1);
     expect(failure(result).code).toBe("VALIDATION_FAILED");
-    expect(declaredFor(handler)).toContain(65);
+    expect(declaredCodes).toContain(1);
   });
 
-  test("an unclassified failure is the undeclared shared exit 1", async () => {
+  test("an unclassified failure uses the shared failure status", async () => {
     const directory = await home();
     await mkdir(join(directory, "state.json"));
 
     const result = run(["list"], { home: directory });
 
-    // exitCodes documents semantic outcomes and excludes this, so 1 stays unlisted by design.
+    // Unexpected failures use the same shared failure status as named domain failures.
     expect(result.status).toBe(1);
-    expect(declaredFor("list")).not.toContain(1);
+    expect(declaredCodes).toContain(1);
   });
 });

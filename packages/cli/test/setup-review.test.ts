@@ -1,9 +1,11 @@
 import { join } from "node:path";
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Result } from "effect";
+import { Effect, FileSystem, Result, Schema } from "effect";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
-import { openSetupReview } from "@smolai/skit-core/library/setup";
+import { openSetupReview, type SetupProgress } from "@smolai/skit-core/library/setup";
+import { SetupReviewInputInvalid } from "@smolai/skit-core/library/setup/failures";
+import { setupReviewFailure } from "../src/library/setup/review-failures.js";
 import { captureDisk } from "./helpers/disk-snapshot.js";
 import { libraryHome, importCollectionIn, scratch, writingTo } from "./helpers/library-home.js";
 
@@ -60,8 +62,24 @@ const fixture = Effect.gen(function* () {
     openSetupReview(options, { installOptions: home.installOptions }),
   );
   const scan = review.scan;
-  const apply = <A, E, R>(_message: string, effect: Effect.Effect<A, E, R>) => effect;
-  return { fs, root, home, agentRoot, linked, alias, options, observed: scan, review, apply };
+  const progress: SetupProgress[] = [];
+  const apply = <A, E, R>(stage: SetupProgress, effect: Effect.Effect<A, E, R>) => {
+    progress.push(stage);
+    return effect;
+  };
+  return {
+    fs,
+    root,
+    home,
+    agentRoot,
+    linked,
+    alias,
+    options,
+    observed: scan,
+    review,
+    apply,
+    progress,
+  };
 });
 
 it.effect("prepares mixed choices without writes and applies their captured meaning", () =>
@@ -98,6 +116,18 @@ it.effect("prepares mixed choices without writes and applies their captured mean
     plan.summary.removals.entries.length = 0;
     plan.summary.additions.length = 0;
     const applied = yield* f.home.owned(plan.apply(f.apply));
+    assert.strictEqual(f.progress[0]?._tag, "RevalidatePlan");
+    const applying = f.progress.find((stage) => stage._tag === "ApplyPlan");
+    assert.deepStrictEqual(applying, {
+      _tag: "ApplyPlan",
+      stages: [
+        { _tag: "ManageExisting", reconnects: 0 },
+        { _tag: "ManageNew", skills: 1 },
+        { _tag: "Remove", copies: 1 },
+      ],
+    });
+    assert.strictEqual("applyCommand" in f.observed.onboarding, false);
+    assert.strictEqual(f.observed.onboarding.apply, undefined);
     const state = yield* f.home.durable;
     assert.deepStrictEqual(state.skills.map((skill) => skill.name).sort(), ["alpha", "beta"]);
     assert.deepStrictEqual(state.enabled, []);
@@ -118,15 +148,27 @@ it.effect("rejects unavailable choices and missing copy decisions without writes
   Effect.gen(function* () {
     const f = yield* fixture;
     const before = yield* captureDisk([f.root]);
-    for (const selection of [
-      { sources: ["unobserved"], copies: [], decisions: [] },
-      { sources: [], copies: ["unobserved"], decisions: [] },
-      { sources: [], copies: ["beta"], decisions: [] },
-    ]) {
+    for (const [selection, reason] of [
+      [
+        { sources: ["unobserved"], copies: [], decisions: [] },
+        { _tag: "SourceUnavailable", key: "unobserved" },
+      ],
+      [
+        { sources: [], copies: ["unobserved"], decisions: [] },
+        { _tag: "ActionUnavailable", value: "unobserved" },
+      ],
+      [
+        { sources: [], copies: ["beta"], decisions: [] },
+        { _tag: "DecisionCountMismatch", selected: 1, decisions: 0 },
+      ],
+    ] as const) {
       const result = yield* Effect.result(f.review.prepare(selection));
       assert.ok(Result.isFailure(result));
-      if (Result.isFailure(result))
-        assert.strictEqual(result.failure._tag, "OptionCombinationInvalid");
+      if (Result.isFailure(result)) {
+        assert.ok(Schema.is(SetupReviewInputInvalid)(result.failure));
+        if (Schema.is(SetupReviewInputInvalid)(result.failure))
+          assert.deepStrictEqual(result.failure.reason, reason);
+      }
     }
     assert.deepStrictEqual(yield* captureDisk([f.root]), before);
   }).pipe(Effect.provide(skitLayer)),
@@ -145,6 +187,41 @@ it.effect("refuses changed observations before moving a selected copy", () =>
     const result = yield* Effect.result(f.home.owned(plan.apply(f.apply)));
     assert.ok(Result.isFailure(result));
     if (Result.isFailure(result)) assert.strictEqual(result.failure._tag, "SetupPlanStale");
+    assert.deepStrictEqual(yield* captureDisk([f.root]), before);
+  }).pipe(Effect.provide(skitLayer)),
+);
+
+it.effect("comparison retains changed-content facts and leaves the edited copy untouched", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const path = f.review.scan.instances.find((copy) => copy.name === "beta")!.path;
+    const expected = yield* deterministicTreeHash(path);
+    yield* f.fs.writeFileString(join(path, "SKILL.md"), "Changed after the scan.\n");
+    const actual = yield* deterministicTreeHash(path);
+    const before = yield* captureDisk([f.root]);
+    const result = yield* Effect.result(f.review.compareCopies([path]));
+    assert.ok(Result.isFailure(result));
+    if (Result.isFailure(result)) {
+      assert.ok(Schema.is(SetupReviewInputInvalid)(result.failure));
+      if (Schema.is(SetupReviewInputInvalid)(result.failure)) {
+        assert.deepStrictEqual(result.failure.reason, {
+          _tag: "ComparisonContentChanged",
+          path,
+          expected,
+          actual,
+        });
+        const json = Schema.encodeSync(Schema.fromJsonString(SetupReviewInputInvalid))(
+          result.failure,
+        );
+        const restored = Schema.decodeSync(Schema.fromJsonString(SetupReviewInputInvalid))(json);
+        assert.deepStrictEqual(restored.reason, result.failure.reason);
+        assert.ok(!json.includes('"message"'));
+        assert.strictEqual(
+          setupReviewFailure(restored).message,
+          `The copy at ${path} changed after setup scanned it.`,
+        );
+      }
+    }
     assert.deepStrictEqual(yield* captureDisk([f.root]), before);
   }).pipe(Effect.provide(skitLayer)),
 );

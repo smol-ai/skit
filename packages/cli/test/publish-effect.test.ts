@@ -254,16 +254,25 @@ it.effect.each([
           );
           if (outcome === "transport")
             expect(Cause.squash(exit.cause)).toMatchObject({
-              _tag: "RegistryTransportError",
-              cause: { name: "Error" },
+              _tag: "PublicationResponseError",
+              reason: {
+                _tag: "TransportFailed",
+                failure: { _tag: "RegistryTransportError", cause: { name: "Error" } },
+              },
             });
           if (outcome === "http-defect")
             expect(Cause.squash(exit.cause)).toMatchObject({
-              _tag: "RegistryTransportError",
-              cause: { name: "Error" },
+              _tag: "PublicationResponseError",
+              reason: {
+                _tag: "TransportFailed",
+                failure: { _tag: "RegistryTransportError", cause: { name: "Error" } },
+              },
             });
           if (outcome === "parser")
-            expect(Cause.squash(exit.cause)).toMatchObject({ name: "SkitContractError" });
+            expect(Cause.squash(exit.cause)).toMatchObject({
+              _tag: "PublicationResponseError",
+              reason: { _tag: "AcknowledgementInvalid" },
+            });
           if (outcome === "rejection" || outcome === "cleanup-rejection")
             expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "RegistryRejectedWrite" });
         }

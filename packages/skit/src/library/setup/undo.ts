@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { canonicalJson } from "../../shared/json.js";
 import { hashParts } from "../../artifact/descriptor.js";
 import * as MachineSettings from "../machine-settings.js";
-import { RecoveryInvalid } from "../recovery-facts.js";
+import { RecoveryInvalid } from "../store/operation-failures.js";
 import { Service } from "../service.js";
 import { StalePlan } from "../library-plan.js";
 
@@ -33,18 +33,19 @@ export const prepareSetupUndo = Effect.fn("SetupUndo.prepare")(function* (
     summary,
     apply: () =>
       Effect.gen(function* () {
-        if (conflicts.length) return yield* new RecoveryInvalid({ detail: conflicts.join("; ") });
+        if (conflicts.length)
+          return yield* new RecoveryInvalid({ reason: { _tag: "Conflicts", conflicts } });
         // Refuse an already-stale machine review before Library starts its file/state work.
         const current = yield* MachineSettings.planRestoreDiscovery(home, operationId);
         if (canonicalJson(current) !== canonicalJson(settings))
           return yield* new StalePlan({
-            message: "The Library changed since this was previewed",
+            reason: { _tag: "ReviewedStateChanged" },
           });
         const owner = yield* Service;
         const undone = yield* owner.apply({ _tag: "Apply", plan: plan }).pipe(
           Effect.map((outcome) => outcome.result),
           Effect.catchTag("Library.StalePlan", () =>
-            Effect.fail(new StalePlan({ message: "The Library changed since this was previewed" })),
+            Effect.fail(new StalePlan({ reason: { _tag: "ReviewedStateChanged" } })),
           ),
         );
         yield* MachineSettings.applyRestoreDiscovery(home, settings);

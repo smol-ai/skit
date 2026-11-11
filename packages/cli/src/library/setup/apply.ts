@@ -1,3 +1,4 @@
+import { setupStage } from "./progress.js";
 import { resolve } from "node:path";
 import { Effect, Option, Schema } from "effect";
 import { Hash } from "@smolai/skit-core/shared";
@@ -10,7 +11,6 @@ import {
   type ManageOptions,
   type SetupDuplicateAction as SetupDuplicateActionType,
   type SetupApplied,
-  changeResults,
 } from "@smolai/skit-core/library/setup";
 
 import type { SetupCommandSelection } from "./actions.js";
@@ -27,6 +27,7 @@ export const openSetupCommandReview = Effect.fn("CLI.setup.openReview")(function
   readonly manageOptions: ManageOptions;
   readonly workDirFlag?: string;
   readonly planId: string;
+  readonly planOption?: "--apply" | "--review" | "--compare";
   readonly duplicates?: SetupDuplicateActionType;
   readonly selection?: SetupCommandSelection["selection"];
 }) {
@@ -34,7 +35,11 @@ export const openSetupCommandReview = Effect.fn("CLI.setup.openReview")(function
   const planId = Schema.decodeOption(Hash)(input.planId);
   if (Option.isNone(planId))
     return yield* new OptionCombinationInvalid({
-      detail: "--apply takes the full planId that `skit setup` prints",
+      reason: {
+        _tag: "SetupPlanIdInvalid",
+        option: input.planOption ?? "--apply",
+        value: input.planId,
+      },
     });
   const setupOptions: SetupOptions = {
     ...input.options,
@@ -42,7 +47,7 @@ export const openSetupCommandReview = Effect.fn("CLI.setup.openReview")(function
     persistRoots: false,
   };
   const review = yield* renderer.withStatus(
-    "Observing local skills",
+    "Scanning local skills",
     openApprovedSetupReview(
       { ...setupOptions, persistRoots: input.workDirFlag !== undefined },
       planId.value,
@@ -67,15 +72,19 @@ export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (
 ) {
   if (input.selection && input.reviewedPlanId === undefined)
     return yield* new OptionCombinationInvalid({
-      detail: "Explicit selections require --reviewed with the reviewId from --review",
+      reason: { _tag: "ReviewedSelectionRequired" },
     });
   const renderer = yield* Renderer;
   const { scan, plan, planId } = yield* prepareSetupCommand(input);
   if (input.reviewedPlanId !== undefined && input.reviewedPlanId !== plan.reviewId)
     return yield* new OptionCombinationInvalid({
-      detail: "The reviewed setup choices changed. Review these choices again before applying.",
+      reason: {
+        _tag: "ReviewedChoicesChanged",
+        reviewedReviewId: input.reviewedPlanId,
+        currentReviewId: plan.reviewId,
+      },
     });
-  const applied = plan.hasChanges ? yield* plan.apply(renderer.withStatus) : undefined;
+  const applied = plan.hasChanges ? yield* plan.apply(setupStage(renderer)) : undefined;
   const { sources, additions, reconnects, removals } = plan.summary;
   const taken = new Set([
     ...sources.flatMap((source) => source.names),
@@ -87,7 +96,6 @@ export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (
   const installedSkills = yield* library.installedSkills;
   return {
     planId,
-    changes: applied?.changes ?? changeResults(plan.summary.changes, false),
     ...(applied ? { operationId: applied.operationId } : {}),
     removed: removals.entries.map(({ name, path }) => ({ name, path })),
     recoveryDirectories: [

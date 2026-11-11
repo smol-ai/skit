@@ -1,3 +1,4 @@
+import type { UndoConflict } from "../../recovery-facts.js";
 import { Clock, Effect } from "effect";
 import { makeImportId, type CollectionId, type MachineId } from "../../entity-ids.js";
 import { originalTreeHash, collectionVersionPath } from "../../collection-version.js";
@@ -19,7 +20,7 @@ export const prepareSetupSourceUndo = Effect.fn("SetupUndo.prepareSources")(func
   machineId: MachineId | undefined,
   observations: Map<CollectionId, UndoSourceImport>,
 ) {
-  const conflicts: string[] = [];
+  const conflicts: UndoConflict[] = [];
   const restorations: Import[] = [];
   const evidence: { path: string; hash: string }[] = [];
   for (const prior of before.sources ?? []) {
@@ -28,7 +29,7 @@ export const prepareSetupSourceUndo = Effect.fn("SetupUndo.prepareSources")(func
     const current = sourceImports(state, prior.collectionId)[0];
     if (current?.collection_version_id === prior.collectionVersionId) continue;
     if (current?.collection_version_id !== after.collectionVersionId) {
-      conflicts.push(`Collection source changed after setup: ${prior.collectionId}`);
+      conflicts.push({ _tag: "SourceChanged", collectionId: prior.collectionId });
       continue;
     }
     const original = state.imports.find(
@@ -42,13 +43,13 @@ export const prepareSetupSourceUndo = Effect.fn("SetupUndo.prepareSources")(func
       (item) => item.collection_version_id === prior.collectionVersionId,
     );
     if (!original || !copy || !machineId) {
-      conflicts.push(`Prior retained source evidence is unavailable: ${prior.collectionId}`);
+      conflicts.push({ _tag: "SourceEvidenceMissing", collectionId: prior.collectionId });
       continue;
     }
     const path = collectionVersionPath(originalsPath, copy.hash);
     const verified = yield* Effect.result(originalTreeHash(path));
     if (verified._tag === "Failure" || verified.success !== copy.hash) {
-      conflicts.push(`Prior retained source bytes changed: ${prior.collectionId}`);
+      conflicts.push({ _tag: "SourceBytesChanged", collectionId: prior.collectionId });
       continue;
     }
     evidence.push({ path, hash: verified.success });
@@ -61,7 +62,7 @@ export const prepareSetupSourceUndo = Effect.fn("SetupUndo.prepareSources")(func
       observations.set(prior.collectionId, sourceImport);
     }
     if (state.imports.some((item) => item.import_id === sourceImport.importId)) {
-      conflicts.push(`Undo import identity is already recorded: ${prior.collectionId}`);
+      conflicts.push({ _tag: "ImportAlreadyRecorded", collectionId: prior.collectionId });
       continue;
     }
     const now = Date.parse(sourceImport.checkedAt);
@@ -71,9 +72,7 @@ export const prepareSetupSourceUndo = Effect.fn("SetupUndo.prepareSources")(func
       now <= Date.parse(current.imported_at) ||
       sourceImport.checkedAt <= current.imported_at
     ) {
-      conflicts.push(
-        `Clock has not advanced past the current source observation: ${prior.collectionId}`,
-      );
+      conflicts.push({ _tag: "ClockNotAdvanced", collectionId: prior.collectionId });
       continue;
     }
     restorations.push({

@@ -94,14 +94,13 @@ export const reviewApply = Effect.fn("Library.reviewApply")(function* (
   const files = yield* InstalledSkills.Service;
   const input = structuredClone(reviewed);
   if (input._tag !== input.intent._tag)
-    return yield* new StalePlan({ message: "The plan tag does not match its reviewed intent" });
-  const stale = (message: string) => new StalePlan({ message });
+    return yield* new StalePlan({ reason: { _tag: "PlanInvalid", kind: "intent" } });
   const inspected = yield* inspectLocalLibraryState(home);
   const base = inspected.present ? inspected.state : emptyLibraryState();
   const actual = snapshotOf(inspected).revision;
   if (actual !== input.baseRevision)
     return yield* new StalePlan({
-      message: "Library changed after this change was previewed",
+      reason: { _tag: "LibraryChanged" },
       expected: Revision.make(input.baseRevision),
       actual,
     });
@@ -111,7 +110,8 @@ export const reviewApply = Effect.fn("Library.reviewApply")(function* (
       ?.destinations ?? [];
   // A refusal by policy says more than "changed since preview", so it is checked first.
   for (const change of again.changes)
-    if (change._tag === "Refuse") return yield* new UninstallConflict({ detail: change.detail });
+    if (change._tag === "Refuse")
+      return yield* new UninstallConflict({ path: change.recorded.path });
   for (const { request, change } of again.enabled)
     yield* refuseDuplicates(request, change, targetsAt(request.scope));
   if (
@@ -121,14 +121,16 @@ export const reviewApply = Effect.fn("Library.reviewApply")(function* (
       input.changes,
     )
   )
-    return yield* stale("Installed agent targets or paths changed after preview");
-  yield* files
-    .check(input.folders)
-    .pipe(
-      Effect.catchTag("Library.InstalledSkillsChanged", (error) =>
-        Effect.fail(stale(error.message)),
+    return yield* new StalePlan({ reason: { _tag: "PlanChanged", kind: "destinations" } });
+  yield* files.check(input.folders).pipe(
+    Effect.catchTag("Library.InstalledSkillsChanged", (error) =>
+      Effect.fail(
+        new StalePlan({
+          reason: { _tag: "EvidenceChanged", path: error.path, kind: "installed" },
+        }),
       ),
-    );
+    ),
+  );
 
   return { input, base, again, snapshot: snapshotOf(inspected) };
 });

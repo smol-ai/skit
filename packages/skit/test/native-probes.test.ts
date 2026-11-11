@@ -11,8 +11,8 @@ import { Deferred, Effect, Fiber, FileSystem, Schedule } from "effect";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import { runAuditProbes } from "../src/auditing/probes.js";
-import { probeHarness } from "@smolai/skit-core/harnesses";
-import { captureBounded } from "@smolai/skit-core/harnesses";
+import { probeHarness } from "../src/harnesses/index.js";
+import { captureBounded } from "../src/harnesses/index.js";
 const scratch = (prefix: string) =>
   Effect.flatMap(FileSystem.FileSystem, (fs) => fs.makeTempDirectoryScoped({ prefix }));
 
@@ -86,7 +86,7 @@ it.effect("an audit probe refuses an invocation the command never declared", () 
       {
         harness: "claude",
         status: "failed",
-        reason: "Probe is not declared: claude plugin list --json",
+        failure: { _tag: "UndeclaredInvocation", invocation: "claude plugin list --json" },
       },
     ]);
   }).pipe(Effect.provide(skitLayer)),
@@ -97,7 +97,11 @@ it.effect("an audit probe reports an unsupported harness without spawning", () =
     const results = yield* runAuditProbes({ probes: ["opencode"], allowedSubprocesses: [] });
 
     expect(results).toEqual([
-      { harness: "opencode", status: "failed", reason: "unsupported probe" },
+      {
+        harness: "opencode",
+        status: "failed",
+        failure: { _tag: "UnsupportedHarness", harness: "opencode" },
+      },
     ]);
   }).pipe(Effect.provide(skitLayer)),
 );
@@ -115,7 +119,10 @@ it.effect("a harness probe fails an executable whose output exceeds its budget",
       harnessId: "codex",
       status: "failed",
       version: null,
-      error: expect.stringContaining("more than 1000000 bytes"),
+      failure: {
+        _tag: "ProcessFailed",
+        failure: { _tag: "SourceProcess.OutputTooLarge", stream: "stdout", limit: 1_000_000 },
+      },
     });
   }).pipe(Effect.provide(skitLayer)),
 );
@@ -130,7 +137,11 @@ it.effect("the audit probe budget stops a flood at five million bytes", () =>
     );
 
     // Counted while the pipe drains, not collected and then truncated; the Scope kills the child.
-    expect(String(failure)).toContain("more than 5000000 bytes");
+    expect(failure).toMatchObject({
+      _tag: "SourceProcess.OutputTooLarge",
+      stream: "stdout",
+      limit: 5_000_000,
+    });
   }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -172,7 +183,11 @@ it.effect("an audit probe reports malformed output as a failed probe, not a defe
       {
         harness: "codex",
         status: "failed",
-        reason: "codex plugin list --json did not return JSON",
+        failure: {
+          _tag: "InvalidJson",
+          invocation: "codex plugin list --json",
+          failure: expect.any(SyntaxError),
+        },
       },
     ]);
   }).pipe(Effect.provide(skitLayer)),

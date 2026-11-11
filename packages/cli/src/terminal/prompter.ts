@@ -22,7 +22,10 @@ import { Prompt } from "effect/cli";
 import { terminalColors, terminalColorEnabled } from "./style.js";
 import { fitTerminalLine, renderSkillPreview } from "./skill-preview.js";
 import { terminalText } from "./text.js";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
+import { compactHome } from "./home-path.js";
+import { homedir } from "node:os";
+import { PromptCancelled } from "./interaction-failures.js";
+export { PromptCancelled } from "./interaction-failures.js";
 
 export interface Choice<Value> {
   value: Value;
@@ -53,23 +56,6 @@ interface MultiselectOptions<Value> {
   readonly maxItems?: number;
   /** Live context derived from every selected value, including off-screen choices. */
   readonly summary?: (selected: readonly Value[], columns: number) => readonly string[];
-}
-
-/** The person answering went back with Escape or interrupted the prompt with Ctrl+C/Ctrl+D. */
-export class PromptCancelled
-  extends Data.TaggedError("PromptCancelled")<{
-    prompt: string;
-    reason: "back" | "interrupt";
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation =
-    "Run the command again to make a choice, or pass it as a flag to skip the prompt; `--help` lists them.";
-  get message(): string {
-    return `${this.prompt} cancelled`;
-  }
 }
 
 // Every prompt in this CLI chooses among string values: skill refs, harness names, action verbs.
@@ -124,7 +110,7 @@ const filterableMultiSelect = <Value extends string>(
     ...(hasRemoval ? ["Ctrl+R remove/undo"] : []),
     "Space toggle",
     "Ctrl+A all/none",
-  ].join(" · ");
+  ].join(" | ");
   const initialSelected = new Set(
     items.flatMap((item, index) => (item.selected && !item.disabled ? [index] : [])),
   );
@@ -206,7 +192,7 @@ const filterableMultiSelect = <Value extends string>(
           : item.label;
       const indent = item.group === undefined ? "" : "    ";
       lines.push(
-        `${indent}${active} ${checked} ${label}${removed ? color.red("  · Remove") : ""}${item.hint ? color.dim(`  · ${item.hint}`) : ""}`,
+        `${indent}${active} ${checked} ${label}${removed ? color.red("  | Remove") : ""}${item.hint ? color.dim(`  | ${item.hint}`) : ""}`,
       );
       for (const line of item.description?.split("\n") ?? [])
         lines.push(`${indent}    ${color.dim(line)}`);
@@ -218,7 +204,7 @@ const filterableMultiSelect = <Value extends string>(
       ? `${visible.indexOf(page[0]) + 1}–${visible.indexOf(page.at(-1)!) + 1}`
       : "0";
     const footer = color.dim(
-      `  ${range} of ${visible.length}${visible.length !== items.length ? ` matches (${items.length} total)` : ""} · ${state.selected.size} selected${page.length < visible.length ? " · ↑↓ scroll" : ""}`,
+      `  ${range} of ${visible.length}${visible.length !== items.length ? ` matches (${items.length} total)` : ""} | ${state.selected.size} selected${page.length < visible.length ? " | ↑↓ scroll" : ""}`,
     );
     return [...lines.slice(0, Math.max(1, maxLines - 1)), footer];
   };
@@ -485,27 +471,26 @@ export const terminalPrompterLayer: Layer.Layer<Prompter, never, Prompt.Environm
       });
 
     // Choices and messages carry Skill and repository names, so their controls never reach the
-    // terminal; the prompt's own drawing is added after.
+    // terminal; the prompt's own drawing is added after. Paths under home read as `~`.
+    const home = homedir();
+    const shown = (text: string) => compactHome(terminalText(text), home);
     const safe = <Value>(items: readonly Choice<Value>[]): Choice<Value>[] =>
       items.map((item) => ({
         ...item,
-        label: terminalText(item.label),
-        ...(item.hint === undefined ? {} : { hint: terminalText(item.hint) }),
-        ...(item.detail === undefined ? {} : { detail: terminalText(item.detail) }),
-        ...(item.description === undefined ? {} : { description: terminalText(item.description) }),
-        ...(item.group === undefined ? {} : { group: terminalText(item.group) }),
+        label: shown(item.label),
+        ...(item.hint === undefined ? {} : { hint: shown(item.hint) }),
+        ...(item.detail === undefined ? {} : { detail: shown(item.detail) }),
+        ...(item.description === undefined ? {} : { description: shown(item.description) }),
+        ...(item.group === undefined ? {} : { group: shown(item.group) }),
       }));
     return Prompter.of({
       select: (message, items) =>
-        ask(
-          message,
-          Prompt.Select({ message: terminalText(message), choices: choices(safe(items)) }),
-        ),
+        ask(message, Prompt.Select({ message: shown(message), choices: choices(safe(items)) })),
       autocomplete: (message, items) =>
         ask(
           message,
           Prompt.AutoComplete({
-            message: terminalText(message),
+            message: shown(message),
             choices: choices(safe(items)),
             maxPerPage: AUTOCOMPLETE_MAX_ITEMS,
           }),
@@ -514,20 +499,18 @@ export const terminalPrompterLayer: Layer.Layer<Prompter, never, Prompt.Environm
         const summary = options?.summary;
         return ask(
           message,
-          filterableMultiSelect(terminalText(message), safe(items), {
+          filterableMultiSelect(shown(message), safe(items), {
             ...options,
             ...(summary && {
-              summary: (selected, columns) => summary(selected, columns).map(terminalText),
+              summary: (selected, columns) => summary(selected, columns).map(shown),
             }),
           }),
         );
       },
-      confirm: (message) => ask(message, Prompt.Confirm({ message: terminalText(message) })),
-      text: (message) => ask(message, Prompt.String({ message: terminalText(message) })),
+      confirm: (message) => ask(message, Prompt.Confirm({ message: shown(message) })),
+      text: (message) => ask(message, Prompt.String({ message: shown(message) })),
       password: (message) =>
-        ask(message, Prompt.Password({ message: terminalText(message) })).pipe(
-          Effect.map(Redacted.value),
-        ),
+        ask(message, Prompt.Password({ message: shown(message) })).pipe(Effect.map(Redacted.value)),
     });
   }),
 );

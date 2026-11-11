@@ -1,6 +1,7 @@
 // Device-local Library records: where skills are enabled and what is installed. Kept apart from
 // library-state.ts so a setup's operation record (store/state-schema.ts) can record them.
 
+import { InstalledSkillConflict } from "../installed-skills/conflict.js";
 import { Schema } from "effect";
 import { isAbsolute } from "node:path";
 import { InstalledSkillId, SkillId, SkillVersionId } from "./entity-ids.js";
@@ -10,7 +11,9 @@ import { InstallDestination } from "../installed-skills/destination.js";
 import { InvocationPolicy } from "../artifact/invocation-policy.js";
 
 export const AbsoluteDevicePath = Schema.String.check(
-  Schema.makeFilter(isAbsolute, { message: "Expected an absolute device path" }),
+  Schema.makeFilter(isAbsolute, {
+    representation: { id: "skit/schema/path-absolute", payload: null },
+  }),
 );
 export type AbsoluteDevicePath = typeof AbsoluteDevicePath.Type;
 
@@ -60,6 +63,7 @@ export const InstalledSkillConflicted = Schema.Struct({
   ...InstalledSkillFields,
   status: Schema.Literal("conflicted"),
   current_hash: Hash,
+  conflicts: Schema.Array(InstalledSkillConflict),
 });
 export interface InstalledSkillConflicted extends Schema.Schema.Type<
   typeof InstalledSkillConflicted

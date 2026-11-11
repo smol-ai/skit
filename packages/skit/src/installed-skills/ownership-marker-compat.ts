@@ -45,7 +45,7 @@ const OwnershipMarkerFromV4 = OwnershipMarkerV4.pipe(
         expected_hash: expected_digest,
       }),
     ),
-    encode: SchemaGetter.forbidden(() => "v4 ownership markers are decode-only"),
+    encode: SchemaGetter.forbiddenEncoding,
   }),
 );
 // Older markers named the Harness a copy was written for; ownership never depended on it.
@@ -55,7 +55,7 @@ const OwnershipMarkerFromV3 = OwnershipMarkerV3.pipe(
       ...marker,
       schemaVersion: 4 as const,
     })),
-    encode: SchemaGetter.forbidden(() => "v3 ownership markers are decode-only"),
+    encode: SchemaGetter.forbiddenEncoding,
   }),
 );
 const OwnershipMarkerFromV2 = OwnershipMarkerV2.pipe(
@@ -64,7 +64,7 @@ const OwnershipMarkerFromV2 = OwnershipMarkerV2.pipe(
       ...marker,
       schemaVersion: 3 as const,
     })),
-    encode: SchemaGetter.forbidden(() => "v2 ownership markers are decode-only"),
+    encode: SchemaGetter.forbiddenEncoding,
   }),
 );
 

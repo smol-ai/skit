@@ -1,24 +1,58 @@
+import { Block } from "../../terminal/blocks.js";
+import { recoveryFactReason } from "./failures.js";
 import type { RecoveryList, RecoveryOutput } from "./output.js";
 
-export const renderRecoveryList = (data: RecoveryList) =>
+export const renderRecoveryList = (data: RecoveryList): Block[] =>
   data.operations.length
-    ? data.operations.map((operation) => operation.operationId).join("\n")
-    : "No saved-file recovery operations.";
+    ? [
+        Block.List({
+          items: data.operations.map((operation) => ({ text: [operation.operationId] })),
+        }),
+      ]
+    : [Block.Status({ tone: "info", text: ["No saved-file recovery operations."] })];
 
-export const renderRecovery = (data: RecoveryOutput) =>
-  [
-    `File recovery: ${data.phase} (Library bindings and settings are unchanged)`,
-    ...data.entries.map(
-      (entry) =>
-        `${entry.name} · ${entry.status} · ${entry.path}\n  ${entry.reason}\n  Saved: ${entry.recoveryPath}`,
-    ),
-    ...(data.legacy
-      ? [
-          "Legacy move record: progress is derived from files, not moved flags; original control-file fingerprints were not recorded.",
-        ]
-      : []),
-    ...(data.failure ? [data.failure] : []),
-    ...data.actions.map(
-      (action) => `${action.rel}: ${action.argv.map((arg) => JSON.stringify(arg)).join(" ")}`,
-    ),
-  ].join("\n");
+export const renderRecovery = (data: RecoveryOutput): Block[] => [
+  Block.Fields({
+    rows: [
+      {
+        label: "File recovery",
+        value: [data.phase, { dim: " (enabled Skills and settings are unchanged)" }],
+      },
+    ],
+  }),
+  ...data.entries.map((entry) =>
+    Block.Group({
+      title: entry.name,
+      children: [
+        Block.Fields({
+          rows: [
+            { label: "Status", value: [entry.status] },
+            { label: "Path", value: [{ dim: entry.path }] },
+            { label: "Reason", value: [recoveryFactReason(entry.reason)] },
+            { label: "Saved", value: [{ dim: entry.recoveryPath }] },
+          ],
+        }),
+      ],
+    }),
+  ),
+  ...(data.legacy
+    ? [
+        Block.Note({
+          text: [
+            "Legacy move record: progress is derived from files, not moved flags; original control-file fingerprints were not recorded.",
+          ],
+        }),
+      ]
+    : []),
+  ...(data.failure ? [Block.Status({ tone: "error", text: [data.failure] })] : []),
+  ...(data.actions.length
+    ? [
+        Block.Fields({
+          rows: data.actions.map((action) => ({
+            label: action.rel,
+            value: [{ code: action.argv.map((arg) => JSON.stringify(arg)).join(" ") }],
+          })),
+        }),
+      ]
+    : []),
+];

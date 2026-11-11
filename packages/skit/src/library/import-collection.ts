@@ -1,4 +1,4 @@
-import { Data, Effect, FileSystem, Schema, SchemaIssue } from "effect";
+import { Effect, FileSystem, Schema } from "effect";
 import { dirname, join } from "node:path";
 import { deterministicTreeHash, validateSkitDirectory } from "../artifact/skit.js";
 import { InvalidLibraryState } from "./failures.js";
@@ -45,22 +45,7 @@ import {
   type SourceDeclaration,
 } from "./source-identity.js";
 import type { Hash } from "../shared/hash.js";
-import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
-
-class ImportRequestInvalid
-  extends Data.TaggedError("Library.ImportRequestInvalid")<{
-    reason: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "VALIDATION_FAILED" as const;
-  readonly remediation =
-    "Inspect the reported Skill paths in the source, correct the content, and retry.";
-  get message(): string {
-    return `Cannot import Collection: ${this.reason}`;
-  }
-}
+import { ImportRequestInvalid, InstalledSkillChanged } from "./import-failures.js";
 
 interface ImportRequestSkill {
   readonly name: string;
@@ -129,16 +114,20 @@ export const prepareImport = Effect.fn("Library.prepareImport")(function* (
 ) {
   const seen: ImportRequestSkill[] = [];
   if (skills.length === 0)
-    return yield* new ImportRequestInvalid({ reason: "empty observed Collection" });
+    return yield* new ImportRequestInvalid({ reason: { _tag: "EmptyCollection" } });
   for (const skill of skills) {
     if (!safeRelative(skill.relativePath))
       return yield* new ImportRequestInvalid({
-        reason: `unsafe Skill path ${JSON.stringify(skill.relativePath)} for ${JSON.stringify(skill.name)}`,
+        reason: { _tag: "UnsafeSkillPath", skill: skill.name, path: skill.relativePath },
       });
     const duplicate = seen.find((previous) => previous.name === skill.name);
     if (duplicate)
       return yield* new ImportRequestInvalid({
-        reason: `duplicate Skill name ${JSON.stringify(skill.name)} at ${JSON.stringify(duplicate.relativePath)} and ${JSON.stringify(skill.relativePath)}`,
+        reason: {
+          _tag: "DuplicateSkillName",
+          name: skill.name,
+          paths: [duplicate.relativePath, skill.relativePath],
+        },
       });
     const overlap = seen.find(
       ({ relativePath: path }) =>
@@ -150,7 +139,13 @@ export const prepareImport = Effect.fn("Library.prepareImport")(function* (
     );
     if (overlap)
       return yield* new ImportRequestInvalid({
-        reason: `overlapping Skill paths ${JSON.stringify(overlap.relativePath)} (${JSON.stringify(overlap.name)}) and ${JSON.stringify(skill.relativePath)} (${JSON.stringify(skill.name)})`,
+        reason: {
+          _tag: "OverlappingSkillPaths",
+          skills: [
+            { name: overlap.name, path: overlap.relativePath },
+            { name: skill.name, path: skill.relativePath },
+          ],
+        },
       });
     seen.push(skill);
   }
@@ -172,9 +167,16 @@ export const prepareImport = Effect.fn("Library.prepareImport")(function* (
       ],
       true,
     );
-    if ((yield* deterministicTreeHash(path)) !== skill.currentHash)
+    const actual = yield* deterministicTreeHash(path);
+    if (actual !== skill.currentHash)
       return yield* new ImportRequestInvalid({
-        reason: `observed Skill ${skill.name} changed`,
+        reason: {
+          _tag: "ObservedContentChanged",
+          skill: skill.name,
+          path: skill.relativePath,
+          expected: skill.currentHash,
+          actual,
+        },
       });
     facts.push({
       name: skill.name,
@@ -189,8 +191,6 @@ export const prepareImport = Effect.fn("Library.prepareImport")(function* (
   }
   return { staged, facts, hash: yield* originalTreeHash(staged) };
 });
-
-const formatManifestIssue = SchemaIssue.makeFormatterDefault();
 
 interface PersistPreparedRequest extends ImportRequest {
   readonly collectionVersionHash: Hash;
@@ -313,6 +313,11 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       };
       state.skills.push(skill);
     }
+    if (source.kind === "authored-workspace" && skill.name !== fact.name) {
+      const index = state.skills.indexOf(skill);
+      skill = { ...skill, name: fact.name };
+      state.skills[index] = skill;
+    }
     persistedSkills.push(skill);
     if (!skill.versions.some((candidate) => candidate.artifact_hash === fact.artifactHash))
       skill.versions.push({
@@ -348,7 +353,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     Effect.mapError(
       (error) =>
         new ImportRequestInvalid({
-          reason: `observed Collection failed validation: ${String(error)}`,
+          reason: { _tag: "StateInvalid", kind: "library-state", failure: error },
         }),
     ),
   );
@@ -356,7 +361,11 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     Effect.mapError(
       (error) =>
         new ImportRequestInvalid({
-          reason: `observed Collection would violate the portable manifest: ${formatManifestIssue(error)}`,
+          reason: {
+            _tag: "StateInvalid",
+            kind: "portable-manifest",
+            failure: new Schema.SchemaError(error),
+          },
         }),
     ),
   );
@@ -391,18 +400,6 @@ export const importCollection = Effect.fn("Library.importCollection")(function* 
   });
 });
 
-class InstalledSkillChanged
-  extends Data.TaggedError("Library.InstalledSkillChanged")<{ path: string }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Preview retaining the installed skill's changes again.";
-  get message(): string {
-    return `Installed skill changed after it was observed: ${this.path}`;
-  }
-}
-
 /**
  * Retain one explicitly selected managed installed skill as a new Version of its existing Skill.
  *
@@ -415,7 +412,7 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: Ed
   if (!current.present)
     return yield* new InvalidLibraryState({
       path: libraryStatePath(writer.home),
-      detail: "Retaining an installed skill's changes requires current Library state",
+      reason: { _tag: "MissingRecord", record: "library-state" },
     });
   const state = structuredClone(current.state);
   const skill = state.skills.find((candidate) => candidate.skill_id === request.skillId);
@@ -499,7 +496,7 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: Ed
       (error) =>
         new InvalidLibraryState({
           path: libraryStatePath(writer.home),
-          detail: `Retaining an installed skill's changes produced invalid Library state: ${String(error)}`,
+          reason: { _tag: "SchemaInvalid", failure: error },
         }),
     ),
   );
@@ -531,7 +528,7 @@ export const importAuthoredCollection = Effect.fn("Library.retainAuthoredCollect
     });
     if (candidate.diagnostics.some((item) => item.severity === "error"))
       return yield* new ImportRequestInvalid({
-        reason: "authored Descriptor or Skill content is invalid",
+        reason: { _tag: "AuthoredContentInvalid", diagnostics: candidate.diagnostics },
       });
     const writer = yield* LibraryWriter;
     const collectionVersionHash = yield* originalTreeHash(request.root);
@@ -548,7 +545,7 @@ export const importAuthoredCollection = Effect.fn("Library.retainAuthoredCollect
     });
     if (validated.diagnostics.some((item) => item.severity === "error"))
       return yield* new ImportRequestInvalid({
-        reason: "authored Descriptor or Skill content is invalid",
+        reason: { _tag: "AuthoredContentInvalid", diagnostics: validated.diagnostics },
       });
     const validationByName = new Map(validated.identity.skills.map((skill) => [skill.name, skill]));
     const facts: ImportedSkillFact[] = [];
@@ -556,7 +553,7 @@ export const importAuthoredCollection = Effect.fn("Library.retainAuthoredCollect
       const identity = validationByName.get(member.name);
       if (identity === undefined)
         return yield* new ImportRequestInvalid({
-          reason: `authored Skill ${member.name} has no validation identity`,
+          reason: { _tag: "AuthoredIdentityMissing", skill: member.name },
         });
       facts.push({
         name: member.name,

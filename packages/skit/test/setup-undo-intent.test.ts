@@ -119,9 +119,10 @@ it.effect(
       expect(enabledSkillIds(before, enabled)).toHaveLength(1);
       expect(enabledSkillIds(after, enabled)).toHaveLength(2);
       const inverse = reverseSetupIntent(after, setupIntent(before), setupIntent(after));
-      expect(inverse.conflicts).toContain(
-        `Collection source membership ${imported.collections[0].collection_id} requires restoration before undo`,
-      );
+      expect(inverse.conflicts).toContainEqual({
+        _tag: "CollectionMembershipChanged",
+        collectionId: imported.collections[0].collection_id,
+      });
       expect(inverse.state.skills).toEqual(after.skills);
       expect(inverse.state.collection_versions).toEqual(after.collection_versions);
     }).pipe(Effect.provide(skitLayer)),
@@ -176,7 +177,12 @@ it.effect(
         },
       };
       const conflict = reverseSetupIntent(edited, setupIntent(before), setupIntent(after));
-      expect(conflict.conflicts).toContain(`account binding invocation ${f.existing.skill_id}`);
+      expect(conflict.conflicts).toContainEqual({
+        _tag: "SelectionChanged",
+        scope: { _tag: "Account" },
+        key: f.existing.skill_id,
+        kind: "invocation",
+      });
       expect(conflict.state.invocation_policies?.[f.existing.skill_id]).toBe("host-policy");
     }).pipe(Effect.provide(skitLayer)),
 );
@@ -238,7 +244,10 @@ it.effect(
       });
       const current = yield* f.home.durable;
       const conflict = reverseSetupIntent(current, setupIntent(before), setupIntent(after));
-      expect(conflict.conflicts).toContain(`selected Version ${f.chosen.skill_id}`);
+      expect(conflict.conflicts).toContainEqual({
+        _tag: "SkillVersionChanged",
+        skillId: f.chosen.skill_id,
+      });
       expect(conflict.state.skills).toEqual(current.skills);
     }).pipe(Effect.provide(skitLayer)),
 );
@@ -272,7 +281,7 @@ it.effect(
         setupIntent(before),
         setupIntent(after),
       );
-      expect(changedMode.conflicts).toContain("device binding selection mode");
+      expect(changedMode.conflicts).toContainEqual({ _tag: "DeviceModeChanged" });
       expect(changedMode.state.device_skill_selection).toEqual({ mode: "follow-account" });
     }).pipe(Effect.provide(skitLayer)),
 );

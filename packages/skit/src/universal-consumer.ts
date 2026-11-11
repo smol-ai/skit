@@ -1,3 +1,4 @@
+export { ArchiveStreamInvalid } from "./artifact/archive-failure.js";
 // Runtime-agnostic contracts and Artifact behavior required by Registry consumer capabilities.
 // The Registry Worker imports this entry, so nothing reachable from it may touch the Node platform
 // layer (`platform/layer.ts`, `platform/link-stat.ts`, `@effect/platform-node`, or `node:fs`).
@@ -30,7 +31,8 @@ export {
   makeOperationId,
 } from "./library/entity-ids.js";
 export {
-  SnapshotArchiveInvalid,
+  CollectionVersionArchiveInvalid,
+  CollectionVersionArchiveInvalidReason,
   verifySnapshotArchive,
 } from "./library/snapshot-archive-universal.js";
 export { auditSkill, evaluateSkillAudit } from "./auditing/skill-audit.js";
@@ -54,13 +56,7 @@ export {
   type InstalledSkillFile,
 } from "./artifact/descriptor.js";
 
-export {
-  type DuplicateSkillNames,
-  type DuplicateSkillPaths,
-  type ConflictingInvocationDeclaration,
-  type SkillDiscoveryLimitExceeded,
-  type SkillNameInvalid,
-} from "./artifact/failures.js";
+export { SkillDiscoveryLimitExceeded, SkillNameInvalid } from "./artifact/failures.js";
 export {
   type SourceRequired,
   type UnsafeSourceUrl,
@@ -74,12 +70,9 @@ export {
 export {
   type UnsafeInstalledSkillName,
   type UnsafeInstalledSkillBackups,
-  type SharedTargetCollision,
-  type InstalledPathCollision,
-  type NoSkillsDirectory,
+  SharedTargetCollision,
+  InstalledPathCollision,
   type OwnershipMarkerDisagrees,
-  type ManageTargetChanged,
-  type ManageContentMismatch,
   type UninstallConflict,
 } from "./installed-skills/failures.js";
 export {
@@ -91,14 +84,32 @@ export {
 } from "./library/failures.js";
 export { type HomeBusy } from "./platform/lock-failures.js";
 
-export { type RegistryNotConfigured } from "./shared/input-failures.js";
+export { type RegistryNotConfigured } from "./sources/failures.js";
 
 export { parseSkillFrontmatter } from "./harnesses/frontmatter.js";
-export {
-  assessInvocationConformance,
-  describeInvocationConformanceIssue,
-} from "./invocation/conformance.js";
+export { assessInvocationConformance } from "./invocation/conformance.js";
 export { canonicalJson } from "./shared/json.js";
 export { encodeHashParts, sha256Hash } from "./shared/hash.js";
 export { normalizeRegistryNamespace } from "./artifact/registry-identity.js";
 export { safePathSchema, type SharedMapping } from "./artifact/schemas.js";
+
+export {
+  DescriptorFailure,
+  DescriptorMalformed,
+  SkitValidationFailed,
+} from "./artifact/failures.js";
+
+export { DescriptorIssue, YamlWarning } from "./artifact/descriptor-issue.js";
+
+export {
+  SchemaIssueFact,
+  SchemaIssueReason,
+  ExpectedSchemaType,
+  SchemaFailure,
+} from "./shared/schema-issue.js";
+
+export { InvocationConformanceIssue } from "./invocation/conformance-issue.js";
+export {
+  SkitValidationDiagnostic,
+  PublicationDiagnostic,
+} from "./artifact/validation-diagnostic.js";

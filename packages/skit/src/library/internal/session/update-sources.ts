@@ -1,10 +1,17 @@
+import { LibraryChanged } from "../../failures.js";
+import { CollectionNotUpdatable } from "../../update-failures.js";
+import type { AuthoredSkillIssue } from "../../authored-skill-issues.js";
 import { Cause, Effect, FileSystem, Predicate } from "effect";
 import { isPlatformError } from "effect/PlatformError";
 import { dirname, join, resolve } from "node:path";
 import type { Interface } from "../../library.js";
 import { emptyLibraryState, type LibraryState } from "../../library-state.js";
 import { loadLibrary, writeLibrary } from "../../store/library-store.js";
-import { latestSourceImport, type LibrarySubject } from "../../subject-resolution.js";
+import {
+  latestSourceImport,
+  matchingLibrarySubjects,
+  type LibrarySubject,
+} from "../../subject-resolution.js";
 import { sourceLocator } from "../../../sources/resolve.js";
 import { isSkitFailure } from "../../../shared/failure.js";
 import type { Hash } from "../../../shared/hash.js";
@@ -18,7 +25,25 @@ import {
 } from "./source-updates.js";
 
 /** The existing acquisition adapter's imported-content facts; no storage or lifecycle is exposed. */
-export interface SourceUpdateAdapters<E, R, F extends { readonly remediation: string }> {
+export interface SourceUpdateAdapters<E, R> {
+  readonly updateAuthoredSkills: (
+    input: string,
+    owner: {
+      readonly library: Interface;
+      readonly home: string;
+      readonly expectedImportId: string;
+    },
+  ) => Effect.Effect<
+    {
+      readonly installed: number;
+      readonly issues: readonly AuthoredSkillIssue[];
+      readonly sync_status?: string;
+      readonly sync_error?: Cause.Cause<unknown>;
+      readonly installation_error?: Cause.Cause<unknown>;
+    },
+    E,
+    R
+  >;
   readonly importSource: (
     input: SkitSource,
     previousSkillPaths: readonly string[],
@@ -33,7 +58,6 @@ export interface SourceUpdateAdapters<E, R, F extends { readonly remediation: st
     R
   >;
   readonly progress: LibraryProgressReporter;
-  readonly classifyFailure: (cause: Cause.Cause<unknown>) => F;
 }
 
 /** Canonicalize the existing ancestor too, since a failed write's destination may not exist. */
@@ -61,16 +85,12 @@ const canonicalStoragePath = Effect.fn("Library.canonicalStoragePath")(function*
  * Own one update through scope cleanup. Recoverable failures report persisted evidence;
  * shared-storage failures, interruption and programming defects remain failures of the action.
  */
-const updateCollection = Effect.fn("Library.updateCollection")(function* <
-  E,
-  R,
-  F extends { readonly remediation: string },
->(
+const updateCollection = Effect.fn("Library.updateCollection")(function* <E, R>(
   home: string,
-  library: Pick<Interface, "read" | "plan" | "apply" | "import">,
+  library: Interface,
   state: LibraryState,
   before: LibrarySubject,
-  adapters: SourceUpdateAdapters<E, R, F>,
+  adapters: SourceUpdateAdapters<E, R>,
 ) {
   const progress = adapters.progress;
   const storeHome = yield* canonicalStoragePath(home);
@@ -79,30 +99,52 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <
   let sourceImported = false;
   return yield* Effect.scoped(
     Effect.gen(function* () {
-      const { priorTree, input } = yield* resolveUpdate(state, before);
+      const { priorTree, input, acquisition } = yield* resolveUpdate(state, before);
       source = sourceLocator(input);
       const subject = { id: before.subjectId, label: before.label };
-      const imported = yield* progress.around(
-        { kind: "source", subject },
-        adapters.importSource(
-          input,
-          priorTree.members.map((member) => member.source_path),
-          library.import,
-        ),
-        (value) => ({
-          kind: "source-inspected",
-          changed: value.snapshot_digest !== priorTree.hash,
-        }),
-      );
+      const authored =
+        acquisition.source_identity.kind === "authored-workspace"
+          ? yield* adapters.updateAuthoredSkills(acquisition.input.value, {
+              library,
+              home,
+              expectedImportId: acquisition.import_id,
+            })
+          : undefined;
+      const imported =
+        authored === undefined
+          ? yield* progress.around(
+              { kind: "source", subject },
+              adapters.importSource(
+                input,
+                priorTree.members.map((member) => member.source_path),
+                library.import,
+              ),
+              (value) => ({
+                kind: "source-inspected",
+                changed: value.snapshot_digest !== priorTree.hash,
+              }),
+            )
+          : yield* Effect.gen(function* () {
+              const current = yield* loadLibrary(home);
+              const latest = latestSourceImport(current, before);
+              const version =
+                current.collection_versions.find(
+                  (item) => item.collection_version_id === latest?.collection_version_id,
+                ) ?? priorTree;
+              return {
+                snapshot_digest: version.hash,
+                collection_version_id: version.collection_version_id,
+              };
+            });
       sourceImported = true;
       const changed = imported.snapshot_digest !== priorTree.hash;
-      let installed = 0;
+      let installed = authored?.installed ?? 0;
       const collectionId =
         before.kind === "collection" ? before.collection.collection_id : before.skill.collection_id;
       // Install the Collection's members where this device installs, even when the Source is
       // current: a previous run may have retained this snapshot before installing failed or
       // temporary-source cleanup interrupted it. New members follow an enabled Collection.
-      {
+      if (authored === undefined) {
         const current = yield* library.read;
         const members =
           current._tag === "Present"
@@ -142,6 +184,16 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <
         changed,
         installed: installed,
         label: before.label,
+        ...(authored === undefined
+          ? {}
+          : {
+              issues: authored.issues,
+              ...(authored.installation_error === undefined
+                ? {}
+                : { installation_error: authored.installation_error }),
+              ...(authored.sync_status === undefined ? {} : { sync_status: authored.sync_status }),
+              ...(authored.sync_error === undefined ? {} : { sync_error: authored.sync_error }),
+            }),
         ...("diagnostics" in imported && imported.diagnostics?.length
           ? { diagnostics: imported.diagnostics }
           : {}),
@@ -207,7 +259,6 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <
             const latest = latestSourceImport(current, before);
             sourceImported = latest !== undefined && latest.import_id !== previous?.import_id;
           }
-          const error = adapters.classifyFailure(cause);
           return {
             status: "failed" as const,
             subject_id: before.subjectId,
@@ -216,12 +267,7 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <
             source,
             phase,
             source_imported: sourceImported,
-            error: sourceImported
-              ? {
-                  ...error,
-                  remediation: `${error.remediation} Update this Collection again to retry it and update its installed skills.`,
-                }
-              : error,
+            error: cause,
           };
         });
       }),
@@ -230,25 +276,40 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <
 });
 
 /** One owner and one batch action; Collection failures stay local, shared-storage failures stop it. */
-export const updateSources = Effect.fn("Library.updateSources")(function* <
-  E,
-  R,
-  F extends { readonly remediation: string },
->(
+export const updateSources = Effect.fn("Library.updateSources")(function* <E, R>(
   home: string,
-  library: Pick<Interface, "read" | "plan" | "apply" | "import">,
+  library: Interface,
   query: string | undefined,
-  adapters: SourceUpdateAdapters<E, R, F>,
+  adapters: SourceUpdateAdapters<E, R>,
 ) {
-  return yield* writeLibrary(
-    home,
+  const snapshot = yield* library.read;
+  const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
+  const selected = yield* selectSubjects(state, query);
+  const update = (subject: LibrarySubject) =>
     Effect.gen(function* () {
-      const snapshot = yield* library.read;
-      const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
-      const selected = yield* selectSubjects(state, query);
-      return yield* Effect.forEach(selected, (subject) =>
-        updateCollection(home, library, state, subject, adapters),
+      const current = yield* loadLibrary(home);
+      const before = matchingLibrarySubjects(current, subject.subjectId).find(
+        (item) => item.subjectId === subject.subjectId,
       );
-    }),
+      if (before === undefined)
+        return yield* new CollectionNotUpdatable({
+          subject_id: subject.subjectId,
+          label: subject.label,
+        });
+      if (
+        latestSourceImport(current, before)?.source_identity.kind !==
+        latestSourceImport(state, subject)?.source_identity.kind
+      )
+        return yield* new LibraryChanged({ path: home });
+      return yield* updateCollection(home, library, current, before, adapters);
+    });
+  const authored = (subject: LibrarySubject) =>
+    latestSourceImport(state, subject)?.source_identity.kind === "authored-workspace";
+  // Keep an ordinary batch one Library action. Authored updates must take workspace
+  // ownership before their Library writer, so no outer writer may span those calls.
+  if (selected.every((subject) => !authored(subject)))
+    return yield* writeLibrary(home, Effect.forEach(selected, update));
+  return yield* Effect.forEach(selected, (subject) =>
+    authored(subject) ? update(subject) : writeLibrary(home, update(subject)),
   );
 }, Effect.scoped);

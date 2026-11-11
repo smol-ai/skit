@@ -10,13 +10,13 @@ const input = {
 };
 test("wide terminals put preview beside the picker within the terminal bounds", () => {
   const frame = renderSkillPreview({ ...input, columns: 140, rows: 24 });
-  expect(frame.lines[0]).toContain("│ SKILL.md · review");
+  expect(frame.lines[0]).toContain("│ SKILL.md | review");
   expect(frame.lines.every((line) => stringWidth(line) <= 140)).toBe(true);
   expect(frame.lines.length).toBeLessThan(24);
 });
 test("narrow terminals stack preview under the picker and clamp scrolling", () => {
   const frame = renderSkillPreview({ ...input, columns: 60, rows: 20, offset: 9999 });
-  expect(frame.lines.join("\n")).toContain("─".repeat(60) + "\nSKILL.md · review");
+  expect(frame.lines.join("\n")).toContain("─".repeat(60) + "\nSKILL.md | review");
   expect(frame.lines.every((line) => stringWidth(line) <= 60)).toBe(true);
   expect(frame.offset).toBeLessThan(9999);
   expect(frame.lines.length).toBeLessThan(20);

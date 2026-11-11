@@ -17,8 +17,9 @@ export interface CommandMetadataShape {
     readonly subprocesses?: readonly string[];
   };
   readonly outputSchemas: readonly AnyOutputContract[];
-  readonly exitCodes: readonly number[];
   readonly interactive: boolean;
+  /** Checks performed by the handler after Effect has parsed the invocation. */
+  readonly handlerRules?: readonly string[];
 }
 
 /** Git commands Source acquisition runs when it retains or restores a Git or GitHub Source. */

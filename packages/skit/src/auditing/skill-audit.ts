@@ -252,7 +252,6 @@ export function auditSkill(text: string, options: AuditSkillOptions = {}): Skill
       confidence: rule.confidence,
       capability: rule.capability,
       location,
-      message: `Content may exercise ${rule.capability}`,
     };
   });
   const riskFlags = [

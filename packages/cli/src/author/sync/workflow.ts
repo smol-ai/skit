@@ -11,6 +11,7 @@ export const syncAuthorWorkspace = Effect.fn("CLI.syncAuthorWorkspace")(function
   options: {
     readonly apply: boolean;
     readonly allowLargeDeletion?: boolean;
+    readonly confirmRemovals?: boolean;
     readonly home?: string;
     readonly to?: string;
     readonly visibility?: AuthorVisibility;

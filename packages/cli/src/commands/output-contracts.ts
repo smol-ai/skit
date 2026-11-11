@@ -8,6 +8,7 @@ import {
 } from "@smolai/skit-core/api";
 import { Hash } from "@smolai/skit-core/shared";
 import { VersionReport } from "../releases.js";
+import { CredentialRotationWarning } from "../registry/auth-failures.js";
 
 import { Schema } from "effect";
 import { setupOutputContracts } from "../library/setup.js";
@@ -18,6 +19,7 @@ import { AuditReportV1Alpha4 } from "@smolai/skit-core/audit";
 import { HarnessProbeReport } from "@smolai/skit-core/harnesses";
 import { RegistryRemoteChange, RegistryRemoteList } from "../registry/contracts.js";
 import { AuthorSyncResult } from "../author/contracts.js";
+import { AuthorWatchOutput } from "../author/watch-output.js";
 import { removeOutputContracts } from "../library/remove/output.js";
 import { checkOutputContracts } from "../library/check/output.js";
 import { addOutputContracts } from "../library/add/output.js";
@@ -52,6 +54,7 @@ const effectValidation = Schema.Struct({
 });
 
 export const outputContracts = {
+  authorWatch: effectOutput("skit.author.watch.v1", AuthorWatchOutput),
   setupUndo: setupOutputContracts.setupUndo,
   setupComparison: setupOutputContracts.setupComparison,
   setupReview: setupOutputContracts.setupReview,
@@ -122,8 +125,8 @@ export const outputContracts = {
   check: checkOutputContracts.check,
   update: updateOutputContracts.update,
   updatePlan: updateOutputContracts.updatePlan,
-  projectionRetention: updateOutputContracts.projectionRetention,
-  projectionRetentionPlan: updateOutputContracts.projectionRetentionPlan,
+  installedEdit: updateOutputContracts.installedEdit,
+  installedEditPlan: updateOutputContracts.installedEditPlan,
   remove: removeOutputContracts.remove,
   removePlan: removeOutputContracts.removePlan,
   enable: enableOutputContracts.enable,
@@ -145,13 +148,13 @@ export const outputContracts = {
     }),
   ),
   authLogin: effectOutput(
-    "skit.auth.login.v2",
+    "skit.auth.login.v3",
     Schema.Struct({
       origin: Schema.String,
       tokenPrefix: Schema.String,
       scopes: Schema.Array(Schema.String),
       expiresAt: Schema.optionalKey(Schema.String),
-      warning: Schema.optionalKey(Schema.String),
+      warning: Schema.optionalKey(CredentialRotationWarning),
       alias: Schema.optionalKey(Schema.String),
       defaultRegistry: Schema.optionalKey(Schema.String),
       alreadyAuthenticated: Schema.optionalKey(Schema.Boolean),

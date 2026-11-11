@@ -13,6 +13,7 @@ import {
   makeCollectionId,
 } from "@smolai/skit-core/universal/consumer";
 import { AdoptionReceiptId, deterministicMigrationId } from "../src/library/entity-ids.js";
+import { SchemaFailure } from "../src/shared/schema-issue.js";
 
 it("generates and strictly validates namespaced entity TypeIDs", () => {
   const id = makeCollectionId();
@@ -70,4 +71,24 @@ it("uses an explicit timestamp without reading the clock", () => {
     ).toISOString(),
     "2026-09-16T00:00:00.000Z",
   );
+});
+
+it.each([
+  "0195d2f0-7c00-7000-8000-invalid",
+  new Date(-1),
+  new Date(0x1000000000000),
+  new Date(NaN),
+])("invalid migration identity input retains native constraint facts: %s", (source) => {
+  try {
+    deterministicMigrationId("skill", source, "fixture");
+    assert.fail("Invalid migration identity input accepted");
+  } catch (error) {
+    assert.ok(Schema.isSchemaError(error));
+    if (!Schema.isSchemaError(error)) return;
+    const facts = Schema.encodeSync(SchemaFailure)(error);
+    assert.isNotEmpty(facts.issues);
+    assert.notProperty(facts, "message");
+    const stored = Schema.decodeUnknownSync(SchemaFailure)(JSON.parse(JSON.stringify(facts)));
+    assert.strictEqual(stored._tag, "StoredSchemaFailure");
+  }
 });

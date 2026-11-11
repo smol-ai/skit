@@ -1,28 +1,12 @@
-import { Data, Effect, FileSystem, Schema } from "effect";
+import { Effect, FileSystem, Schema } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { LinkStat } from "../platform/link-stat.js";
 import { isJsonObject, type JsonObject } from "../shared/json.js";
 import type { SourceDiscoveryDiagnostic } from "./source-diagnostics.js";
-import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
-
-export class PluginManifestInvalid
-  extends Data.TaggedError("PluginManifestInvalid")<{
-    path: string;
-    detail: string;
-    reason?: "escape";
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "VALIDATION_FAILED" as const;
-  get remediation(): string {
-    return `Correct the plugin declaration at ${this.path}, then retry.`;
-  }
-  get message() {
-    return `Invalid plugin declaration at ${this.path}: ${this.detail}`;
-  }
-}
+import { PluginManifestInvalid, PluginManifestInvalidReason } from "./plugin-failures.js";
+export { PluginManifestInvalid } from "./plugin-failures.js";
+import { isDeepStrictEqual } from "node:util";
 
 export interface PluginUnit {
   readonly name: string;
@@ -46,25 +30,26 @@ export const containedPluginPath = Effect.fn("Source.containedPluginPath")(funct
   if (!path || isAbsolute(path))
     return yield* new PluginManifestInvalid({
       path: base,
-      detail: `Invalid relative path ${path}`,
-      reason: "escape",
+      reason: { _tag: "RelativePathInvalid", requested: path },
     });
   const selected = resolve(base, path);
   if (!within(sourceRoot, selected))
     return yield* new PluginManifestInvalid({
       path: selected,
-      detail: "Path escapes the Source",
-      reason: "escape",
+      reason: { _tag: "SourceEscape", root: sourceRoot, selected },
     });
   const fs = yield* FileSystem.FileSystem;
   if (!(yield* fs.exists(selected)))
-    return yield* new PluginManifestInvalid({ path: selected, detail: "Declared path is missing" });
-  const real = yield* fs.realPath(selected);
-  if (!within(yield* fs.realPath(sourceRoot), real))
     return yield* new PluginManifestInvalid({
       path: selected,
-      detail: "Link escapes the Source",
-      reason: "escape",
+      reason: { _tag: "DeclaredPathMissing" },
+    });
+  const real = yield* fs.realPath(selected);
+  const realRoot = yield* fs.realPath(sourceRoot);
+  if (!within(realRoot, real))
+    return yield* new PluginManifestInvalid({
+      path: selected,
+      reason: { _tag: "LinkEscape", root: realRoot, target: real },
     });
   return selected;
 });
@@ -76,23 +61,30 @@ const readManifest = Effect.fn("Source.readPluginManifest")(function* (
   const fs = yield* FileSystem.FileSystem;
   const selected = yield* containedPluginPath(sourceRoot, dirname(path), basename(path));
   const info = yield* fs.stat(selected);
-  if (info.type !== "File" || Number(info.size) > 1_048_576)
+  if (info.type !== "File")
     return yield* new PluginManifestInvalid({
       path,
-      detail: "Expected a JSON file no larger than 1 MiB",
+      reason: { _tag: "ManifestNotFile", kind: info.type },
+    });
+  if (Number(info.size) > 1_048_576)
+    return yield* new PluginManifestInvalid({
+      path,
+      reason: { _tag: "ManifestTooLarge", actual: Number(info.size), limit: 1_048_576 },
     });
   return yield* Schema.decodeEffect(jsonObject)(yield* fs.readFileString(selected)).pipe(
-    Effect.mapError(() => new PluginManifestInvalid({ path, detail: "Expected a JSON object" })),
+    Effect.mapError(
+      (failure) => new PluginManifestInvalid({ path, reason: { _tag: "InvalidJson", failure } }),
+    ),
   );
 });
 
-function skillPaths(value: unknown, path: string) {
+function skillPaths(value: Schema.Json | undefined, path: string) {
   if (value === undefined) return Effect.succeed([] as string[]);
   if (typeof value === "string") return Effect.succeed([value]);
   if (Array.isArray(value) && value.every((entry): entry is string => typeof entry === "string"))
     return Effect.succeed(value);
   return Effect.fail(
-    new PluginManifestInvalid({ path, detail: "skills must be a path or array of paths" }),
+    new PluginManifestInvalid({ path, reason: { _tag: "SkillPathsInvalid", value } }),
   );
 }
 
@@ -106,14 +98,14 @@ const scanSkillDirectory = Effect.fn("Source.scanPluginSkills")(function* (
   if (isAbsolute(path) || !within(root, resolve(root, path)))
     return yield* new PluginManifestInvalid({
       path: root,
-      detail: "Skill path escapes the plugin root",
-      reason: "escape",
+      reason: { _tag: "SkillPathEscape", root, requested: path },
     });
   const selected = yield* containedPluginPath(sourceRoot, root, path);
-  if ((yield* fs.stat(selected)).type !== "Directory")
+  const info = yield* fs.stat(selected);
+  if (info.type !== "Directory")
     return yield* new PluginManifestInvalid({
       path: selected,
-      detail: "Expected a Skill directory",
+      reason: { _tag: "SkillDirectoryRequired", kind: info.type },
     });
   if (yield* fs.exists(join(selected, "SKILL.md"))) {
     yield* containedPluginPath(sourceRoot, selected, "SKILL.md");
@@ -148,16 +140,27 @@ export const readPluginUnits = Effect.fn("Source.readPluginUnits")(function* (
   ) =>
     operation.pipe(
       Effect.catchTag("PluginManifestInvalid", (error) => {
-        if (error.reason === "escape" || (options.strictRoot && explicit))
+        if (
+          PluginManifestInvalidReason.isAnyOf([
+            "RelativePathInvalid",
+            "SourceEscape",
+            "LinkEscape",
+            "SkillPathEscape",
+          ])(error.reason) ||
+          (options.strictRoot && explicit)
+        )
           return Effect.fail(error);
         const diagnostic: SourceDiscoveryDiagnostic = {
           code: "plugin-manifest-invalid",
           path: relative(sourceRoot, error.path) || ".",
-          message: error.detail,
+          reason: error.reason,
         };
         if (
           !options.diagnostics?.some(
-            (item) => item.path === diagnostic.path && item.message === diagnostic.message,
+            (item) =>
+              item.code === diagnostic.code &&
+              item.path === diagnostic.path &&
+              isDeepStrictEqual(item.reason, diagnostic.reason),
           )
         )
           options.diagnostics?.push(diagnostic);
@@ -200,7 +203,7 @@ export const readPluginUnits = Effect.fn("Source.readPluginUnits")(function* (
     if (entry?.strict !== undefined && typeof entry.strict !== "boolean")
       return yield* new PluginManifestInvalid({
         path: manifestPath,
-        detail: "strict must be boolean",
+        reason: { _tag: "StrictInvalid", value: entry.strict },
       });
     if (
       manifest &&
@@ -211,13 +214,18 @@ export const readPluginUnits = Effect.fn("Source.readPluginUnits")(function* (
     )
       return yield* new PluginManifestInvalid({
         path: manifestPath,
-        detail: "Marketplace entry conflicts with plugin manifest under strict:false",
+        reason: {
+          _tag: "MarketplaceComponentsConflict",
+          fields: ["skills", "commands", "agents", "hooks", "outputStyles", "themes"].filter(
+            (key) => entry[key] !== undefined,
+          ),
+        },
       });
     const name = manifest?.name ?? entry?.name ?? basename(root);
     if (typeof name !== "string" || !name.trim())
       return yield* new PluginManifestInvalid({
         path: manifestPath,
-        detail: "Expected a nonempty plugin name",
+        reason: { _tag: "NameInvalid", value: name },
       });
     const extra = yield* skillPaths(manifest?.skills, manifestPath);
     const selected = yield* skillPaths(entry?.skills, manifestPath);
@@ -253,11 +261,21 @@ export const readPluginUnits = Effect.fn("Source.readPluginUnits")(function* (
         Effect.gen(function* () {
           const marketplace = yield* readManifest(containmentRoot, path);
           if (!Array.isArray(marketplace.plugins))
-            return yield* new PluginManifestInvalid({ path, detail: "plugins must be an array" });
+            return yield* new PluginManifestInvalid({
+              path,
+              reason: {
+                _tag: "PluginsArrayRequired",
+                ...(marketplace.plugins === undefined ? {} : { value: marketplace.plugins }),
+              },
+            });
           if (marketplace.plugins.length > 5_000)
             return yield* new PluginManifestInvalid({
               path,
-              detail: "Marketplace exceeds 5,000 entries",
+              reason: {
+                _tag: "MarketplaceTooLarge",
+                actual: marketplace.plugins.length,
+                limit: 5_000,
+              },
             });
           return { plugins: marketplace.plugins, metadata: marketplace.metadata };
         }),
@@ -273,7 +291,7 @@ export const readPluginUnits = Effect.fn("Source.readPluginUnits")(function* (
             if (!isJsonObject(entry))
               return yield* new PluginManifestInvalid({
                 path,
-                detail: "Expected a plugin entry object",
+                reason: { _tag: "PluginEntryInvalid", value: entry },
               });
             const source = entry.source;
             let local: string | undefined;
@@ -283,7 +301,7 @@ export const readPluginUnits = Effect.fn("Source.readPluginUnits")(function* (
                 if (typeof pluginRoot !== "string")
                   return yield* new PluginManifestInvalid({
                     path,
-                    detail: "metadata.pluginRoot must be a path",
+                    reason: { _tag: "PluginRootInvalid", value: pluginRoot },
                   });
                 local = join(pluginRoot, source);
               }
@@ -291,13 +309,16 @@ export const readPluginUnits = Effect.fn("Source.readPluginUnits")(function* (
               if (typeof source.path !== "string")
                 return yield* new PluginManifestInvalid({
                   path,
-                  detail: "Local source requires a path",
+                  reason: {
+                    _tag: "LocalPathInvalid",
+                    ...(source.path === undefined ? {} : { value: source.path }),
+                  },
                 });
               local = source.path;
             } else if (source === undefined) {
               return yield* new PluginManifestInvalid({
                 path,
-                detail: "Plugin entry requires a source",
+                reason: { _tag: "PluginSourceMissing" },
               });
             }
             // Remote plugin dependencies are not part of this acquired Source.

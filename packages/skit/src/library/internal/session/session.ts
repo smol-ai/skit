@@ -5,8 +5,7 @@ import { emptyLibraryState } from "../../library-state.js";
 import { InstalledSkillWouldDuplicate } from "../../library-plan.js";
 import type { SkillMetadata } from "./skill-metadata.js";
 import { collectionVersionPath } from "../../collection-version.js";
-import { versionBacking, type SourceIdentity } from "../../library-contracts.js";
-import { ImportContentInvalid } from "../../failures.js";
+import { versionBacking } from "../../library-contracts.js";
 import { type InstallScope } from "../../scope.js";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
@@ -14,15 +13,15 @@ import { LibrarySubjectNotFound, resolveLibrarySubject } from "../../subject-res
 import type { InvocationOption } from "./invocation-option.js";
 import { invocationReadModel, type InvocationReadModel } from "./invocation.js";
 import type { AuthorInvocationRead } from "./invocation-source.js";
-import { scopeRowLabel, destinationLabel } from "./read-model.js";
-import { failureDetails, type FailureDetails } from "../../../shared/failure.js";
+import { InvocationUnavailable, type AuthorInvocationFailure } from "../../invocation-failure.js";
+import type { CollectionSource } from "../../collection-source.js";
+import type { SetEnabledIncomplete } from "./set-enabled.js";
 import { setEnabledOutcomes, type SetEnabledIntent, type SetEnabledPlan } from "./set-enabled.js";
 
 export interface ScopeRow {
   readonly scope: InstallScope;
   readonly invocation: InvocationOption;
   readonly policy?: InvocationReadModel;
-  readonly label: string;
 }
 
 export interface LibrarySkillRow extends SkillMetadata {
@@ -30,11 +29,11 @@ export interface LibrarySkillRow extends SkillMetadata {
   readonly skillId: string;
   readonly skillVersionId: string;
   readonly authorInvocation: AuthorInvocationRead;
-  readonly invocationWarning?: string;
+  readonly invocationFailure?: AuthorInvocationFailure;
   readonly collectionId: string;
   readonly heading: string;
   readonly hasCollection?: boolean;
-  readonly collectionSource?: { readonly kind: SourceIdentity["kind"]; readonly locator: string };
+  readonly collectionSource?: CollectionSource;
   readonly scopes: readonly ScopeRow[];
 }
 
@@ -42,15 +41,11 @@ interface PreviewFacts {
   readonly action: "enable" | "disable";
   readonly skills: readonly string[];
   readonly scope: InstallScope;
-  readonly destination: string;
   readonly invocation?: InvocationOption;
-  readonly writes:
-    | "projection created"
-    | "projection removed"
-    | "nothing to change"
-    | "copies checked for repair";
+  readonly fileChange: "install" | "uninstall" | "unchanged" | "check-for-repair";
   readonly wholeCollection?: boolean;
   readonly collectionLabel?: string;
+  readonly collectionSource?: CollectionSource;
 }
 
 export interface PendingLibraryChange {
@@ -64,7 +59,14 @@ export type LibraryActionOutcome =
   | { readonly kind: "applied"; readonly pending: PendingLibraryChange }
   | { readonly kind: "unchanged"; readonly pending: PendingLibraryChange }
   | { readonly kind: "cancelled"; readonly pending?: PendingLibraryChange }
-  | { readonly kind: "failed"; readonly failure: FailureDetails };
+  | {
+      readonly kind: "failed";
+      readonly failure:
+        | Effect.Error<ReturnType<SessionLibrary["planEnabled"]>>
+        | Effect.Error<ReturnType<SessionLibrary["apply"]>>
+        | SetEnabledIncomplete
+        | InvocationUnavailable;
+    };
 
 const sessionContext = Symbol("LibrarySessionContext");
 type SessionLibrary = Pick<Library.Interface, "read" | "skills" | "list" | "planEnabled" | "apply">;
@@ -99,12 +101,13 @@ const sessionFromSnapshot = Effect.fn("LibrarySession.read")(function* (
     revision: row.revision,
     source_updated_at: row.source_updated_at,
     imported_at: row.imported_at,
+    ...(row.saved_at === undefined ? {} : { saved_at: row.saved_at }),
     name: row.name,
     skillId: row.id,
     skillVersionId: row.versionId,
     authorInvocation: row.authorInvocation,
     ...(Result.isFailure(row.authorInvocation)
-      ? { invocationWarning: `Author preference unavailable: ${row.authorInvocation.failure}` }
+      ? { invocationFailure: row.authorInvocation.failure }
       : {}),
     collectionId: row.collectionId,
     heading: row.collectionLabel ?? row.name,
@@ -115,14 +118,13 @@ const sessionFromSnapshot = Effect.fn("LibrarySession.read")(function* (
         return {
           scope,
           invocation,
-          label: `${destinationLabel(scope)} · Author preference unavailable`,
         };
       const policy = invocationReadModel({
         skill: row.name,
         author: row.authorInvocation.success,
         storedIntent: invocation,
       });
-      return { scope, invocation, policy, label: scopeRowLabel({ scope, policy }) };
+      return { scope, invocation, policy };
     }),
   }));
   const session: LibrarySessionState = {
@@ -160,7 +162,7 @@ export const readLibrarySkillContent = Effect.fn("LibrarySession.readSkillConten
 export function libraryPolicyAfter(
   row: LibrarySkillRow,
   intent: InvocationOption,
-): Result.Result<InvocationReadModel, string> {
+): Result.Result<InvocationReadModel, AuthorInvocationFailure> {
   return Result.map(row.authorInvocation, (author) =>
     invocationReadModel({
       skill: row.name,
@@ -172,14 +174,14 @@ export function libraryPolicyAfter(
 
 const unavailablePolicyChange = (
   state: LibrarySessionState,
-  reason: string,
-): Effect.Success<ReturnType<typeof proposeLibraryChange>> =>
+  failure: AuthorInvocationFailure,
+): LibrarySessionState & { readonly outcome: LibraryActionOutcome } =>
   ({
     ...state,
     pending: undefined,
     outcome: {
       kind: "failed",
-      failure: failureDetails(new ImportContentInvalid({ diagnostics: [reason] })),
+      failure: new InvocationUnavailable({ failure }),
     },
   }) satisfies LibrarySessionState & { readonly outcome: LibraryActionOutcome };
 
@@ -187,13 +189,8 @@ const factFromPlan = (plan: SetEnabledPlan["changes"][number]): PreviewFacts => 
   action: plan.action,
   skills: plan.skills,
   scope: plan.scope,
-  destination: destinationLabel(plan.scope),
   ...(plan.invocation === undefined ? {} : { invocation: plan.invocation }),
-  writes: !plan.changed
-    ? "nothing to change"
-    : plan.action === "enable"
-      ? "projection created"
-      : "projection removed",
+  fileChange: !plan.changed ? "unchanged" : plan.action === "enable" ? "install" : "uninstall",
 });
 
 const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
@@ -206,7 +203,7 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
     Effect.gen(function* () {
       if (context === undefined)
         return yield* new StalePlan({
-          message: "Open the Library before proposing a Binding change",
+          reason: { _tag: "SessionNotOpen", action: "propose" },
         });
       const plan = yield* context.library.planEnabled([intent], { base: context.base });
       for (const change of plan.changes)
@@ -219,29 +216,37 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
     return {
       ...state,
       pending: undefined,
-      outcome: { kind: "failed", failure: failureDetails(attempted.failure) },
+      outcome: { kind: "failed", failure: attempted.failure },
     } satisfies LibrarySessionState & { readonly outcome: LibraryActionOutcome };
   const pending: PendingLibraryChange = {
     plan: attempted.success,
-    facts: attempted.success.changes.map((plan) => ({
-      ...factFromPlan(plan),
-      ...(plan.repair
-        ? {
-            writes:
-              plan.action === "enable"
-                ? ("copies checked for repair" as const)
-                : ("projection removed" as const),
-          }
-        : {}),
-      ...(intent.members === "whole"
-        ? {
-            wholeCollection: true,
-            collectionLabel:
-              context?.collections.find((collection) => collection.id === plan.subject_id)?.label ??
-              plan.subject_id,
-          }
-        : {}),
-    })),
+    facts: attempted.success.changes.map((plan) => {
+      const collection = context?.collections.find(
+        (item) =>
+          item.id === plan.subject_id ||
+          item.members.some((member) => member.id === plan.subject_id),
+      );
+      return {
+        ...factFromPlan(plan),
+        ...(collection === undefined
+          ? {}
+          : { collectionLabel: collection.label, collectionSource: collection.collectionSource }),
+        ...(plan.repair
+          ? {
+              fileChange:
+                plan.action === "enable" ? ("check-for-repair" as const) : ("uninstall" as const),
+            }
+          : {}),
+        ...(intent.members === "whole"
+          ? {
+              wholeCollection: true,
+              collectionLabel:
+                context?.collections.find((collection) => collection.id === plan.subject_id)
+                  ?.label ?? plan.subject_id,
+            }
+          : {}),
+      };
+    }),
     policies,
   };
   if (attempted.success.changes.every((plan) => !plan.changed && !plan.repair))
@@ -356,7 +361,7 @@ export const confirmLibraryChange = Effect.fn("LibrarySession.confirm")(function
     return state.outcome?.kind === "unchanged" ? state : cancelLibraryChange(state);
   const context = state[sessionContext];
   if (context === undefined)
-    return yield* new StalePlan({ message: "Open the Library before confirming a change" });
+    return yield* new StalePlan({ reason: { _tag: "SessionNotOpen", action: "confirm" } });
   const applied = yield* Effect.result(
     Effect.gen(function* () {
       return yield* setEnabledOutcomes(
@@ -367,6 +372,6 @@ export const confirmLibraryChange = Effect.fn("LibrarySession.confirm")(function
   const refreshed = yield* sessionFromSnapshot(context.library, yield* context.library.read);
   const outcome: LibraryActionOutcome = Result.isSuccess(applied)
     ? { kind: "applied", pending }
-    : { kind: "failed", failure: failureDetails(applied.failure) };
+    : { kind: "failed", failure: applied.failure };
   return { ...refreshed, outcome };
 });

@@ -5,7 +5,7 @@ import { makeOperationId, OperationId } from "../entity-ids.js";
 // Only this module addresses state.json. Its versioned history-delivery envelope is private;
 // callers see domain snapshots through Library, without delivery bookkeeping.
 
-import { Clock, DateTime, Effect, FileSystem, Schema, SchemaIssue } from "effect";
+import { Clock, DateTime, Effect, FileSystem, Schema } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { dirname, join, resolve } from "node:path";
 import { InvalidLibraryState, LibraryChanged } from "../failures.js";
@@ -37,7 +37,7 @@ export type InspectedLibraryState =
 const envelope = (path: string, value: unknown) =>
   Schema.decodeUnknownEffect(StateEnvelope)(value).pipe(
     Effect.mapError(
-      () => new InvalidLibraryState({ path, detail: "invalid Library storage envelope" }),
+      (failure) => new InvalidLibraryState({ path, reason: { _tag: "SchemaInvalid", failure } }),
     ),
   );
 const emptyDelivery = (): HistoryDelivery => ({ schemaVersion: 1, pending: [] });
@@ -56,7 +56,9 @@ const readStateValue = Effect.fn("Library.readStateValue")(function* (path: stri
     );
   if (text === undefined) return undefined;
   return yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
-    Effect.mapError(() => new InvalidLibraryState({ path, detail: "invalid Library JSON" })),
+    Effect.mapError(
+      (failure) => new InvalidLibraryState({ path, reason: { _tag: "SchemaInvalid", failure } }),
+    ),
   );
 });
 
@@ -66,14 +68,16 @@ const decodeCurrentState = Effect.fn("Library.decodeCurrentState")(function* (
 ) {
   const { historyDelivery: _delivery, ...domain } = yield* envelope(path, value);
   const state = yield* decodeLibraryState(domain).pipe(
-    Effect.mapError(() => new InvalidLibraryState({ path, detail: "invalid Library state" })),
+    Effect.mapError(
+      (failure) => new InvalidLibraryState({ path, reason: { _tag: "SchemaInvalid", failure } }),
+    ),
   );
   yield* libraryManifestFromLocalState(state).pipe(
     Effect.mapError(
       (issue) =>
         new InvalidLibraryState({
           path,
-          detail: `Library state violates the portable manifest: ${SchemaIssue.makeFormatterDefault()(issue)}`,
+          reason: { _tag: "SchemaInvalid", failure: new Schema.SchemaError(issue) },
         }),
     ),
   );
@@ -100,7 +104,15 @@ const readStateVersion = (path: string, value: unknown) =>
   Schema.decodeUnknownEffect(StateVersion)(value).pipe(
     Effect.map(({ schemaVersion }) => schemaVersion),
     Effect.mapError(
-      () => new InvalidLibraryState({ path, detail: "Library state has no schema version" }),
+      () =>
+        new InvalidLibraryState({
+          path,
+          reason: {
+            _tag: "UnsupportedVersion",
+            oldest: OLDEST_LIBRARY_STATE_VERSION,
+            current: CURRENT_LIBRARY_STATE_VERSION,
+          },
+        }),
     ),
   );
 
@@ -114,19 +126,16 @@ const decodeStoredState = Effect.fn("Library.decodeStoredState")(function* (
 ) {
   const version = yield* readStateVersion(path, value);
   if (version === CURRENT_LIBRARY_STATE_VERSION) return yield* decodeCurrentState(path, value);
-  if (version > CURRENT_LIBRARY_STATE_VERSION)
-    return yield* new InvalidLibraryState({
-      path,
-      detail: `Library state schema v${version} was written by a newer SKIT; this CLI supports v${OLDEST_LIBRARY_STATE_VERSION}–v${CURRENT_LIBRARY_STATE_VERSION}`,
-    });
-  if (isLegacyVersion(version))
-    return yield* new InvalidLibraryState({
-      path,
-      detail: `Library state schema v${version} has not been migrated to v${CURRENT_LIBRARY_STATE_VERSION}; run SKIT again to migrate it`,
-    });
+  // Newer, not yet migrated, or unknown: the numbers say which. A version too large to hold is
+  // still newer, so it is kept at the largest number there is.
   return yield* new InvalidLibraryState({
     path,
-    detail: `unsupported Library state schema v${version}; this CLI supports v${OLDEST_LIBRARY_STATE_VERSION}–v${CURRENT_LIBRARY_STATE_VERSION}`,
+    reason: {
+      _tag: "UnsupportedVersion",
+      version: Math.max(-Number.MAX_VALUE, Math.min(version, Number.MAX_VALUE)),
+      oldest: OLDEST_LIBRARY_STATE_VERSION,
+      current: CURRENT_LIBRARY_STATE_VERSION,
+    },
   });
 });
 
@@ -152,11 +161,8 @@ export const migrateLocalLibraryState = Effect.fn("Library.migrateState")(functi
         path,
         yield* Schema.decodeEffect(LegacyLibraryState)(lockedValue).pipe(
           Effect.mapError(
-            () =>
-              new InvalidLibraryState({
-                path,
-                detail: `invalid v${lockedVersion} Library state`,
-              }),
+            (failure) =>
+              new InvalidLibraryState({ path, reason: { _tag: "SchemaInvalid", failure } }),
           ),
         ),
       );
@@ -199,7 +205,7 @@ export const saveLibraryState = Effect.fn("Library.saveState")(function* (
   const cleanNext = yield* decodeCurrentState(path, next);
   const text = yield* encodeLibraryState(cleanNext).pipe(
     Effect.mapError(
-      () => new InvalidLibraryState({ path, detail: "refusing invalid Library state" }),
+      (failure) => new InvalidLibraryState({ path, reason: { _tag: "SchemaInvalid", failure } }),
     ),
   );
   yield* withLibraryStateReplacement(
@@ -223,7 +229,8 @@ export const saveLibraryState = Effect.fn("Library.saveState")(function* (
           .map((item) => item.operationId),
       ).pipe(
         Effect.mapError(
-          () => new InvalidLibraryState({ path, detail: "invalid operation identity for history" }),
+          (failure) =>
+            new InvalidLibraryState({ path, reason: { _tag: "SchemaInvalid", failure } }),
         ),
       );
       const changes = [...(prior?.event.changes ?? []), ...diffLibraryState(base, cleanNext)];
@@ -249,7 +256,8 @@ export const saveLibraryState = Effect.fn("Library.saveState")(function* (
           pending,
         }).pipe(
           Effect.mapError(
-            () => new InvalidLibraryState({ path, detail: "invalid history delivery record" }),
+            (failure) =>
+              new InvalidLibraryState({ path, reason: { _tag: "SchemaInvalid", failure } }),
           ),
         );
         yield* writeJsonAtomic(path, { ...cleanNext, historyDelivery });

@@ -138,8 +138,8 @@ it.effect("does not attribute an unrecorded user alias to pnpm", () =>
       Effect.provide(skitConfigurationLayer()),
     );
     expect(
-      audited.skills.find((entry) => entry.location === join(alias, "SKILL.md"))?.provenance.source,
-    ).toBe("symlink");
+      audited.skills.find((entry) => entry.location === join(alias, "SKILL.md"))?.provenance.origin,
+    ).toEqual({ _tag: "Symlink" });
     yield* f.fs.symlink(f.skill, f.alias);
     const home = yield* libraryHome({
       home: join(f.root, "library"),
@@ -161,7 +161,7 @@ it.effect("does not attribute an unrecorded user alias to pnpm", () =>
       (item) => item.instance.path === alias,
     );
     expect(row?.choice.disabled).toBe(true);
-    expect(row?.details).toContain("Left in place · no setup action");
+    expect(row?.details).toContain("Left in place | no setup action");
     expect((yield* setupRemovablePaths(options, scan)).get(alias)).toEqual([alias]);
   }).pipe(Effect.provide(skitLayer)),
 );
@@ -195,7 +195,7 @@ it.effect("reports pnpm copies but excludes acquisition, setup selection and rem
       (item) => item.instance.name === "demo-guide",
     );
     expect(row?.choice.disabled).toBe(true);
-    expect(row?.details).toContain("Managed by pnpm · left in place");
+    expect(row?.details).toContain("Managed by pnpm | left in place");
     expect((yield* setupRemovablePaths(options, scan)).has(f.skill)).toBe(false);
     const add = yield* Effect.result(home.owned(importSource(f.alias)));
     expect(add._tag).toBe("Failure");

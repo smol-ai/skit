@@ -1,21 +1,8 @@
+import { RegistryTransportError } from "./request-failures.js";
 import { cliBuild } from "../commands/build-info.js";
-import { Data, Context, Effect, Layer, Predicate, Scope } from "effect";
+import { Context, Effect, Layer, Predicate, Scope } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest } from "effect/http";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 
-export class RegistryTransportError
-  extends Data.TaggedError("RegistryTransportError")<{
-    cause: Error;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Check the network connection and the Registry origin, then retry.";
-  get message() {
-    return this.cause.message;
-  }
-}
 export const isRegistryTransportError = (error: unknown): error is RegistryTransportError =>
   Predicate.isTagged(error, "RegistryTransportError");
 
@@ -74,3 +61,5 @@ export function registryHttpLayer(
     }),
   ).pipe(Layer.provide(clientLayer));
 }
+
+export { RegistryTransportError } from "./request-failures.js";

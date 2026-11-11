@@ -1,7 +1,8 @@
+import { PnpmEvidenceUnreadable } from "../src/installed-skills/pnpm-failures.js";
 import { dirname, join } from "node:path";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { Effect, FileSystem, Logger, References } from "effect";
+import { Effect, FileSystem, Logger, References, Schema } from "effect";
 import { systemError } from "effect/PlatformError";
 import { skitLayer } from "../src/platform/layer.js";
 import { skitConfigurationLayer } from "../src/platform/configuration.js";
@@ -81,20 +82,19 @@ it.effect("reports unreadable evidence, retries it, and keeps missing-file probe
     const f = yield* fixture();
     let denied = true;
     const messages: unknown[] = [];
+    const failure = systemError({
+      _tag: "PermissionDenied",
+      module: "FileSystem",
+      method: "readFileString",
+      pathOrDescriptor: f.ledgerPath,
+    });
     const fs = FileSystem.FileSystem.of({
       ...f.fs,
       readFileString: (path, ...args) =>
         Effect.suspend(() => {
           if (path === f.ledgerPath && denied) {
             denied = false;
-            return Effect.fail(
-              systemError({
-                _tag: "PermissionDenied",
-                module: "FileSystem",
-                method: "readFileString",
-                pathOrDescriptor: path,
-              }),
-            );
+            return Effect.fail(failure);
           }
           return f.fs.readFileString(path, ...args);
         }),
@@ -108,9 +108,11 @@ it.effect("reports unreadable evidence, retries it, and keeps missing-file probe
       Effect.provideService(References.MinimumLogLevel, "Debug"),
       Effect.provide(Logger.layer([Logger.make((entry) => messages.push(entry.message))])),
     );
-    expect(messages).toEqual([
-      ["Cannot read pnpm Skill evidence", { path: f.ledgerPath, reason: "PermissionDenied" }],
-    ]);
+    expect(messages).toEqual([[PnpmEvidenceUnreadable.make({ path: f.ledgerPath, failure })]]);
+    const notices = messages.flatMap<unknown>((message) =>
+      Array.isArray(message) ? message : [message],
+    );
+    expect(notices.find(Schema.is(PnpmEvidenceUnreadable))?.failure).toBe(failure);
   }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -165,7 +167,7 @@ for (const yaml of [false, true]) {
         audited.skills.find((entry) => entry.location === join(f.alias, "SKILL.md"))?.provenance,
       ).toEqual({
         confidence: "exact",
-        source: "pnpm · @acme/demo@1.0.0",
+        origin: { _tag: "PnpmPackage", package: "@acme/demo", version: "1.0.0" },
         evidence: f.ledgerPath,
       });
       expect((yield* Effect.result(leavePnpmSkill(f.alias)))._tag).toBe("Failure");

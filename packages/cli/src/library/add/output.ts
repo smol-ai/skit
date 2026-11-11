@@ -27,5 +27,5 @@ export type AddResult = typeof AddResult.Type;
 
 export const addOutputContracts = {
   add: { id: "skit.add.v7", schema: AddResult },
-  addPreview: { id: "skit.add.preview.v4", schema: AddPreview },
+  addPreview: { id: "skit.add.preview.v5", schema: AddPreview },
 } as const;

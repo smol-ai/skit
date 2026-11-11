@@ -1,22 +1,23 @@
-import {
-  skillMetadataLines,
-  metadataSource,
-  metadataRevision,
-  metadataDate,
-} from "../presentation/skill-metadata.js";
-import { createColors } from "picocolors";
+import { Block } from "../../terminal/blocks.js";
+import { classifyFailure } from "../../commands/failure-classification.js";
+import { skillMetadataFields, skillMetadataLines } from "../presentation/skill-metadata.js";
 import { terminalData } from "../../terminal/text.js";
 import { Effect } from "effect";
 import { resolve } from "node:path";
 import type { InvocationOption } from "@smolai/skit-core/library/session";
+import { invocationEligibleScopes } from "@smolai/skit-core/library/session";
 import {
   DESTINATION_QUESTION,
   destinationLabel,
+  destinationValue,
   invocationChoices,
-  invocationEligibleScopes,
   invocationBriefing,
   invocationRowSummary,
-} from "@smolai/skit-core/library/session";
+  invocationExplanation,
+  invocationQuestion,
+  scopeRowLabel,
+  fileChangeLabels,
+} from "../presentation/invocation.js";
 import {
   cancelLibraryChange,
   confirmLibraryChange,
@@ -33,6 +34,13 @@ import {
 import { Prompter, PromptCancelled } from "../../terminal/prompter.js";
 import { Renderer } from "../../terminal/renderer.js";
 import { promptForScope } from "../presentation/scope-prompt.js";
+import {
+  collectionTitle,
+  collectionChoiceTitle,
+  collectionHint,
+  collectionEnablement,
+  collectionWarnings,
+} from "../presentation/collection-source.js";
 
 const DONE = "Done";
 const BACK_TO_COLLECTIONS = "Back to collections";
@@ -46,30 +54,44 @@ const abandonOnCancel = <E, R>(
   state: LibrarySessionState,
 ) => effect.pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(state)));
 
-function pendingReviewText(pending: PendingLibraryChange): string {
-  return pending.facts
-    .map((fact, index) => {
-      const policy = pending.policies[index] ?? pending.policies[0];
-      return [
-        `  ${fact.action === "enable" ? "Enable" : "Disable"} ${fact.skills.join(", ")}`,
+function pendingReview(pending: PendingLibraryChange): readonly Block[] {
+  return pending.facts.map((fact, index) => {
+    const policy = pending.policies[index] ?? pending.policies[0];
+    return Block.Group({
+      title: `${fact.action === "enable" ? "Enable" : "Disable"} ${fact.skills.join(", ")}`,
+      children: [
+        ...(fact.collectionLabel === undefined
+          ? []
+          : [
+              Block.Note({ text: [collectionTitle(fact.collectionLabel, fact.collectionSource)] }),
+              Block.Note({ text: [collectionHint(fact.collectionSource)] }),
+            ]),
         ...(fact.wholeCollection
           ? [
-              fact.action === "enable"
-                ? "    collection includes new skills and removes deleted ones when you update"
-                : "    collection every skill is disabled",
+              Block.Note({
+                text: [
+                  fact.action === "enable"
+                    ? "The collection includes new skills and removes deleted ones when you update."
+                    : "Every skill in the collection is disabled.",
+                ],
+              }),
             ]
           : []),
-        `    applies to ${fact.destination}`,
-        ...(fact.action === "enable" && policy
-          ? [
-              `    behaviour  ${invocationRowSummary(policy)}`,
-              `    meaning    ${policy.effectiveSummary}`,
-            ]
-          : []),
-        `    writes     ${fact.writes}`,
-      ].join("\n");
-    })
-    .join("\n\n");
+        Block.Fields({
+          rows: [
+            { label: "Applies to", value: destinationValue(fact.scope) },
+            ...(fact.action === "enable" && policy
+              ? [
+                  { label: "Behaviour", value: [invocationRowSummary(policy)] },
+                  { label: "Meaning", value: [invocationExplanation(policy)] },
+                ]
+              : []),
+            { label: "Files", value: [fileChangeLabels[fact.fileChange]] },
+          ],
+        }),
+      ],
+    });
+  });
 }
 
 const applyWithConfirmation = Effect.fn("CLI.libraryBrowse.apply")(function* (
@@ -81,35 +103,53 @@ const applyWithConfirmation = Effect.fn("CLI.libraryBrowse.apply")(function* (
   const proposed = session.outcome;
   if (proposed === undefined) return session;
   if (proposed.kind === "failed") {
-    yield* renderer.note(proposed.failure.message, "Unable to preview change");
+    yield* renderer.note(
+      [Block.Status({ tone: "error", text: [classifyFailure(proposed.failure).message] })],
+      "Unable to preview change",
+    );
     return session;
   }
   if (proposed.kind === "unchanged") {
-    yield* renderer.note("Already set this way. Nothing to change.", "No change");
+    yield* renderer.note(
+      [Block.Note({ text: ["Already set this way. Nothing to change."] })],
+      "No change",
+    );
     return session;
   }
   if (proposed.kind !== "preview") return session;
-  yield* renderer.note(pendingReviewText(proposed.pending), "Review");
+  yield* renderer.note(pendingReview(proposed.pending), "Review");
   const confirmed = yield* prompter
     .confirm("Apply this change?")
     .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(false)));
   if (!confirmed) {
-    yield* renderer.note("Nothing was written.", "Cancelled");
+    yield* renderer.note([Block.Note({ text: ["Nothing was written."] })], "Cancelled");
     return cancelLibraryChange(session);
   }
   const applied = yield* renderer.withStatus(progress, confirmLibraryChange(session));
-  if (applied.outcome?.kind === "failed")
+  if (applied.outcome?.kind === "failed") {
+    const failure = classifyFailure(applied.outcome.failure);
     yield* renderer.note(
-      `${applied.outcome.failure.message}\n${applied.outcome.failure.remediation}`,
+      [
+        Block.Status({ tone: "error", text: [failure.message] }),
+        Block.Note({ text: [failure.remediation] }),
+      ],
       "Unable to apply change",
     );
-  else
+  } else {
     yield* renderer.note(
-      proposed.pending.facts
-        .map((fact) => `${fact.action === "enable" ? "Enabled" : "Disabled"} (${fact.destination})`)
-        .join("\n"),
+      proposed.pending.facts.map((fact) =>
+        Block.Status({
+          tone: "ok",
+          text: [
+            `${fact.action === "enable" ? "Enabled" : "Disabled"} (`,
+            ...destinationValue(fact.scope),
+            ")",
+          ],
+        }),
+      ),
       "Applied",
     );
+  }
   return applied;
 });
 
@@ -119,7 +159,7 @@ const enableSkill = Effect.fn("CLI.libraryBrowse.enable")(function* (
 ) {
   const scope = yield* promptForScope(resolve(process.cwd()));
   const proposed = yield* proposeLibraryEnable(session, row, { scope });
-  return yield* applyWithConfirmation(proposed, "Projecting Skill");
+  return yield* applyWithConfirmation(proposed, "Installing skill");
 });
 
 const chooseScope = Effect.fn("CLI.libraryBrowse.chooseScope")(function* (
@@ -147,7 +187,7 @@ const changeInvocation = Effect.fn("CLI.libraryBrowse.invocation")(function* (
   const eligible = invocationEligibleScopes(row);
   if (eligible.length === 0) {
     yield* renderer.note(
-      "None of this Skill's current Bindings carries an invocation policy.",
+      [Block.Note({ text: ["Enable this skill before changing when it may be used."] })],
       "Not applicable",
     );
     return session;
@@ -156,7 +196,7 @@ const changeInvocation = Effect.fn("CLI.libraryBrowse.invocation")(function* (
   if (scopeRow.policy === undefined) return session;
   yield* renderer.note(invocationBriefing(scopeRow.policy), "Invocation");
   const invocation = yield* (yield* Prompter).autocomplete<InvocationOption>(
-    scopeRow.policy.question,
+    invocationQuestion(scopeRow.policy),
     invocationChoices(scopeRow),
   );
   const proposed = yield* proposeLibraryInvocation(session, row, scopeRow, invocation);
@@ -169,7 +209,7 @@ const disableSkill = Effect.fn("CLI.libraryBrowse.disable")(function* (
 ) {
   const options = row.scopes.map((scopeRow, index) => ({
     value: String(index),
-    label: scopeRow.label,
+    label: scopeRowLabel(scopeRow),
   }));
   const choice =
     options.length === 1
@@ -197,8 +237,18 @@ export const browseLibrary = Effect.fn("CLI.libraryBrowse")(function* (
       .autocomplete("Select a collection", [
         ...collections.map((row) => ({
           value: row.collectionId,
-          label: row.heading,
-          hint: `${session.skills.filter((skill) => skill.collectionId === row.collectionId).length} Skills`,
+          label: collectionChoiceTitle(row.heading, row.collectionSource),
+          hint: [
+            `${session.skills.filter((skill) => skill.collectionId === row.collectionId).length} Skills`,
+            collectionEnablement(
+              session.skills.filter((skill) => skill.collectionId === row.collectionId).length,
+              session.skills.filter(
+                (skill) => skill.collectionId === row.collectionId && skill.scopes.length > 0,
+              ).length,
+            ),
+          ]
+            .filter(Boolean)
+            .join(" | "),
         })),
         { value: DONE, label: DONE },
       ])
@@ -224,8 +274,8 @@ export const browseLibrary = Effect.fn("CLI.libraryBrowse")(function* (
             : []),
           ...rows.map((row) => ({
             value: row.skillVersionId,
-            label: row.scopes.length > 0 ? `${row.name} · enabled` : row.name,
-            hint: `${metadataSource(row.source)} · revision ${metadataRevision(row.revision)} · source updated ${metadataDate(row.source_updated_at)}`,
+            label: row.scopes.length > 0 ? `${row.name} | enabled` : row.name,
+            hint: skillMetadataLines(row).join(" | "),
           })),
           { value: BACK_TO_COLLECTIONS, label: BACK_TO_COLLECTIONS },
         ])
@@ -272,17 +322,54 @@ export const browseLibrary = Effect.fn("CLI.libraryBrowse")(function* (
         const row = session.skills.find((candidate) => candidate.skillVersionId === skillId);
         if (row === undefined) break;
         const detail = terminalData(row);
-        const renderDetail = (color: boolean) => {
-          const colors = createColors(color);
-          return [
-            colors.cyan(detail.heading),
-            `  ${colors.bold(detail.name)}`,
-            ...skillMetadataLines(detail).map((line) => `    ${colors.dim(line)}`),
-            ...(detail.invocationWarning ? [`    ${detail.invocationWarning}`] : []),
-            `  ${detail.scopes.length === 0 ? "not enabled" : detail.scopes.map((scopeRow) => scopeRow.label).join("\n  ")}`,
-          ].join("\n");
-        };
-        yield* renderer.note(renderDetail(false), "Skill", { renderBody: renderDetail });
+        const body = [
+          Block.Fields({
+            rows: [
+              {
+                label: "Collection",
+                value: [collectionTitle(detail.heading, detail.collectionSource)],
+              },
+              ...skillMetadataFields(detail),
+              ...(detail.collectionSource?.authority
+                ? [{ label: "Registry", value: [detail.collectionSource.authority] }]
+                : []),
+              ...(detail.scopes.length === 0 ? [{ label: "Enabled", value: ["No"] }] : []),
+            ],
+          }),
+          ...detail.scopes.map((scopeRow) =>
+            Block.Group({
+              title: destinationLabel(scopeRow.scope),
+              children: [
+                Block.Fields({
+                  rows: [
+                    {
+                      label: "Model invocation",
+                      value: [
+                        scopeRow.policy === undefined
+                          ? "Unavailable"
+                          : invocationRowSummary(scopeRow.policy),
+                      ],
+                    },
+                  ],
+                }),
+              ],
+            }),
+          ),
+          ...collectionWarnings(detail.collectionSource).map((warning) =>
+            Block.Status({ tone: "warn", text: [warning] }),
+          ),
+          ...(detail.invocationFailure
+            ? [
+                Block.Status({
+                  tone: "warn",
+                  text: [
+                    `Author preference unavailable: ${classifyFailure(detail.invocationFailure).message}`,
+                  ],
+                }),
+              ]
+            : []),
+        ];
+        yield* renderer.note(body, detail.name);
         const action = yield* prompter
           .select<"enable" | "disable" | "invocation" | "back" | "done">("What next?", [
             { value: "enable", label: "Enable" },

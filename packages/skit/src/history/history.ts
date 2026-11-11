@@ -1,3 +1,4 @@
+import { SchemaFailure } from "../shared/schema-issue.js";
 /**
  * Content-addressed history: immutable trees, revisions that name their parents, and a store
  * that holds both. The device and the Registry share this model, so a revision recorded on a
@@ -30,21 +31,29 @@ export type RevisionId = typeof RevisionId.Type;
 export const Tree = Schema.Array(TreeEntry);
 export type Tree = typeof Tree.Type;
 
+export const TreePathIssue = Schema.TaggedUnion({
+  DuplicatePath: { path: Schema.String },
+  ParentNotDirectory: {
+    path: Schema.String,
+    parent: Schema.String,
+    kind: Schema.Literals(["file", "symlink"]),
+  },
+});
+export type TreePathIssue = typeof TreePathIssue.Type;
+
 /** A physical namespace may have directory parents, never file or symlink parents. Raw
  * history remains unrestricted; sync and ingress call this before accepting a writable tree. */
-export const treePathIssue = (
-  tree: Tree,
-): { readonly path: string; readonly message: string } | undefined => {
+export const treePathIssue = (tree: Tree): TreePathIssue | undefined => {
   const entries = new Map<string, TreeEntry["kind"]>();
   for (const entry of tree) {
-    if (entries.has(entry.path)) return { path: entry.path, message: "Duplicate tree path" };
+    if (entries.has(entry.path)) return { _tag: "DuplicatePath", path: entry.path };
     entries.set(entry.path, entry.kind);
   }
   for (const entry of tree)
     for (const parent of parentDirectories(entry.path)) {
       const kind = entries.get(parent);
       if (kind !== undefined && kind !== "directory")
-        return { path: entry.path, message: `A ${kind} at ${parent} cannot contain descendants` };
+        return { _tag: "ParentNotDirectory", path: entry.path, parent, kind };
     }
   return undefined;
 };
@@ -92,6 +101,14 @@ class StoreMissing extends Schema.TaggedError<StoreMissing, { readonly brand: un
   },
 ) {}
 
+export const StoreCorruptReason = Schema.TaggedUnion({
+  InvalidData: { failure: SchemaFailure },
+  ContentHashMismatch: { actual: Hash },
+  BlobMissing: { blob: Hash },
+  BlobHashMismatch: { blob: Hash, actual: Hash },
+});
+export type StoreCorruptReason = typeof StoreCorruptReason.Type;
+
 /** Stored bytes that no longer match the identity they are stored under. */
 export class StoreCorrupt extends Schema.TaggedError<
   StoreCorrupt,
@@ -99,7 +116,7 @@ export class StoreCorrupt extends Schema.TaggedError<
 >()("History.StoreCorrupt", {
   kind: Schema.Literals(["tree", "revision"]),
   hash: Hash,
-  reason: Schema.String,
+  reason: StoreCorruptReason,
 }) {}
 
 /** The store could not read or write, for example because its storage failed. */
@@ -177,10 +194,18 @@ export const makeStore = Effect.fn("History.makeStore")(function* (
       const text = yield* backend.read(kind, hash);
       if (Option.isNone(text)) return yield* new StoreMissing({ kind, hash });
       const value = yield* Schema.decodeEffect(document)(text.value).pipe(
-        Effect.mapError((error) => new StoreCorrupt({ kind, hash, reason: String(error) })),
+        Effect.mapError(
+          (error) =>
+            new StoreCorrupt({ kind, hash, reason: { _tag: "InvalidData", failure: error } }),
+        ),
       );
-      if ((yield* identity(value)) !== hash)
-        return yield* new StoreCorrupt({ kind, hash, reason: "content hash does not match" });
+      const actual = yield* identity(value);
+      if (actual !== hash)
+        return yield* new StoreCorrupt({
+          kind,
+          hash,
+          reason: { _tag: "ContentHashMismatch", actual },
+        });
       return value;
     }).pipe(Effect.provideService(Digest.Digest, digests));
   const put = <A, H extends Hash>(

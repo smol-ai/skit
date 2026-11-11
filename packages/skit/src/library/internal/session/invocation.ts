@@ -13,9 +13,7 @@ import { InvocationPolicy } from "../../../artifact/invocation-policy.js";
 import { invocationMetadataAdapters } from "../../../harnesses/invocation-metadata.js";
 import { LibraryInvocationOption } from "../../invocation-option.js";
 import { Record, Schema } from "effect";
-import { harnessLabel } from "../../../harnesses/discovery.js";
 import type { InvocationOption } from "./invocation-option.js";
-import { type InstallScope } from "../../scope.js";
 
 export const AuthorInvocation = Schema.Record(HarnessName, DeclaredInvocationResolution);
 export type AuthorInvocation = typeof AuthorInvocation.Type;
@@ -37,52 +35,8 @@ export const InvocationReadModel = Schema.Struct({
   overridePolicy: Schema.optionalKey(InvocationPolicy),
   /** Presentation never edits the persisted intent. */
   storedIntent: LibraryInvocationOption,
-  question: Schema.String,
-  authorSummary: Schema.String,
-  effectiveSummary: Schema.String,
-  /** Present only when the artifact itself fails to demonstrate its declaration. */
-  defect: Schema.optionalKey(Schema.String),
 });
 export type InvocationReadModel = typeof InvocationReadModel.Type;
-
-function policyLabel(policy: InvocationPolicy): string {
-  if (policy === "implicit") return "Automatically";
-  if (policy === "explicit") return "Only when asked";
-  return "Agent default";
-}
-
-function policyExplanation(policy: InvocationPolicy): string {
-  if (policy === "implicit") return "Agents may choose this skill on their own when it fits.";
-  if (policy === "explicit")
-    return "Agents use this skill only when you ask for it. OpenCode V1 ignores this setting.";
-  return "Each agent decides, using its own default.";
-}
-
-function authorPolicyLabel(policy: ResolvedDeclaredPolicy): string {
-  return policy === "unspecified" ? "Not specified" : policyLabel(policy);
-}
-
-export function destinationLabel(scope: InstallScope): string {
-  return scope.kind === "global" ? "All projects" : scope.root;
-}
-
-function conformanceDefect(conformance: InvocationConformance, skill: string): string | undefined {
-  if (conformance.state === "non-conforming")
-    return `‘${skill}’ contradicts itself: its author declared ${policyLabel(conformance.declared).toLowerCase()}, but the published metadata in ${conformance.path} sets ${conformance.field} to ${policyLabel(conformance.native).toLowerCase()}. Only the author can repair this.`;
-  if (conformance.state === "unverified-legacy")
-    return `‘${skill}’ was published before skills carried this setting in their own metadata: ${conformance.path} states no ${conformance.field}, so its compatibility outside SKIT is unverified.`;
-  return undefined;
-}
-
-const agentEntries = (model: Pick<InvocationReadModel, "agents">) =>
-  HarnessName.literals.map((harness) => ({ harness, ...model.agents[harness] }));
-
-const authorPreference = (model: Pick<InvocationReadModel, "agents">): string => {
-  const policy = model.agents.codex.authorPolicy;
-  return agentEntries(model).every((agent) => agent.authorPolicy === policy)
-    ? authorPolicyLabel(policy)
-    : "Varies by agent";
-};
 
 /** Match installing: an override or descriptor policy is written; otherwise native fields survive. */
 export function invocationReadModel(input: {
@@ -92,7 +46,6 @@ export function invocationReadModel(input: {
 }): InvocationReadModel {
   const { skill, author, storedIntent } = input;
   const overridePolicy = storedIntent === "declared" ? undefined : storedIntent;
-  const defects = new Set<string>();
   const agents = Record.map(author, (declared, harness): typeof AgentInvocation.Type => {
     let effectivePolicy =
       overridePolicy ?? (declared.policy === "unspecified" ? "host-policy" : declared.policy);
@@ -120,93 +73,12 @@ export function invocationReadModel(input: {
       effectivePolicy,
       policySource,
     };
-    const defect = conformanceDefect(declared.conformance, skill);
-    if (defect !== undefined) defects.add(`${harnessLabel(harness)}: ${defect}`);
     return agent;
   });
-  const entries = agentEntries({ agents });
-  const common = agents.codex;
-  const uniform = entries.every(
-    (agent) =>
-      agent.effectivePolicy === common.effectivePolicy &&
-      agent.policySource === common.policySource,
-  );
-  const effectiveSummary = uniform
-    ? `${policyExplanation(common.effectivePolicy)} ${
-        common.policySource === "local-override"
-          ? "Set on this device."
-          : common.policySource === "author"
-            ? "Set by the author."
-            : "The author did not specify a preference."
-      }`
-    : [
-        entries
-          .map((agent) => `${harnessLabel(agent.harness)}: ${policyLabel(agent.effectivePolicy)}`)
-          .join("; "),
-        ...(agents.opencode.effectivePolicy === "explicit"
-          ? ["OpenCode V1 ignores this setting."]
-          : []),
-      ].join(". ");
   return {
     skill,
     agents,
     ...(overridePolicy === undefined ? {} : { overridePolicy }),
     storedIntent,
-    question: `When can agents use ‘${skill}’?`,
-    authorSummary: `Author preference: ${authorPreference({ agents })}`,
-    effectiveSummary,
-    ...(defects.size ? { defect: [...defects].join("\n") } : {}),
   };
-}
-
-export interface InvocationPolicyChoice {
-  value: InvocationOption;
-  label: string;
-  hint?: string;
-}
-
-/** Name the four stored intents as decisions, including what following the author will mean. */
-export function invocationPolicyChoices(model: InvocationReadModel): InvocationPolicyChoice[] {
-  const preference = authorPreference(model);
-  const options: InvocationPolicyChoice[] = [
-    {
-      value: "declared",
-      label:
-        preference === "Not specified"
-          ? "Author preference — none (agent default)"
-          : `Author preference — ${preference.toLowerCase()}`,
-    },
-    { value: "implicit", label: policyLabel("implicit") },
-    { value: "explicit", label: policyLabel("explicit") },
-    { value: "host-policy", label: policyLabel("host-policy") },
-  ];
-  return options.map((option) =>
-    option.value === model.storedIntent ? { ...option, hint: "current" } : option,
-  );
-}
-
-/** Explain author evidence, the local choice and resulting behavior before asking for a change. */
-export function invocationBriefing(policy: InvocationReadModel): string {
-  const summary = invocationRowSummary(policy);
-  return [
-    ...(policy.overridePolicy || summary === "Varies by agent" ? [policy.authorSummary] : []),
-    `Current: ${summary}`,
-    ...(summary === "Varies by agent" ? [policy.effectiveSummary] : []),
-    ...(policy.defect ? ["", policy.defect] : []),
-  ].join("\n");
-}
-
-export function invocationRowSummary(model: InvocationReadModel): string {
-  const entries = agentEntries(model);
-  const common = model.agents.codex;
-  if (
-    entries.some(
-      (agent) =>
-        agent.effectivePolicy !== common.effectivePolicy ||
-        agent.policySource !== common.policySource,
-    )
-  )
-    return "Varies by agent";
-  if (common.policySource === "harness-default") return policyLabel(common.effectivePolicy);
-  return `${policyLabel(common.effectivePolicy)} · ${common.policySource === "local-override" ? "you" : "author"}`;
 }

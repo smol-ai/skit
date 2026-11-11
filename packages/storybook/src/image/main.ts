@@ -4,6 +4,7 @@ import { parseArgs } from "node:util";
 import { Effect } from "effect";
 import {
   type TerminalEnvironment,
+  defaultTerminalEnvironment,
   journeyStories,
   renderReplayFrame,
 } from "@smolai/skit/storybook";
@@ -52,6 +53,7 @@ Writes a 2× PNG and an SVG sibling with embedded fonts.`);
   if (item.kind === "output" && (values.frame !== undefined || values.frames))
     throw new Error("Frame selection requires a journey story.");
   const environment: TerminalEnvironment = {
+    ...defaultTerminalEnvironment,
     color: true,
     detail: values.detail,
     format: "human",

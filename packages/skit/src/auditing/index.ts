@@ -7,3 +7,5 @@ export {
   AuditMcpServerV1Alpha4,
   type AuditEntryV1Alpha4,
 } from "./schema.js";
+export { AuditFindingReason } from "./finding-reasons.js";
+export { AuditOrigin } from "./provenance-facts.js";

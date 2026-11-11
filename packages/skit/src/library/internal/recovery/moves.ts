@@ -1,5 +1,6 @@
 import { recoveryFingerprint as fingerprint } from "./evidence.js";
-import { RecoveryInvalid, RecoveryFact } from "../../recovery-facts.js";
+import { RecoveryInvalid } from "../../store/operation-failures.js";
+import { RecoveryFact } from "../../recovery-facts.js";
 import { createHash, randomUUID } from "node:crypto";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { Effect, FileSystem, Schema, SchemaGetter } from "effect";
@@ -57,7 +58,7 @@ const LegacyEntry = Schema.Struct({
       ...entry,
       ...(observedHash === undefined ? {} : { currentHash: observedHash }),
     })),
-    encode: SchemaGetter.forbidden(() => "v1 move records are decode-only"),
+    encode: SchemaGetter.forbiddenEncoding,
   }),
 );
 const CurrentMoveRecord = Schema.Struct({
@@ -98,7 +99,7 @@ const prepareMoves = Effect.fn("RecoveryMoves.prepare")(function* (
 ) {
   if (dirname(operationDirectory) !== join(resolve(home), "removed"))
     return yield* new RecoveryInvalid({
-      detail: "Operation must belong to this Library's recovery directory",
+      reason: { _tag: "UnsafePath", kind: "operation-directory", path: operationDirectory },
     });
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
@@ -115,17 +116,21 @@ const prepareMoves = Effect.fn("RecoveryMoves.prepare")(function* (
         (other) => pathIsWithin(other, physicalPath) || pathIsWithin(physicalPath, other),
       )
     )
-      return yield* new RecoveryInvalid({ detail: "Overlapping recovery entries are unsafe" });
+      return yield* new RecoveryInvalid({
+        reason: { _tag: "UnsafePath", kind: "overlapping-entries", path: physicalPath },
+      });
     seen.add(physicalPath);
     if (
       path === resolve(home) ||
       pathIsWithin(path, resolve(home)) ||
       pathIsWithin(join(resolve(home), "removed"), path)
     )
-      return yield* new RecoveryInvalid({ detail: "Library storage cannot be displaced" });
+      return yield* new RecoveryInvalid({
+        reason: { _tag: "UnsafePath", kind: "library-storage", path },
+      });
     const info = yield* links.identity.lstat(path);
     if (info.type !== "Directory" && info.type !== "SymbolicLink")
-      return yield* new StalePlan({ message: "The Library changed since this was previewed" });
+      return yield* new StalePlan({ reason: { _tag: "ReviewedStateChanged" } });
     const linkTarget = info.type === "SymbolicLink" ? yield* fs.readLink(path) : undefined;
     if (
       request.approvedLink &&
@@ -134,7 +139,7 @@ const prepareMoves = Effect.fn("RecoveryMoves.prepare")(function* (
         info.ino !== request.approvedLink.ino ||
         linkTarget !== request.approvedLink.linkTarget)
     )
-      return yield* new StalePlan({ message: "The Library changed since this was previewed" });
+      return yield* new StalePlan({ reason: { _tag: "ReviewedStateChanged" } });
     const physicalHome = yield* links
       .realPathNative(home)
       .pipe(
@@ -148,7 +153,9 @@ const prepareMoves = Effect.fn("RecoveryMoves.prepare")(function* (
       physicalPath === join(physicalHome, "removed") ||
       pathIsWithin(join(physicalHome, "removed"), physicalPath)
     )
-      return yield* new RecoveryInvalid({ detail: "Recovery cannot displace its own storage" });
+      return yield* new RecoveryInvalid({
+        reason: { _tag: "UnsafePath", kind: "recovery-storage", path: physicalPath },
+      });
     const parent = yield* links.identity.lstat(parentPath);
     entries.push({
       name: request.name,
@@ -213,7 +220,7 @@ const applyRecoveryMoves = Effect.fn("RecoveryMoves.apply")(
         current.ino !== entry.ino ||
         (yield* fingerprint(entry.path)) !== entry.contentHash
       )
-        return yield* new StalePlan({ message: "The Library changed since this was previewed" });
+        return yield* new StalePlan({ reason: { _tag: "ReviewedStateChanged" } });
       if (entry.type !== "Directory") return;
       const hash = yield* Effect.result(deterministicTreeHash(entry.path));
       const marker = yield* fs
@@ -222,9 +229,7 @@ const applyRecoveryMoves = Effect.fn("RecoveryMoves.apply")(
           Effect.catchTag("PlatformError", (error) =>
             error.reason._tag === "NotFound"
               ? Effect.undefined
-              : Effect.fail(
-                  new StalePlan({ message: "The Library changed since this was previewed" }),
-                ),
+              : Effect.fail(new StalePlan({ reason: { _tag: "ReviewedStateChanged" } })),
           ),
         );
       if (
@@ -232,7 +237,7 @@ const applyRecoveryMoves = Effect.fn("RecoveryMoves.apply")(
         hash.success !== entry.currentHash ||
         marker !== entry.approvedMarker
       )
-        return yield* new StalePlan({ message: "The Library changed since this was previewed" });
+        return yield* new StalePlan({ reason: { _tag: "ReviewedStateChanged" } });
     });
     for (const entry of entries) yield* checkApproved(entry);
     if (!entries.length) return;
@@ -268,7 +273,9 @@ const missingStat = Effect.fn("Recovery.stat")(function* (path: string) {
 const checkedDirectory = Effect.fn("Recovery.directory")(function* (path: string) {
   const links = yield* LinkStat;
   if ((yield* links.identity.lstat(path)).type !== "Directory")
-    return yield* new RecoveryInvalid({ detail: `Expected a recovery directory at ${path}` });
+    return yield* new RecoveryInvalid({
+      reason: { _tag: "UnsafePath", kind: "recovery-directory", path },
+    });
 });
 
 /** Create only this Library's operation containers, checking each parent before descending. */
@@ -280,7 +287,9 @@ export const ensureRecoveryOperation = Effect.fn("Recovery.ensureOperation")(fun
     dirname(directory) !== join(resolve(home), "removed") ||
     !/^[a-zA-Z0-9_-]+$/.test(basename(directory))
   )
-    return yield* new RecoveryInvalid({ detail: "Invalid recovery operation directory" });
+    return yield* new RecoveryInvalid({
+      reason: { _tag: "InvalidData", record: "operation-directory" },
+    });
   const fs = yield* FileSystem.FileSystem;
   for (const path of [join(resolve(home), "removed"), directory]) {
     if (!(yield* missingStat(path))) yield* fs.makeDirectory(path, { mode: 0o700 });
@@ -293,7 +302,7 @@ const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
   operationId: string,
 ) {
   if (!/^[a-zA-Z0-9_-]+$/.test(operationId))
-    return yield* new RecoveryInvalid({ detail: "Invalid operation identifier" });
+    return yield* new RecoveryInvalid({ reason: { _tag: "InvalidData", record: "operation-id" } });
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
   const removed = join(yield* links.realPathNative(home), "removed");
@@ -330,12 +339,15 @@ const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
     if (!(yield* missingStat(moveRecordPath))) continue;
     if ((yield* links.identity.lstat(moveRecordPath)).type !== "File")
       return yield* new RecoveryInvalid({
-        detail: `Move record is not a regular file: ${moveRecordPath}`,
+        reason: { _tag: "UnsafePath", kind: "move-record", path: moveRecordPath },
       });
     const raw = yield* fs.readFileString(moveRecordPath);
     const moveRecord = yield* Schema.decodeEffect(Schema.fromJsonString(MoveRecord))(raw).pipe(
       Effect.mapError(
-        () => new RecoveryInvalid({ detail: `Invalid move record: ${moveRecordPath}` }),
+        () =>
+          new RecoveryInvalid({
+            reason: { _tag: "InvalidData", record: "move-record", path: moveRecordPath },
+          }),
       ),
     );
     evidence.push(raw);
@@ -352,7 +364,9 @@ const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
         storedEntry.recoveryPath !==
           join(logicalBatch, `${index + 1}-${basename(storedEntry.path)}`)
       )
-        return yield* new RecoveryInvalid({ detail: `Unsafe archive path in ${moveRecordPath}` });
+        return yield* new RecoveryInvalid({
+          reason: { _tag: "UnsafePath", kind: "archive", path: moveRecordPath },
+        });
       const entry = { ...storedEntry, recoveryPath: expectedArchive };
       if (
         !isAbsolute(entry.path) ||
@@ -367,7 +381,7 @@ const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
         (entry.type === "Directory" && entry.currentHash === undefined)
       )
         return yield* new RecoveryInvalid({
-          detail: `Unsafe or incomplete entry in ${moveRecordPath}`,
+          reason: { _tag: "InvalidData", record: "move-entry", path: moveRecordPath },
         });
       paths.add(entry.path);
       const parentStat = yield* missingStat(dirname(entry.path));
@@ -419,16 +433,16 @@ const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
               ? "missing"
               : "conflict";
       const reason = !safeParent
-        ? "Original parent is missing, replaced or redirected"
+        ? "parent-changed"
         : status === "saved"
-          ? "Verified saved entry; original destination is free"
+          ? "saved"
           : status === "at-original"
-            ? "Verified entry is at its original path"
+            ? "at-original"
             : status === "missing"
-              ? "Neither original nor saved entry exists"
+              ? "missing"
               : original.exists && saved.matches
-                ? "Original destination is occupied; preserve both entries"
-                : "Saved or original entry differs from its move record";
+                ? "destination-occupied"
+                : "entry-changed";
       facts.push({
         name: entry.name,
         path: entry.path,
@@ -507,7 +521,7 @@ export const restoreRecorded = Effect.fn("Recovery.restoreRecorded")(function* (
       JSON.stringify(current.parents) !== JSON.stringify(program.parents) ||
       current.witnesses.length !== program.witnesses.length
     )
-      return yield* new StalePlan({ message: "Recovery evidence changed since this was reviewed" });
+      return yield* new StalePlan({ reason: { _tag: "EvidenceChanged", kind: "recovery" } });
     for (const [index, fact] of program.summary.entries.entries()) {
       if (current.witnesses[index] === program.witnesses[index]) continue;
       if (
@@ -516,7 +530,9 @@ export const restoreRecorded = Effect.fn("Recovery.restoreRecorded")(function* (
         current.content[index]?.original === program.content[index]?.saved
       )
         continue;
-      return yield* new StalePlan({ message: `Recovery evidence changed at ${fact.path}` });
+      return yield* new StalePlan({
+        reason: { _tag: "EvidenceChanged", path: fact.path, kind: "recovery" },
+      });
     }
     return current;
   });
@@ -528,7 +544,9 @@ export const restoreRecorded = Effect.fn("Recovery.restoreRecorded")(function* (
     yield* fs.rename(fact.recoveryPath, fact.path);
     current = yield* check();
     if (current.inspection.entries[index]?.status !== "at-original")
-      return yield* new StalePlan({ message: `Restored entry differs at ${fact.path}` });
+      return yield* new StalePlan({
+        reason: { _tag: "EvidenceChanged", path: fact.path, kind: "recovery-entry" },
+      });
   }
   return current.inspection;
 });

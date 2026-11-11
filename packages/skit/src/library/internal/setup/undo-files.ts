@@ -1,3 +1,4 @@
+import type { UndoConflict } from "../../recovery-facts.js";
 import type { LibraryState } from "../../library-state.js";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { Effect, FileSystem } from "effect";
@@ -18,7 +19,7 @@ import { readSkillPathDetails } from "./undo-evidence.js";
 import { inspectRecoveryOperation } from "../recovery/moves.js";
 import { checkSetupGlobalContent } from "./protection.js";
 import { recoveryFingerprint } from "../recovery/evidence.js";
-import { RecoveryInvalid } from "../../recovery-facts.js";
+import { RecoveryInvalid } from "../../store/operation-failures.js";
 
 type SkillPathDetails = Effect.Success<ReturnType<typeof readSkillPathDetails>>;
 
@@ -78,7 +79,9 @@ export const checkAnchor = Effect.fn("SetupUndo.checkAnchor")(function* (file: U
     anchor.dev !== file.anchor.dev ||
     anchor.ino !== file.anchor.ino
   )
-    return yield* new RecoveryInvalid({ detail: `Redirected original parent: ${file.path}` });
+    return yield* new RecoveryInvalid({
+      reason: { _tag: "UnsafePath", kind: "original-parent", path: file.path },
+    });
   const suffix = relative(file.anchor.path, dirname(file.path));
   const expected = resolve(file.anchor.physicalPath, suffix);
   // A present parent must still name the same physical namespace. Missing parents are allowed
@@ -95,7 +98,7 @@ export const checkAnchor = Effect.fn("SetupUndo.checkAnchor")(function* (file: U
     (file.entry !== null && parent === undefined)
   )
     return yield* new RecoveryInvalid({
-      detail: `Redirected or missing original parent: ${file.path}`,
+      reason: { _tag: "UnsafePath", kind: "original-parent-missing", path: file.path },
     });
 });
 
@@ -114,13 +117,15 @@ export const restoreMarker = Effect.fn("SetupUndo.restoreMarker")(function* (
       ),
     );
   if (existing && existing.type !== "File")
-    return yield* new RecoveryInvalid({ detail: `Unsafe ownership marker at ${path}` });
+    return yield* new RecoveryInvalid({
+      reason: { _tag: "UnsafePath", kind: "ownership-marker", path },
+    });
   if (entry.marker === null) {
     if (existing) yield* fs.remove(marker).pipe(Effect.uninterruptible);
   } else {
     if (entry.markerType !== "File" || entry.markerMode === undefined || entry.markerMode === null)
       return yield* new RecoveryInvalid({
-        detail: `Original marker metadata unavailable at ${path}`,
+        reason: { _tag: "MissingRecord", record: "marker-metadata", at: path },
       });
     yield* writeRawAtomic(marker, entry.marker, false, entry.markerMode & 0o7777);
     yield* fs.chmod(marker, entry.markerMode & 0o7777);
@@ -143,7 +148,7 @@ export const planUndoFiles = Effect.fn("SetupUndo.planFiles")(function* (
     ? yield* inspectRecoveryOperation(home, operationId)
     : { entries: [] };
   const backups = yield* Effect.forEach(priorBackups, (id) => inspectRecoveryOperation(home, id));
-  const conflicts: string[] = [];
+  const conflicts: UndoConflict[] = [];
   const pathDetails: SkillPathDetails[] = [];
   const actions: {
     path: string;
@@ -169,20 +174,18 @@ export const planUndoFiles = Effect.fn("SetupUndo.planFiles")(function* (
       (file.entry === null || file.entry.marker === null);
     const claim = possibleClaim && setup.claimedPaths.has(file.path);
     if (!saved.length && !changedInstalledSkill && possibleClaim && !claim) {
-      conflicts.push(`Setup's ownership claim is not confirmed: ${file.path}`);
+      conflicts.push({ _tag: "OwnershipUnconfirmed", path: file.path });
       continue;
     }
     if (!saved.length && !claim && !changedInstalledSkill) continue;
     if ((yield* Effect.result(checkSetupGlobalContent(file.path)))._tag === "Failure") {
-      conflicts.push(
-        `Repository, authored or package-manager ownership protects this path: ${file.path}`,
-      );
+      conflicts.push({ _tag: "PathProtected", path: file.path });
       continue;
     }
     affected.add(file.path);
     const anchor = yield* Effect.result(checkAnchor(file));
     if (anchor._tag === "Failure") {
-      conflicts.push(`Original parent changed: ${file.path}`);
+      conflicts.push({ _tag: "ParentChanged", path: file.path });
       continue;
     }
     const physical = join(details.anchor.physicalPath, relative(details.anchor.path, file.path));
@@ -191,7 +194,7 @@ export const planUndoFiles = Effect.fn("SetupUndo.planFiles")(function* (
       pathIsWithin(physicalHome, physical) ||
       pathIsWithin(physical, physicalHome)
     ) {
-      conflicts.push(`Library storage cannot be restored over: ${file.path}`);
+      conflicts.push({ _tag: "StorageOverlap", path: file.path });
       continue;
     }
     if (
@@ -200,7 +203,7 @@ export const planUndoFiles = Effect.fn("SetupUndo.planFiles")(function* (
           other === physical || pathIsWithin(other, physical) || pathIsWithin(physical, other),
       )
     ) {
-      conflicts.push(`Overlapping original paths: ${file.path}`);
+      conflicts.push({ _tag: "OriginalPathsOverlap", path: file.path });
       continue;
     }
     physicalPaths.push(physical);
@@ -208,7 +211,7 @@ export const planUndoFiles = Effect.fn("SetupUndo.planFiles")(function* (
       !equal(installedSkillChoice(current), installedSkillChoice(after)) &&
       !equal(installedSkillChoice(current), installedSkillChoice(prior))
     ) {
-      conflicts.push(`Installed-skill choice changed: ${file.path}`);
+      conflicts.push({ _tag: "InstalledChoiceChanged", path: file.path });
       continue;
     }
     if (
@@ -251,11 +254,11 @@ export const planUndoFiles = Effect.fn("SetupUndo.planFiles")(function* (
       details.entry.ino === file.entry.ino &&
       !sameBytes
     ) {
-      conflicts.push(`Managed original was edited: ${file.path}`);
+      conflicts.push({ _tag: "OriginalEdited", path: file.path });
       continue;
     }
     if (details.entry && !owned) {
-      conflicts.push(`Occupied original path: ${file.path}`);
+      conflicts.push({ _tag: "DestinationOccupied", path: file.path });
       continue;
     }
     // Only a copy the operation installed is setup's to move or remove; a folder that appeared
@@ -275,7 +278,7 @@ export const planUndoFiles = Effect.fn("SetupUndo.planFiles")(function* (
         inspection.entries.some((entry) => entry.path === file.path && entry.status === "saved"),
       )
     ) {
-      conflicts.push(`Installed copy disappeared without undo preservation: ${file.path}`);
+      conflicts.push({ _tag: "CopyMissing", path: file.path });
       continue;
     }
     let source: string | undefined;
@@ -337,7 +340,7 @@ export const planUndoFiles = Effect.fn("SetupUndo.planFiles")(function* (
       }
     }
     if (source === undefined) {
-      conflicts.push(`Original bytes unavailable: ${file.path}`);
+      conflicts.push({ _tag: "OriginalBytesMissing", path: file.path });
       continue;
     }
     const original = (yield* readSkillPathDetails(source)).entry;
@@ -348,7 +351,7 @@ export const planUndoFiles = Effect.fn("SetupUndo.planFiles")(function* (
       (yield* links.identity.lstat(yield* links.realPathNative(dirname(file.path)))).dev !==
         original!.dev
     ) {
-      conflicts.push(`Original cannot be renamed across devices: ${file.path}`);
+      conflicts.push({ _tag: "DifferentDevice", path: file.path });
       continue;
     }
     actions.push({ path: file.path, kind: "restore", source, transfer });
@@ -357,7 +360,9 @@ export const planUndoFiles = Effect.fn("SetupUndo.planFiles")(function* (
     Effect.gen(function* () {
       const evidence = yield* readPathEvidence(installedSkill.path);
       if (evidence._tag === "None")
-        return yield* new RecoveryInvalid({ detail: `Missing successor: ${installedSkill.path}` });
+        return yield* new RecoveryInvalid({
+          reason: { _tag: "MissingRecord", record: "successor", at: installedSkill.path },
+        });
       return evidence.value;
     }),
   );

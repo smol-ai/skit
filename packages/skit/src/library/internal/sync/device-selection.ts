@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import type { DeviceSkillSelection } from "../../device-state.js";
 import type { Enabled, LibraryManifest } from "../../library-contracts.js";
-import { OptionCombinationInvalid } from "../../../shared/input-failures.js";
+import { SyncInputInvalid } from "../../sync-input-failures.js";
 
 /** Resolve explicit names once to stable identities; collection items continue to follow membership. */
 export const selectDeviceSkills = Effect.fn("Library.selectDeviceSkills")(function* (
@@ -14,8 +14,12 @@ export const selectDeviceSkills = Effect.fn("Library.selectDeviceSkills")(functi
       (skill) => skill.name === query || skill.skill_id === query,
     );
     if (matches.length !== 1)
-      return yield* new OptionCombinationInvalid({
-        detail: `Device Skill ${query} matched ${matches.length} Skills; use a unique name or Skill ID.`,
+      return yield* new SyncInputInvalid({
+        reason: {
+          _tag: "SkillSelectionNotUnique",
+          query,
+          matches: matches.map((skill) => ({ id: skill.skill_id, name: skill.name })),
+        },
       });
     items.push({ skill: matches[0]!.skill_id });
   }
@@ -24,8 +28,15 @@ export const selectDeviceSkills = Effect.fn("Library.selectDeviceSkills")(functi
       (collection) => collection.label === query || collection.collection_id === query,
     );
     if (matches.length !== 1)
-      return yield* new OptionCombinationInvalid({
-        detail: `Device Collection ${query} matched ${matches.length} Collections; use a unique label or Collection ID.`,
+      return yield* new SyncInputInvalid({
+        reason: {
+          _tag: "CollectionSelectionNotUnique",
+          query,
+          matches: matches.map((collection) => ({
+            id: collection.collection_id,
+            label: collection.label,
+          })),
+        },
       });
     items.push({ collection: matches[0]!.collection_id });
   }

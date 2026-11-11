@@ -1,3 +1,4 @@
+import { dataFailure } from "../src/commands/data-failure.js";
 import { feedbackInput } from "../src/feedback/send.js";
 import { describe, expect } from "vitest";
 import { it } from "@effect/vitest";
@@ -141,13 +142,36 @@ describe("signing feedback", () => {
 
       expect(error).toMatchObject({
         _tag: "AuthenticationRequired",
-        remediation: expect.stringContaining("skit auth login"),
+        origin: "https://skit.smol.ai",
       });
+      expect(dataFailure(error)?.remediation).toContain("skit auth login");
     }).pipe(Effect.provide(testPlatformLayer)),
   );
 });
 
 describe("sending feedback", () => {
+  for (const [name, response] of [
+    ["an invalid acknowledgement", () => Response.json({ unexpected: true }, { status: 201 })],
+    ["a server failure", () => Response.json({ error: "internal_error" }, { status: 500 })],
+  ] as const) {
+    it.effect(`leaves delivery unknown after ${name}, without retrying`, () =>
+      Effect.gen(function* () {
+        let attempts = 0;
+        const error = yield* Effect.flip(
+          send(() =>
+            Effect.sync(() => {
+              attempts += 1;
+              return response();
+            }),
+          ),
+        );
+        expect(error._tag).toBe("FeedbackUnconfirmed");
+        expect(dataFailure(error)?.remediation).toContain("Do not send it again");
+        expect(attempts).toBe(1);
+      }),
+    );
+  }
+
   it.effect("sends a signing token as a Bearer credential, and none when unsigned", () =>
     Effect.gen(function* () {
       const authorization: Array<string | undefined> = [];

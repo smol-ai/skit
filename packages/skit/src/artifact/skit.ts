@@ -14,10 +14,7 @@ import type {
 import type { SkitDescriptor } from "./schemas.js";
 import type { SkitValidationDiagnostic } from "./validation-diagnostic.js";
 import { auditSkill, evaluateSkillAudit } from "../auditing/skill-audit.js";
-import {
-  assessInvocationConformance,
-  describeInvocationConformanceIssue,
-} from "../invocation/conformance.js";
+import { assessInvocationConformance } from "../invocation/conformance.js";
 import { walkTree } from "./tree.js";
 
 import type { TreeEntry } from "./tree-entry.js";
@@ -178,7 +175,6 @@ export function validateSkitDirectory(
           code: "SKILL_FILE_MISSING",
           severity: "error",
           path: primary,
-          message: "Contained skills require a primary SKILL.md",
         });
       for (const mapping of skill.shared ?? []) {
         if (
@@ -189,14 +185,13 @@ export function validateSkitDirectory(
             code: "SHARED_SOURCE_MISSING",
             severity: "error",
             path: mapping.from,
-            message: `Shared mapping source for ${skill.name} does not exist`,
+            skill: skill.name,
           });
         if (mapping.to.startsWith("../"))
           diagnostics.push({
             code: "SHARED_TARGET_TRAVERSAL",
             severity: "error",
             path: mapping.to,
-            message: "Shared mapping target escapes the child skill",
           });
       }
       if (filePaths.has(primary)) {
@@ -228,7 +223,7 @@ export function validateSkitDirectory(
                 : "SECURITY_ASSESSMENT_WARNING",
             severity: decision.outcome === "block" ? "error" : "warning",
             path: primary,
-            message: `Security assessment ${decision.outcome}: ${decision.reasons.map((reason) => reason.code).join(", ")}`,
+            assessment: decision,
           });
       }
     }
@@ -250,7 +245,7 @@ export function validateSkitDirectory(
           code: "INVOCATION_METADATA_MISMATCH",
           severity: options.assessmentContext === "publish" ? "error" : "warning",
           path: issue.path,
-          message: describeInvocationConformanceIssue(issue),
+          issue,
         });
     }
     for (const declared of [
@@ -263,7 +258,6 @@ export function validateSkitDirectory(
           code: "CAPABILITY_PATH_MISSING",
           severity: "error",
           path: declared,
-          message: "Declared capability path does not exist",
         });
     }
     const skillNames = new Set(descriptor.skills.map((skill) => skill.name));
@@ -277,77 +271,82 @@ export function validateSkitDirectory(
           code: "EXAMPLE_MANIFEST_INVALID",
           severity: "error",
           path: file.path,
-          message: String(source.failure),
+          reason: { _tag: "Unreadable", failure: source.failure },
         });
         continue;
       }
-      const checked = yield* Effect.result(
-        Effect.try(() => {
-          const manifest = parseSkillExample(source.success);
-          const [, directorySkill, directoryId] = match;
-          if (manifest.skill !== directorySkill || manifest.id !== directoryId)
+      const checked = yield* Effect.result(parseSkillExample(source.success));
+      if (Result.isSuccess(checked)) {
+        const manifest = checked.success;
+        const [, directorySkill, directoryId] = match;
+        if (manifest.skill !== directorySkill || manifest.id !== directoryId)
+          diagnostics.push({
+            code: "EXAMPLE_PATH_IDENTITY_MISMATCH",
+            severity: "error",
+            path: file.path,
+            skill: manifest.skill,
+            id: manifest.id,
+            directorySkill,
+            directoryId,
+          });
+        if (!skillNames.has(manifest.skill))
+          diagnostics.push({
+            code: "EXAMPLE_SKILL_UNKNOWN",
+            severity: "error",
+            path: file.path,
+            skill: manifest.skill,
+          });
+        const key = `${manifest.skill}:${manifest.id}`;
+        if (exampleKeys.has(key))
+          diagnostics.push({
+            code: "EXAMPLE_ID_DUPLICATE",
+            severity: "error",
+            path: file.path,
+            skill: manifest.skill,
+            id: manifest.id,
+          });
+        exampleKeys.add(key);
+        const base = posix.dirname(file.path);
+        const references = [
+          { path: manifest.prompt.path, kind: "prompt", code: "EXAMPLE_PROMPT_MISSING" as const },
+          ...(manifest.execution.fixtures ?? []).map((path) => ({
+            path,
+            kind: "fixture",
+            code: "EXAMPLE_FIXTURE_MISSING" as const,
+          })),
+          ...(manifest.screenshots ?? []).map((screenshot) => ({
+            path: screenshot.path,
+            kind: "screenshot",
+            code: "EXAMPLE_SCREENSHOT_MISSING" as const,
+          })),
+        ];
+        for (const reference of references) {
+          const referencedPath = posix.join(base, reference.path);
+          const referencedFile = files.find((candidate) => candidate.path === referencedPath);
+          if (!referencedFile)
             diagnostics.push({
-              code: "EXAMPLE_PATH_IDENTITY_MISMATCH",
+              code: reference.code,
               severity: "error",
-              path: file.path,
-              message: "Example skill and id must match examples/<skill>/<id>/case.yaml",
+              path: referencedPath,
             });
-          if (!skillNames.has(manifest.skill))
+          else if (
+            reference.kind === "screenshot" &&
+            !referencedFile.mediaType.startsWith("image/")
+          )
             diagnostics.push({
-              code: "EXAMPLE_SKILL_UNKNOWN",
+              code: "EXAMPLE_SCREENSHOT_MEDIA_INVALID",
               severity: "error",
-              path: file.path,
-              message: `Example references undeclared skill ${manifest.skill}`,
+              path: referencedPath,
+              mediaType: referencedFile.mediaType,
             });
-          const key = `${manifest.skill}:${manifest.id}`;
-          if (exampleKeys.has(key))
-            diagnostics.push({
-              code: "EXAMPLE_ID_DUPLICATE",
-              severity: "error",
-              path: file.path,
-              message: `Duplicate example identity ${key}`,
-            });
-          exampleKeys.add(key);
-          const base = posix.dirname(file.path);
-          const references = [
-            { path: manifest.prompt.path, kind: "prompt" },
-            ...(manifest.execution.fixtures ?? []).map((path) => ({ path, kind: "fixture" })),
-            ...(manifest.screenshots ?? []).map((screenshot) => ({
-              path: screenshot.path,
-              kind: "screenshot",
-            })),
-          ];
-          for (const reference of references) {
-            const referencedPath = posix.join(base, reference.path);
-            const referencedFile = files.find((candidate) => candidate.path === referencedPath);
-            if (!referencedFile)
-              diagnostics.push({
-                code: `EXAMPLE_${reference.kind.toUpperCase()}_MISSING`,
-                severity: "error",
-                path: referencedPath,
-                message: `Example ${reference.kind} does not exist`,
-              });
-            else if (
-              reference.kind === "screenshot" &&
-              !referencedFile.mediaType.startsWith("image/")
-            )
-              diagnostics.push({
-                code: "EXAMPLE_SCREENSHOT_MEDIA_INVALID",
-                severity: "error",
-                path: referencedPath,
-                message: "Example screenshot must use an image media type",
-              });
-          }
-          examples.push({ path: file.path, manifest });
-        }),
-      );
-      if (Result.isFailure(checked)) {
-        const error = checked.failure.cause;
+        }
+        examples.push({ path: file.path, manifest });
+      } else {
         diagnostics.push({
           code: "EXAMPLE_MANIFEST_INVALID",
           severity: "error",
           path: file.path,
-          message: error instanceof Error ? error.message : "Example manifest is invalid",
+          reason: { _tag: "Malformed", issue: checked.failure.issue },
         });
       }
     }

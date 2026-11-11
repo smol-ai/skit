@@ -6,14 +6,15 @@ import {
 } from "./routing/roots.js";
 import { findDuplicates, readableSkillsDirectories } from "./routing/duplicates.js";
 import {
+  Changed,
   Destination,
   Duplicate,
   DuplicateScanIncomplete,
   Warning,
 } from "./installed-skill-facts.js";
-export { Destination, Duplicate } from "./installed-skill-facts.js";
+export { Changed, Destination, Duplicate } from "./installed-skill-facts.js";
 
-import { Context, Data, Effect, FileSystem, Option, Path, Schema, Scope } from "effect";
+import { Context, Effect, FileSystem, Option, Path, Schema, Scope } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { Digest } from "effect/crypto";
 import * as InstalledSkillFiles from "../installed-skills/files.js";
@@ -47,9 +48,8 @@ import { reproducible } from "./installation/retained-skill.js";
 import { installedSkillSource } from "./installation/installed-skill-source.js";
 import { declaredInvocationIntent, overrideInvocationIntent } from "../installed-skills/policy.js";
 import type { Invocation } from "./enabled-plan.js";
-import { type SkitFailure, FailureTypeId } from "../shared/failure.js";
 
-import type { TreeError } from "../shared/tree-error.js";
+import { TreeErrorReason, type TreeError } from "../shared/tree-error.js";
 
 /**
  * Library's adapter from saved selections to installed-folder facts and operations.
@@ -64,7 +64,7 @@ export type Protection = typeof Protection.Type;
 export const Facts = Schema.Struct({
   marker: OwnershipMarkerInspection,
   /** An empty or unhashable folder is a fact, never a planning failure. */
-  hash: Schema.Union([Hash, Schema.TaggedStruct("Unreadable", { reason: Schema.String })]),
+  hash: Schema.Union([Hash, Schema.TaggedStruct("Unreadable", { reason: TreeErrorReason })]),
   realPath: Schema.String,
   /** A `.git` at or above the folder: a checkout owns it. */
   insideRepository: Schema.Boolean,
@@ -121,17 +121,6 @@ export type Cause =
   | InstalledSkillInvalid
   | Effect.Error<ReturnType<typeof installedSkillSource>>
   | Effect.Error<ReturnType<typeof reproducible>>;
-export class Changed
-  extends Data.TaggedError("Library.InstalledSkillsChanged")<{ readonly path: string }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly remediation = "Preview the change again.";
-  get message() {
-    return `Installed skill evidence changed at ${this.path}`;
-  }
-}
 export interface Interface {
   /** Install destinations active on this device. Unknown routing counts every one as active. */
   readonly active: Effect.Effect<readonly InstallDestination[], Cause>;
@@ -236,9 +225,7 @@ export interface Routing {
  */
 export const make = Effect.fn("make")(function* (configuration?: Routing | InventoryRootOptions) {
   const unrouted = () =>
-    Effect.fail(
-      new InstalledSkillInvalid({ detail: "This device's install destinations are unknown" }),
-    );
+    Effect.fail(new InstalledSkillInvalid({ reason: { _tag: "DestinationsUnknown" } }));
   const context = (yield* Effect.context<TreeRequirements | Digest.Digest>()).pipe(
     Context.pick(FileSystem.FileSystem, Path.Path, LinkStat, SourceProcess, Digest.Digest),
   );
@@ -320,7 +307,7 @@ export const make = Effect.fn("make")(function* (configuration?: Routing | Inven
       hash: yield* deterministicTreeHash(path).pipe(
         Effect.map((hash): Facts["hash"] => hash),
         Effect.catchTag("TreeError", (error) =>
-          Effect.succeed({ _tag: "Unreadable" as const, reason: error.reason._tag }),
+          Effect.succeed({ _tag: "Unreadable" as const, reason: error.reason }),
         ),
       ),
       realPath,
@@ -374,7 +361,7 @@ export const make = Effect.fn("make")(function* (configuration?: Routing | Inven
       const current = yield* inspect(expected.path).pipe(Effect.provide(context));
       if (JSON.stringify(current) !== JSON.stringify(expected))
         return yield* new InstalledSkillFiles.InstalledSkillFailure({
-          message: `Installed skill evidence changed before commit: ${expected.path}`,
+          reason: { _tag: "EvidenceChanged", path: expected.path },
         });
     });
 
@@ -448,13 +435,13 @@ export const make = Effect.fn("make")(function* (configuration?: Routing | Inven
       );
       if (skill === undefined || version === undefined)
         return yield* new InstalledSkillInvalid({
-          detail: "An enabled Skill has no selected stored Version",
+          reason: { _tag: "VersionMissing", kind: "enabled" },
         });
       const source = yield* installedSkillSource(state, originalsPath, skill, version).pipe(
         Effect.provide(context),
       );
       if (source.kind === "invalid")
-        return yield* new InstalledSkillInvalid({ detail: source.detail });
+        return yield* new InstalledSkillInvalid({ reason: source.reason });
       return yield* InstalledSkillFiles.stageInstalledSkill({
         root: installedSkill.root,
         libraryPath: source.libraryPath,

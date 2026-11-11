@@ -1,3 +1,5 @@
+import { Block, renderBlocks } from "../src/terminal/blocks.js";
+import { resultExitCode } from "../src/commands/exit-code.js";
 import { toEnabledIntent } from "./helpers/set-enabled.js";
 import * as Library from "@smolai/skit-core/library";
 import { LibraryState } from "@smolai/skit-core/library";
@@ -41,7 +43,8 @@ import { presentSetEnabled } from "../src/library/enable.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
-import { renderContract } from "../src/commands/output-presenters.js";
+import { renderSetEnabled } from "../src/library/enable/present.js";
+import { classifyFailure } from "../src/commands/failure-classification.js";
 import { Prompter, PromptCancelled } from "../src/terminal/prompter.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -220,6 +223,22 @@ it.effect("retrying an already selected device Skill still checks unmanaged copi
       .pipe(Effect.flip);
     assert.strictEqual(error._tag, "InstalledSkillWouldDuplicate");
     assert.strictEqual(yield* f.fs.readFileString(join(native, "SKILL.md")), "native copy\n");
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect("a Collection request naming neither a Skill nor all of them gives its reason", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const library = yield* f.home.owned(
+      Library.Service.pipe(withLibraryOwner({ ...f.home.installOptions, overrides: {} })),
+    );
+    const { selectedSkills: _, ...request } = f.request;
+    const error = yield* library
+      .planEnabled([toEnabledIntent(request)], { base: yield* library.read })
+      .pipe(Effect.flip);
+    if (error._tag !== "Library.SetEnabledInvalid") return assert.fail(error._tag);
+    assert.strictEqual(error.reason, "selection-required");
+    assert.strictEqual(classifyFailure(error).code, "INVALID_ARGUMENT");
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -470,7 +489,7 @@ it.effect("a TUI proposal keeps the revision displayed before the proposal was m
     const confirmed = yield* f.home.owned(confirmLibraryChange(proposed));
     assert.strictEqual(confirmed.outcome?.kind, "failed");
     if (confirmed.outcome?.kind === "failed")
-      assert.strictEqual(confirmed.outcome.failure.code, "CONFLICT");
+      assert.strictEqual(classifyFailure(confirmed.outcome.failure).code, "CONFLICT");
     assert.strictEqual(yield* f.fs.readFileString(f.home.statePath), before);
     assert.strictEqual(yield* f.fs.exists(f.destination), false);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -536,8 +555,16 @@ const cleanupFixture = Effect.gen(function* () {
     descriptionsDropped: { min: 0, max: 0 },
     fidelity: "modelled",
     collections: [],
-    basis: "test",
-    coverage: [],
+    provenance: {
+      _tag: "CodexAllocation",
+      contextWindow: null,
+      maxContextTokens: 1000,
+      fraction: 0.01,
+      fallbackCharacters: 8000,
+      tokenCap: 10000,
+    },
+    skippedPaths: [],
+    diagnostics: [],
     entries: [
       { name: "alpha", path: join(f.destination, "alpha", "SKILL.md"), demand: 700 },
       { name: "beta", path: join(f.destination, "beta", "SKILL.md"), demand: 400 },
@@ -737,7 +764,7 @@ for (const mode of ["dry-run", "decline", "apply", "cancel"] as const) {
         );
       }
       const before = yield* f.fs.readFileString(f.home.statePath);
-      const notes: string[] = [];
+      const notes: (readonly Block[])[] = [];
       let confirmations = 0;
       const cancelled = new PromptCancelled({ prompt: "test", reason: "back" });
       const prompt = Layer.succeed(
@@ -794,7 +821,12 @@ for (const mode of ["dry-run", "decline", "apply", "cancel"] as const) {
       );
       if (mode === "dry-run") {
         assert.ok(
-          notes.every((note) => !note.includes("No transcript history in this window for codex")),
+          notes.every(
+            (note) =>
+              !renderBlocks(note, { color: false }).includes(
+                "No transcript history in this window for codex",
+              ),
+          ),
         );
       }
       assert.strictEqual(changed, mode === "apply");
@@ -806,7 +838,20 @@ for (const mode of ["dry-run", "decline", "apply", "cancel"] as const) {
         assert.strictEqual(yield* f.fs.exists(join(f.destination, "beta")), true);
         assert.strictEqual((yield* f.home.durable).skills.length, 2);
       }
-      if (mode !== "cancel") assert.ok(notes.some((note) => note.includes("~900 / 1,000 tokens")));
+      if (mode !== "cancel")
+        assert.ok(
+          notes
+            .flat()
+            .filter(Block.$is("Table"))
+            .some((table) =>
+              table.rows.some(
+                (row) =>
+                  row[2]?.includes("~900") &&
+                  row[3]?.includes("1,000") &&
+                  row[4]?.includes("tokens"),
+              ),
+            ),
+        );
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
   );
 }
@@ -1258,8 +1303,9 @@ it.effect(
       const confirmed = yield* f.home.owned(confirmLibraryChange(proposed));
       assert.strictEqual(confirmed.outcome?.kind, "failed");
       if (confirmed.outcome?.kind === "failed") {
-        assert.strictEqual(confirmed.outcome.failure.code, "CONFLICT");
-        assert.match(confirmed.outcome.failure.message, /intent was saved/);
+        assert.strictEqual(classifyFailure(confirmed.outcome.failure).code, "CONFLICT");
+        assert.strictEqual(confirmed.outcome.failure._tag, "Library.SetEnabledIncomplete");
+        assert.match(classifyFailure(confirmed.outcome.failure).message, /choice was saved/);
       }
       assert.strictEqual(
         confirmed.skills.find((skill) => skill.name === "alpha")?.scopes.length,
@@ -1407,7 +1453,7 @@ it.effect(
       assert.strictEqual(result.contract, "enable");
       if (result.contract !== "enable") return;
       assert.strictEqual(result.schema, "skit.enable.v8");
-      assert.strictEqual(result.exitCode, 12);
+      assert.strictEqual(resultExitCode(result), 1);
       assert.strictEqual(result.data.application.status, "incomplete");
       assert.strictEqual(result.data.application.intent, "saved");
       assert.strictEqual(
@@ -1416,10 +1462,13 @@ it.effect(
           .update(canonicalJson(yield* f.home.durable))
           .digest("hex"),
       );
-      const rendered = renderContract(result, { color: false, detail: "full" });
-      assert.match(rendered, /Library choice saved/);
-      assert.match(rendered, /Installed copies need attention/);
-      assert.notMatch(rendered, /^Enabled/);
+      const statuses = renderSetEnabled(result.data, true).flatMap((block) =>
+        block._tag === "Status"
+          ? [block.text.filter((part) => typeof part === "string").join("")]
+          : [],
+      );
+      assert.match(statuses[0] ?? "", /^Library choice saved/);
+      assert.isTrue(statuses.some((text) => text.startsWith("Installed copies need attention")));
       assert.strictEqual(
         yield* f.fs.readFileString(join(destination, "SKILL.md")),
         "Foreign active bytes\n",
@@ -1547,7 +1596,7 @@ it.effect("the CLI adapter keeps the I/O failure exit code after saving enableme
     assert.ok(result);
     assert.strictEqual(result.contract, "enable");
     if (result.contract !== "enable") return;
-    assert.strictEqual(result.exitCode, 1);
+    assert.strictEqual(resultExitCode(result), 1);
     assert.strictEqual(result.data.application.status, "incomplete");
     assert.strictEqual(result.data.application.failure?.code, "OPERATION_FAILED");
     assert.strictEqual(result.data.application.intent, "saved");

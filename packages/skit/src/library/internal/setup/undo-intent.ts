@@ -1,3 +1,4 @@
+import type { UndoConflict, UndoScope } from "../../recovery-facts.js";
 import { canonicalJson } from "../../../shared/json.js";
 import {
   currentCollectionSkills,
@@ -35,15 +36,15 @@ export const reverseSetupIntent = (
   const selectedSourceState = restoredSources.length
     ? { ...state, imports: [...state.imports, ...restoredSources] }
     : state;
-  const conflicts: string[] = [];
-  const restore = <A>(label: string, prior: A, after: A, current: A): A => {
+  const conflicts: UndoConflict[] = [];
+  const restore = <A>(conflict: UndoConflict, prior: A, after: A, current: A): A => {
     if (equal(prior, after) || equal(current, prior)) return current;
     if (equal(current, after)) return prior;
-    conflicts.push(label);
+    conflicts.push(conflict);
     return current;
   };
   const reverseList = (
-    label: string,
+    scope: UndoScope,
     prior: EnabledList | undefined,
     after: EnabledList | undefined,
     current: EnabledList | undefined,
@@ -55,7 +56,12 @@ export const reverseSetupIntent = (
       const was = old.get(key);
       const wanted = next.get(key);
       const enabled = items.some((item) => itemKey(item) === key);
-      const reversed = restore(`${label} ${key}`, was !== undefined, wanted !== undefined, enabled);
+      const reversed = restore(
+        { _tag: "SelectionChanged", scope, key, kind: "enabled" },
+        was !== undefined,
+        wanted !== undefined,
+        enabled,
+      );
       if (!reversed) {
         const index = items.findIndex((item) => itemKey(item) === key);
         if (index >= 0) items.splice(index, 1);
@@ -65,7 +71,7 @@ export const reverseSetupIntent = (
             ? state.skills.some((skill) => skill.skill_id === was.skill)
             : state.collections.some((collection) => collection.collection_id === was.collection);
         if (imported) items.push(was);
-        else conflicts.push(`${label} missing retained ${key}`);
+        else conflicts.push({ _tag: "SelectionMissing", scope, key });
       }
     }
     const policies = { ...current?.invocation_policies };
@@ -75,7 +81,7 @@ export const reverseSetupIntent = (
     ])) {
       const key = SkillId.make(id);
       const policy = restore(
-        `${label} invocation ${key}`,
+        { _tag: "SelectionChanged", scope, key, kind: "invocation" },
         prior?.invocation_policies?.[key],
         after?.invocation_policies?.[key],
         policies[key],
@@ -92,7 +98,7 @@ export const reverseSetupIntent = (
   const currentGlobal = { enabled: state.enabled, ...withPolicies(state.invocation_policies) };
   const global = equal(before.global, expected.global)
     ? currentGlobal
-    : (reverseList("account binding", before.global, expected.global, currentGlobal) ??
+    : (reverseList({ _tag: "Account" }, before.global, expected.global, currentGlobal) ??
       currentGlobal);
   const repositories = [...state.repositories];
   const roots = new Set(
@@ -103,7 +109,7 @@ export const reverseSetupIntent = (
     const after = expected.repositories.find((repository) => repository.root === root);
     const index = repositories.findIndex((repository) => repository.root === root);
     const current = repositories[index];
-    const reversed = reverseList(`repository binding ${root}`, prior, after, current);
+    const reversed = reverseList({ _tag: "Repository", root }, prior, after, current);
     if (equal(prior, after)) continue;
     if (
       reversed &&
@@ -126,12 +132,13 @@ export const reverseSetupIntent = (
   let device = state.device_skill_selection ?? null;
   if (before.device?.mode === "choose" && expected.device?.mode === "choose") {
     if (device?.mode !== "choose") {
-      if (!equal(before.device, expected.device)) conflicts.push("device binding selection mode");
+      if (!equal(before.device, expected.device)) conflicts.push({ _tag: "DeviceModeChanged" });
     } else {
-      const reversed = reverseList("device binding", before.device, expected.device, device);
+      const reversed = reverseList({ _tag: "Device" }, before.device, expected.device, device);
       device = { mode: "choose", ...(reversed ?? device) };
     }
-  } else device = restore("device selection", before.device, expected.device, device);
+  } else
+    device = restore({ _tag: "DeviceSelectionChanged" }, before.device, expected.device, device);
   const skills = state.skills.map((skill) => {
     const prior = before.versions.find((item) => item.skillId === skill.skill_id);
     const after = expected.versions.find((item) => item.skillId === skill.skill_id);
@@ -149,7 +156,7 @@ export const reverseSetupIntent = (
       prior.selected === null ||
       !skill.versions.some((version) => version.skill_version_id === prior.selected)
     ) {
-      conflicts.push(`selected Version ${skill.skill_id}`);
+      conflicts.push({ _tag: "SkillVersionChanged", skillId: skill.skill_id });
       return skill;
     }
     const { local_version_id: _local, ...rest } = skill;
@@ -168,7 +175,7 @@ export const reverseSetupIntent = (
       !equal(prior, after) &&
       !state.skills.some((skill) => skill.skill_id === prior.skillId)
     )
-      conflicts.push(`missing retained Skill ${prior.skillId}`);
+      conflicts.push({ _tag: "SkillMissing", skillId: prior.skillId });
   }
   const { device_skill_selection: _device, invocation_policies: _policies, ...rest } = state;
   const next: LibraryState = {
@@ -203,9 +210,7 @@ export const reverseSetupIntent = (
       .map((skill) => skill.skill_id)
       .sort();
     if (follows(priorLists) && follows(currentLists) && !equal(currentMembers, prior.skillIds))
-      conflicts.push(
-        `Collection source membership ${prior.collectionId} requires restoration before undo`,
-      );
+      conflicts.push({ _tag: "CollectionMembershipChanged", collectionId: prior.collectionId });
   }
   return { state: next, conflicts, changed: !equal(state, next) };
 };

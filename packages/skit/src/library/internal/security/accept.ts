@@ -51,7 +51,7 @@ export const planAcceptance = Effect.fn("Library.planAcceptance")(function* (
     input,
   ).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(AcceptFindingIntent)),
-    Effect.mapError(() => new InvalidIntent({ detail: "invalid acceptance intent" })),
+    Effect.mapError(() => new InvalidIntent({ intent: "AcceptFinding" })),
   );
   const state = yield* planningState(home, options.base);
   if (!intent.principal.trim() || !intent.rationale.trim())
@@ -107,14 +107,14 @@ export const applyAcceptance = Effect.fn("Library.applyAcceptance")(function* (
     input,
   ).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(AcceptFindingPlan)),
-    Effect.mapError(() => new StalePlan({ message: "Invalid acceptance plan" })),
+    Effect.mapError(() => new StalePlan({ reason: { _tag: "PlanInvalid", kind: "acceptance" } })),
   );
   const check = (folders: AcceptFindingPlan["folders"]) =>
     files
       .check(folders)
       .pipe(
         Effect.catchTag("Library.InstalledSkillsChanged", () =>
-          Effect.fail(new StalePlan({ message: "Reviewed Skill content changed" })),
+          Effect.fail(new StalePlan({ reason: { _tag: "ContentChanged", kind: "skill" } })),
         ),
       );
   return yield* applyReviewed(

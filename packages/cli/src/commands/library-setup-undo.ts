@@ -1,3 +1,4 @@
+import { defineCommand } from "./definition.js";
 import { Cause, Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 import { commandFailure } from "./failure-classification.js";
@@ -9,10 +10,12 @@ import { jsonFlag, optionalString } from "./parameters.js";
 import { Renderer } from "../terminal/renderer.js";
 import { encodeResult as result } from "./encode-result.js";
 
-export const librarySetupUndoCliCommand = Command.make(
+export const librarySetupUndoCliCommand = defineCommand(
   "undo",
   {
-    operation: Argument.String("operation"),
+    operation: Argument.String("operation").pipe(
+      Argument.withDescription("Setup operation ID to undo, from skit library history."),
+    ),
 
     json: jsonFlag,
     apply: optionalString(
@@ -28,73 +31,53 @@ export const librarySetupUndoCliCommand = Command.make(
       if (prepared._tag === "Failure") {
         const failure = commandFailure(Cause.fail(prepared.failure));
         return yield* renderer.result(
-          result(
-            "setupUndo",
-            setupOutputContracts.setupUndo,
-            {
-              operationId: input.operation,
-              status: "conflicted",
-              phase: "failed",
-              conflicts: [],
-              files: [],
-              intentChanged: false,
-              settingsChanged: false,
-              sourceSelections: [],
-              failure: failure.message,
-              actions: setupUndoActions(configuration.skitHome, input.operation),
-            },
-            failure.exitCode,
-          ),
+          result("setupUndo", setupOutputContracts.setupUndo, {
+            operationId: input.operation,
+            status: "conflicted",
+            phase: "failed",
+            conflicts: [],
+            files: [],
+            intentChanged: false,
+            settingsChanged: false,
+            sourceSelections: [],
+            failure: failure.message,
+            actions: setupUndoActions(configuration.skitHome, input.operation),
+          }),
         );
       }
       const plan = prepared.success;
       const approved = input.apply;
       if (approved === undefined)
         return yield* renderer.result(
-          result(
-            "setupUndo",
-            setupOutputContracts.setupUndo,
-            {
-              ...plan.summary,
-              phase: "preview",
-              actions: setupUndoActions(
-                configuration.skitHome,
-                input.operation,
-                plan.summary.status === "ready" ? plan.summary.planId : undefined,
-              ),
-            },
-            plan.summary.status === "conflicted" ? 12 : 0,
-          ),
+          result("setupUndo", setupOutputContracts.setupUndo, {
+            ...plan.summary,
+            phase: "preview",
+            actions: setupUndoActions(
+              configuration.skitHome,
+              input.operation,
+              plan.summary.status === "ready" ? plan.summary.planId : undefined,
+            ),
+          }),
         );
       if (approved !== plan.summary.planId)
         return yield* renderer.result(
-          result(
-            "setupUndo",
-            setupOutputContracts.setupUndo,
-            {
-              ...plan.summary,
-              phase: "stale",
-              failure: "Setup undo evidence changed. Review the refreshed preview before applying.",
-              actions: setupUndoActions(configuration.skitHome, input.operation),
-            },
-            12,
-          ),
+          result("setupUndo", setupOutputContracts.setupUndo, {
+            ...plan.summary,
+            phase: "stale",
+            failure: "Setup undo evidence changed. Review the refreshed preview before applying.",
+            actions: setupUndoActions(configuration.skitHome, input.operation),
+          }),
         );
       const applied = yield* Effect.result(plan.apply());
       if (applied._tag === "Failure") {
         const failure = commandFailure(Cause.fail(applied.failure));
         return yield* renderer.result(
-          result(
-            "setupUndo",
-            setupOutputContracts.setupUndo,
-            {
-              ...plan.summary,
-              phase: "failed",
-              failure: failure.message,
-              actions: setupUndoActions(configuration.skitHome, input.operation),
-            },
-            failure.exitCode,
-          ),
+          result("setupUndo", setupOutputContracts.setupUndo, {
+            ...plan.summary,
+            phase: "failed",
+            failure: failure.message,
+            actions: setupUndoActions(configuration.skitHome, input.operation),
+          }),
         );
       }
       const undone = applied.success;
@@ -133,7 +116,6 @@ export const librarySetupUndoCliCommand = Command.make(
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read", "filesystem.write"] },
     outputSchemas: [setupOutputContracts.setupUndo],
-    exitCodes: [0, 11, 12, 64],
     interactive: false,
   }),
 );

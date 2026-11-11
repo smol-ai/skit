@@ -1,3 +1,5 @@
+import { duplicatesFlag } from "../library/setup/duplicate-options.js";
+import { defineCommand } from "./definition.js";
 import {
   openSetupCommandReview,
   prepareSetupCommand,
@@ -16,16 +18,24 @@ import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Cause, Effect, Option } from "effect";
 import { Command, Flag } from "effect/cli";
 import { resolve } from "node:path";
-import { commandFailure } from "./failure-classification.js";
+import { commandError } from "./failure-classification.js";
 import { CommandMetadata } from "./metadata.js";
 
 import { inventoryRootOptions, localFlags, optionalString } from "./parameters.js";
 import { promptsAllowed } from "../terminal/interactivity.js";
 import { Renderer } from "../terminal/renderer.js";
-import { openSetupReview, SetupDuplicateAction } from "@smolai/skit-core/library/setup";
+import { openSetupReview } from "@smolai/skit-core/library/setup";
 import { encodeResult as result } from "./encode-result.js";
 
 import { OptionCombinationInvalid } from "./input-failures.js";
+
+const reviewedRule = "--reviewed requires --apply";
+
+const selectionRule =
+  "Selections require --review, --compare or --apply; duplicate decisions apply to review/apply";
+
+const modeRule =
+  "Use only one of --review, --compare or --apply; --apply cannot be combined with --dry-run.";
 
 const workDirFlag = optionalString(
   "work-dir",
@@ -61,18 +71,6 @@ const repeated = (name: string, description: string) =>
   Flag.String(name).pipe(Flag.withDescription(description), Flag.atLeast(0));
 
 const selectionFlags = {
-  useRetained: repeated(
-    "use-retained",
-    "Use the retained active version for this competing Skill identifier.",
-  ),
-  useCopy: repeated(
-    "use-copy",
-    "Use this current copy as the active version of its competing Skill.",
-  ),
-  reconcileSkill: repeated(
-    "reconcile-skill",
-    "Review this already-enabled Skill without selecting unrelated sources; repeat to choose more.",
-  ),
   onlySelected: Flag.Boolean("only-selected").pipe(
     Flag.withDescription(
       "Use only the explicitly selected sources/copies/removals, including an empty selection.",
@@ -93,15 +91,7 @@ const selectionFlags = {
   ),
 };
 
-const duplicatesFlag = Flag.Literals("duplicates", SetupDuplicateAction.literals).pipe(
-  Flag.withDescription(
-    "Choose what happens to other copies of the selected skills: retain-only imports into the Library without enabling; keep-both enables and leaves the other copies; retire-aliases enables and moves symlinks to the skill into recovery; preserve-duplicates enables and moves identical global copies into recovery.",
-  ),
-  Flag.optional,
-  Flag.map(Option.getOrUndefined),
-);
-
-export const setupCliCommand = Command.make(
+export const setupCliCommand = defineCommand(
   "setup",
   {
     workDir: workDirFlag,
@@ -126,21 +116,17 @@ export const setupCliCommand = Command.make(
         duplicates,
         workDir,
       } = input;
-      const explicit =
-        input.onlySelected ||
-        input.selectPath.length > 0 ||
-        input.selectSource.length > 0 ||
-        input.removePath.length > 0 ||
-        input.reconcileSkill.length > 0 ||
-        input.useRetained.length > 0 ||
-        input.useCopy.length > 0;
+      const selectionOptions = [
+        ...(input.onlySelected ? ["--only-selected"] : []),
+        ...(input.selectPath.length ? ["--select-path"] : []),
+        ...(input.selectSource.length ? ["--select-source"] : []),
+        ...(input.removePath.length ? ["--remove-path"] : []),
+      ];
+      const explicit = selectionOptions.length > 0;
       const choice = {
         ...(explicit
           ? {
               selection: {
-                reconcileSkillIds: input.reconcileSkill,
-                useRetainedSkillIds: input.useRetained,
-                useCopyPaths: input.useCopy.map((path) => resolve(path)),
                 sourceIds: input.selectSource,
                 copyPaths: input.selectPath.map((path) => resolve(path)),
                 removePaths: input.removePath.map((path) => resolve(path)),
@@ -177,7 +163,15 @@ export const setupCliCommand = Command.make(
             (apply !== undefined && input.dryRun)
           )
             return yield* new OptionCombinationInvalid({
-              detail: "Use --review to preview or --apply to apply, one at a time",
+              reason: {
+                _tag: "ConflictingOptions",
+                options: [
+                  ...(apply === undefined ? [] : ["--apply"]),
+                  ...(reviewId === undefined ? [] : ["--review"]),
+                  ...(compare === undefined ? [] : ["--compare"]),
+                  ...(apply !== undefined && input.dryRun ? ["--dry-run"] : []),
+                ],
+              },
             });
           if (
             (duplicates !== undefined || explicit) &&
@@ -186,12 +180,18 @@ export const setupCliCommand = Command.make(
             compare === undefined
           )
             return yield* new OptionCombinationInvalid({
-              detail:
-                "Selections require --review, --compare or --apply; duplicate decisions apply to review/apply",
+              reason: {
+                _tag: "RequiresMode",
+                options: [
+                  ...selectionOptions,
+                  ...(duplicates === undefined ? [] : ["--duplicates"]),
+                ],
+                modes: ["--review", "--compare", "--apply"],
+              },
             });
           if (reviewedPlanId !== undefined && apply === undefined)
             return yield* new OptionCombinationInvalid({
-              detail: "--reviewed requires --apply",
+              reason: { _tag: "RequiresOption", options: ["--reviewed"], required: "--apply" },
             });
           const selected = {
             options,
@@ -200,21 +200,23 @@ export const setupCliCommand = Command.make(
             ...choice,
           };
           if (compare !== undefined) {
-            if (
-              duplicates !== undefined ||
-              input.selectSource.length ||
-              input.reconcileSkill.length ||
-              input.useRetained.length ||
-              input.useCopy.length ||
-              input.removePath.length ||
-              input.onlySelected
-            )
+            const unsupported = [
+              ...selectionOptions.filter((option) => option !== "--select-path"),
+              ...(duplicates === undefined ? [] : ["--duplicates"]),
+            ];
+            if (unsupported.length)
               return yield* new OptionCombinationInvalid({
-                detail: "--compare accepts --select-path choices only",
+                reason: {
+                  _tag: "OptionsNotAllowed",
+                  mode: "--compare",
+                  options: unsupported,
+                  allowed: ["--select-path"],
+                },
               });
             const opened = yield* openSetupCommandReview({
               ...selected,
               planId: compare,
+              planOption: "--compare",
             });
             const copies = yield* opened.review.compareCopies(choice.selection?.copyPaths ?? []);
             const discovery = setupDiscoveryOutput(opened.scan, opened.review, context);
@@ -226,13 +228,7 @@ export const setupCliCommand = Command.make(
                 ...discovery.choices
                   .filter(
                     (item) =>
-                      (item.kind === "copy" && copies.some((copy) => copy.path === item.path)) ||
-                      (item.kind === "version" &&
-                        opened.scan.changes?.some(
-                          (fact) =>
-                            fact.skillId === item.skillId &&
-                            copies.some((copy) => copy.name === fact.name),
-                        )),
+                      item.kind === "copy" && copies.some((copy) => copy.path === item.path),
                   )
                   .flatMap((item) => item.actions.filter((action) => action.rel === "review")),
               ],
@@ -242,6 +238,7 @@ export const setupCliCommand = Command.make(
             const prepared = yield* prepareSetupCommand({
               ...selected,
               planId: reviewId,
+              planOption: "--review",
             });
             return result("setupReview", setupOutputContracts.setupReview, {
               planId: prepared.planId,
@@ -252,13 +249,6 @@ export const setupCliCommand = Command.make(
               actions: [
                 setupScanAction(context),
                 setupReviewAction(context, prepared.planId, choice),
-                ...setupDiscoveryOutput(prepared.scan, prepared.review, context)
-                  .choices.filter(
-                    (item) =>
-                      item.kind === "version" &&
-                      prepared.plan.summary.changes.some((fact) => fact.skillId === item.skillId),
-                  )
-                  .flatMap((item) => item.actions),
                 ...(prepared.plan.canApply
                   ? [setupApplyAction(context, prepared.planId, prepared.plan.reviewId, choice)]
                   : []),
@@ -298,19 +288,12 @@ export const setupCliCommand = Command.make(
         }),
       );
       if (execution._tag === "Failure") {
-        const failed = commandFailure(Cause.fail(execution.failure));
+        const failed = commandError(Cause.fail(execution.failure));
         return yield* renderer.result(
-          result(
-            "setupFailed",
-            setupOutputContracts.setupFailed,
-            {
-              code: failed.code,
-              message: failed.message,
-              remediation: failed.remediation,
-              actions: [setupScanAction(context), setupRecoveryListAction(selectedHome)],
-            },
-            failed.exitCode,
-          ),
+          result("setupFailed", setupOutputContracts.setupFailed, {
+            ...failed,
+            actions: [setupScanAction(context), setupRecoveryListAction(selectedHome)],
+          }),
         );
       }
       if (execution.success) yield* renderer.result(execution.success);
@@ -326,6 +309,7 @@ export const setupCliCommand = Command.make(
     { command: "skit setup --apply sha256:<planId> --work-dir ~/Work" },
   ]),
   Command.annotate(CommandMetadata, {
+    handlerRules: [modeRule, selectionRule, reviewedRule],
     effects: {
       capabilities: ["filesystem.read", "filesystem.write", "network.read", "process.execute"],
       subprocesses: [
@@ -350,7 +334,6 @@ export const setupCliCommand = Command.make(
       setupOutputContracts.setupFailed,
       setupOutputContracts.setupComparison,
     ],
-    exitCodes: [0, 1, 11, 12, 64, 65],
     interactive: true,
   }),
 );

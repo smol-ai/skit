@@ -1,3 +1,4 @@
+import { GlobalParameters, withSharedFlags } from "./definition.js";
 import { usageCliCommand } from "./library-usage.js";
 import { Command } from "effect/cli";
 import { Layer } from "effect";
@@ -38,16 +39,17 @@ import { registryDefaultCliCommand } from "../registry/commands/registry-default
 import { registryListCliCommand } from "../registry/commands/registry-list.js";
 import { registryRemoveCliCommand } from "../registry/commands/registry-remove.js";
 import { homeFlag, localFlags, JsonOutputFlag } from "./parameters.js";
+import { authorCliCommand } from "../author/commands.js";
 
 const authCommand = Command.make("auth").pipe(
-  Command.withSharedFlags({ home: homeFlag }),
+  withSharedFlags({ home: homeFlag }),
   Command.withDescription("Manage Registry authentication."),
   Command.withSubcommands([authLoginCliCommand, authLogoutCliCommand, authStatusCliCommand]),
   Command.provide((input) => Layer.merge(configurationLayer(input), registryHttpLayer())),
 );
 
 const feedbackCommand = Command.make("feedback").pipe(
-  Command.withSharedFlags({ home: homeFlag }),
+  withSharedFlags({ home: homeFlag }),
   Command.withDescription("Tell SKIT's maintainers what got in your way."),
   Command.withSubcommands([feedbackSendCliCommand]),
   Command.provide((input) => Layer.merge(configurationLayer(input), registryHttpLayer())),
@@ -55,8 +57,8 @@ const feedbackCommand = Command.make("feedback").pipe(
 
 const securityCommand = Command.provide(
   Command.make("security").pipe(
-    Command.withSharedFlags(localFlags),
-    Command.withDescription("Review and accept retained artifact security findings."),
+    withSharedFlags(localFlags),
+    Command.withDescription("Review and accept security findings for Skills in the Library."),
     Command.withSubcommands([securityAcceptCliCommand, securityReviewCliCommand]),
   ),
   libraryLayer,
@@ -70,7 +72,7 @@ const serverCommand = Command.make("server").pipe(
 
 const registryCommand = Command.provide(
   Command.make("registry").pipe(
-    Command.withSharedFlags({ home: homeFlag }),
+    withSharedFlags({ home: homeFlag }),
     Command.withDescription("Manage named Registry locations."),
     Command.withSubcommands([
       registryAddCliCommand,
@@ -84,7 +86,7 @@ const registryCommand = Command.provide(
 
 const libraryCommand = Command.provide(
   Command.make("library").pipe(
-    Command.withSharedFlags({ home: homeFlag }),
+    withSharedFlags({ home: homeFlag }),
     Command.withDescription("Manage local Library storage."),
     Command.withSubcommands([
       libraryHistoryCliCommand,
@@ -97,7 +99,7 @@ const libraryCommand = Command.provide(
 
 const repositoryCommand = Command.provide(
   Command.make("repository").pipe(
-    Command.withSharedFlags({ home: homeFlag }),
+    withSharedFlags({ home: homeFlag }),
     Command.withDescription("Manage this machine's repository inventory decisions."),
     Command.withSubcommands([
       repositoryListCliCommand,
@@ -109,12 +111,19 @@ const repositoryCommand = Command.provide(
   configurationLayer,
 );
 
+const globalFlags = [JsonOutputFlag] as const;
+
 /** The executable CLI grammar. Its leaves own parsing, metadata, and execution. */
 export const skitCommand = Command.make("skit").pipe(
   Command.withDescription("Manage portable, auditable collections of agent skills."),
-  Command.withGlobalFlags([JsonOutputFlag]),
+  Command.withGlobalFlags(globalFlags),
+  Command.annotate(GlobalParameters, globalFlags),
   Command.withSubcommands([
     authCommand,
+    authorCliCommand.pipe(
+      withSharedFlags({ home: homeFlag }),
+      Command.provide((input) => Layer.merge(configurationLayer(input), registryHttpLayer())),
+    ),
     Command.provide(addCliCommand, sourceLayer),
     Command.provide(checkCliCommand, sourceLayer),
     Command.provide(doctorCliCommand, libraryLayer),

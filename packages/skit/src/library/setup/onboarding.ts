@@ -27,14 +27,14 @@ export const classifyOwner = (input: {
   if (input.harnesses.includes("codex")) {
     const codexHome = join(resolve(input.home), ".codex");
     if (pathIsWithin(join(codexHome, "skills", ".system"), input.canonicalPath))
-      return { kind: "harness", harness: "codex", source: "Codex system", bundled: true };
+      return { kind: "harness", harness: "codex", origin: "system" };
     const pluginCache = join(codexHome, "plugins", "cache");
     if (pathIsWithin(join(pluginCache, "openai-bundled"), input.canonicalPath))
-      return { kind: "harness", harness: "codex", source: "Codex bundled", bundled: true };
+      return { kind: "harness", harness: "codex", origin: "bundled-plugin" };
     if (pathIsWithin(join(pluginCache, "openai-primary-runtime"), input.canonicalPath))
-      return { kind: "harness", harness: "codex", source: "Codex runtime", bundled: false };
+      return { kind: "harness", harness: "codex", origin: "runtime-plugin" };
     if (pathIsWithin(join(pluginCache, "openai-curated-remote"), input.canonicalPath))
-      return { kind: "harness", harness: "codex", source: "Codex curated", bundled: false };
+      return { kind: "harness", harness: "codex", origin: "curated-plugin" };
   }
   return { kind: "unknown" };
 };
@@ -70,7 +70,10 @@ const classifyLockClaims = (
     );
     let matchingCollections: Set<string> | undefined;
     for (const instance of foundInstances) {
-      const currentHash = instance.contentIdentity.currentHash;
+      const currentHash =
+        instance.contentIdentity.status === "hashed"
+          ? instance.contentIdentity.currentHash
+          : undefined;
       const matchingLock = instance.locks.find((item) => setupLockGroupKey(item) === groupKey);
       if (currentHash === undefined || matchingLock === undefined) {
         matchingCollections = new Set();
@@ -157,9 +160,14 @@ export const classifySetupOnboarding = (
       });
       continue;
     }
+    const failed = group.find((instance) => instance.contentIdentity.status === "failed");
+    if (failed) {
+      candidates.push({ ...base, action: "blocked", reason: "content-unhashable" });
+      continue;
+    }
     const hashes = new Set(
       group.flatMap((instance) =>
-        instance.contentIdentity.currentHash ? [instance.contentIdentity.currentHash] : [],
+        instance.contentIdentity.status === "hashed" ? [instance.contentIdentity.currentHash] : [],
       ),
     );
     if (hashes.size > 1) {
@@ -197,7 +205,9 @@ export const classifySetupOnboarding = (
       default:
         lockDecision satisfies never;
     }
-    const matches = group.flatMap((instance) => instance.contentIdentity.libraryMatches);
+    const matches = group.flatMap((instance) =>
+      instance.contentIdentity.status === "hashed" ? instance.contentIdentity.libraryMatches : [],
+    );
     const uniqueMatches = [
       ...new Map(
         matches.map((match) => [`${match.subjectId}\0${match.skillVersionId}`, match]),
@@ -205,7 +215,11 @@ export const classifySetupOnboarding = (
     ];
     if (
       uniqueMatches.length > 1 ||
-      group.some((instance) => instance.contentIdentity.status === "ambiguous")
+      group.some(
+        (instance) =>
+          instance.contentIdentity.status === "hashed" &&
+          instance.contentIdentity.libraryMatches.length > 1,
+      )
     ) {
       candidates.push({
         ...base,
@@ -284,14 +298,6 @@ export const classifySetupOnboarding = (
       candidates.push({
         ...base,
         action: "repository-owned",
-      });
-      continue;
-    }
-    if (group.some((instance) => instance.contentIdentity.status === "unhashable")) {
-      candidates.push({
-        ...base,
-        action: "blocked",
-        reason: "content-unhashable",
       });
       continue;
     }

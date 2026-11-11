@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { canonicalJson } from "../../../shared/json.js";
-import { InvalidIntent } from "../../enabled-plan.js";
+import { InvalidLibraryState } from "../../failures.js";
+import { libraryStatePath } from "../../store/library-store.js";
 import type { Plan, InstalledSkillResult } from "../../library-plan.js";
 import type { InstalledSkill } from "../../device-state.js";
 import type { LibraryState } from "../../library-state.js";
@@ -22,13 +23,17 @@ export const compileApply = Effect.fn("Library.compileApply")(function* (
   before: LibraryState,
   rows: ReadonlyMap<string, InstalledSkill>,
   routing: StepRouting,
+  home: string,
 ) {
   const changes: RecordedInstalledChange[] = [];
   for (const change of plan.changes) {
     if ("subject_id" in change || change._tag === "Protected" || change._tag === "Refuse") continue;
     const path = "path" in change ? change.path : change.recorded.path;
     if (!plan.folders.some((folder) => folder.path === path))
-      return yield* new InvalidIntent({ detail: `Missing reviewed folder evidence at ${path}` });
+      return yield* new InvalidLibraryState({
+        path: libraryStatePath(home),
+        reason: { _tag: "MissingRecord", record: "folder-evidence", at: path },
+      });
     if ("skillVersionId" in change) {
       if (change._tag === "Unreadable") {
         changes.push({ _tag: "Fail", path: change.path, reason: change.reason });
@@ -36,15 +41,19 @@ export const compileApply = Effect.fn("Library.compileApply")(function* (
       }
       const row = rows.get(change.path);
       if (!row)
-        return yield* new InvalidIntent({
-          detail: `Missing recorded installed row at ${change.path}`,
+        return yield* new InvalidLibraryState({
+          path: libraryStatePath(home),
+          reason: { _tag: "MissingRecord", record: "installed-row", at: change.path },
         });
       switch (change._tag) {
         case "Install":
         case "Update":
         case "Manage":
           if (row.status !== "installed")
-            return yield* new InvalidIntent({ detail: `Invalid install row at ${row.path}` });
+            return yield* new InvalidLibraryState({
+              path: libraryStatePath(home),
+              reason: { _tag: "InvalidData" },
+            });
           changes.push({
             _tag: "Install",
             row,
@@ -79,7 +88,7 @@ export const compileApply = Effect.fn("Library.compileApply")(function* (
     if (change._tag === "Conflict")
       changes.push({
         _tag: "Save",
-        row: Status.conflicted(row, change.currentHash),
+        row: Status.conflicted(row, change.currentHash, change.conflicts),
         result: "Conflicted",
         backUp: false,
       });

@@ -1,3 +1,5 @@
+import { sourceUpdateOutput } from "../src/library/update/output.js";
+import { commandFailure } from "../src/commands/failure-classification.js";
 import { emptyLibraryFixture } from "./helpers/library-home.js";
 import { originalTreePath } from "./helpers/original-tree.js";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
@@ -14,7 +16,7 @@ import { join } from "node:path";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { writingTo } from "./helpers/library-home.js";
 import { importSource } from "../src/library/source.js";
-import { updateExitCode } from "../src/library/update/exit-code.js";
+import { resultExitCode } from "../src/commands/exit-code.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import { defaultTerminalEnvironment, renderResultFrame } from "../src/commands/output-frame.js";
 import { result } from "../src/commands/result.js";
@@ -137,17 +139,20 @@ it.effect(
       assert.strictEqual(outcomes.length, 2);
       assert.isTrue("status" in outcomes[0]!);
       if (!("status" in outcomes[0]!)) return;
-      assert.strictEqual(outcomes[0].error.code, "VALIDATION_FAILED");
-      assert.include(outcomes[0].error.message, 'duplicate Skill name "collision"');
-      assert.include(outcomes[0].error.message, "Additional failure: PermissionDenied");
+      assert.strictEqual(commandFailure(outcomes[0].error).code, "VALIDATION_FAILED");
+      assert.include(commandFailure(outcomes[0].error).message, 'duplicate Skill name "collision"');
+      assert.include(
+        commandFailure(outcomes[0].error).message,
+        "Additional failure: PermissionDenied",
+      );
       assert.strictEqual(outcomes[0].source, f.urls[0]);
       assert.isTrue("changed" in outcomes[1]! && outcomes[1].changed);
       const after = yield* f.load;
       assert.strictEqual(after.skills.find((s) => s.name === "broken")!.versions.length, 1);
       assert.strictEqual(after.skills.find((s) => s.name === "healthy")!.versions.length, 2);
-      assert.strictEqual(updateExitCode(outcomes), 1);
-      assert.strictEqual(updateExitCode([outcomes[0]]), 65);
-      const commandResult = result("update", outcomes, updateExitCode(outcomes));
+      assert.strictEqual(resultExitCode(result("update", sourceUpdateOutput(outcomes))), 1);
+      assert.strictEqual(resultExitCode(result("update", sourceUpdateOutput([outcomes[0]]))), 1);
+      const commandResult = result("update", sourceUpdateOutput(outcomes));
       const human = renderResultFrame(commandResult, defaultTerminalEnvironment);
       assert.strictEqual(human.exitCode, 1);
       const json = renderResultFrame(commandResult, {
@@ -203,7 +208,7 @@ for (const failurePhase of ["install", "source-cleanup"] as const) {
                     withStatus: (status, operation) =>
                       failurePhase === "source-cleanup" &&
                       typeof status !== "string" &&
-                      status.pending === `${collection.label} · Fetching and inspecting Source`
+                      status.pending === `${collection.label} | Fetching and inspecting Source`
                         ? operation.pipe(
                             Effect.ensuring(
                               Effect.gen(function* () {
@@ -358,8 +363,8 @@ it.effect("keeps candidate manifest validation failures local to their Collectio
     );
     assert.isTrue("status" in outcomes[0]!);
     if (!("status" in outcomes[0]!)) return;
-    assert.strictEqual(outcomes[0].error.code, "VALIDATION_FAILED");
-    assert.include(outcomes[0].error.message, "portable manifest");
+    assert.strictEqual(commandFailure(outcomes[0].error).code, "VALIDATION_FAILED");
+    assert.include(commandFailure(outcomes[0].error).message, "portable manifest");
     assert.isTrue("changed" in outcomes[1]! && outcomes[1].changed);
     const after = yield* f.load;
     assert.strictEqual(after.skills.find((s) => s.name === "broken")!.versions.length, 1);
@@ -488,4 +493,46 @@ it.effect("several successful source updates are one composed history action", (
     const after = (yield* f.fs.readFileString(auditPath)).trim().split("\n").length;
     assert.strictEqual(after, before + 1);
   }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.effect(
+  "a post-sync installation error preserves installed counts in JSON, renders the error, and exits nonzero",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "after"));
+      const outcomes = yield* f.run(
+        Effect.gen(function* () {
+          const library = yield* Library.Service;
+          return yield* library.update(undefined, yield* updateAdapters);
+        }).pipe(Effect.provide(rendererTestLayer())),
+      );
+      const successful = outcomes.find((item) => "changed" in item);
+      if (successful === undefined || !("changed" in successful))
+        return assert.fail("Expected successful source");
+      const error = systemError({
+        _tag: "PermissionDenied",
+        module: "FileSystem",
+        method: "writeFile",
+        pathOrDescriptor: "/installed/review",
+      });
+      const commandResult = result(
+        "update",
+        sourceUpdateOutput([
+          { ...successful, installed: 3, installation_error: Cause.fail(error) },
+        ]),
+      );
+      const human = renderResultFrame(commandResult, defaultTerminalEnvironment);
+      const json = renderResultFrame(commandResult, {
+        ...defaultTerminalEnvironment,
+        format: "json",
+      });
+      assert.strictEqual(human.exitCode, 1);
+      assert.include(human.stdout, "earlier updates were kept");
+      assert.include(human.stdout, "PermissionDenied");
+      assert.strictEqual(json.exitCode, 1);
+      const data = JSON.parse(json.stdout).data[0];
+      assert.strictEqual(data.installed, 3);
+      assert.isDefined(data.installation_error);
+    }).pipe(Effect.provide(testPlatformLayer)),
 );

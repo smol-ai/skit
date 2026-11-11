@@ -1,3 +1,4 @@
+import { defineCommand } from "../../commands/definition.js";
 import { Effect } from "effect";
 import { Command } from "effect/cli";
 import { bootstrapServer } from "../bootstrap.js";
@@ -16,7 +17,7 @@ const environment = optionalString(
 );
 const wrangler = optionalString("wrangler", "Use this Wrangler executable.");
 
-export const serverBootstrapCliCommand = Command.make(
+export const serverBootstrapCliCommand = defineCommand(
   "bootstrap",
   { config, env: environment, url, wrangler, json: jsonFlag },
   ({ config, env, url, wrangler }) =>
@@ -57,7 +58,6 @@ export const serverBootstrapCliCommand = Command.make(
       ],
     },
     outputSchemas: [outputContracts.serverBootstrap],
-    exitCodes: [0, 64],
     interactive: true,
   }),
 );

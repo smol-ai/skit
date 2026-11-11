@@ -1,7 +1,10 @@
+import { AuditProbeFailure } from "./probe-failures.js";
 import { FrontmatterCompatibilityResult } from "../harnesses/frontmatter.js";
 import { HarnessName } from "../harnesses/contracts.js";
 import { SkillAudit } from "./skill-contracts.js";
 import { Schema } from "effect";
+import { AuditFindingReason } from "./finding-reasons.js";
+import { AuditOrigin } from "./provenance-facts.js";
 
 const StringArray = Schema.Array(Schema.String);
 const AuditScope = Schema.Literals(["user", "project", "legacy"]);
@@ -17,7 +20,7 @@ const AuditDocumentation = Schema.Struct({
 
 const AuditProvenance = Schema.Struct({
   confidence: Schema.Literals(["exact", "matched", "unknown"]),
-  source: Schema.NullOr(Schema.String),
+  origin: AuditOrigin,
   evidence: Schema.Union([Schema.String, StringArray]),
   collectionId: Schema.optionalKey(Schema.String),
   parentPlugin: Schema.optionalKey(Schema.String),
@@ -58,7 +61,7 @@ export const AuditFinding = Schema.Struct({
   severity: Schema.Literals(["warning", "error"]),
   code: Schema.String,
   subject: Schema.String,
-  problem: Schema.String,
+  reason: AuditFindingReason,
   locations: StringArray,
   details: Schema.Record(Schema.String, Schema.Unknown),
 });
@@ -73,7 +76,7 @@ const AuditProbe = Schema.Struct({
       mcpServers: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
     }),
   ),
-  reason: Schema.optionalKey(Schema.String),
+  failure: Schema.optionalKey(AuditProbeFailure),
 });
 
 export const AuditReport = Schema.Struct({
@@ -156,7 +159,7 @@ const AuditFindingV1Alpha4 = Schema.Struct({
   code: Schema.String,
   entryIds: StringArray,
   unresolvedSubject: Schema.NullOr(Schema.String),
-  problem: Schema.String,
+  reason: AuditFindingReason,
   locations: StringArray,
   details: Schema.Record(Schema.String, Schema.Unknown),
 });
@@ -193,7 +196,7 @@ export const AuditReportV1Alpha4 = Schema.Struct({
           mcpServers: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
         }),
       ),
-      reason: Schema.optionalKey(Schema.String),
+      failure: Schema.optionalKey(AuditProbeFailure),
     }),
   ),
   coverage: Schema.Struct({ deferredHarnessIds: StringArray }),

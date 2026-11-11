@@ -50,7 +50,6 @@ it.effect("names the different ambient, explicit, login, and logout selection ru
       name: "RegistryAliasNotFound",
       alias: "typo",
     });
-    expect(String(missing)).toBe("RegistryAliasNotFound: Unknown Registry name: typo");
 
     const empty = new RegistryAccounts({ schemaVersion: 1, servers: {} });
     expect(yield* empty.select(undefined, "ambient")).toBeUndefined();

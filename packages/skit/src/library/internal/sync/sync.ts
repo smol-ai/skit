@@ -49,7 +49,10 @@ import { inspectContent } from "../content/content.js";
 import { alignLibrary, aliasDevice } from "./alignment.js";
 import { resolveSyncInstalledSkillCollisions } from "./collisions.js";
 import { previewSyncInstalledSkills, SyncInstalledSkillsPreview } from "./installed-skills.js";
-import { SyncConflictDetail } from "./conflict.js";
+import { SyncConflictDetail, SyncConflicted } from "./conflict.js";
+import { SyncEnablementIssue, SyncIssue } from "../../sync-issues.js";
+import { stepError } from "../../store/step-error.js";
+import { DuplicateScanIncomplete } from "../../installed-skill-facts.js";
 import { syncPublication } from "./operation.js";
 
 const Staged = Schema.Struct({
@@ -89,13 +92,13 @@ const syncPlan = Schema.TaggedStruct("Sync", {
   routing: StepRouting,
   folders: Schema.Array(SyncFolder),
   next: SyncPublication,
-  installationIssues: Schema.Array(Schema.String),
+  installationIssues: Schema.Array(SyncIssue),
   change: Schema.Struct({
     device: Schema.Unknown.pipe(Schema.refine(Schema.is(LibraryState))),
     deviceSelection: Schema.OptionFromOptionalKey(DeviceSkillSelection),
     installedSkills: Schema.OptionFromOptionalKey(SyncInstalledSkillsPreview),
     collectionsToRemove: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-    missingSelection: Schema.Array(Schema.String),
+    missingSelection: Schema.Array(SyncEnablementIssue.cases.SelectionMissing),
     collisions: Schema.Array(SyncConflictDetail),
     clean: Schema.Boolean,
     acceptedBase: Schema.OptionFromOptionalKey(SyncAncestry),
@@ -114,7 +117,11 @@ const remoteSyncPlan = syncPlan.mapFields((fields) => ({
 type LocalSyncPlan = typeof localSyncPlan.Type;
 export type RemoteSyncPlan = typeof remoteSyncPlan.Type;
 export type SyncPlan = LocalSyncPlan | RemoteSyncPlan;
-export const SyncPlan = Schema.Union([localSyncPlan, remoteSyncPlan]);
+type EncodedSyncPlan = typeof localSyncPlan.Encoded | typeof remoteSyncPlan.Encoded;
+export const SyncPlan: Schema.Codec<SyncPlan, EncodedSyncPlan> = Schema.Union([
+  localSyncPlan,
+  remoteSyncPlan,
+]);
 export const isRemoteSyncPlan = (plan: SyncPlan): plan is RemoteSyncPlan =>
   plan.change.remote._tag === "Expected";
 export const RemoteReceipt = Schema.Struct({
@@ -135,7 +142,7 @@ export type SyncApplyRequest =
 export interface SyncResult {
   readonly installed: number;
   readonly uninstalled: number;
-  readonly enablementIssues: readonly string[];
+  readonly enablementIssues: readonly SyncIssue[];
   readonly ancestry: Option.Option<SyncAncestry>;
 }
 export interface SyncOutcome {
@@ -151,11 +158,6 @@ class SyncStopped extends Schema.TaggedError<SyncStopped, { readonly brand: uniq
 ) {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT";
-  readonly remediation =
-    "Inspect Library history and retry Sync after resolving the reported change.";
-  get message() {
-    return `Local Sync stopped at its recorded operation ${this.operationId}`;
-  }
 }
 
 const digest = (value: unknown) => sha256Hash(new TextEncoder().encode(canonicalJson(value)));
@@ -212,27 +214,30 @@ export const planSync = Effect.fn("Library.planSync")(function* (
   const intent = yield* Schema.encodeEffect(SyncIntent)(input).pipe(
     Effect.map((encoded) => structuredClone(encoded)),
     Effect.flatMap(Schema.decodeUnknownEffect(SyncIntent)),
-    Effect.mapError(() => new InvalidIntent({ detail: "Invalid Sync intent" })),
+    Effect.mapError(() => new InvalidIntent({ intent: "Sync" })),
   );
   if (intent.staged.missing.length)
     return yield* new RestoreInvalid({
-      detail: `retained copies unavailable: ${intent.staged.missing.join(", ")}`,
+      reason: { _tag: "CopiesUnavailable", ids: intent.staged.missing },
     });
   const manifestOf = (state: LibraryState) =>
     libraryManifestFromLocalState(state).pipe(
       Effect.mapError(
-        () =>
-          new InvalidLibraryState({ path: `${home}/state.json`, detail: "Invalid Sync manifest" }),
+        (issue) =>
+          new InvalidLibraryState({
+            path: `${home}/state.json`,
+            reason: { _tag: "SchemaInvalid", failure: new Schema.SchemaError(issue) },
+          }),
       ),
     );
   const manifest = normalized(yield* manifestOf(intent.staged.state));
   if ((yield* digest(manifest)) !== intent.staged.manifestDigest)
-    return yield* new StalePlan({ message: "The staged Sync manifest changed" });
+    return yield* new StalePlan({ reason: { _tag: "SyncChanged", part: "manifest" } });
   const state =
     options.base._tag === "Present" ? structuredClone(options.base.state) : emptyLibraryState();
   const local = yield* manifestOf(state);
   if (!same(state.sync_ancestry ?? null, Option.getOrUndefined(intent.acceptedBase) ?? null))
-    return yield* new StalePlan({ message: "The accepted Sync base changed" });
+    return yield* new StalePlan({ reason: { _tag: "SyncChanged", part: "base" } });
   const prior = Option.getOrUndefined(intent.acceptedBase);
   const remote = Option.getOrUndefined(intent.remote);
   const alignmentBase =
@@ -244,10 +249,7 @@ export const planSync = Effect.fn("Library.planSync")(function* (
       : emptyManifest;
   const aliases = alignLibrary(local, manifest, alignmentBase);
   const aligned = yield* LibraryState.makeEffect(aliasDevice(state, aliases)).pipe(
-    Effect.mapError(
-      () =>
-        new InvalidIntent({ detail: "The Sync target cannot preserve this device's references" }),
-    ),
+    Effect.mapError(() => new InvalidIntent({ intent: "Sync" })),
   );
   const device = withDeviceSkillSelection(
     aligned,
@@ -265,7 +267,7 @@ export const planSync = Effect.fn("Library.planSync")(function* (
     rootFor,
     [],
     device,
-  ).pipe(Effect.mapError(() => new InvalidIntent({ detail: "Invalid Sync collision choices" })));
+  ).pipe(Effect.mapError(() => new InvalidIntent({ intent: "Sync" })));
   const installedSkills =
     options.base._tag === "Absent"
       ? Option.none()
@@ -276,24 +278,17 @@ export const planSync = Effect.fn("Library.planSync")(function* (
             installation.manifest,
             rootFor,
             installation.independent,
-          ).pipe(
-            Effect.mapError(() => new InvalidIntent({ detail: "Invalid installed Sync preview" })),
-          ),
+          ).pipe(Effect.mapError(() => new InvalidIntent({ intent: "Sync" }))),
         );
   const conflicts = [
     ...collisions.conflicts,
     ...(Option.getOrUndefined(installedSkills)?.conflicts ?? []),
   ];
-  const missingSelection = installation.missing.map(
-    (item) =>
-      `The selected ${"skill" in item ? `skill ${item.skill}` : `collection ${item.collection}`} is no longer in the Library; update this device's selection.`,
+  const missingSelection = installation.missing.map((selection) =>
+    SyncEnablementIssue.cases.SelectionMissing.make({ selection }),
   );
-  const issues = installation.independent
-    ? [
-        ...missingSelection,
-        ...conflicts.map((item) => item.message),
-        ...(Option.getOrUndefined(installedSkills)?.issues.map((item) => item.message) ?? []),
-      ]
+  const issues: SyncIssue[] = installation.independent
+    ? [...missingSelection, ...conflicts, ...(Option.getOrUndefined(installedSkills)?.issues ?? [])]
     : [];
   if (installation.independent) {
     const names = manifest.skills
@@ -306,12 +301,21 @@ export const planSync = Effect.fn("Library.planSync")(function* (
         (yield* InstalledSkills.Service).duplicates.scan({ kind: "global" }, names),
       );
       if (inspected._tag === "Failure")
-        issues.push(`Could not inspect existing Skill installations: ${String(inspected.failure)}`);
-      else
-        for (const duplicate of inspected.success.copies)
+        issues.push(
+          SyncEnablementIssue.cases.DuplicateScanFailed.make({
+            failure: stepError(inspected.failure),
+          }),
+        );
+      else {
+        for (const warning of inspected.success.warnings)
           issues.push(
-            `${duplicate.name} already exists at ${duplicate.aliases.map((alias) => (alias.linkPath === undefined ? alias.path : `${alias.path} (symlink ${alias.linkPath} → ${alias.linkTarget})`)).join(", ")} (resolved: ${duplicate.canonicalPath}); review it before enabling.`,
+            SyncEnablementIssue.cases.DuplicateScanFailed.make({
+              failure: new DuplicateScanIncomplete(warning),
+            }),
           );
+        for (const duplicate of inspected.success.copies)
+          issues.push(SyncEnablementIssue.cases.ExistingCopy.make({ copy: duplicate }));
+      }
     }
   }
   const next = yield* blendRestoredState(
@@ -386,9 +390,7 @@ export const planSync = Effect.fn("Library.planSync")(function* (
           planId,
           change: { ...data.change, remote: data.change.remote },
         });
-  return yield* reviewed.pipe(
-    Effect.mapError(() => new InvalidIntent({ detail: "Invalid local Sync plan" })),
-  );
+  return yield* reviewed.pipe(Effect.mapError(() => new InvalidIntent({ intent: "Sync" })));
 });
 
 /** Verify the receipt and exact review before recording a replayable local program. */
@@ -399,11 +401,15 @@ export const applySync = Effect.fn("Library.applySync")(function* (
 ) {
   const approved = request.plan;
   if (approved.home !== home)
-    return yield* new StalePlan({ message: "The Sync plan belongs to another Library" });
+    return yield* new StalePlan({
+      reason: { _tag: "SyncPlanInvalid", reason: "library-mismatch" },
+    });
   let ancestry = Option.getOrUndefined(approved.intent.acceptedBase);
   if (approved.change.remote._tag === "Expected") {
     if (request._tag !== "ApplySynced")
-      return yield* new StalePlan({ message: "This Sync plan requires its remote receipt" });
+      return yield* new StalePlan({
+        reason: { _tag: "SyncPlanInvalid", reason: "receipt-missing" },
+      });
     const receipt = request.receipt;
     const remote = approved.change.remote;
     if (
@@ -416,11 +422,13 @@ export const applySync = Effect.fn("Library.applySync")(function* (
       (yield* digest(normalized(receipt.ancestry.base_manifest))) !== remote.manifestDigest
     )
       return yield* new StalePlan({
-        message: "The remote receipt does not match the reviewed Sync plan",
+        reason: { _tag: "SyncPlanInvalid", reason: "receipt-mismatch" },
       });
     ancestry = receipt.ancestry;
   } else if (request._tag !== "Apply")
-    return yield* new StalePlan({ message: "This local Sync plan cannot accept a remote receipt" });
+    return yield* new StalePlan({
+      reason: { _tag: "SyncPlanInvalid", reason: "unexpected-receipt" },
+    });
   return yield* applyReviewed(
     home,
     approved,
@@ -432,9 +440,7 @@ export const applySync = Effect.fn("Library.applySync")(function* (
           fresh.change.collisions.length &&
           fresh.change.device.device_skill_selection?.mode !== "choose"
         )
-          return yield* new InvalidIntent({
-            detail: fresh.change.collisions.map((item) => item.message).join("; "),
-          });
+          return yield* new SyncConflicted({ conflicts: fresh.change.collisions });
         const current = base._tag === "Present" ? base.state : emptyLibraryState();
         const inspected = yield* inspectContent(
           home,
@@ -442,7 +448,7 @@ export const applySync = Effect.fn("Library.applySync")(function* (
         );
         if (inspected._tag === "Changed")
           return yield* new RestoreInvalid({
-            detail: `Retained Sync content changed: ${inspected.hash}`,
+            reason: { _tag: "SyncContentChanged", hash: inspected.hash },
           });
         const keepCurrent =
           fresh.change.clean &&
@@ -541,4 +547,4 @@ export const applySync = Effect.fn("Library.applySync")(function* (
 export type SyncPlanError = Effect.Error<ReturnType<typeof planSync>>;
 export type SyncApplyError = Effect.Error<ReturnType<typeof applySync>>;
 
-export type { SyncStopped };
+export { SyncStopped };

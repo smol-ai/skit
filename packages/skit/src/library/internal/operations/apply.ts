@@ -1,3 +1,4 @@
+import { LibraryRecoveryNotice } from "../../recovery-notice.js";
 import { samePathChain } from "../../../platform/path-evidence.js";
 import { Data, Effect } from "effect";
 import type { ApplyError } from "../../library-plan.js";
@@ -282,8 +283,11 @@ export const apply = Effect.fn("Library.applyRecordedChanges")(function* (
             }).pipe(
               Effect.catch((error) =>
                 Effect.logWarning(
-                  "Installed files changed, but pending state could not be saved",
-                  error,
+                  LibraryRecoveryNotice.cases.PendingStateSaveFailed.make({
+                    home: writer.home,
+                    ...(path === undefined ? {} : { path }),
+                    failure: error,
+                  }),
                 ),
               ),
             ),
@@ -353,7 +357,14 @@ const settleBackups = Effect.fn("Library.settleApplyBackups")(function* (
       }
     }).pipe(
       Effect.catch((error) =>
-        Effect.logWarning("Library changed, but installed-skill backups stayed pending", error),
+        Effect.logWarning(
+          LibraryRecoveryNotice.cases.BackupsStillPending.make({
+            home,
+            installedSkillId: copy.installed_skill_id,
+            path: copy.path,
+            failure: error,
+          }),
+        ),
       ),
     );
 });

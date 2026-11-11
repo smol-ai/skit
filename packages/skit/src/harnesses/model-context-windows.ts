@@ -32,8 +32,8 @@ export const ModelContextCatalog = Schema.Struct({
       Schema.makeFilter(
         (model) =>
           model.maxContextWindow === undefined ||
-          model.defaultContextWindow <= model.maxContextWindow ||
-          "Default context window must not exceed maximum",
+          model.defaultContextWindow <= model.maxContextWindow,
+        { representation: { id: "skit/schema/model-context-bounds", payload: null } },
       ),
     ),
   ).check(Schema.isMinLength(1)),
@@ -41,7 +41,8 @@ export const ModelContextCatalog = Schema.Struct({
   Schema.makeFilter(
     (value) =>
       new Set(value.models.map((model) => `${model.provider}:${model.id}`)).size ===
-        value.models.length || "Model IDs must be unique",
+      value.models.length,
+    { representation: { id: "skit/schema/model-identifiers-unique", payload: null } },
   ),
 );
 export type ModelContextCatalog = typeof ModelContextCatalog.Type;

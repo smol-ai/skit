@@ -82,6 +82,14 @@ Agents such as Codex and Claude Code can run setup for you: they review the plan
 
 The experimental `skit usage` command shows observed skill calls, instruction loads, and document reads from local Claude Code and Codex transcripts over the last seven days. Use `--days 30`, `--harness codex`, `--project .`, or `--json` to narrow the report or read structured output. See [local skill activity](docs/skill-usage.md) for evidence categories and coverage limits.
 
+## Authoring skills (experimental)
+
+`skit author` exposes `init`, `validate`, `sync`, `publish`, `list`, `delete`, and
+`invocation`. These commands and their output formats are experimental and may
+change between releases. Run `skit author --help` or a subcommand's `--help` for
+usage. Synchronization is manual; automatic background sync and per-skill live
+installation updates are not available yet.
+
 ## Enabling and disabling skills
 
 Use the interactive flows:

@@ -1,40 +1,33 @@
-import { execFileSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { Effect } from "effect";
 import { commandContractArtifacts } from "../dist/src/commands/artifacts.js";
 import { checkContractCompatibility } from "../dist/src/commands/contract-compatibility.js";
 import { cliLayer } from "../dist/src/application.js";
+import { readPublishedContracts } from "./published-contracts.mjs";
 
 const root = resolve(import.meta.dirname, "../../..");
-const contractsPath = "packages/cli/contracts";
-const argument = process.argv.indexOf("--base");
-const explicitBase = argument === -1 ? undefined : process.argv[argument + 1];
-
-const git = (args) =>
-  execFileSync("git", args, {
-    cwd: root,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
-
-const base = explicitBase ?? git(["merge-base", "HEAD", "origin/main"]);
-const paths = git(["ls-tree", "-r", "--name-only", base, "--", contractsPath])
-  .split("\n")
-  .filter((path) => path.endsWith(".json"));
-const baseArtifacts = Object.fromEntries(
-  paths
-    .filter((path) => !path.endsWith("/command-manifest.json"))
-    .map((path) => [path.slice(contractsPath.length + 1), git(["show", `${base}:${path}`]) + "\n"]),
+const args = process.argv.slice(2);
+if (args.length !== 0 && (args.length !== 2 || args[0] !== "--release"))
+  throw new Error(
+    "Usage: check-contracts.mjs [--release <published-version>]; Git branch baselines are not supported",
+  );
+const published = await readPublishedContracts(args[1]);
+console.log(
+  `Checking against published @smolai/skit@${published.version} (${published.integrity})`,
 );
-const baseManifest = git(["show", `${base}:${contractsPath}/command-manifest.json`]);
 const headArtifacts = await Effect.runPromise(
   commandContractArtifacts().pipe(
     Effect.provide(cliLayer(false, join(root, ".tmp", "contract-check-home"))),
     Effect.scoped,
   ),
 );
-const result = checkContractCompatibility({ baseArtifacts, headArtifacts, baseManifest });
+const result = checkContractCompatibility({
+  baseArtifacts: published.artifacts,
+  headArtifacts,
+  baseManifest: published.artifacts["command-manifest.json"],
+});
 
 for (const warning of result.warnings) console.warn(`warning: ${warning}`);
 for (const error of result.errors) console.error(`error: ${error}`);
 if (result.errors.length > 0) process.exitCode = 1;
+else console.log("Released contract compatibility passed");

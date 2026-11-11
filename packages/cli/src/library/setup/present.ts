@@ -1,3 +1,23 @@
+import { setupApplyCommandLine } from "./apply-command.js";
+import { commandFailure } from "../../commands/failure-classification.js";
+import { basename, relative } from "node:path";
+import { harnessLabel } from "@smolai/skit-core/harnesses";
+import type { InstalledSkillChange } from "@smolai/skit-core/library/setup";
+import { type ContractData, type ContractDataForId } from "../../commands/output-contracts.js";
+import type { CommandAction } from "../../commands/command-actions.js";
+import { Block, type Change, type Field } from "../../terminal/blocks.js";
+import {
+  installedSkillChangeReason,
+  installedSkillChangeLabel,
+} from "../presentation/installed-skill-changes.js";
+import { setupWarning } from "./warnings.js";
+import { setupActionName, setupLeftAloneReason } from "./reasons.js";
+import { errorMessage } from "@smolai/skit-core/shared";
+import { treeFailure } from "../../platform/tree-failure.js";
+
+type SetupData = ContractDataForId<"skit.setup.v8">;
+type SetupInstance = SetupData["instances"][number];
+
 const setupGitStateOrder = [
   "committed",
   "modified",
@@ -9,164 +29,367 @@ const setupGitStateOrder = [
   "unavailable",
 ] as const;
 const setupExpandedSkillLimit = 5;
+const installedStatuses = ["current", "modified", "missing"] as const;
 
-import { type ContractData, type ContractDataForId } from "../../commands/output-contracts.js";
-import { basename, relative } from "node:path";
-import { harnessLabel } from "@smolai/skit-core/harnesses";
-import {
-  renderInstalledSkillChange,
-  renderChangeResult,
-  renderSetupVersionChoice,
-  renderReviewedChanges,
-} from "../presentation/installed-skill-changes.js";
+/** "2 committed, 1 modified": how many of `items` are in each state, in a fixed order. */
+const stateCounts = <T>(
+  items: readonly T[],
+  states: readonly string[],
+  state: (item: T) => string,
+) =>
+  states
+    .flatMap((status) => {
+      const count = items.filter((item) => state(item) === status).length;
+      return count ? [`${count} ${status}`] : [];
+    })
+    .join(", ");
 
-function renderSetupCollections(data: ContractDataForId<"skit.setup.v8">): string[] {
+/** Each action a person or agent can run next, by its relation to this result. */
+export const actionFields = (actions: readonly CommandAction[]): Field[] =>
+  actions.map((action) => ({
+    label: action.rel,
+    value: [{ code: action.argv.map((arg) => JSON.stringify(arg)).join(" ") }],
+  }));
+
+/** What setup would do to each existing installed copy. */
+const installedChangesTable = (facts: readonly InstalledSkillChange[]) =>
+  Block.Table({
+    columns: [{ title: "Skill" }, { title: "State" }, { title: "Path" }, { title: "Reason" }],
+    rows: facts.map((fact) => [
+      [fact.name],
+      [installedSkillChangeLabel(fact)],
+      [{ dim: fact.path }],
+      fact.reason === undefined ? [] : [installedSkillChangeReason(fact.reason)],
+    ]),
+  });
+
+/** A group of skill instances: how many, which, in what git states, for which harnesses. */
+function collectionFields(input: {
+  readonly instances: readonly SetupInstance[];
+  readonly rows?: readonly Field[];
+  readonly states: string;
+}): Block {
+  const names = [...new Set(input.instances.map((instance) => instance.name))].sort();
+  const harnesses = [...new Set(input.instances.flatMap((instance) => instance.harnesses))]
+    .sort()
+    .map(harnessLabel);
+  return Block.Fields({
+    rows: [
+      ...(input.rows ?? []),
+      { label: "Skills", value: [String(names.length)] },
+      ...(input.instances.length === names.length
+        ? []
+        : [{ label: "Instances", value: [String(input.instances.length)] }]),
+      ...(names.length <= setupExpandedSkillLimit
+        ? [{ label: "Names", value: [names.join(", ")] }]
+        : []),
+      { label: "States", value: [input.states] },
+      ...(harnesses.length ? [{ label: "Harnesses", value: [harnesses.join(", ")] }] : []),
+    ],
+  });
+}
+
+function setupCollections(data: SetupData): Block[] {
   const { sources, repositories, loose } = data.collectionGroups;
-  const renderCollection = (collection: {
-    label: string;
-    instances: typeof data.instances;
-  }): string[] => {
-    const names = [...new Set(collection.instances.map((instance) => instance.name))].sort();
-    const states = setupGitStateOrder.flatMap((status) => {
-      const count = collection.instances.filter(
-        (instance) => instance.git.status === status,
-      ).length;
-      return count ? [`${count} ${status}`] : [];
-    });
-    const harnesses = [...new Set(collection.instances.flatMap((instance) => instance.harnesses))]
+  const gitStates = (instances: readonly SetupInstance[]) =>
+    stateCounts(instances, setupGitStateOrder, (instance) => instance.git.status);
+  const scopes = new Map<string, number>();
+  for (const instance of loose) scopes.set(instance.scope, (scopes.get(instance.scope) ?? 0) + 1);
+  return [
+    ...(sources.length
+      ? [
+          Block.Group({
+            title: "Installed collections",
+            children: sources.map((collection) =>
+              Block.Group({
+                title: collection.source,
+                children: [
+                  collectionFields({
+                    instances: collection.instances,
+                    states: gitStates(collection.instances),
+                  }),
+                ],
+              }),
+            ),
+          }),
+        ]
+      : []),
+    ...(repositories.length
+      ? [
+          Block.Group({
+            title: "Repository collections (inferred)",
+            children: repositories.map((collection) =>
+              Block.Group({
+                title: basename(collection.repository),
+                children: [
+                  collectionFields({
+                    instances: collection.instances,
+                    rows: [
+                      {
+                        label: "Root",
+                        value: [relative(collection.repository, collection.root) || "."],
+                      },
+                    ],
+                    states: gitStates(collection.instances),
+                  }),
+                ],
+              }),
+            ),
+          }),
+        ]
+      : []),
+    ...(loose.length
+      ? [
+          Block.Group({
+            title: "Loose skills",
+            children: [
+              collectionFields({
+                instances: loose,
+                states: [...scopes.entries()]
+                  .map(([scope, count]) => `${count} ${scope}`)
+                  .join(", "),
+              }),
+            ],
+          }),
+        ]
+      : []),
+  ];
+}
+
+function setupInstalledSkills(collections: SetupData["collectionGroups"]["installed"]): Block[] {
+  return collections.map(({ displayName, skills }) => {
+    const names = [...new Set(skills.map((skill) => skill.name))].sort();
+    const harnesses = [...new Set(skills.flatMap((skill) => skill.harnesses))]
       .sort()
       .map(harnessLabel);
-    return [
-      `  ${collection.label} · ${names.length} skill${names.length === 1 ? "" : "s"}${collection.instances.length === names.length ? "" : ` · ${collection.instances.length} instances`}`,
-      ...(names.length <= setupExpandedSkillLimit ? [`    ${names.join(", ")}`] : []),
-      `    ${states.join(" · ")}${harnesses.length ? ` · ${harnesses.join(", ")}` : ""}`,
-    ];
-  };
-
-  const lines: string[] = [];
-  if (sources.length)
-    lines.push(
-      "Installed collections",
-      ...sources.flatMap((collection) =>
-        renderCollection({ label: collection.source, instances: collection.instances }),
-      ),
-    );
-  if (repositories.length)
-    lines.push(
-      ...(lines.length ? [""] : []),
-      "Repository collections (inferred)",
-      ...repositories.flatMap((collection) =>
-        renderCollection({
-          label: `${basename(collection.repository)} · ${relative(collection.repository, collection.root) || "."}`,
-          instances: collection.instances,
+    return Block.Group({
+      title: displayName,
+      children: [
+        Block.Fields({
+          rows: [
+            { label: "Skills", value: [String(names.length)] },
+            ...(skills.length === names.length
+              ? []
+              : [{ label: "Installed copies", value: [String(skills.length)] }]),
+            ...(names.length <= setupExpandedSkillLimit
+              ? [{ label: "Names", value: [names.join(", ")] }]
+              : []),
+            {
+              label: "Status",
+              value: [stateCounts(skills, installedStatuses, (skill) => skill.status)],
+            },
+            ...(harnesses.length ? [{ label: "Harnesses", value: [harnesses.join(", ")] }] : []),
+          ],
         }),
-      ),
-    );
-  if (loose.length) {
-    const names = [...new Set(loose.map((instance) => instance.name))].sort();
-    const scopes = new Map<string, number>();
-    for (const instance of loose) scopes.set(instance.scope, (scopes.get(instance.scope) ?? 0) + 1);
-    lines.push(
-      ...(lines.length ? [""] : []),
-      "Loose skills",
-      `  ${names.length} skill${names.length === 1 ? "" : "s"}${loose.length === names.length ? "" : ` · ${loose.length} instances`}`,
-      ...(names.length <= setupExpandedSkillLimit ? [`    ${names.join(", ")}`] : []),
-      `    ${[...scopes.entries()].map(([scope, count]) => `${count} ${scope}`).join(" · ")}`,
-    );
-  }
-  return lines;
-}
-
-function renderSetupInstalledSkills(
-  collections: ContractDataForId<"skit.setup.v8">["collectionGroups"]["installed"],
-): string[] {
-  return collections.flatMap(({ displayName, skills: installedSkills }) => {
-    const names = [...new Set(installedSkills.map((installedSkill) => installedSkill.name))].sort();
-    const statuses = ["current", "modified", "missing"] as const;
-    const counts = statuses.flatMap((status) => {
-      const count = installedSkills.filter(
-        (installedSkill) => installedSkill.status === status,
-      ).length;
-      return count ? [`${count} ${status}`] : [];
+      ],
     });
-    const harnesses = [
-      ...new Set(installedSkills.flatMap((installedSkill) => installedSkill.harnesses)),
-    ]
-      .sort()
-      .map(harnessLabel);
-    return [
-      `  ${displayName} · ${names.length} skill${names.length === 1 ? "" : "s"}${installedSkills.length === names.length ? "" : ` · ${installedSkills.length} installed copies`}`,
-      ...(names.length <= setupExpandedSkillLimit ? [`    ${names.join(", ")}`] : []),
-      `    ${counts.join(" · ")}${harnesses.length ? ` · ${harnesses.join(", ")}` : ""}`,
-    ];
   });
 }
 
-function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v8">): string[] {
-  return data.collectionGroups.authored.flatMap((collection) => {
-    const installedSkills = collection.installedSkills;
-    const statuses = ["current", "modified", "missing"] as const;
-    const installedSkillSummary = statuses.flatMap((status) => {
-      const count = installedSkills.filter(
-        (installedSkill) => installedSkill.status === status,
-      ).length;
-      return count ? [`${count} ${status}`] : [];
-    });
+function setupAuthoredCollections(data: SetupData): Block[] {
+  return data.collectionGroups.authored.map((collection) => {
+    const installed = stateCounts(
+      collection.installedSkills,
+      installedStatuses,
+      (skill) => skill.status,
+    );
     const names = collection.skills.map((skill) => skill.name);
-    return [
-      `  ${collection.namespace}/${collection.skit} · ${collection.repository}`,
-      `    ${names.length} authored skill${names.length === 1 ? "" : "s"} · library ${collection.collectionId ? "present" : "missing"}${installedSkillSummary.length ? ` · ${installedSkillSummary.join(" · ")} installed cop${installedSkills.length === 1 ? "y" : "ies"}` : ""}`,
-      ...(names.length <= setupExpandedSkillLimit ? [`    ${names.join(", ")}`] : []),
-      `    ${collection.origin}`,
-    ];
+    return Block.Group({
+      title: `${collection.namespace}/${collection.skit}`,
+      children: [
+        Block.Fields({
+          rows: [
+            { label: "Repository", value: [{ dim: collection.repository }] },
+            { label: "Authored skills", value: [String(names.length)] },
+            { label: "Library", value: [collection.collectionId ? "present" : "missing"] },
+            ...(installed
+              ? [
+                  {
+                    label:
+                      collection.installedSkills.length === 1
+                        ? "Installed copy"
+                        : "Installed copies",
+                    value: [installed],
+                  },
+                ]
+              : []),
+            ...(names.length <= setupExpandedSkillLimit
+              ? [{ label: "Names", value: [names.join(", ")] }]
+              : []),
+            { label: "Origin", value: [collection.origin] },
+          ],
+        }),
+      ],
+    });
   });
 }
 
-function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v8">): string[] {
+function setupContentMatches(data: SetupData): Block[] {
   const candidates = data.instances.filter(
     (instance) => instance.owner.kind === "unknown" && instance.locks.length === 0,
   );
-  const libraryMatches = candidates.filter(
-    (instance) => instance.contentIdentity.libraryMatches.length > 0,
-  );
+  const libraryMatches = candidates
+    .filter(
+      (instance) =>
+        instance.contentIdentity.status === "hashed" &&
+        instance.contentIdentity.libraryMatches.length > 0,
+    )
+    .sort((left, right) => left.path.localeCompare(right.path));
   const duplicateHashes = new Map<string, typeof candidates>();
   for (const instance of candidates) {
-    const hash = instance.contentIdentity.currentHash;
+    const hash =
+      instance.contentIdentity.status === "hashed"
+        ? instance.contentIdentity.currentHash
+        : undefined;
     if (hash) duplicateHashes.set(hash, [...(duplicateHashes.get(hash) ?? []), instance]);
   }
   const duplicates = [...duplicateHashes.values()]
     .filter((instances) => instances.length > 1)
     .sort((left, right) => left[0]!.name.localeCompare(right[0]!.name));
-  const lines: string[] = [];
-  if (libraryMatches.length)
-    lines.push(
-      "Exact Library matches",
-      ...libraryMatches
-        .sort((left, right) => left.path.localeCompare(right.path))
-        .flatMap((instance) => [
-          `  ${instance.name} · ${instance.git.status}`,
-          `    ${instance.path}`,
-          `    matches ${[...new Set(instance.contentIdentity.libraryMatches.map((match) => match.name))].join(", ")}`,
-        ]),
-    );
-  if (duplicates.length)
-    lines.push(
-      ...(lines.length ? [""] : []),
-      "Equivalent unmanaged copies",
-      ...duplicates.flatMap((instances) => {
-        const names = [...new Set(instances.map((instance) => instance.name))].sort();
-        return [
-          `  ${names.join(", ")} · ${instances.length} identical instances`,
-          ...instances.map((instance) => `    ${instance.path}`),
-        ];
+  return [
+    ...data.instances.flatMap((instance) => {
+      if (instance.contentIdentity.status !== "failed") return [];
+      const failure = instance.contentIdentity.failure;
+      return [
+        Block.Group({
+          title: `Could not check ${instance.name}`,
+          children: [
+            Block.Note({
+              text: [
+                instance.path,
+                "\n",
+                failure._tag === "TreeError" ? treeFailure(failure.reason) : errorMessage(failure),
+              ],
+            }),
+          ],
+        }),
+      ];
+    }),
+    ...(libraryMatches.length
+      ? [
+          Block.Group({
+            title: "Exact Library matches",
+            children: [
+              Block.Table({
+                columns: [
+                  { title: "Skill" },
+                  { title: "Git" },
+                  { title: "Matches" },
+                  { title: "Path" },
+                ],
+                rows: libraryMatches.map((instance) => [
+                  [instance.name],
+                  [instance.git.status],
+                  [
+                    [
+                      ...new Set(
+                        instance.contentIdentity.status === "hashed"
+                          ? instance.contentIdentity.libraryMatches.map((match) => match.name)
+                          : [],
+                      ),
+                    ].join(", "),
+                  ],
+                  [{ dim: instance.path }],
+                ]),
+              }),
+            ],
+          }),
+        ]
+      : []),
+    ...(duplicates.length
+      ? [
+          Block.Group({
+            title: "Equivalent unmanaged copies",
+            children: [
+              Block.List({
+                items: duplicates.map((instances) => ({
+                  text: [
+                    [...new Set(instances.map((instance) => instance.name))].sort().join(", "),
+                    { dim: ` (${instances.length} identical instances)` },
+                  ],
+                  detail: [{ dim: instances.map((instance) => instance.path).join("\n") }],
+                })),
+              }),
+            ],
+          }),
+        ]
+      : []),
+  ];
+}
+
+function setupOnboardingPlan(data: SetupData): Block[] {
+  if (!data.onboarding.candidates.length) return [];
+  type Candidate = (typeof data.onboarding.candidates)[number];
+  const actions = new Map<Candidate["action"], Candidate[]>();
+  for (const candidate of data.onboarding.candidates)
+    actions.set(candidate.action, [...(actions.get(candidate.action) ?? []), candidate]);
+  const groups = (
+    [
+      "import-observed-collection",
+      "bind-existing-entry",
+      "manage-locally",
+      "harness-owned",
+      "repository-owned",
+      "blocked",
+      "leave-alone",
+    ] as const
+  ).flatMap((action) => {
+    const candidates = actions.get(action);
+    if (!candidates) return [];
+    const reasons = new Map<Extract<Candidate, { action: "blocked" }>["reason"], number>();
+    for (const candidate of candidates)
+      if (candidate.action === "blocked")
+        reasons.set(candidate.reason, (reasons.get(candidate.reason) ?? 0) + 1);
+    return [
+      Block.Group({
+        title: `${setupActionName(action)} (${candidates.length} skill${candidates.length === 1 ? "" : "s"})`,
+        children:
+          candidates.length <= setupExpandedSkillLimit
+            ? [
+                Block.List({
+                  items: candidates.map((candidate) => {
+                    const why =
+                      candidate.action === "blocked"
+                        ? setupLeftAloneReason(candidate.reason)
+                        : candidate.action === "manage-locally" &&
+                            candidate.sourceSelection === "required"
+                          ? "choose source copy"
+                          : undefined;
+                    return {
+                      text: [candidate.name, ...(why === undefined ? [] : [{ dim: ` (${why})` }])],
+                      detail: [{ dim: candidate.paths.join("\n") }],
+                    };
+                  }),
+                }),
+              ]
+            : action === "blocked"
+              ? [
+                  Block.Table({
+                    columns: [{ title: "Skills", align: "end" }, { title: "Reason" }],
+                    rows: [...reasons].map(([reason, count]) => [
+                      [String(count)],
+                      [setupLeftAloneReason(reason)],
+                    ]),
+                  }),
+                ]
+              : [],
       }),
-    );
-  return lines;
+    ];
+  });
+  return [
+    Block.Group({
+      title: "Onboarding plan",
+      children: [
+        Block.Fields({ rows: [{ label: "Plan", value: [data.onboarding.planId.slice(0, 12)] }] }),
+        ...groups,
+      ],
+    }),
+  ];
 }
 
 /** What `skit setup --apply` would do, and the exact command that does it. */
-function renderSetupRecommendation(data: ContractDataForId<"skit.setup.v8">): string[] {
-  const { candidates, recommended } = data.onboarding;
+function setupRecommendation(data: SetupData): Block[] {
+  const { candidates, recommended, apply, planId } = data.onboarding;
   if (!recommended.sources.length && !recommended.copies.length) return [];
   const duplicates = recommended.copies.filter((copy) =>
     candidates.some(
@@ -174,245 +397,423 @@ function renderSetupRecommendation(data: ContractDataForId<"skit.setup.v8">): st
     ),
   );
   return [
-    "",
-    "Recommended plan",
-    ...recommended.sources.map(
-      ({ source, names }) => `  Import skills.sh Collection ${source}: ${names.join(", ")}`,
-    ),
-    ...(recommended.copies.length
-      ? [`  Add to Library: ${recommended.copies.map((copy) => copy.name).join(", ")}`]
-      : []),
+    Block.Changes({
+      title: "Recommended plan",
+      items: [
+        ...recommended.sources.map(({ source, names }): Change => ({
+          action: "add",
+          label: `Import skills.sh Collection ${source}`,
+          children: names.map((name) => ({ action: "add", label: name })),
+        })),
+        ...(recommended.copies.length
+          ? [
+              {
+                action: "add" as const,
+                label: "Add to Library",
+                children: recommended.copies.map((copy) => ({
+                  action: "add" as const,
+                  label: copy.name,
+                })),
+              },
+            ]
+          : []),
+      ],
+    }),
     ...(duplicates.length
       ? [
-          `  Already visible to agents elsewhere: ${duplicates.map((copy) => copy.name).join(", ")} (choose --duplicates retain-only, keep-both or retire-aliases)`,
+          Block.Status({
+            tone: "warn",
+            text: [
+              `Already visible to agents elsewhere: ${duplicates.map((copy) => copy.name).join(", ")} (choose --duplicates import-only or keep-both)`,
+            ],
+          }),
         ]
       : []),
-    ...(data.onboarding.applyCommand === undefined
+    ...(apply === undefined
       ? []
-      : ["Apply it without prompts:", `  ${data.onboarding.applyCommand}`]),
+      : [
+          Block.Note({
+            text: [
+              "Apply it without prompts: ",
+              { code: setupApplyCommandLine({ planId, ...apply }) },
+            ],
+          }),
+        ]),
   ];
 }
 
-export /** What `skit setup --apply` did, then why the rest was left alone. */
-function renderSetupApplied(data: ContractDataForId<"skit.setup.applied.v4">): string {
-  const lines = [
-    ...data.imported.map(({ source, names }) => `Imported ${source}: ${names.join(", ")}`),
+/** What `skit setup --apply` did, then why the rest was left alone. */
+export function renderSetupApplied(data: ContractDataForId<"skit.setup.applied.v4">): Block[] {
+  const applied: Change[] = [
+    ...data.imported.map(({ source, names }): Change => ({
+      action: "add",
+      label: `Imported ${source}`,
+      children: names.map((name) => ({ action: "add", label: name })),
+    })),
     ...(data.added.length
-      ? [`Added to Library: ${data.added.map((copy) => copy.name).join(", ")}`]
+      ? [
+          {
+            action: "add" as const,
+            label: "Added to Library",
+            children: data.added.map((copy) => ({ action: "add" as const, label: copy.name })),
+          },
+        ]
       : []),
     ...(data.reconnected.length
-      ? [`Reconnected: ${data.reconnected.map((copy) => copy.name).join(", ")}`]
-      : []),
-  ];
-  if (!lines.length)
-    lines.push(
-      data.changes?.some((outcome) => outcome.status === "updated")
-        ? "Updated existing managed copies."
-        : data.changes?.some((outcome) => outcome.status === "pending")
-          ? "Existing managed copies need a fresh review."
-          : "Nothing to apply; the plan recommended no changes.",
-    );
-  if (data.installedSkills.length)
-    lines.push(
-      "",
-      "Copies",
-      ...data.installedSkills.map(
-        (installedSkill) =>
-          `  ${installedSkill.name} · ${installedSkill.destination} · ${installedSkill.status} · ${installedSkill.path}`,
-      ),
-    );
-  if (data.changes?.length)
-    lines.push("", "Existing managed copies", ...data.changes.map(renderChangeResult));
-  if (data.leftAlone.length)
-    lines.push(
-      "",
-      "Left alone",
-      ...data.leftAlone.map((skill) => `  ${skill.name} · ${skill.reason}`),
-    );
-  if (data.aliasRecoveryDirectories?.length)
-    lines.push(
-      "",
-      "Backed-up copies and their move records are saved in",
-      ...data.aliasRecoveryDirectories.map((directory) => `  ${directory}`),
-    );
-  const backupWarnings = data.backupWarnings ?? data.aliasesKept;
-  if (backupWarnings?.length)
-    lines.push(
-      "",
-      "Existing copies left in place",
-      ...backupWarnings.map((kept) => `  ${kept.name} · ${kept.message}`),
-    );
-  return lines.join("\n");
-}
-
-export function renderSetup(data: ContractDataForId<"skit.setup.v8">): string {
-  const lines = [
-    `Observed ${data.instances.length} skill instance(s) in ${data.repositories.length} repositories across ${data.machineConfig.repositoryRoots.length} configured root(s)${data.machineConfig.persisted ? " · roots saved for this machine" : ""}`,
-    `Scan ${data.scan.complete ? "complete" : "incomplete"} · ${data.scan.directoriesExamined} directories examined · repository depth ${data.scan.repositorySearchDepth}`,
-    "",
-    ...(data.scan.issues?.length
       ? [
-          "Discovery issues",
-          ...data.scan.issues.map((issue) => `  ${issue.code} · ${issue.path}`),
-          "",
+          {
+            action: "update" as const,
+            label: "Reconnected",
+            children: data.reconnected.map((copy) => ({
+              action: "update" as const,
+              label: copy.name,
+            })),
+          },
         ]
       : []),
-    "Harnesses",
-    ...data.probes.map(
-      (probe) => `  ${harnessLabel(probe.harness)} · ${probe.status} · ${probe.command}`,
-    ),
   ];
-  if (data.repositories.length) {
-    lines.push("", `Repositories (${data.repositories.length})`);
-    for (const repository of data.repositories)
-      lines.push(
-        `  ${repository.path} · ${repository.skills.length} skill${repository.skills.length === 1 ? "" : "s"} discovered`,
-      );
-  }
+  const backupWarnings = data.backupWarnings ?? data.aliasesKept;
+  return [
+    applied.length
+      ? Block.Changes({ items: applied })
+      : Block.Status({
+          tone: "info",
+          text: ["Nothing to apply; the plan recommended no changes."],
+        }),
+    ...(data.installedSkills.length
+      ? [
+          Block.Group({
+            title: "Copies",
+            children: [
+              Block.Table({
+                columns: [
+                  { title: "Skill" },
+                  { title: "Destination" },
+                  { title: "Status" },
+                  { title: "Path" },
+                ],
+                rows: data.installedSkills.map((installedSkill) => [
+                  [installedSkill.name],
+                  [installedSkill.destination],
+                  [installedSkill.status],
+                  [{ dim: installedSkill.path }],
+                ]),
+              }),
+            ],
+          }),
+        ]
+      : []),
+    ...(data.leftAlone.length
+      ? [
+          Block.Group({
+            title: "Left alone",
+            children: [
+              Block.Table({
+                columns: [{ title: "Skill" }, { title: "Reason" }],
+                rows: data.leftAlone.map((skill) => [
+                  [skill.name],
+                  [setupLeftAloneReason(skill.reason)],
+                ]),
+              }),
+            ],
+          }),
+        ]
+      : []),
+    ...(data.aliasRecoveryDirectories?.length
+      ? [
+          Block.Group({
+            title: "Backed-up copies and their move records are saved in",
+            children: [
+              Block.List({
+                items: data.aliasRecoveryDirectories.map((directory) => ({
+                  text: [{ dim: directory }],
+                })),
+              }),
+            ],
+          }),
+        ]
+      : []),
+    ...(backupWarnings?.length
+      ? [
+          Block.Group({
+            title: "Existing copies left in place",
+            children: [
+              Block.List({
+                items: backupWarnings.map((kept) => ({
+                  text: [kept.name],
+                  detail: [setupWarning(kept)],
+                })),
+              }),
+            ],
+          }),
+        ]
+      : []),
+  ];
+}
+
+export function renderSetup(data: SetupData): Block[] {
   const configuredRepositories = data.repositoryConfigs.filter(
     (config) => config.status !== "missing",
   );
-  if (configuredRepositories.length) {
-    lines.push("", "Repository discovery config");
-    for (const config of configuredRepositories)
-      lines.push(
-        `  ${config.repository} · ${config.status} · ${config.exclude.length} exclusion${config.exclude.length === 1 ? "" : "s"} · ${config.collections.length} collection root${config.collections.length === 1 ? "" : "s"}\n    ${config.path}`,
-      );
-  }
-  if (data.authoredCollections.length)
-    lines.push("", "Authored SKITs", ...renderSetupAuthoredCollections(data));
-  if (data.collectionGroups.installed.length)
-    lines.push(
-      "",
-      "Existing SKIT installed skills",
-      ...renderSetupInstalledSkills(data.collectionGroups.installed),
-    );
-  if (data.changes?.length)
-    lines.push(
-      "",
-      "Existing copy reconciliation",
-      ...data.changes.map((fact) => renderInstalledSkillChange(fact)),
-    );
-  const contentMatches = renderSetupContentMatches(data);
-  if (contentMatches.length) lines.push("", ...contentMatches);
-  if (data.onboarding.candidates.length) {
-    lines.push("", `Onboarding plan · ${data.onboarding.planId.slice(0, 12)}`);
-    const actions = new Map<
-      (typeof data.onboarding.candidates)[number]["action"],
-      (typeof data.onboarding.candidates)[number][]
-    >();
-    for (const candidate of data.onboarding.candidates)
-      actions.set(candidate.action, [...(actions.get(candidate.action) ?? []), candidate]);
-    for (const action of [
-      "import-observed-collection",
-      "bind-existing-entry",
-      "manage-locally",
-      "repository-owned",
-      "blocked",
-      "leave-alone",
-    ] as const) {
-      const candidates = actions.get(action);
-      if (!candidates) continue;
-      lines.push(`  ${action} · ${candidates.length} skill${candidates.length === 1 ? "" : "s"}`);
-      if (candidates.length <= 5)
-        for (const candidate of candidates)
-          lines.push(
-            `    ${candidate.name}${candidate.action === "blocked" ? ` · ${candidate.reason}` : candidate.action === "manage-locally" && candidate.sourceSelection === "required" ? " · choose source copy" : ""}\n      ${candidate.paths.join("\n      ")}`,
-          );
-      else if (action === "blocked") {
-        const reasons = new Map<string, number>();
-        for (const candidate of candidates)
-          if (candidate.action === "blocked")
-            reasons.set(candidate.reason, (reasons.get(candidate.reason) ?? 0) + 1);
-        for (const [reason, count] of reasons) lines.push(`    ${count} · ${reason}`);
-      }
-    }
-  }
-  lines.push(...renderSetupRecommendation(data));
-  if (data.suggestedRepositoryRoots.length)
-    lines.push(
-      "",
-      `Repositories under ${data.suggestedRepositoryRoots.join(", ")} were not scanned. To include their skills:`,
-      ...data.suggestedRepositoryRoots.map((root) => `  skit setup --work-dir ${root}`),
-    );
-  const collections = renderSetupCollections(data);
-  if (collections.length) lines.push("", "Skill collections", ...collections);
-  if (data.instances.length) {
-    lines.push("", "Skill instances");
-    for (const item of data.instances) {
-      const ownerLabel =
-        item.owner.kind === "pnpm"
-          ? `Managed by pnpm · ${item.owner.package}@${item.owner.version} · left in place`
-          : item.owner.kind === "authored"
-            ? "author-source"
-            : item.owner.kind;
-      lines.push(
-        `  ${item.name} · ${item.scope} · ${ownerLabel} · ${item.git.status}${item.harnesses.length ? ` · ${item.harnesses.map(harnessLabel).join(", ")}` : ""}\n    ${item.path}`,
-      );
-    }
-  }
-  if (data.locks.length)
-    lines.push(
-      "",
-      "skills.sh locks",
-      ...data.locks.map((lock) => `  ${lock.scope} · ${lock.status}\n    ${lock.path}`),
-    );
-  if (data.brokenLinks.length)
-    lines.push(
-      "",
-      "Broken links",
-      ...data.brokenLinks.map((link) => `  ${link.path} -> ${link.target}`),
-    );
-  if (!data.instances.length) lines.push("", "No skill instances observed.");
-  return lines.join("\n");
-}
-
-export const renderSetupComparison = (data: ContractData<"setupComparison">) =>
-  [
-    ...data.copies.map(
-      (copy) =>
-        `${copy.name} · ${copy.path}\n${copy.currentHash}\n${copy.markdown}${copy.truncated ? "\n[Preview truncated]" : ""}`,
-    ),
-    ...data.actions.map(
-      (action) => `${action.rel}: ${action.argv.map((arg) => JSON.stringify(arg)).join(" ")}`,
-    ),
-  ].join("\n\n");
-
-export const renderSetupReview = (data: ContractData<"setupReview">) =>
-  [
-    !data.canApply
-      ? "Resolve existing copy choices before applying"
-      : data.hasChanges
-        ? "Review setup changes"
-        : "Nothing to apply",
-    ...(data.summary.sourceUpdateMayNeedReview
+  const collections = setupCollections(data);
+  return [
+    Block.Status({
+      tone: "info",
+      text: [
+        `Found ${data.instances.length} skill instance(s) in ${data.repositories.length} repositories across ${data.machineConfig.repositoryRoots.length} configured root(s).`,
+      ],
+    }),
+    ...(data.machineConfig.persisted
+      ? [Block.Status({ tone: "ok", text: ["Roots saved for this machine."] })]
+      : []),
+    Block.Fields({
+      rows: [
+        { label: "Scan", value: [data.scan.complete ? "complete" : "incomplete"] },
+        { label: "Directories examined", value: [String(data.scan.directoriesExamined)] },
+        { label: "Repository depth", value: [String(data.scan.repositorySearchDepth)] },
+      ],
+    }),
+    ...(data.scan.issues?.length
       ? [
-          "Source imports that change an existing active version require a fresh setup review before those copies are updated.",
+          Block.Group({
+            title: "Discovery issues",
+            children: [
+              Block.Table({
+                columns: [{ title: "Issue" }, { title: "Path" }],
+                rows: data.scan.issues.map((issue) => [[issue.code], [{ dim: issue.path }]]),
+              }),
+            ],
+          }),
         ]
       : []),
-    ...data.summary.versionChoices.map((choice) =>
-      renderSetupVersionChoice(choice, data.summary.changes),
-    ),
-    ...data.summary.changes.map((fact) => renderReviewedChanges(fact, data.summary.versionChoices)),
-    ...data.summary.sources.map((source) => `Import ${source.source}: ${source.names.join(", ")}`),
-    ...data.summary.enables.map((copy) => `Enable ${copy.name} from ${copy.path}`),
-    ...data.summary.retains.map((copy) => `Retain ${copy.name} from ${copy.path}`),
-    ...data.summary.preserves.map(
-      (copy) => `Preserve ${copy.kind} ${copy.name} from ${copy.path} in recovery`,
-    ),
-    ...data.summary.removals.map((copy) => `Save ${copy.name} from ${copy.path} in recovery`),
-    ...(data.summary.savesMachineSettings ? ["Save the selected machine discovery settings"] : []),
-    `Review: ${data.reviewId}`,
-    ...data.actions.map(
-      (action) => `${action.rel}: ${action.argv.map((arg) => JSON.stringify(arg)).join(" ")}`,
-    ),
-  ].join("\n");
+    Block.Group({
+      title: "Harnesses",
+      children: [
+        Block.Table({
+          columns: [{ title: "Harness" }, { title: "Status" }, { title: "Command" }],
+          rows: data.probes.map((probe) => [
+            [harnessLabel(probe.harness)],
+            [probe.status],
+            [{ code: probe.command }],
+          ]),
+        }),
+      ],
+    }),
+    ...(data.repositories.length
+      ? [
+          Block.Group({
+            title: `Repositories (${data.repositories.length})`,
+            children: [
+              Block.Table({
+                columns: [{ title: "Repository" }, { title: "Skills discovered", align: "end" }],
+                rows: data.repositories.map((repository) => [
+                  [repository.path],
+                  [String(repository.skills.length)],
+                ]),
+              }),
+            ],
+          }),
+        ]
+      : []),
+    ...(configuredRepositories.length
+      ? [
+          Block.Group({
+            title: "Repository discovery config",
+            children: [
+              Block.Table({
+                columns: [
+                  { title: "Repository" },
+                  { title: "Status" },
+                  { title: "Exclusions", align: "end" },
+                  { title: "Collection roots", align: "end" },
+                  { title: "Config" },
+                ],
+                rows: configuredRepositories.map((config) => [
+                  [config.repository],
+                  [config.status],
+                  [String(config.exclude.length)],
+                  [String(config.collections.length)],
+                  [{ dim: config.path }],
+                ]),
+              }),
+            ],
+          }),
+        ]
+      : []),
+    ...(data.authoredCollections.length
+      ? [Block.Group({ title: "Authored SKITs", children: setupAuthoredCollections(data) })]
+      : []),
+    ...(data.collectionGroups.installed.length
+      ? [
+          Block.Group({
+            title: "Existing SKIT installed skills",
+            children: setupInstalledSkills(data.collectionGroups.installed),
+          }),
+        ]
+      : []),
+    ...(data.changes?.length
+      ? [
+          Block.Group({
+            title: "Existing managed copies (left unchanged)",
+            children: [
+              installedChangesTable(data.changes),
+              Block.Note({ text: ["Use skit update to handle changes to managed skills."] }),
+            ],
+          }),
+        ]
+      : []),
+    ...setupContentMatches(data),
+    ...setupOnboardingPlan(data),
+    ...setupRecommendation(data),
+    ...(data.suggestedRepositoryRoots.length
+      ? [
+          Block.Note({
+            text: [
+              `Repositories under ${data.suggestedRepositoryRoots.join(", ")} were not scanned. To include their skills:`,
+            ],
+          }),
+          Block.List({
+            items: data.suggestedRepositoryRoots.map((root) => ({
+              text: [{ code: `skit setup --work-dir ${root}` }],
+            })),
+          }),
+        ]
+      : []),
+    ...(collections.length
+      ? [Block.Group({ title: "Skill collections", children: collections })]
+      : []),
+    ...(data.instances.length
+      ? [
+          Block.Group({
+            title: "Skill instances",
+            children: [
+              Block.Table({
+                columns: [
+                  { title: "Skill" },
+                  { title: "Scope" },
+                  { title: "Owner" },
+                  { title: "Git" },
+                  { title: "Harnesses" },
+                  { title: "Path" },
+                ],
+                rows: data.instances.map((item) => [
+                  [item.name],
+                  [item.scope],
+                  [
+                    item.owner.kind === "pnpm"
+                      ? `Managed by pnpm (${item.owner.package}@${item.owner.version}), left in place`
+                      : item.owner.kind === "authored"
+                        ? "author-source"
+                        : item.owner.kind,
+                  ],
+                  [item.git.status],
+                  [item.harnesses.map(harnessLabel).join(", ")],
+                  [{ dim: item.path }],
+                ]),
+              }),
+            ],
+          }),
+        ]
+      : []),
+    ...(data.locks.length
+      ? [
+          Block.Group({
+            title: "skills.sh locks",
+            children: [
+              Block.Table({
+                columns: [{ title: "Scope" }, { title: "Status" }, { title: "Path" }],
+                rows: data.locks.map((lock) => [[lock.scope], [lock.status], [{ dim: lock.path }]]),
+              }),
+            ],
+          }),
+        ]
+      : []),
+    ...(data.brokenLinks.length
+      ? [
+          Block.Group({
+            title: "Broken links",
+            children: [
+              Block.Table({
+                columns: [{ title: "Link" }, { title: "Target" }],
+                rows: data.brokenLinks.map((link) => [
+                  [{ dim: link.path }],
+                  [{ dim: link.target }],
+                ]),
+              }),
+            ],
+          }),
+        ]
+      : []),
+    ...(data.instances.length
+      ? []
+      : [Block.Status({ tone: "info", text: ["No skill instances found."] })]),
+  ];
+}
 
-export const renderSetupFailed = (data: ContractData<"setupFailed">) =>
-  [
-    data.message,
-    data.remediation,
-    ...data.actions.map(
-      (action) => `${action.rel}: ${action.argv.map((arg) => JSON.stringify(arg)).join(" ")}`,
-    ),
-  ].join("\n");
+export const renderSetupComparison = (data: ContractData<"setupComparison">): Block[] => [
+  ...data.copies.map((copy) =>
+    Block.Group({
+      title: copy.name,
+      children: [
+        Block.Fields({
+          rows: [{ label: "Path", value: [{ dim: copy.path }] }],
+        }),
+        Block.Verbatim({ text: copy.markdown }),
+        ...(copy.truncated ? [Block.Note({ text: [{ dim: "[Preview truncated]" }] })] : []),
+      ],
+    }),
+  ),
+  ...(data.actions.length ? [Block.Fields({ rows: actionFields(data.actions) })] : []),
+];
+
+export const renderSetupReview = (data: ContractData<"setupReview">): Block[] => {
+  const { summary } = data;
+  const changes: Change[] = [
+    ...summary.sources.map((source): Change => ({
+      action: "add",
+      label: `Import ${source.source}`,
+      children: source.names.map((name) => ({ action: "add", label: name })),
+    })),
+    ...summary.enables.map((copy): Change => ({
+      action: "add",
+      label: `Enable ${copy.name} from ${copy.path}`,
+    })),
+    ...summary.retains.map((copy): Change => ({
+      action: "add",
+      label: `Import ${copy.name} from ${copy.path} into the Library`,
+    })),
+    ...summary.preserves.map((copy): Change => ({
+      action: "update",
+      label: `Back up ${copy.kind} ${copy.name} from ${copy.path} in recovery`,
+    })),
+    ...summary.removals.map((copy): Change => ({
+      action: "remove",
+      label: `Save ${copy.name} from ${copy.path} in recovery`,
+    })),
+    ...(summary.savesMachineSettings
+      ? [{ action: "update" as const, label: "Save the selected machine discovery settings" }]
+      : []),
+  ];
+  return [
+    data.hasChanges
+      ? Block.Status({ tone: "info", text: ["Review setup changes"] })
+      : Block.Status({ tone: "ok", text: ["Nothing to apply"] }),
+    ...(summary.sourceUpdateMayNeedReview
+      ? [
+          Block.Status({
+            tone: "warn",
+            text: [
+              "Setup leaves existing managed copies unchanged. Use skit update to handle their edits or newer Library versions.",
+            ],
+          }),
+        ]
+      : []),
+    ...(changes.length ? [Block.Changes({ items: changes })] : []),
+    ...(data.actions.length ? [Block.Fields({ rows: actionFields(data.actions) })] : []),
+  ];
+};
+
+export const renderSetupFailed = (data: ContractData<"setupFailed">): Block[] => [
+  ...commandFailure(data.cause).presentation,
+  ...(data.actions.length ? [Block.Fields({ rows: actionFields(data.actions) })] : []),
+];

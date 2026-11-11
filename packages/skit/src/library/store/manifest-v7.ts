@@ -292,6 +292,6 @@ export const libraryManifestFromV7 = ({
 export const LibraryManifestFromV7 = LibraryManifestV7.pipe(
   Schema.decodeTo(LibraryManifest, {
     decode: SchemaGetter.transform(libraryManifestFromV7),
-    encode: SchemaGetter.forbidden(() => "v7 portable Library manifests are decode-only"),
+    encode: SchemaGetter.forbiddenEncoding,
   }),
 );

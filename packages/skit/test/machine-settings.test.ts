@@ -1,7 +1,7 @@
 import { systemError } from "effect/PlatformError";
 import { hostname } from "node:os";
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Option } from "effect";
+import { Effect, FileSystem, Option, Schema } from "effect";
 import { join } from "node:path";
 import * as MachineSettings from "../src/library/machine-settings.js";
 import {
@@ -150,6 +150,19 @@ for (const content of ["invalid JSON", JSON.stringify({ schemaVersion: 99 })]) {
       yield* fs.writeFileString(path, content);
       const error = yield* MachineSettings.ensureIdentity(home).pipe(Effect.flip);
       assert.strictEqual(error._tag, "MachineSettingsUnusable");
+      if (error._tag === "MachineSettingsUnusable") {
+        if (content === "invalid JSON") {
+          assert.strictEqual(error.reason._tag, "InvalidData");
+          if (error.reason._tag === "InvalidData")
+            assert.strictEqual(Schema.isSchemaError(error.reason.failure), true);
+        } else {
+          assert.strictEqual(error.reason._tag, "UnsupportedVersion");
+          if (error.reason._tag === "UnsupportedVersion") {
+            assert.strictEqual(error.reason.version, 99);
+            assert.deepStrictEqual(error.reason.supported, [1, 2, 3, 4, 5, 6]);
+          }
+        }
+      }
       assert.strictEqual(yield* fs.readFileString(path), content);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
@@ -163,6 +176,11 @@ it.effect("does not interpret an unreadable document as missing settings", () =>
     yield* fs.makeDirectory(path);
     const error = yield* MachineSettings.ensureIdentity(home).pipe(Effect.flip);
     assert.strictEqual(error._tag, "MachineSettingsUnusable");
+    if (error._tag === "MachineSettingsUnusable") {
+      assert.strictEqual(error.reason._tag, "ReadFailed");
+      if (error.reason._tag === "ReadFailed")
+        assert.strictEqual(error.reason.failure.reason.module, "FileSystem");
+    }
     assert.strictEqual((yield* fs.stat(path)).type, "Directory");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

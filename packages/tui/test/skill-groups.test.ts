@@ -10,7 +10,7 @@ describe("skill groups", () => {
           confidence: "exact",
           evidence: "fixture",
           collectionId: "coll_01m2xxw78tfeva4p48mn5xbprh",
-          source: null,
+          origin: { _tag: "Unknown" },
         },
       },
       {
@@ -18,17 +18,17 @@ describe("skill groups", () => {
           confidence: "exact",
           evidence: "fixture",
           parentPlugin: "review@example",
-          source: "Plugin registry",
+          origin: { _tag: "PluginRegistry", harness: "claude-code" },
         },
       },
       {
         provenance: {
           confidence: "exact",
           evidence: "fixture",
-          source: "Skills CLI / skills.sh",
+          origin: { _tag: "SkillsSh" },
         },
       },
-      { provenance: { confidence: "unknown", evidence: "fixture", source: null } },
+      { provenance: { confidence: "unknown", evidence: "fixture", origin: { _tag: "Unknown" } } },
     ] satisfies Array<Pick<AuditSkillV1Alpha4, "provenance" | "canonicalLocation">>;
 
     const groups = groupSkills(skills);
@@ -41,8 +41,8 @@ describe("skill groups", () => {
       },
       { identity: { kind: "plugin", id: "review@example" }, label: "review@example" },
       {
-        identity: { kind: "source", name: "Skills CLI / skills.sh" },
-        label: "Skills CLI / skills.sh",
+        identity: { kind: "source", origin: { _tag: "SkillsSh" } },
+        label: "skills.sh",
       },
       { identity: { kind: "unattributed" }, label: "Unattributed" },
     ]);
@@ -52,18 +52,37 @@ describe("skill groups", () => {
     });
   });
 
+  test("package origins group by package and version regardless of property order", () => {
+    const first = { _tag: "PnpmPackage", package: "@acme/review", version: "1.0.0" } as const;
+    const reordered = { version: "1.0.0", package: "@acme/review", _tag: "PnpmPackage" } as const;
+    const next = { ...first, version: "2.0.0" };
+    const skills = [first, next, reordered].map((origin) => ({
+      provenance: {
+        confidence: "exact" as const,
+        evidence: "/workspace/node_modules/.modules.yaml",
+        origin,
+      },
+    }));
+    const groups = groupSkills(skills);
+    expect(groups).toHaveLength(3);
+    expect(groupForSkill(groups, skills[0]!)).toBe(groupForSkill(groups, skills[2]!));
+    expect(groupForSkill(groups, skills[0]!)?.skills).toHaveLength(2);
+    expect(groupForSkill(groups, skills[0]!)?.identity).toEqual({ kind: "source", origin: first });
+    expect(groupForSkill(groups, skills[1]!)?.identity).toEqual({ kind: "source", origin: next });
+  });
+
   test("counts one canonical skill and keeps its strongest provenance", () => {
     const skills = [
       {
         canonicalLocation: "/skills/review/SKILL.md",
-        provenance: { confidence: "exact", evidence: "root", source: "Skills CLI / skills.sh" },
+        provenance: { confidence: "exact", evidence: "root", origin: { _tag: "SkillsSh" } },
       },
       {
         canonicalLocation: "/skills/review/SKILL.md",
         provenance: {
           confidence: "exact",
           evidence: "projection",
-          source: "SKIT projection",
+          origin: { _tag: "SkitManaged" },
           collectionId: "coll_01m2xxw78tfeva4p48mn5xbprh",
           parentPlugin: "review@example",
         },

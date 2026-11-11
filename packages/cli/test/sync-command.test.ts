@@ -14,8 +14,8 @@ import { RegistryHttp, registryClient, registryHttpLayer } from "../src/registry
 import { testHttpClientLayer } from "./helpers/http-test-client.js";
 import { scratch } from "./helpers/library-home.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
-import { MissingRequirement } from "../src/commands/input-failures.js";
-import { authorLayer } from "./helpers/author-history.js";
+import { AuthorDestinationRequired } from "@smolai/skit-core/author/failures";
+import { authorLayer } from "../src/platform/author-sync-fixture/history.js";
 import { testRoots } from "./helpers/roots.js";
 
 const failure = new CredentialsUnusable({ path: "/broken/auth.json", reason: "invalid" });
@@ -40,19 +40,20 @@ const services = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     ),
   );
 
-it.effect("author sync reports missing first-sync arguments before reading any credential", () =>
-  services(authorSyncCommand({ apply: false })).pipe(
-    Effect.flip,
-    Effect.map((actual) =>
-      assert.deepStrictEqual(
-        actual,
-        new MissingRequirement({
-          command: "First author sync",
-          requires: "--to <namespace/skit> and --visibility <private|unlisted|public>",
-        }),
+it.effect.each([undefined, "private"] as const)(
+  "author sync reports a missing destination before reading credentials (visibility: %s)",
+  (visibility) =>
+    services(
+      authorSyncCommand({ apply: false, ...(visibility === undefined ? {} : { visibility }) }),
+    ).pipe(
+      Effect.flip,
+      Effect.map((actual) =>
+        assert.deepStrictEqual(
+          actual,
+          new AuthorDestinationRequired({ visibilityRequired: visibility === undefined }),
+        ),
       ),
     ),
-  ),
 );
 
 it.effect("Library sync preserves credential configuration failures", () =>

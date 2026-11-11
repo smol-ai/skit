@@ -22,7 +22,7 @@ import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.j
 
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
-import { renderContract } from "../src/commands/output-presenters.js";
+import { renderSetupUndo } from "../src/library/setup/undo-result.js";
 import * as Library from "@smolai/skit-core/library";
 import {
   deterministicTreeHash,
@@ -277,8 +277,18 @@ it.effect(
         "--json",
       ]);
       expect(preview.data.sourceSelections).toHaveLength(1);
-      expect(renderContract(preview, { color: false, detail: "full" })).toContain(
-        preview.data.sourceSelections[0].toSnapshot,
+      const [selection] = preview.data.sourceSelections;
+      expect(renderSetupUndo(preview.data)).toContainEqual(
+        expect.objectContaining({
+          _tag: "Changes",
+          items: expect.arrayContaining([
+            {
+              action: "update",
+              label: `Restore Collection ${selection.label}`,
+              detail: `${selection.fromSnapshot} → ${selection.toSnapshot}`,
+            },
+          ]),
+        }),
       );
       const action = preview.data.actions.find((item) => item.rel === "apply-undo");
       if (!action) return yield* Effect.die(new Error("Missing source undo action"));
@@ -526,9 +536,10 @@ it.effect(
       yield* f.fs.writeFileString(path, "Corrupted retained snapshot");
       const current = yield* f.home.durable;
       const inverse = yield* f.home.owned(prepareSetupUndo(f.operationId));
-      expect(inverse.summary.conflicts).toContain(
-        `Prior retained source bytes changed: ${f.collectionId}`,
-      );
+      expect(inverse.summary.conflicts).toContainEqual({
+        _tag: "SourceBytesChanged",
+        collectionId: f.collectionId,
+      });
       expect((yield* Effect.flip(f.home.owned(inverse.apply())))._tag).toBe("RecoveryInvalid");
       expect(yield* f.home.durable).toEqual(current);
     }).pipe(Effect.provide(skitLayer)),
@@ -541,9 +552,10 @@ it.effect(
       const f = yield* fixture();
       yield* TestClock.setTime(Date.parse("2026-10-01T00:00:00.000Z"));
       const inverse = yield* f.home.owned(prepareSetupUndo(f.operationId));
-      expect(inverse.summary.conflicts).toContain(
-        `Clock has not advanced past the current source observation: ${f.collectionId}`,
-      );
+      expect(inverse.summary.conflicts).toContainEqual({
+        _tag: "ClockNotAdvanced",
+        collectionId: f.collectionId,
+      });
       expect((yield* Effect.flip(f.home.owned(inverse.apply())))._tag).toBe("RecoveryInvalid");
       expect(
         setupIntent(yield* f.home.durable).memberships?.find(
@@ -569,9 +581,10 @@ it.effect(
       yield* TestClock.adjust("1 second");
       const current = yield* f.home.durable;
       const inverse = yield* f.home.owned(prepareSetupUndo(f.operationId));
-      expect(inverse.summary.conflicts).toContain(
-        `Collection source changed after setup: ${f.collectionId}`,
-      );
+      expect(inverse.summary.conflicts).toContainEqual({
+        _tag: "SourceChanged",
+        collectionId: f.collectionId,
+      });
       expect((yield* Effect.flip(f.home.owned(inverse.apply())))._tag).toBe("RecoveryInvalid");
       expect(yield* f.home.durable).toEqual(current);
       expect(
@@ -582,61 +595,45 @@ it.effect(
     }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect(
-  "source imports return a fresh-review continuation for changed desired versions without projecting unreviewed bytes",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture(false, false, true);
-      const original = f.before.installed_skills[0];
-      expect(f.applied?.changes?.find((item) => item.path === original.path)?.status).toBe(
-        "pending",
-      );
-      expect(f.applied?.changes?.find((item) => item.path === original.path)?.reason).toContain(
-        "review",
-      );
-      expect(yield* f.fs.readFileString(join(original.path, "SKILL.md"))).toBe(
-        document("existing", "Before setup"),
-      );
-      expect((yield* f.home.durable).installed_skills).toEqual(f.before.installed_skills);
-      const scan = yield* f.home.owned(
-        runSetup({ ...f.options, persistRoots: false, repositoryRoots: [f.root] }),
-      );
-      const input = {
-        options: f.options,
-        workDirFlag: f.root,
-        manageOptions: { installOptions: f.home.installOptions },
-        planId: scan.onboarding.planId,
-        selection: {
-          sourceIds: [],
-          copyPaths: [],
-          removePaths: [],
-          reconcileSkillIds: [original.skill_id],
-        },
-      };
-      const interaction = yield* makeScriptedInteraction([]);
-      const review = yield* f.home.owned(
-        prepareSetupCommand(input).pipe(Effect.provide(interaction.layer)),
-      );
-      expect(review.plan.canApply).toBe(true);
-      expect(review.plan.summary.sources).toEqual([]);
-      const reconciled = yield* f.home.owned(
-        setupApplyCommand({ ...input, reviewedPlanId: review.plan.reviewId }).pipe(
-          Effect.provide(interaction.layer),
-        ),
-      );
-      expect(yield* f.fs.readFileString(join(original.path, "SKILL.md"))).toBe(
-        document("existing", "Setup source update"),
-      );
-      if (!reconciled.operationId) return yield* Effect.die(new Error("Missing update inverse"));
-      const undoUpdate = yield* f.home.owned(prepareSetupUndo(reconciled.operationId));
-      expect(undoUpdate.summary.conflicts).toEqual([]);
-      yield* f.home.owned(undoUpdate.apply());
-      expect(yield* f.fs.readFileString(join(original.path, "SKILL.md"))).toBe(
-        document("existing", "Before setup"),
-      );
-      expect((yield* f.home.durable).installed_skills).toEqual(f.before.installed_skills);
-      // The later setup replaced the import's record, so only the later one can be undone.
-      const undoImport = yield* Effect.flip(f.home.owned(prepareSetupUndo(f.operationId)));
-      expect(undoImport._tag).toBe("RecoveryInvalid");
-    }).pipe(Effect.provide(skitLayer)),
+it.effect("source imports leave existing managed copies unchanged", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture(false, false, true);
+    const original = f.before.installed_skills[0];
+    expect(f.applied).not.toHaveProperty("changes");
+    expect(yield* f.fs.readFileString(join(original.path, "SKILL.md"))).toBe(
+      document("existing", "Before setup"),
+    );
+    expect((yield* f.home.durable).installed_skills).toEqual(f.before.installed_skills);
+    const scan = yield* f.home.owned(
+      runSetup({ ...f.options, persistRoots: false, repositoryRoots: [f.root] }),
+    );
+    const input = {
+      options: f.options,
+      workDirFlag: f.root,
+      manageOptions: { installOptions: f.home.installOptions },
+      planId: scan.onboarding.planId,
+      selection: {
+        sourceIds: [],
+        copyPaths: [],
+        removePaths: [],
+      },
+    };
+    const interaction = yield* makeScriptedInteraction([]);
+    const review = yield* f.home.owned(
+      prepareSetupCommand(input).pipe(Effect.provide(interaction.layer)),
+    );
+    expect(review.plan.canApply).toBe(true);
+    expect(review.plan.summary.sources).toEqual([]);
+    const reconciled = yield* f.home.owned(
+      setupApplyCommand({ ...input, reviewedPlanId: review.plan.reviewId }).pipe(
+        Effect.provide(interaction.layer),
+      ),
+    );
+    // The explicit work directory can save settings; it still cannot repair managed copies.
+    expect(reconciled.operationId).toBeTruthy();
+    expect(yield* f.fs.readFileString(join(original.path, "SKILL.md"))).toBe(
+      document("existing", "Before setup"),
+    );
+    expect((yield* f.home.durable).installed_skills).toEqual(f.before.installed_skills);
+  }).pipe(Effect.provide(skitLayer)),
 );

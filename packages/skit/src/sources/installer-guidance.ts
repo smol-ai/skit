@@ -1,13 +1,14 @@
 import type { SkitSource } from "../library/library-contracts.js";
-import { Data, Effect } from "effect";
+import { Schema, Effect } from "effect";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
-export interface DedicatedInstallerGuidance {
-  readonly sourceCoordinate: string;
-  readonly displayName: string;
-  readonly command: string;
-  readonly documentationUrl: string;
-}
+export const DedicatedInstallerGuidance = Schema.Struct({
+  sourceCoordinate: Schema.String,
+  displayName: Schema.String,
+  command: Schema.String,
+  documentationUrl: Schema.String,
+});
+export type DedicatedInstallerGuidance = typeof DedicatedInstallerGuidance.Type;
 
 const catalog = new Map<string, DedicatedInstallerGuidance>([
   [
@@ -22,19 +23,14 @@ const catalog = new Map<string, DedicatedInstallerGuidance>([
 ]);
 
 export class DedicatedInstallerRequired
-  extends Data.TaggedError("Library.DedicatedInstallerRequired")<DedicatedInstallerGuidance>
+  extends Schema.TaggedError<DedicatedInstallerRequired, { readonly brand: unique symbol }>()(
+    "Library.DedicatedInstallerRequired",
+    DedicatedInstallerGuidance.fields,
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "INVALID_ARGUMENT" as const;
-
-  get message(): string {
-    return `${this.displayName} publishes harness-specific builds and cannot be added as one portable Skill Collection.`;
-  }
-
-  get remediation(): string {
-    return `Run \`${this.command}\`. Installation guide: ${this.documentationUrl}`;
-  }
 }
 
 export function dedicatedInstallerForSource(

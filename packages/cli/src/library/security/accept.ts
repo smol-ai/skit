@@ -36,13 +36,14 @@ export const securityAcceptCommand = Effect.fn("CLI.securityAccept")(function* <
   },
 ) {
   if (!options.query)
-    return yield* new MissingRequirement({ command: "security accept", requires: "<skill>" });
+    return yield* new MissingRequirement({ reason: { _tag: "SecuritySubject", action: "accept" } });
+  const missing = [
+    ...(!options.fingerprint ? ["--finding" as const] : []),
+    ...(!options.principal ? ["--principal" as const] : []),
+    ...(!options.rationale ? ["--rationale" as const] : []),
+  ];
   if (!options.fingerprint || !options.principal || !options.rationale)
-    return yield* new MissingRequirement({
-      command: "security accept",
-      requires: "--finding, --principal, and --rationale",
-      hint: "`skit security review <skill> --json` lists each finding's fingerprint.",
-    });
+    return yield* new MissingRequirement({ reason: { _tag: "SecurityAcceptanceFields", missing } });
   const fingerprintInput = options.fingerprint;
   const fingerprint = yield* Schema.decodeUnknownEffect(FindingFingerprint)(fingerprintInput).pipe(
     Effect.mapError(() => new FindingFingerprintInvalid({ value: fingerprintInput })),

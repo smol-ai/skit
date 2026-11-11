@@ -1,10 +1,14 @@
+import { errorOutputContract } from "./error-output.js";
 import { Context, Effect, Option } from "effect";
 import * as Command from "effect/cli/Command";
 import { helpDocument } from "./help-document.js";
+import { commandInvocation } from "./invocation.js";
+import type { CommandInvocation } from "../storybook/contracts.js";
 import { CommandMetadata } from "./metadata.js";
 import type { CommandDescription } from "./command-contracts.js";
 
 interface CommandDocument extends CommandDescription {
+  readonly invocation: CommandInvocation;
   readonly examples: readonly string[];
   readonly positionals: readonly {
     readonly name: string;
@@ -24,27 +28,33 @@ interface CommandDocument extends CommandDescription {
 
 interface TraversableCommand {
   readonly name: string;
+  readonly annotations: Context.Context<never>;
   readonly subcommands: ReadonlyArray<{
     readonly commands: readonly TraversableCommand[];
   }>;
 }
 
-const sharedErrorExitCodes = [1, 11, 12, 13, 64, 65, 77] as const;
-
 function leaves(
   command: TraversableCommand,
   parent: readonly string[] = [],
-): ReadonlyArray<{ readonly path: readonly string[] }> {
+  ancestors: readonly TraversableCommand[] = [],
+): ReadonlyArray<{
+  readonly path: readonly string[];
+  readonly ancestors: readonly TraversableCommand[];
+}> {
   const path = command.name === "skit" ? parent : [...parent, command.name];
   const children = command.subcommands.flatMap((group) => group.commands);
-  return children.length === 0 ? [{ path }] : children.flatMap((child) => leaves(child, path));
+  const lineage = [...ancestors, command];
+  return children.length === 0
+    ? [{ path, ancestors: lineage }]
+    : children.flatMap((child) => leaves(child, path, lineage));
 }
 
 /** Derive the public command manifest from the executable Effect command tree. */
 export function commandDocuments<Name extends string, Input, ContextInput, E, R>(
   root: Command.Command<Name, Input, ContextInput, E, R>,
 ) {
-  return Effect.forEach(leaves(root), ({ path }) =>
+  return Effect.forEach(leaves(root), ({ path, ancestors }) =>
     Effect.gen(function* () {
       const document = yield* helpDocument(root, path);
       const metadata = Context.get(document.annotations, CommandMetadata);
@@ -55,16 +65,15 @@ export function commandDocuments<Name extends string, Input, ContextInput, E, R>
       ];
       return {
         path,
+        invocation: commandInvocation(document, ancestors, metadata.handlerRules),
         summary: document.description,
         stability: metadata.stability ?? "stable",
         effects: metadata.effects ?? { capabilities: [] },
         outputSchemas: [
           ...metadata.outputSchemas.map((contract) => contract.id),
           "skit.help.v1",
-          "skit.error.v1",
+          errorOutputContract.id,
         ],
-        successExitCodes: metadata.exitCodes,
-        errorExitCodes: [...sharedErrorExitCodes],
         interactive: metadata.interactive,
         flags: Object.fromEntries(allFlags.map((flag) => [flag.name, { type: flag.type }])),
         examples: (document.examples ?? []).map((example) => example.command),
@@ -95,6 +104,7 @@ export function commandDescriptions<Name extends string, Input, ContextInput, E,
     Effect.map((documents) =>
       documents.map(
         ({
+          invocation: _invocation,
           documentedFlags: _documentedFlags,
           examples: _examples,
           positionals: _positionals,

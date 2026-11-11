@@ -1,62 +1,47 @@
-import type {
-  InstalledSkillChange,
-  InstalledSkillChangeResult,
-  SetupVersionChoice,
-} from "@smolai/skit-core/library/setup";
-import { terminalData } from "../../terminal/text.js";
+import type { InstalledSkillChange } from "@smolai/skit-core/library/setup";
+import { InstalledSkillChangeReason } from "@smolai/skit-core/library";
+import { installedSkillInvalidReason } from "../installed-skill-failures.js";
+import { dataFailure } from "../../commands/data-failure.js";
+import { errorMessage } from "@smolai/skit-core/shared";
 
-export function renderInstalledSkillChange(
-  fact: InstalledSkillChange,
-  displayPath: (path: string) => string = (path) => path,
-) {
-  const label = {
-    unchanged: fact.metadataChanged
-      ? "Align the installed copy with the selected version"
-      : "Already matches Library",
-    "incoming-update": "Update untouched copy from Library",
-    "local-only": "Keep local edits active",
-    competing: "Local and Library both changed; choose the active version",
-    protected: `Resolve ownership: ${fact.reason ?? "ownership is uncertain"}`,
-    "native-delete": "Keep native deletion",
-    uninstall: "Uninstall: nothing enables it here",
-    install: "Install from Library",
-  }[fact.status];
-  return `${terminalData(fact.name)} · ${terminalData(label)} · ${terminalData(displayPath(fact.path))}`;
-}
+export const installedSkillChangeReason = (reason: InstalledSkillChangeReason): string =>
+  InstalledSkillChangeReason.match(reason, {
+    Unmanaged: () => "The folder holds what SKIT did not write",
+    Protected: ({ owner }) =>
+      ({
+        repository: "A repository owns this folder",
+        authored: "An author's workspace owns this folder",
+        "package-manager": "A package manager owns this folder",
+      })[owner],
+    Unreadable: ({ reason }) =>
+      `The folder cannot be read as a skill: ${installedSkillInvalidReason(reason)}`,
+    Modified: ({ path }) => `Refusing to remove modified Skill at ${path}`,
+    NativeDelete: () => "The user deleted this folder; it stays deleted",
+    SourceVersionChanged: () =>
+      "The source import changed the desired Version. Use skit update to review managed copies; setup leaves them untouched.",
+    PlanningFailed: ({ error }) =>
+      `The Library cannot plan its installed copies: ${dataFailure(error)?.message ?? errorMessage(error)}`,
+  });
 
-export function renderSetupVersionChoice(
-  choice: SetupVersionChoice,
-  facts: readonly InstalledSkillChange[],
-  displayPath: (path: string) => string = (path) => path,
-) {
-  const name = facts.find((fact) => fact.skillId === choice.skillId)?.name ?? choice.skillId;
-  const version =
-    choice.version === "retained"
-      ? "retained Library version"
-      : `current copy at ${terminalData(displayPath(choice.path!))}`;
-  return `Use ${version} for ${terminalData(name)}; preserve displaced copies in recovery`;
-}
-
-export function renderReviewedChanges(
-  fact: InstalledSkillChange,
-  choices: readonly SetupVersionChoice[],
-  displayPath: (path: string) => string = (path) => path,
-) {
-  return fact.status !== "native-delete" &&
-    choices.some((choice) => choice.skillId === fact.skillId)
-    ? `${terminalData(fact.name)} · Install selected version · ${terminalData(displayPath(fact.path))}`
-    : renderInstalledSkillChange(fact, displayPath);
-}
-
-export function renderChangeResult(outcome: InstalledSkillChangeResult) {
-  const label = {
-    updated: "Updated active copy",
-    unchanged: "Unchanged",
-    "local-kept": "Local edits kept active",
-    "native-delete": "Native deletion kept",
-    pending: "Fresh review needed",
-    uninstalled: "Uninstalled",
-    installed: "Installed",
-  }[outcome.status];
-  return `${terminalData(outcome.name)} · ${label} · ${terminalData(outcome.path)}${outcome.reason ? ` · ${terminalData(outcome.reason)}` : ""}`;
+/** Setup reports managed copies without offering to change them. */
+export function installedSkillChangeLabel(fact: InstalledSkillChange) {
+  if (fact.metadataChanged) return "Installed metadata differs";
+  switch (fact.status) {
+    case "unchanged":
+      return "Matches Library";
+    case "incoming-update":
+      return "Library version changed";
+    case "local-only":
+      return "Installed copy has local edits";
+    case "competing":
+      return "Installed copy and Library both changed";
+    case "protected":
+      return "Folder needs attention";
+    case "native-delete":
+      return "Folder was deleted";
+    case "uninstall":
+      return "No longer enabled here";
+    case "install":
+      return "Enabled copy is missing";
+  }
 }

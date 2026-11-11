@@ -19,7 +19,7 @@ const entry = {
   harnessIds: ["codex"],
   scope: "user",
   location: "/skills/review/SKILL.md",
-  provenance: { confidence: "exact", evidence: "fixture", source: "Fixture" },
+  provenance: { confidence: "unknown", evidence: "fixture", origin: { _tag: "Unknown" } },
 } as const;
 const report: AuditReportV1Alpha4 = {
   schemaVersion: "v1alpha4",
@@ -81,7 +81,11 @@ const report: AuditReportV1Alpha4 = {
       code: "warning",
       entryIds: ["review"],
       unresolvedSubject: null,
-      problem: "Review warning",
+      reason: {
+        _tag: "FrontmatterCompatibility",
+        harness: "codex",
+        issue: { code: "field-unknown", field: "metadata", severity: "unknown", sourceIds: [] },
+      },
       locations: [],
       details: {},
     },
@@ -91,7 +95,7 @@ const report: AuditReportV1Alpha4 = {
       code: "orphaned-projection-claim",
       entryIds: ["review"],
       unresolvedSubject: null,
-      problem: "Custody error",
+      reason: { _tag: "LibrarySkillMissing" },
       locations: [],
       details: {},
     },
@@ -101,7 +105,7 @@ const report: AuditReportV1Alpha4 = {
       code: "other",
       entryIds: ["mcp"],
       unresolvedSubject: null,
-      problem: "MCP error",
+      reason: { _tag: "McpRegistrationMissing", server: "github" },
       locations: [],
       details: {},
     },
@@ -164,10 +168,52 @@ const skill = (
   revision: null,
   imported_at: null,
   source_updated_at: null,
-  collectionSource: { kind: "local", locator: `/sources/${collectionId}` },
-  scopes: enabled
-    ? [{ scope: { kind: "global" }, invocation: "declared", label: "All projects" }]
-    : [],
+  collectionSource: { kind: "local", name: collectionId, locator: `/sources/${collectionId}` },
+  scopes: enabled ? [{ scope: { kind: "global" }, invocation: "declared" }] : [],
+});
+
+test("audit rows explain typed marker evidence rather than the generic legacy problem", () => {
+  const model = auditPresentation({
+    ...report,
+    findings: [
+      {
+        ...report.findings[1]!,
+        reason: { _tag: "OwnershipMarkerInvalid", reason: { _tag: "InvalidFields" } },
+      },
+    ],
+  });
+  expect(model.skillItems[0]!.evidence).toContain(
+    "error: The ownership marker's fields do not match a supported SKIT format.",
+  );
+  expect(model.skillItems[0]!.evidence).not.toContain(
+    "error: The SKIT-managed folder has no matching skill in the Library",
+  );
+});
+
+test("an orphaned marker stays managed in provenance wording", () => {
+  const model = auditPresentation({
+    ...report,
+    skills: [
+      {
+        ...report.skills[0]!,
+        provenance: {
+          confidence: "matched",
+          origin: { _tag: "SkitUnrecorded" },
+          evidence: "/skills/review/.skit-ownership.json",
+        },
+      },
+    ],
+  });
+  expect(model.skillItems[0]!.evidence).toContain(
+    "Provenance: Inferred match | Managed by SKIT; missing from the Library",
+  );
+  expect(detailPresentation(model.skillItems[0]!, false).fields).toContainEqual({
+    label: "source",
+    value: "Managed by SKIT; missing from the Library",
+  });
+  expect(detailPresentation(model.skillItems[0]!, false).action).toBe(
+    "Inspect the folder, its ownership marker and its Library record before changing it",
+  );
 });
 
 test("audit rows associate findings with their entries and partition plugins by harness", () => {
@@ -177,8 +223,12 @@ test("audit rows associate findings with their entries and partition plugins by 
     findingCount: 2,
     findingCodes: ["warning", "orphaned-projection-claim"],
   });
-  expect(model.skillItems[0]!.evidence).toContain("error: Custody error");
-  expect(model.skillItems[0]!.evidence).not.toContain("error: MCP error");
+  expect(model.skillItems[0]!.evidence).toContain(
+    "error: The SKIT-managed folder has no matching skill in the Library",
+  );
+  expect(model.skillItems[0]!.evidence).not.toContain(
+    "error: Rules reference MCP server github, but no supported registration was found",
+  );
   expect(
     model.sections
       .find((section) => section.key === "claude-plugins")!
@@ -214,9 +264,7 @@ test("details retain MCP launch evidence and ownership-specific action guidance"
       { label: "configured in", value: "/home/.codex/config.toml" },
     ]),
   );
-  expect(detailPresentation(model.skillItems[0]!, false).action).toContain(
-    "does not authorize removal",
-  );
+  expect(detailPresentation(model.skillItems[0]!, false).action).toContain("before changing it");
   const risky: AuditItem = { ...model.skillItems[0]!, status: "clear", riskFlagCount: 1 };
   expect(detailPresentation(risky, false).action).toContain("risk signals");
 });
@@ -235,7 +283,7 @@ test("Library rows group collections, keep standalone Skills, and never sort the
   expect(skills.map((row) => row.name)).toEqual(["zulu", "solo", "alpha"]);
   expect(libraryRows(skills, "tools").map((row) => row.name)).toEqual(["alpha", "zulu"]);
   const collection = rows[1]!;
-  expect(collection.evidence).toEqual(["alpha · enabled", "zulu · not enabled"]);
+  expect(collection.evidence).toEqual(["alpha | enabled", "zulu | not enabled"]);
   if (collection.kind !== "library-collection") throw new Error("Expected a collection");
   const details = detailPresentation(collection, true);
   expect(details.source).toContain("/sources/tools");
@@ -281,8 +329,7 @@ test("confirmation keeps per-destination skill subsets and toggles collection me
         action: "disable",
         skills: ["review"],
         scope: { kind: "global" },
-        destination: "All projects",
-        writes: "projection removed",
+        fileChange: "uninstall",
         collectionLabel: "Tools",
         wholeCollection: true,
       },
@@ -290,8 +337,7 @@ test("confirmation keeps per-destination skill subsets and toggles collection me
         action: "disable",
         skills: ["test"],
         scope: { kind: "repository", root: "/work" },
-        destination: "/work",
-        writes: "projection removed",
+        fileChange: "uninstall",
       },
     ],
   };
@@ -301,7 +347,7 @@ test("confirmation keeps per-destination skill subsets and toggles collection me
   expect(hidden.canShowSkills).toBe(true);
   expect(
     hidden.fields.filter((field) => field.label === "applies to").map((field) => field.value),
-  ).toEqual(["All projects", "/work"]);
+  ).toEqual(["Everywhere on this device", "/work"]);
   expect(hidden.fields.some((field) => field.label === "included")).toBe(false);
   expect(shown.fields.filter((field) => field.label === "included")).toEqual([
     { label: "included", value: "review" },
@@ -322,11 +368,11 @@ test("probe results update display facts without mutating the passive audit item
     resolvedPath: "/packages/codex",
     version: "1.0",
     versionOutput: "\ncodex 1.0\n",
-    error: null,
+    failure: null,
   };
   const next = harnessProbePresentation(item, result);
   expect(next).toMatchObject({ status: "clear", harnessProbe: result });
-  expect(next.evidence).not.toContain("installation probe: not run · press p");
+  expect(next.evidence).not.toContain("installation probe: not run | press p");
   expect(item).not.toHaveProperty("harnessProbe");
   expect(detailPresentation(next, false).fields).toEqual(
     expect.arrayContaining([

@@ -1,16 +1,6 @@
-import { Data, Effect, Schema } from "effect";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
+import { Effect, Schema } from "effect";
+import { FeedbackInputInvalid } from "./failures.js";
 import { FeedbackInput } from "@smolai/skit-core/api";
-
-class FeedbackInputInvalid
-  extends Data.TaggedError("FeedbackInputInvalid")<{ readonly message: string }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "INVALID_ARGUMENT" as const;
-  readonly remediation =
-    'Pass one message, either as an argument or with --message: skit feedback send "what slowed you down".';
-}
 
 /** One report from the command's arguments, plus the platform and runtime this CLI runs on. */
 export const feedbackInput = Effect.fnUntraced(function* (options: {
@@ -24,12 +14,12 @@ export const feedbackInput = Effect.fnUntraced(function* (options: {
   const message = options.message?.trim() || undefined;
   if (text !== undefined && message !== undefined)
     return yield* new FeedbackInputInvalid({
-      message: "Feedback was given both as an argument and with --message.",
+      reason: { _tag: "ConflictingMessages" },
     });
   const harness = options.harness?.trim() || undefined;
   const model = options.model?.trim() || undefined;
   const email = options.email?.trim() || undefined;
-  return yield* Schema.decodeEffect(FeedbackInput)({
+  return yield* Schema.decodeEffect(FeedbackInput, { errors: "all" })({
     message: text ?? message ?? "",
     ...(harness === undefined ? {} : { harness }),
     ...(model === undefined ? {} : { model }),
@@ -38,13 +28,7 @@ export const feedbackInput = Effect.fnUntraced(function* (options: {
     runtime: process.version,
   }).pipe(
     Effect.mapError(
-      () =>
-        new FeedbackInputInvalid({
-          message:
-            "Feedback needs a message of 1 to 1,000 characters; --harness and --model take up to 200, and --email one address.",
-        }),
+      (failure) => new FeedbackInputInvalid({ reason: { _tag: "InvalidData", failure } }),
     ),
   );
 });
-
-export type { FeedbackInputInvalid };

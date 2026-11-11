@@ -1,30 +1,11 @@
-import { Data, Effect, FileSystem } from "effect";
+import { Effect, FileSystem } from "effect";
 import { basename, join, relative, resolve, sep } from "node:path";
 import { deterministicTreeHash } from "../artifact/skit.js";
 import { parseSkillFrontmatter } from "../harnesses/frontmatter.js";
 import { containedPluginPath, readPluginUnits, type PluginUnit } from "./plugin-manifests.js";
 import type { SourceDiscoveryDiagnostic } from "./source-diagnostics.js";
-import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
-
-export class PluginSkillConflict
-  extends Data.TaggedError("PluginSkillConflict")<{
-    skillName: string;
-    paths: readonly string[];
-    directories: readonly string[];
-    locators?: readonly string[];
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "VALIDATION_FAILED" as const;
-  readonly remediation = "Add one of the available selections instead.";
-  get message() {
-    const selections = this.locators
-      ? this.locators.map((locator) => `  skit add '${locator.replaceAll("'", "'\\''")}'`)
-      : this.directories.map((directory) => `  ${directory}`);
-    return `Skill name ${JSON.stringify(this.skillName)} is ambiguous at ${this.paths.map((path) => JSON.stringify(path)).join(" and ")}. Select the plugin or Skill directory explicitly; different plugin Skills cannot share one Collection name.\nAvailable selections:\n${selections.join("\n")}`;
-  }
-}
+import { PluginSkillConflict } from "./plugin-failures.js";
+export { PluginSkillConflict } from "./plugin-failures.js";
 
 /** Manifest facts determine ownership; existing paths determine refresh compatibility. */
 export const selectPluginMembers = Effect.fn("Source.selectPluginMembers")(function* (
@@ -118,7 +99,8 @@ export const selectPluginMembers = Effect.fn("Source.selectPluginMembers")(funct
       diagnostics.push({
         code: "plugin-member-held",
         path: relative(root, path),
-        message: `Kept existing Skill ${JSON.stringify(name)} at ${relative(root, duplicate.path)}; this conflicting candidate was left unselected.`,
+        skillName: name,
+        retainedPath: relative(root, duplicate.path),
       });
       continue;
     }

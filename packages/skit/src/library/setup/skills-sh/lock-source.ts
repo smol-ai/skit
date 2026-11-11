@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { basename, dirname } from "node:path";
-import { Data, Effect, FileSystem, Result, Schema } from "effect";
+import { Array, Data, Effect, FileSystem, Result, Schema } from "effect";
 import { skillsShLockFileEntry } from "../../skills-sh-lock-file.js";
 import { sourceLocator } from "../../../sources/resolve.js";
 import { SkitSource } from "../../library-contracts.js";
@@ -292,17 +292,16 @@ const lockFileEntryFor = (
 export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImportEvidence")(
   function* (
     groupKey: string,
-    candidates: readonly { name: string; paths: readonly string[]; skillPath?: string }[],
+    candidates: Array.NonEmptyReadonlyArray<{
+      name: string;
+      paths: readonly string[];
+      skillPath?: string;
+    }>,
     instances: readonly Pick<SetupSkillInstance, "name" | "path" | "locks" | "contentIdentity">[],
     machineId: MachineId,
     checkedAt: string,
   ) {
     const first = candidates[0];
-    if (!first)
-      return yield* new SkillsShImportEvidenceInvalid({
-        skillName: "collection",
-        reason: "observation-missing",
-      });
     const foundSkills = [];
     const provenance = [];
     const claimedMembers: Array<{ lock: SetupLockMatch; name: string }> = [];
@@ -317,19 +316,9 @@ export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImpo
       const matchingClaims = matchingInstances.flatMap((item) =>
         item.locks.filter((lock) => setupLockGroupKey(lock) === groupKey),
       );
-      const claimVariants = new Set(
-        matchingClaims.map((lock) =>
-          [
-            lock.entry.sourceType,
-            lock.entry.source,
-            lock.entry.sourceUrl ?? "",
-            lock.entry.sourceBaseUrl ?? "",
-            lock.entry.ref ?? "",
-            lock.entry.skillPath ?? "",
-          ].join("\0"),
-        ),
-      );
-      if (claimVariants.size > 1)
+      const members = matchingClaims.map((lock) => ({ lock, name: candidate.name }));
+      const resolution = resolveSkillsShSelectedSource(members);
+      if (resolution._tag === "Contested")
         return yield* new SkillsShImportEvidenceInvalid({
           skillName: candidate.name,
           reason: "contested-observation",
@@ -337,14 +326,17 @@ export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImpo
       const instance = [...matchingInstances].sort((left, right) =>
         left.path.localeCompare(right.path),
       )[0];
-      const currentHash = instance?.contentIdentity.currentHash;
+      const currentHash =
+        instance?.contentIdentity.status === "hashed"
+          ? instance.contentIdentity.currentHash
+          : undefined;
       const lock = instance?.locks.find((item) => setupLockGroupKey(item) === groupKey);
       if (!instance || !currentHash || !lock)
         return yield* new SkillsShImportEvidenceInvalid({
           skillName: candidate.name,
           reason: "observation-missing",
         });
-      claimedMembers.push({ lock, name: candidate.name });
+      claimedMembers.push(...members);
       foundSkills.push({
         name: candidate.name,
         sourcePath: instance.path,

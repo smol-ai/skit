@@ -1,26 +1,7 @@
 import { Schema } from "effect";
 import { Hash } from "@smolai/skit-core/shared";
 
-const SkillsShMemberCheck = Schema.Struct({
-  skill_name: Schema.String,
-  skill_path: Schema.optionalKey(Schema.String),
-  hash_kind: Schema.optionalKey(Schema.Literals(["computedHash", "skillFolderHash"])),
-  status: Schema.Literals([
-    "current",
-    "update-available",
-    "removed-upstream",
-    "lock-stale",
-    "differs-from-lock-and-upstream",
-    "unverifiable",
-    "not-applicable",
-  ]),
-  baseline_commit: Schema.optionalKey(Schema.String),
-  baseline_tree: Schema.optionalKey(Schema.String),
-  baseline_verification: Schema.optionalKey(Schema.Literals(["lock-only", "lock+original-bytes"])),
-  upstream_commit: Schema.optionalKey(Schema.String),
-  upstream_tree: Schema.optionalKey(Schema.String),
-  reason: Schema.optionalKey(Schema.String),
-});
+import { SkillsShUpdateMember } from "@smolai/skit-core/library";
 
 export const CheckResult = Schema.Array(
   Schema.Struct({
@@ -42,7 +23,7 @@ export const CheckResult = Schema.Array(
     skills_sh: Schema.optionalKey(
       Schema.Struct({
         checked_at: Schema.String,
-        members: Schema.Array(SkillsShMemberCheck),
+        members: Schema.Array(SkillsShUpdateMember),
       }),
     ),
   }),

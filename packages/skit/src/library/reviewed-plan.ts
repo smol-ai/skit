@@ -22,14 +22,14 @@ export const planningState = Effect.fn("Library.planningState")(function* (
 ) {
   const base = structuredClone(displayed);
   if (base._tag !== "Present" && base._tag !== "Absent")
-    return yield* new StalePlan({ message: "Planning requires the displayed Library snapshot" });
+    return yield* new StalePlan({ reason: { _tag: "SnapshotRequired" } });
   const state = base._tag === "Present" ? base.state : emptyLibraryState();
   yield* LibraryState.makeEffect(state).pipe(
     Effect.mapError(
       () =>
         new InvalidLibraryState({
           path: libraryStatePath(home),
-          detail: "invalid Library snapshot",
+          reason: { _tag: "InvalidData" },
         }),
     ),
   );
@@ -38,7 +38,7 @@ export const planningState = Effect.fn("Library.planningState")(function* (
   ).revision;
   if (base.revision !== actual)
     return yield* new StalePlan({
-      message: "The displayed Library snapshot changed",
+      reason: { _tag: "SnapshotChanged" },
       expected: base.revision,
       actual,
     });
@@ -73,14 +73,14 @@ export const applyReviewed = <
       const base = snapshotOf(yield* inspectLocalLibraryState(home));
       if (base.revision !== plan.baseRevision)
         return yield* new StalePlan({
-          message: "The Library changed after this plan was reviewed",
+          reason: { _tag: "LibraryChanged" },
           expected: Revision.make(plan.baseRevision),
           actual: base.revision,
         });
       const again = yield* replan(base);
       // Planning again must give exactly the plan handed in, not merely its id.
       if (again.planId !== plan.planId || canonicalJson(again) !== canonicalJson(plan))
-        return yield* new StalePlan({ message: "The Library differs from the reviewed plan" });
+        return yield* new StalePlan({ reason: { _tag: "PlanChanged", kind: "apply" } });
       return yield* apply(again, base);
     }),
   );

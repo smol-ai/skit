@@ -1,20 +1,20 @@
+import {
+  SetupDuplicateDecisionRequired,
+  SetupReviewInputInvalid,
+  type SetupReviewInputReason,
+} from "./setup-failures.js";
 import { join } from "node:path";
-import { Data, Effect, FileSystem } from "effect";
+import { Effect, FileSystem } from "effect";
 import { deterministicTreeHash } from "../artifact/skit.js";
 import { canonicalJson } from "../shared/json.js";
 import { hashParts } from "../artifact/descriptor.js";
-import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
+
 import * as MachineSettings from "./machine-settings.js";
-import { OptionCombinationInvalid } from "../shared/input-failures.js";
 import { recordDuplicateSymlinks, type ManageOptions } from "./setup/manage-existing.js";
 import { applySetupPlan, type SetupApplyOptions, type SetupApproval } from "./setup/apply.js";
 import { revalidateSetupPlan, runSetup, type SetupOptions } from "./setup/scan.js";
 import type { Hash } from "../shared/hash.js";
-import type {
-  SetupResult,
-  SetupKnownSourceSelection,
-  SetupVersionChoice,
-} from "./setup/contract.js";
+import type { SetupResult, SetupKnownSourceSelection } from "./setup/contract.js";
 import {
   isSetupInstallDestination,
   setupReviewCopies,
@@ -31,35 +31,11 @@ import {
 } from "./setup/decisions.js";
 import { planSetupRemovals, setupRemovablePaths } from "./setup/removal.js";
 import { recordSetupCopies } from "./setup/copy-backup.js";
-import {
-  hasChangesToApply,
-  changesNeedingChoice,
-  setupVersionAlternatives,
-} from "./setup/installed-skills.js";
 
 /**
  * Applying the recommended plan would create another agent-visible copy of these skills, and
  * nobody has said how to resolve that. Non-interactive setup never guesses.
  */
-class SetupDuplicateDecisionRequired
-  extends Data.TaggedError("SetupDuplicateDecisionRequired")<{
-    names: readonly string[];
-    retirable: boolean;
-    /** False when one of them is linked where SKIT writes its copy, so both cannot stay. */
-    keepBoth: boolean;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "INVALID_ARGUMENT" as const;
-  get remediation() {
-    return `Pass --duplicates retain-only to keep them in the Library without enabling${this.keepBoth ? ", --duplicates keep-both to enable them alongside the existing copies" : ""}${this.retirable ? ", or --duplicates retire-aliases to replace the redundant symlinks" : ""}.`;
-  }
-  get message() {
-    return `Enabling ${this.names.join(", ")} would create another copy agents already see`;
-  }
-}
-
 /** Hold the observed choices and their meaning through preparation and confirmation. */
 const reviewScan = Effect.fn("Setup.reviewScan")(function* (
   options: SetupOptions,
@@ -111,7 +87,7 @@ const reviewScan = Effect.fn("Setup.reviewScan")(function* (
       candidates: [...(prior?.candidates ?? []), candidate],
     });
   }
-  const invalid = (detail: string) => new OptionCombinationInvalid({ detail });
+  const invalid = (reason: SetupReviewInputReason) => new SetupReviewInputInvalid({ reason });
   const selectedCopies = Effect.fn("Setup.selectedCopies")(function* (values: readonly string[]) {
     const add = [];
     const bind = [];
@@ -125,7 +101,7 @@ const reviewScan = Effect.fn("Setup.reviewScan")(function* (
       }
       const removal = copies.find((item) => `remove\0${item.value}` === value);
       if (removal && (removablePaths.get(removal.instance.path)?.length ?? 0) > 0) continue;
-      return yield* invalid("Choose an available setup action from the observed review");
+      return yield* invalid({ _tag: "ActionUnavailable", value });
     }
     return structuredClone(
       setupSelectedCopies(scan, add, bind).map((copy) => ({
@@ -138,23 +114,14 @@ const reviewScan = Effect.fn("Setup.reviewScan")(function* (
     readonly sources: readonly string[];
     readonly copies: readonly string[];
     readonly decisions: readonly SetupCopyChoice[];
-    readonly reconcileExisting?: boolean;
-    readonly reconciliationSkills?: readonly string[];
-    readonly versionChoices?: readonly SetupVersionChoice[];
   }) {
-    const versionChoices = selection.versionChoices ?? [];
-    const alternatives = setupVersionAlternatives(scan.changes ?? []);
-    if (
-      new Set(versionChoices.map((choice) => choice.skillId)).size !== versionChoices.length ||
-      versionChoices.some(
-        (choice) =>
-          !alternatives.some((alternative) => canonicalJson(alternative) === canonicalJson(choice)),
-      )
-    )
-      return yield* invalid("Choose one available active version for each competing Skill");
     const chosen = yield* selectedCopies(selection.copies);
     if (chosen.length !== selection.decisions.length)
-      return yield* invalid("Review the duplicate-copy decisions for every selected setup copy");
+      return yield* invalid({
+        _tag: "DecisionCountMismatch",
+        selected: chosen.length,
+        decisions: selection.decisions.length,
+      });
     const decisions: SetupCopyDecision[] = [];
     for (const copy of chosen) {
       const matches = selection.decisions.filter(
@@ -162,7 +129,12 @@ const reviewScan = Effect.fn("Setup.reviewScan")(function* (
       );
       const decision = matches[0];
       if (matches.length !== 1 || decision === undefined)
-        return yield* invalid("Review the duplicate-copy decision for this setup copy");
+        return yield* invalid({
+          _tag: "CopyDecisionCountMismatch",
+          name: copy.name,
+          path: copy.sourcePath,
+          decisions: matches.length,
+        });
       // Front ends supply intent; only this owner captures filesystem approval evidence.
       const action =
         decision.duplicateAction ??
@@ -182,12 +154,19 @@ const reviewScan = Effect.fn("Setup.reviewScan")(function* (
           keepBoth: !copy.conflict.replacesLink,
         });
       if (action === "keep-both" && copy.conflict.replacesLink)
-        return yield* invalid(
-          `${copy.name} is linked where SKIT writes its copy, so both cannot stay`,
-        );
+        return yield* invalid({
+          _tag: "KeepBothReplacesLink",
+          name: copy.name,
+          path: copy.sourcePath,
+        });
       if (action === "preserve-duplicates") {
         if (copy.conflict.kind !== "preservable")
-          return yield* invalid(`${copy.name} does not have eligible equal global copies`);
+          return yield* invalid({
+            _tag: "CopiesNotPreservable",
+            name: copy.name,
+            path: copy.sourcePath,
+            conflict: copy.conflict.kind,
+          });
         decisions.push({
           ...copy,
           duplicateAction: action,
@@ -204,7 +183,12 @@ const reviewScan = Effect.fn("Setup.reviewScan")(function* (
         continue;
       }
       if (copy.conflict.kind !== "retirable")
-        return yield* invalid(`${copy.name} has copies that are not individual symlinks`);
+        return yield* invalid({
+          _tag: "AliasesNotRetirable",
+          name: copy.name,
+          path: copy.sourcePath,
+          conflict: copy.conflict.kind,
+        });
       decisions.push({
         ...copy,
         duplicateAction: action,
@@ -218,7 +202,7 @@ const reviewScan = Effect.fn("Setup.reviewScan")(function* (
     const imports: SetupKnownSourceSelection[] = [];
     for (const key of new Set(selection.sources)) {
       const source = sources.get(key);
-      if (source === undefined) return yield* invalid("Choose an observed setup Source");
+      if (source === undefined) return yield* invalid({ _tag: "SourceUnavailable", key });
       imports.push(
         ...source.candidates.map((candidate) => ({
           name: candidate.name,
@@ -235,16 +219,6 @@ const reviewScan = Effect.fn("Setup.reviewScan")(function* (
     const removals = copies
       .filter((copy) => selection.copies.includes(`remove\0${copy.value}`))
       .map((copy) => ({ name: copy.instance.name, paths: [copy.instance.path] }));
-    const selectedExistingSkills = new Set(
-      decisions
-        .filter((copy) => copy.operation === "bind")
-        .flatMap(
-          (copy) =>
-            scan.instances
-              .find((instance) => instance.path === copy.sourcePath)
-              ?.contentIdentity.libraryMatches.map((match) => match.skillId) ?? [],
-        ),
-    );
     const approval: SetupApproval = {
       setup,
       planId: scan.onboarding.planId,
@@ -253,16 +227,6 @@ const reviewScan = Effect.fn("Setup.reviewScan")(function* (
       bindings: decisions.filter((copy) => copy.operation === "bind"),
       ownership: decisions.filter((copy) => copy.operation === "add"),
       removals: yield* planSetupRemovals(scan, removals, removablePaths),
-      versionChoices: structuredClone(versionChoices),
-      changes: structuredClone(
-        (scan.changes ?? []).filter(
-          (fact) =>
-            selection.reconcileExisting !== false ||
-            selectedExistingSkills.has(fact.skillId) ||
-            selection.reconciliationSkills?.includes(fact.skillId) ||
-            versionChoices.some((choice) => choice.skillId === fact.skillId),
-        ),
-      ),
     };
     const repositoryCopies = approval.ownership.filter((copy) =>
       scan.instances.some(
@@ -277,8 +241,6 @@ const reviewScan = Effect.fn("Setup.reviewScan")(function* (
     });
     const summary = {
       sourceUpdateMayNeedReview: imports.length > 0 && (scan.changes?.length ?? 0) > 0,
-      changes: approval.changes ?? [],
-      versionChoices,
       persistRoots,
       repositoryDecisions,
       createsMachineIdentity:
@@ -382,13 +344,11 @@ const reviewScan = Effect.fn("Setup.reviewScan")(function* (
       custody: structuredClone(approval.ownership),
     };
     return {
-      canApply: !changesNeedingChoice(approval.changes ?? [], versionChoices).length,
+      canApply: true as const,
       reviewId: hashParts([
         canonicalJson({
           planId: scan.onboarding.planId,
           setup,
-          changes: approval.changes,
-          versionChoices,
           sources: [...selection.sources].sort(),
           copies: [...selection.copies].sort(),
           decisions: [...decisions].sort((a, b) => a.sourcePath.localeCompare(b.sourcePath)),
@@ -398,12 +358,10 @@ const reviewScan = Effect.fn("Setup.reviewScan")(function* (
         persistRoots ||
         imports.length > 0 ||
         decisions.length > 0 ||
-        approval.removals.entries.length > 0 ||
-        hasChangesToApply(approval.changes ?? [], versionChoices) ||
-        changesNeedingChoice(approval.changes ?? [], versionChoices).length > 0,
+        approval.removals.entries.length > 0,
       summary: structuredClone(summary),
-      apply: (withStatus: SetupApplyOptions["withStatus"]) =>
-        applySetupPlan({ manage: manageOptions, withStatus }, approved),
+      apply: (withStage: SetupApplyOptions["withStage"]) =>
+        applySetupPlan({ manage: manageOptions, withStage }, approved),
     };
   });
   const recommended = scan.onboarding.recommended;
@@ -414,16 +372,18 @@ const reviewScan = Effect.fn("Setup.reviewScan")(function* (
         item.instance.name === recommendation.name &&
         item.instance.path === recommendation.sourcePath,
     );
-    if (copy === undefined) return yield* invalid("The recommended copy is not in the review");
+    if (copy === undefined)
+      return yield* invalid({
+        _tag: "RecommendedCopyMissing",
+        name: recommendation.name,
+        path: recommendation.sourcePath,
+      });
     recommendedValues.push(copy.value);
   }
   const prepareChoices = Effect.fn("Setup.prepareChoices")(function* (
     sourceKeys: readonly string[],
     values: readonly string[],
     duplicates: SetupDuplicateAction | undefined,
-    reconcileExisting = true,
-    reconciliationSkills: readonly string[] = [],
-    versionChoices: readonly SetupVersionChoice[] = [],
   ) {
     const chosen = yield* selectedCopies(values);
     const conflicting = chosen.filter(setupDuplicateChoiceRequired);
@@ -435,9 +395,6 @@ const reviewScan = Effect.fn("Setup.reviewScan")(function* (
         keepBoth: alternatives.includes("keep-both"),
       });
     return yield* prepare({
-      reconcileExisting,
-      reconciliationSkills,
-      versionChoices,
       sources: sourceKeys,
       copies: values,
       decisions: chosen.map((copy) => ({
@@ -449,28 +406,25 @@ const reviewScan = Effect.fn("Setup.reviewScan")(function* (
   const explicitChoices = Effect.fn("Setup.explicitChoices")(function* (
     selection: SetupExplicitSelection,
   ) {
-    for (const id of selection.reconcileSkillIds ?? []) {
-      if (!(scan.changes ?? []).some((fact) => fact.skillId === id))
-        return yield* invalid("Choose an observed existing Skill identifier");
-    }
     const sourceKeys: string[] = [];
     for (const id of new Set(selection.sourceIds)) {
       const source = [...sources.values()].find((item) => setupSourceChoiceId(item.key) === id);
-      if (!source) return yield* invalid("Choose an available setup source identifier");
+      if (!source) return yield* invalid({ _tag: "SourceIdUnavailable", sourceId: id });
       sourceKeys.push(source.key);
     }
     const values: string[] = [];
     for (const path of new Set(selection.copyPaths)) {
       const copy = copies.find((item) => item.instance.path === path && item.selectable);
-      if (!copy) return yield* invalid("Choose an available setup copy path");
+      if (!copy) return yield* invalid({ _tag: "CopyUnavailable", path });
       values.push(copy.value);
     }
     for (const path of new Set(selection.removePaths)) {
       const copy = copies.find(
         (item) => item.instance.path === path && (removablePaths.get(path)?.length ?? 0) > 0,
       );
-      if (!copy || selection.copyPaths.includes(path))
-        return yield* invalid("Choose a removable copy without also selecting it for enablement");
+      if (!copy) return yield* invalid({ _tag: "RemovalUnavailable", path });
+      if (selection.copyPaths.includes(path))
+        return yield* invalid({ _tag: "RemovalAlsoEnabled", path });
       values.push(`remove\0${copy.value}`);
     }
     const selected = yield* selectedCopies(values);
@@ -481,16 +435,23 @@ const reviewScan = Effect.fn("Setup.reviewScan")(function* (
     const names = new Set<string>();
     for (const path of paths) {
       const copy = scan.instances.find((item) => item.path === path);
-      if (!copy) return yield* invalid("Choose an observed copy to compare");
+      if (!copy) return yield* invalid({ _tag: "ComparisonCopyUnavailable", path });
       names.add(copy.name);
     }
-    if (!names.size) return yield* invalid("Choose at least one observed copy to compare");
+    if (!names.size) return yield* invalid({ _tag: "ComparisonEmpty" });
     const compared = [];
     for (const instance of scan.instances.filter((item) => names.has(item.name))) {
       const markdown = yield* fs.readFileString(join(instance.path, "SKILL.md"));
       const currentHash = yield* deterministicTreeHash(instance.path);
+      if (instance.contentIdentity.status !== "hashed")
+        return yield* invalid({ _tag: "ComparisonIdentityMissing", path: instance.path });
       if (currentHash !== instance.contentIdentity.currentHash)
-        return yield* invalid("This copy changed; observe setup again before comparing");
+        return yield* invalid({
+          _tag: "ComparisonContentChanged",
+          path: instance.path,
+          expected: instance.contentIdentity.currentHash,
+          actual: currentHash,
+        });
       compared.push({
         name: instance.name,
         path: instance.path,
@@ -506,28 +467,7 @@ const reviewScan = Effect.fn("Setup.reviewScan")(function* (
     duplicates: SetupDuplicateAction | undefined,
   ) {
     const chosen = yield* explicitChoices(selection);
-    const alternatives = setupVersionAlternatives(scan.changes ?? []);
-    const versionChoices: SetupVersionChoice[] = [];
-    for (const skillId of selection.useRetainedSkillIds ?? []) {
-      const choice = alternatives.find(
-        (item) => item.skillId === skillId && item.version === "retained",
-      );
-      if (!choice) return yield* invalid("Choose an available retained-version alternative");
-      versionChoices.push(choice);
-    }
-    for (const path of selection.useCopyPaths ?? []) {
-      const choice = alternatives.find((item) => item.version === "local" && item.path === path);
-      if (!choice) return yield* invalid("Choose an available current-copy alternative");
-      versionChoices.push(choice);
-    }
-    return yield* prepareChoices(
-      chosen.sourceKeys,
-      chosen.values,
-      duplicates,
-      false,
-      selection.reconcileSkillIds ?? [],
-      versionChoices,
-    );
+    return yield* prepareChoices(chosen.sourceKeys, chosen.values, duplicates);
   });
   const prepareRecommended = (duplicates: SetupDuplicateAction | undefined) =>
     prepareChoices(
@@ -561,7 +501,6 @@ const reviewScan = Effect.fn("Setup.reviewScan")(function* (
           : {}),
       })),
     ),
-    versionAlternatives: setupVersionAlternatives(scan.changes ?? []),
     selectedCopies,
     explicitChoices,
     compareCopies,
@@ -620,25 +559,30 @@ export type SetupReviewSummary = Effect.Success<ReturnType<SetupReview["prepare"
 
 /** Reusable setup scan, reviewed choices and apply workflow. Owners retain their state. */
 export { recordDuplicateSymlinks, type ManageOptions } from "./setup/manage-existing.js";
-export { SetupStopped, applySetupPlan } from "./setup/apply.js";
+export {
+  SetupStopped,
+  applySetupPlan,
+  SetupApplyStage,
+  SetupProgress,
+  type SetupApplyOptions,
+} from "./setup/apply.js";
 export {
   InstalledSkillChange,
-  InstalledSkillChangeResult,
   RepositoryPolicyResult,
   SetupApplied,
+  SetupLeftAloneReason,
   SetupKnownSourceSelection,
   SetupLockMatch,
   SetupOnboardingCandidate,
   SetupResult,
   SetupSkillInstance,
-  SetupVersionChoice,
+  HarnessSkillOrigin,
 } from "./setup/contract.js";
 export {
   SetupCopySelection,
   SetupDuplicateAction,
   copyConflict,
   recommendedSetupSelection,
-  setupApplyCommandLine,
   setupDuplicateActions,
   setupDuplicateChoiceRequired,
   setupReviewCopies,
@@ -651,7 +595,6 @@ export {
 } from "./setup/decisions.js";
 export { collectSetupEvidence, ownershipAt } from "./setup/discovery.js";
 export { setupImportRequests } from "./setup/import.js";
-export { changeResults } from "./setup/installed-skills.js";
 export { setupExistingSelections, setupNewSelections } from "./setup/manage.js";
 export { classifyOwner, classifySetupOnboarding } from "./setup/onboarding.js";
 export { planSetupRemovals, setupRemovablePaths } from "./setup/removal.js";
@@ -666,5 +609,6 @@ export { setupIntent } from "./internal/setup/intent.js";
 // Inferred consumer declarations require these failure names.
 export type { SetupDuplicateDecisionRequired };
 export type { SetupImportInvalid } from "./setup/import.js";
-export type { ChangeChoiceRequired } from "./setup/installed-skills.js";
 export type { SetupManageSelectionInvalid } from "./setup/manage.js";
+
+export { SetupWarning, SetupWarningReason } from "./setup-warning.js";

@@ -1,60 +1,13 @@
 import { writeRawAtomic, syncPaths } from "../../platform/atomic-write.js";
 import { canonicalJson } from "../../shared/json.js";
-import { Data, Effect, FileSystem, Schema } from "effect";
+import { Effect, FileSystem, Schema } from "effect";
 import { join } from "node:path";
-import { Hash } from "../../shared/hash.js";
-import { OperationId } from "../entity-ids.js";
-import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
-
-export const LibraryAuditChange = Schema.Struct({
-  entity: Schema.Literals([
-    "collection",
-    "skill",
-    "version",
-    "binding",
-    "projection",
-    "custody",
-    "library",
-  ]),
-  id: Schema.String,
-  action: Schema.String,
-  before: Schema.optionalKey(Schema.String),
-  after: Schema.optionalKey(Schema.String),
-  path: Schema.optionalKey(Schema.String),
-  digest: Schema.optionalKey(Hash),
-});
-export interface LibraryAuditChange extends Schema.Schema.Type<typeof LibraryAuditChange> {}
-
-export const LibraryAuditEvent = Schema.Struct({
-  schemaVersion: Schema.Literal(1),
-  eventId: OperationId,
-  occurredAt: Schema.String,
-  type: Schema.String,
-  workflow: Schema.String,
-  imported: Schema.optionalKey(Schema.Boolean),
-  changes: Schema.Array(LibraryAuditChange),
-});
-export interface LibraryAuditEvent extends Schema.Schema.Type<typeof LibraryAuditEvent> {}
+import { LibraryAuditEvent } from "./contracts.js";
+export { LibraryAuditChange, LibraryAuditEvent } from "./contracts.js";
+import { LibraryAuditInvalid } from "./failures.js";
+export { LibraryAuditInvalid } from "./failures.js";
 
 const AuditLine = Schema.fromJsonString(LibraryAuditEvent);
-
-export class LibraryAuditInvalid
-  extends Data.TaggedError("LibraryAuditInvalid")<{
-    path: string;
-    line?: number;
-    cause: unknown;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  get remediation(): string {
-    return `Move ${this.path} aside to start a new audit log, then retry.`;
-  }
-  get message(): string {
-    return `Invalid Library audit log at ${this.path}${this.line === undefined ? "" : `:${this.line}`}`;
-  }
-}
 
 /** Deliver a recorded identity once; atomic replacement cannot leave a partial JSONL tail. */
 export const appendLibraryAudit = Effect.fn("LibraryAudit.append")(function* (
@@ -63,7 +16,13 @@ export const appendLibraryAudit = Effect.fn("LibraryAudit.append")(function* (
 ) {
   const path = join(home, "audit.jsonl");
   const event = yield* LibraryAuditEvent.makeEffect(recorded).pipe(
-    Effect.mapError((cause) => new LibraryAuditInvalid({ path, cause })),
+    Effect.mapError(
+      (issue) =>
+        new LibraryAuditInvalid({
+          path,
+          reason: { _tag: "SchemaInvalid", failure: new Schema.SchemaError(issue) },
+        }),
+    ),
   );
   const { events: previous, text } = yield* readAuditContents(home);
   const delivered = previous.find((item) => item.eventId === event.eventId);
@@ -71,13 +30,20 @@ export const appendLibraryAudit = Effect.fn("LibraryAudit.append")(function* (
     if (canonicalJson(delivered) !== canonicalJson(event))
       return yield* new LibraryAuditInvalid({
         path,
-        cause: "Recorded event differs from its delivered identity",
+        reason: {
+          _tag: "EventIdentityChanged",
+          eventId: event.eventId,
+          expected: delivered,
+          actual: event,
+        },
       });
     yield* syncPaths([path, home]);
     return delivered;
   }
   const encoded = yield* Schema.encodeEffect(AuditLine)(event).pipe(
-    Effect.mapError((cause) => new LibraryAuditInvalid({ path, cause })),
+    Effect.mapError(
+      (failure) => new LibraryAuditInvalid({ path, reason: { _tag: "SchemaInvalid", failure } }),
+    ),
   );
   const separator = text.length && !text.endsWith("\n") ? "\n" : "";
   yield* writeRawAtomic(path, `${text}${separator}${encoded}\n`);
@@ -102,7 +68,14 @@ const readAuditContents = Effect.fn("LibraryAudit.readContents")(function* (home
     const line = lines[index]!;
     if (!line && index === lines.length - 1) continue;
     const event = yield* Schema.decodeEffect(AuditLine)(line).pipe(
-      Effect.mapError((cause) => new LibraryAuditInvalid({ path, line: index + 1, cause })),
+      Effect.mapError(
+        (failure) =>
+          new LibraryAuditInvalid({
+            path,
+            line: index + 1,
+            reason: { _tag: "SchemaInvalid", failure },
+          }),
+      ),
     );
     events.push(event);
   }

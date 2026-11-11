@@ -116,7 +116,7 @@ effectIt.effect(
       );
       const prompts = yield* interaction.prompts;
       expect(prompts[0]?.choices.find((choice) => choice.value === "collection")?.label).toBe(
-        "Enable whole collection · 1 skills · 3 description characters",
+        "Enable whole collection | 1 skill | 3 description characters",
       );
       expect(prompts[1]?.choices.map((choice) => choice.value).sort()).toEqual(["keep", "removed"]);
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),

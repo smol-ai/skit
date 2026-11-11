@@ -30,4 +30,4 @@ export const describeBuild = (build) =>
     `${build.version} (${build.kind})`,
     `commit ${build.commit ?? "unknown"}`,
     ...(build.buildId ? [`build ${build.buildId}`] : []),
-  ].join(" · ");
+  ].join(" | ");

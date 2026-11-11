@@ -18,7 +18,7 @@ export const checkSetupGlobalContent = Effect.fn("Setup.checkGlobalContent")(fun
       ),
     );
   if (yield* present(join(path, ".skit")))
-    return yield* new StalePlan({ message: "The Library changed since this was previewed" });
+    return yield* new StalePlan({ reason: { _tag: "ReviewedStateChanged" } });
   // A configured root alias must not hide protection above its physical destination.
   let ancestor = dirname(path);
   let physical = path;
@@ -35,14 +35,14 @@ export const checkSetupGlobalContent = Effect.fn("Setup.checkGlobalContent")(fun
       break;
     }
     if (ancestor === dirname(ancestor))
-      return yield* new StalePlan({ message: "The Library changed since this was previewed" });
+      return yield* new StalePlan({ reason: { _tag: "ReviewedStateChanged" } });
     ancestor = dirname(ancestor);
   }
   for (const coordinate of new Set([path, physical])) {
     for (let parent = coordinate; ; parent = dirname(parent)) {
       for (const marker of [".git", "skit.json", "skit.remote.json"])
         if (yield* present(join(parent, marker)))
-          return yield* new StalePlan({ message: "The Library changed since this was previewed" });
+          return yield* new StalePlan({ reason: { _tag: "ReviewedStateChanged" } });
       if (parent === dirname(parent)) break;
     }
   }

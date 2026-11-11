@@ -1,3 +1,4 @@
+import { TreeError } from "@smolai/skit-core/shared";
 import * as Library from "@smolai/skit-core/library";
 import { withLibraryOwner } from "./helpers/library-owner.js";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -62,7 +63,7 @@ const setupInstance = (
   harnesses: ["codex"],
   owner: { kind: "unknown" },
   contentIdentity: {
-    status: "none",
+    status: "hashed",
     currentHash: projectHash(name),
     libraryMatches: [],
   },
@@ -105,7 +106,6 @@ const saveSettingsForSetup = (options: SetupOptions) =>
       sources: [],
       copies: [],
       decisions: [],
-      reconcileExisting: false,
     });
     return (yield* plan.apply((_message, effect) => effect)).scan;
   }).pipe(
@@ -708,23 +708,23 @@ it.effect("keeps onboarding classifications conservative across conflicting evid
     const sharedVersion = makeSkillVersionId();
     const candidates = classifySetupOnboarding([
       setupInstance("lock-mismatch", "/global/lock-mismatch-a", {
-        contentIdentity: { status: "none", currentHash: hash, libraryMatches: [] },
+        contentIdentity: { status: "hashed", currentHash: hash, libraryMatches: [] },
         locks: [setupLock("acme/a", "agrees", "lock-ambiguous")],
       }),
       setupInstance("lock-mismatch", "/global/lock-mismatch-b", {
-        contentIdentity: { status: "none", currentHash: hash, libraryMatches: [] },
+        contentIdentity: { status: "hashed", currentHash: hash, libraryMatches: [] },
         locks: [setupLock("acme/b", "mismatch", "lock-mismatch")],
       }),
       setupInstance("lock-ambiguous", "/global/lock-ambiguous-a", {
-        contentIdentity: { status: "none", currentHash: hash, libraryMatches: [] },
+        contentIdentity: { status: "hashed", currentHash: hash, libraryMatches: [] },
         locks: [setupLock("acme/a", "agrees", "lock-ambiguous")],
       }),
       setupInstance("lock-ambiguous", "/global/lock-ambiguous-b", {
-        contentIdentity: { status: "none", currentHash: hash, libraryMatches: [] },
+        contentIdentity: { status: "hashed", currentHash: hash, libraryMatches: [] },
         locks: [setupLock("acme/b", "agrees", "lock-mismatch")],
       }),
       setupInstance("lock-local-only", "/global/lock-local-only", {
-        contentIdentity: { status: "none", currentHash: hash, libraryMatches: [] },
+        contentIdentity: { status: "hashed", currentHash: hash, libraryMatches: [] },
         locks: [
           {
             ...setupLock("../local-source", "agrees", "lock-local-only"),
@@ -739,7 +739,7 @@ it.effect("keeps onboarding classifications conservative across conflicting evid
       }),
       setupInstance("library-exact", "/global/library-exact", {
         contentIdentity: {
-          status: "exact",
+          status: "hashed",
           currentHash: hash,
           libraryMatches: [
             {
@@ -753,7 +753,7 @@ it.effect("keeps onboarding classifications conservative across conflicting evid
       }),
       setupInstance("library-renamed", "/global/library-renamed", {
         contentIdentity: {
-          status: "exact",
+          status: "hashed",
           currentHash: hash,
           libraryMatches: [
             {
@@ -767,7 +767,7 @@ it.effect("keeps onboarding classifications conservative across conflicting evid
       }),
       setupInstance("library-ambiguous", "/global/library-ambiguous", {
         contentIdentity: {
-          status: "ambiguous",
+          status: "hashed",
           currentHash: hash,
           libraryMatches: [
             {
@@ -787,7 +787,10 @@ it.effect("keeps onboarding classifications conservative across conflicting evid
       }),
       setupInstance("invalid", "/global/invalid", { owner: { kind: "invalid-marker" } }),
       setupInstance("unhashable", "/global/unhashable", {
-        contentIdentity: { status: "unhashable", libraryMatches: [] },
+        contentIdentity: {
+          status: "failed",
+          failure: new TreeError({ reason: { _tag: "IgnoredRoot" } }),
+        },
       }),
       setupInstance("standalone", "/loose/standalone", {
         scope: "standalone",
@@ -879,7 +882,7 @@ it.effect(
       const upstream = setupInstance("upstream", "/repo/upstream", {
         git: { status: "ignored", repository: "/repo" },
         contentIdentity: {
-          status: "exact",
+          status: "hashed",
           currentHash: hash,
           libraryMatches: [
             {
@@ -899,7 +902,7 @@ it.effect(
         git: { status: "ignored", repository: "/repo" },
         owner: { kind: "repository", repository: "/repo" },
         contentIdentity: {
-          status: "exact",
+          status: "hashed",
           currentHash: hash,
           libraryMatches: [
             {
@@ -970,7 +973,7 @@ it.effect("matches an unresolvable lock to a retained Collection by canonical re
     const instance = setupInstance("Bad_Name", "/repo/Bad_Name", {
       git: { status: "ignored", repository: "/repo" },
       contentIdentity: {
-        status: "exact",
+        status: "hashed",
         currentHash: projectHash("Bad_Name"),
         libraryMatches: [{ subjectId: collectionId, skillId, skillVersionId, name: "Bad_Name" }],
       },
@@ -1008,7 +1011,7 @@ it.effect(
           home,
           harnesses: ["codex"],
         }),
-      ).toEqual({ kind: "harness", harness: "codex", source: "Codex system", bundled: true });
+      ).toEqual({ kind: "harness", harness: "codex", origin: "system" });
       expect(
         classifyOwner({
           canonicalPath:
@@ -1016,7 +1019,15 @@ it.effect(
           home,
           harnesses: ["codex"],
         }),
-      ).toEqual({ kind: "harness", harness: "codex", source: "Codex bundled", bundled: true });
+      ).toEqual({ kind: "harness", harness: "codex", origin: "bundled-plugin" });
+      expect(
+        classifyOwner({
+          canonicalPath:
+            "/home/test/.codex/plugins/cache/openai-primary-runtime/example/1.0.0/skills/review",
+          home,
+          harnesses: ["codex"],
+        }),
+      ).toEqual({ kind: "harness", harness: "codex", origin: "runtime-plugin" });
       expect(
         classifyOwner({
           canonicalPath:
@@ -1024,7 +1035,7 @@ it.effect(
           home,
           harnesses: ["codex"],
         }),
-      ).toEqual({ kind: "harness", harness: "codex", source: "Codex curated", bundled: false });
+      ).toEqual({ kind: "harness", harness: "codex", origin: "curated-plugin" });
       expect(
         classifyOwner({
           canonicalPath: "/home/test/.codex/skills/user-installed",
@@ -1043,8 +1054,7 @@ it.effect(
         owner: {
           kind: "harness",
           harness: "codex",
-          source: "Codex curated",
-          bundled: false,
+          origin: "curated-plugin",
         },
       });
       const unmanaged = setupInstance("local", "/global/local");
@@ -1246,7 +1256,7 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
     expect(
       scan.instances.find((instance) => instance.path === authoredSkillRealPath)?.contentIdentity,
     ).toEqual({
-      status: "exact",
+      status: "hashed",
       currentHash: contentHash,
       libraryMatches: [{ subjectId: collectionId, skillId, skillVersionId, name: "council" }],
     });
@@ -1535,7 +1545,7 @@ for (const kind of ["source", "edit"] as const) {
       const lock = setupLock("acme/reviews", "agrees", "review");
       const instance = setupInstance("review", "/global/review", {
         locks: [lock],
-        contentIdentity: { status: "none", currentHash: hash, libraryMatches: [] },
+        contentIdentity: { status: "hashed", currentHash: hash, libraryMatches: [] },
       });
       const library = yield* Schema.decodeUnknownEffect(LibraryState)({
         schemaVersion: emptyLibraryFixture().schemaVersion,
@@ -1645,7 +1655,8 @@ for (const kind of ["source", "edit"] as const) {
         {
           ...instance,
           contentIdentity: {
-            ...instance.contentIdentity,
+            status: "hashed",
+            libraryMatches: [],
             currentHash: `sha256:${"b".repeat(64)}`,
           },
         },

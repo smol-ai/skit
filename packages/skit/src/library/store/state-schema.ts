@@ -1,15 +1,21 @@
+import {
+  FileIdentity,
+  FolderEvidence,
+  LinkEvidence,
+  StepError,
+  SetupStopReason,
+} from "./operation-failures.js";
+export {
+  FileIdentity,
+  FolderEvidence,
+  LinkEvidence,
+  StepError,
+  SetupStopReason,
+} from "./operation-failures.js";
+import { InstalledSkillInvalidReason } from "../installation/install-enabled.js";
 import { OwnershipIssue } from "../../installed-skills/metadata.js";
 import { SkillAssessmentAcceptance } from "../assessment-acceptance.js";
-import { Schema, SchemaGetter } from "effect";
-import {
-  badArgument,
-  isPlatformError,
-  systemError,
-  type PlatformError,
-} from "effect/PlatformError";
-import { InvalidLibraryState, LibraryChanged } from "../failures.js";
-import { StoredHomeBusy } from "./step-error-compat.js";
-import { TreeError } from "../../shared/tree-error.js";
+import { Schema } from "effect";
 import {
   CollectionId,
   CollectionVersionId,
@@ -41,6 +47,7 @@ import {
 import { UndoFile, UndoPath, UndoAction } from "../internal/setup/undo-evidence.js";
 import { RecoveryInspection } from "../recovery-facts.js";
 import { EnabledChange } from "../enabled-change.js";
+import { SyncIssue } from "../sync-issues.js";
 import { Destination } from "../installed-skill-facts.js";
 import { Hash } from "../../shared/hash.js";
 import { HarnessName } from "../../harnesses/contracts.js";
@@ -134,39 +141,6 @@ export const SyncPublication: Schema.Codec<SyncPublication, unknown> = Schema.Un
       Schema.is(syncPublication)(value) && !Object.hasOwn(value, "operations"),
   ),
 );
-
-// ── Operation records ───────────────────────────────────────────────────────────────────────────
-// Setup records each operation durably before applying its folder changes (ADR-0020).
-// Each codec decodes to the contract's shape; `state.json` holds its JSON encoding, so the state
-// document stays a plain JSON value: Options are optional keys and device and inode numbers text.
-
-/** A file's identity: exact device and inode, saved as decimal text. */
-export const FileIdentity = Schema.Struct({
-  path: Schema.String,
-  dev: Schema.BigIntFromString,
-  ino: Schema.BigIntFromString,
-});
-export type FileIdentity = typeof FileIdentity.Type;
-
-const FileIdentityFields = FileIdentity.fields;
-
-export const FolderEvidence = Schema.TaggedStruct("Directory", {
-  ...FileIdentityFields,
-  parent: FileIdentity,
-  contentHash: Hash,
-  treeHash: Hash,
-  marker: Schema.OptionFromOptionalKey(Schema.String),
-});
-export type FolderEvidence = typeof FolderEvidence.Type;
-
-export const LinkEvidence = Schema.TaggedStruct("SymbolicLink", {
-  ...FileIdentityFields,
-  parent: FileIdentity,
-  linkTarget: Schema.String,
-  canonicalPath: Schema.String,
-  contentHash: Hash,
-});
-export type LinkEvidence = typeof LinkEvidence.Type;
 
 /** Recorded "nothing here": the before of a created folder, the after of a moved one. */
 export const AbsentEvidence = Schema.TaggedStruct("Absent", {
@@ -330,7 +304,7 @@ const syncProgram = Schema.Struct({
   manifestDigest: Hash,
   receipt: Schema.OptionFromOptionalKey(SyncAncestry),
   folders: Schema.Array(SyncFolder),
-  issues: Schema.Array(Schema.String),
+  issues: Schema.Array(Schema.suspend((): Schema.Codec<SyncIssue, unknown> => SyncIssue)),
 });
 export interface SyncProgram extends Schema.Schema.Type<typeof syncProgram> {}
 export interface StoredSyncProgram extends Schema.Codec.Encoded<typeof syncProgram> {}
@@ -351,7 +325,7 @@ export const RecordedInstalledChange = Schema.Union([
   }),
   Schema.TaggedStruct("Uninstall", { id: InstalledSkillId, keep: Schema.Boolean }),
   Schema.TaggedStruct("Forget", { id: InstalledSkillId, keep: Schema.Boolean }),
-  Schema.TaggedStruct("Fail", { path: Schema.String, reason: Schema.String }),
+  Schema.TaggedStruct("Fail", { path: Schema.String, reason: InstalledSkillInvalidReason }),
 ]).check(
   Schema.makeFilter(
     (change) =>
@@ -361,7 +335,7 @@ export const RecordedInstalledChange = Schema.Union([
         : change.result === "Suppressed"
           ? change.row.status === "suppressed" && !change.backUp
           : change.row.status === "conflicted"),
-    { message: "Recorded result and installed row status must agree" },
+    { representation: { id: "skit/schema/installed-change-status", payload: null } },
   ),
 );
 export type RecordedInstalledChange = typeof RecordedInstalledChange.Type;
@@ -395,7 +369,7 @@ export interface StoredInstalledApply extends Schema.Codec.Encoded<typeof instal
 export const InstalledApply: Schema.Codec<InstalledApply, StoredInstalledApply> = installedApply;
 
 export const RecoveryRestore = Schema.Struct({
-  summary: RecoveryInspection,
+  summary: Schema.suspend(() => RecoveryInspection),
   witnesses: Schema.Array(Schema.String),
   parents: Schema.Array(Schema.String),
   structure: Schema.String,
@@ -471,107 +445,6 @@ export const RecordedSetupStep = Schema.Struct({
   status: Schema.Literals(["Pending", "Done"]),
 });
 export type RecordedSetupStep = typeof RecordedSetupStep.Type;
-
-const SystemErrorTags = Schema.Literals([
-  "AlreadyExists",
-  "BadResource",
-  "Busy",
-  "InvalidData",
-  "NotFound",
-  "PermissionDenied",
-  "TimedOut",
-  "UnexpectedEof",
-  "Unknown",
-  "WouldBlock",
-  "WriteZero",
-]);
-
-/**
- * Effect's PlatformError, stored as the fields it exposes. Its `cause` can be any value, so it is
- * not stored; a read-back error has none.
- */
-const StoredPlatformError = Schema.TaggedStruct("PlatformError", {
-  reason: Schema.Struct({
-    _tag: Schema.Union([SystemErrorTags, Schema.Literal("BadArgument")]),
-    module: Schema.String,
-    method: Schema.String,
-    description: Schema.optionalKey(Schema.String),
-    syscall: Schema.optionalKey(Schema.String),
-    pathOrDescriptor: Schema.optionalKey(Schema.Union([Schema.String, Schema.Finite])),
-  }),
-}).pipe(
-  Schema.decodeTo(Schema.declare(isPlatformError), {
-    decode: SchemaGetter.transform(({ reason }) => {
-      const { _tag, module, method, description, syscall, pathOrDescriptor } = reason;
-      return _tag === "BadArgument"
-        ? badArgument({ module, method, ...(description === undefined ? {} : { description }) })
-        : systemError({
-            _tag,
-            module,
-            method,
-            ...(description === undefined ? {} : { description }),
-            ...(syscall === undefined ? {} : { syscall }),
-            ...(pathOrDescriptor === undefined ? {} : { pathOrDescriptor }),
-          });
-    }),
-    encode: SchemaGetter.transform(({ reason }: PlatformError) => ({
-      _tag: "PlatformError" as const,
-      reason: {
-        _tag: reason._tag,
-        module: reason.module,
-        method: reason.method,
-        ...(reason.description === undefined ? {} : { description: reason.description }),
-        ...(reason._tag === "BadArgument" || reason.syscall === undefined
-          ? {}
-          : { syscall: reason.syscall }),
-        ...(reason._tag === "BadArgument" || reason.pathOrDescriptor === undefined
-          ? {}
-          : { pathOrDescriptor: reason.pathOrDescriptor }),
-      },
-    })),
-  }),
-);
-
-/** Any other SKIT failure, stored as what every SKIT failure says about itself. */
-const StoredFailure = Schema.Struct({
-  _tag: Schema.String,
-  code: Schema.String,
-  message: Schema.String,
-  remediation: Schema.String,
-});
-
-/**
- * A failed step's error. These errors are stored in full; any other is stored as a
- * `StoredFailure`, so a stopped operation can always be recorded.
- */
-export const StepError = Schema.Union([
-  TreeError,
-  StoredHomeBusy,
-  LibraryChanged,
-  InvalidLibraryState,
-  StoredPlatformError,
-  StoredFailure,
-]);
-export type StepError = typeof StepError.Type;
-
-/** Why an operation stopped. */
-export const SetupStopReason = Schema.TaggedUnion({
-  EvidenceDiffers: {
-    step: Schema.Int,
-    path: Schema.String,
-    expected: Schema.Struct({
-      before: Schema.OptionFromOptionalKey(Schema.Union([FolderEvidence, LinkEvidence])),
-      after: Schema.OptionFromOptionalKey(Schema.Union([FolderEvidence, LinkEvidence])),
-    }),
-  },
-  /** `revision` is a Library `Revision`. */
-  LibraryChanged: {
-    step: Schema.Int,
-    revision: Schema.NonEmptyString.pipe(Schema.brand("Revision")),
-  },
-  StepFailed: { step: Schema.Int, error: StepError },
-});
-export type SetupStopReason = typeof SetupStopReason.Type;
 
 /** The desired fields a setup can change. Retained versions and history are not among them. */
 export const SetupIntent = Schema.Struct({

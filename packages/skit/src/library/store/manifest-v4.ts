@@ -257,6 +257,6 @@ export const LibraryManifestFromV4 = LibraryManifestV4.pipe(
         bindings: migrated.bindings,
       };
     }),
-    encode: SchemaGetter.forbidden(() => "v4 portable Library manifests are decode-only"),
+    encode: SchemaGetter.forbiddenEncoding,
   }),
 );

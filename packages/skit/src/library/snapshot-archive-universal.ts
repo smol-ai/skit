@@ -1,12 +1,13 @@
-import { Data, Effect, Schema } from "effect";
-import { encodeHashParts, sha256Hash } from "../shared/hash.js";
+import { SchemaFailure } from "../shared/schema-issue.js";
+import { Effect, Schema } from "effect";
+import { encodeHashParts, sha256Hash, Hash } from "../shared/hash.js";
 import { SnapshotArchive } from "./library-contracts.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
+import type { TreeEntry } from "../artifact/tree-entry.js";
 
 const MAX_TREE_BYTES = 32 * 1024 * 1024;
 const parentOf = (path: string) =>
   path.lastIndexOf("/") < 0 ? "." : path.slice(0, path.lastIndexOf("/"));
-const nameOf = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 const safeLink = (path: string, target: string): boolean => {
   if (!target || target.startsWith("/") || target.includes("\\") || target.includes("\0"))
     return false;
@@ -21,24 +22,44 @@ const safeLink = (path: string, target: string): boolean => {
   return true;
 };
 
-export class SnapshotArchiveInvalid
-  extends Data.TaggedError("Library.SnapshotArchiveInvalid")<{
-    reason: string;
-  }>
+export const CollectionVersionArchiveInvalidReason = Schema.TaggedUnion({
+  InvalidShape: { failure: SchemaFailure },
+  InvalidBase64: { path: Schema.String },
+  DuplicatePath: { path: Schema.String },
+  ByteLimitExceeded: {
+    kind: Schema.Literals(["encoded-file", "tree"]),
+    path: Schema.String,
+    limit: Schema.Int,
+    actual: Schema.Int,
+  },
+  UnsafeSymlink: { path: Schema.String, target: Schema.String },
+  ChildOfNonDirectory: { path: Schema.String },
+  MissingParent: { unreachable: Schema.Int },
+  HashMismatch: {
+    kind: Schema.Literals(["archive", "materialized"]),
+    expected: Hash,
+    actual: Hash,
+  },
+}).annotate({ identifier: "CollectionVersionArchiveInvalidReason" });
+export type CollectionVersionArchiveInvalidReason =
+  typeof CollectionVersionArchiveInvalidReason.Type;
+
+export class CollectionVersionArchiveInvalid
+  extends Schema.TaggedError<CollectionVersionArchiveInvalid, { readonly brand: unique symbol }>()(
+    // Released serialized tag; changing stored/wire spellings is outside this cleanup.
+    "Library.SnapshotArchiveInvalid",
+    { reason: CollectionVersionArchiveInvalidReason },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Sync again; if it persists, the stored snapshot is damaged.";
-  get message(): string {
-    return `Invalid Library snapshot archive: ${this.reason}`;
-  }
 }
 
-const fromBase64 = (value: string) =>
+const fromBase64 = (path: string, value: string) =>
   Effect.try({
     try: () => Uint8Array.from(atob(value), (character) => character.charCodeAt(0)),
-    catch: () => new SnapshotArchiveInvalid({ reason: "invalid file base64" }),
+    catch: () => new CollectionVersionArchiveInvalid({ reason: { _tag: "InvalidBase64", path } }),
   });
 
 /** Decode, validate archive hierarchy, and recompute the verbatim tree digest. */
@@ -46,61 +67,90 @@ export const verifySnapshotArchive = Effect.fn("Library.verifySnapshotArchive")(
   input: unknown,
 ) {
   const archive = yield* Schema.decodeUnknownEffect(SnapshotArchive)(input).pipe(
-    Effect.mapError(() => new SnapshotArchiveInvalid({ reason: "invalid archive shape or path" })),
+    Effect.mapError(
+      (error) =>
+        new CollectionVersionArchiveInvalid({
+          reason: { _tag: "InvalidShape", failure: error },
+        }),
+    ),
   );
-  const byPath = new Map<string, (typeof archive.entries)[number]>();
-  const children = new Map<string, string[]>();
+  const paths = new Set<string>();
+  const children = new Map<string, TreeEntry[]>();
   let treeBytes = 0;
-  const decodedFiles = new Map<string, Uint8Array>();
   for (const entry of archive.entries) {
-    if (byPath.has(entry.path))
-      return yield* new SnapshotArchiveInvalid({ reason: `duplicate path: ${entry.path}` });
-    byPath.set(entry.path, entry);
-    const parent = parentOf(entry.path);
-    const siblings = children.get(parent) ?? [];
-    siblings.push(nameOf(entry.path));
-    children.set(parent, siblings);
+    if (paths.has(entry.path))
+      return yield* new CollectionVersionArchiveInvalid({
+        reason: { _tag: "DuplicatePath", path: entry.path },
+      });
+    paths.add(entry.path);
+    let decoded: TreeEntry;
     if (entry.kind === "file") {
       if (entry.content_base64.length > Math.ceil((MAX_TREE_BYTES * 4) / 3) + 4)
-        return yield* new SnapshotArchiveInvalid({ reason: "encoded file exceeds byte limit" });
-      const bytes = yield* fromBase64(entry.content_base64);
+        return yield* new CollectionVersionArchiveInvalid({
+          reason: {
+            _tag: "ByteLimitExceeded",
+            kind: "encoded-file",
+            path: entry.path,
+            limit: Math.ceil((MAX_TREE_BYTES * 4) / 3) + 4,
+            actual: entry.content_base64.length,
+          },
+        });
+      const bytes = yield* fromBase64(entry.path, entry.content_base64);
       treeBytes += bytes.length;
       if (treeBytes > MAX_TREE_BYTES)
-        return yield* new SnapshotArchiveInvalid({ reason: "tree exceeds byte limit" });
-      decodedFiles.set(entry.path, bytes);
-    }
+        return yield* new CollectionVersionArchiveInvalid({
+          reason: {
+            _tag: "ByteLimitExceeded",
+            kind: "tree",
+            path: entry.path,
+            limit: MAX_TREE_BYTES,
+            actual: treeBytes,
+          },
+        });
+      decoded = { path: entry.path, kind: "file", mode: entry.mode, bytes };
+    } else decoded = entry;
     if (entry.kind === "symlink" && !safeLink(entry.path, entry.target))
-      return yield* new SnapshotArchiveInvalid({ reason: `unsafe symlink: ${entry.path}` });
+      return yield* new CollectionVersionArchiveInvalid({
+        reason: { _tag: "UnsafeSymlink", path: entry.path, target: entry.target },
+      });
+    const parent = parentOf(entry.path);
+    const siblings = children.get(parent) ?? [];
+    siblings.push(decoded);
+    children.set(parent, siblings);
   }
-  const ordered: (typeof archive.entries)[number][] = [];
-  const walk = (parent: string): Effect.Effect<void, SnapshotArchiveInvalid> =>
+  const ordered: TreeEntry[] = [];
+  const walk = (parent: string): Effect.Effect<void, CollectionVersionArchiveInvalid> =>
     Effect.gen(function* () {
-      for (const name of (children.get(parent) ?? []).sort()) {
-        const path = parent === "." ? name : `${parent}/${name}`;
-        const entry = byPath.get(path);
-        if (entry === undefined)
-          return yield* new SnapshotArchiveInvalid({ reason: `missing path: ${path}` });
+      const siblings = (children.get(parent) ?? []).sort((left, right) =>
+        left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
+      );
+      for (const entry of siblings) {
+        const path = entry.path;
         ordered.push(entry);
         if (entry.kind === "directory") yield* walk(path);
         else if (children.has(path))
-          return yield* new SnapshotArchiveInvalid({ reason: `child of non-directory: ${path}` });
+          return yield* new CollectionVersionArchiveInvalid({
+            reason: { _tag: "ChildOfNonDirectory", path },
+          });
       }
     });
   yield* walk(".");
-  if (ordered.length !== byPath.size)
-    return yield* new SnapshotArchiveInvalid({ reason: "missing parent directory" });
+  if (ordered.length !== paths.size)
+    return yield* new CollectionVersionArchiveInvalid({
+      reason: { _tag: "MissingParent", unreachable: paths.size - ordered.length },
+    });
   const parts: (string | Uint8Array)[] = [];
   for (const entry of ordered) {
     parts.push(entry.path, entry.kind);
     if (entry.kind === "file") {
-      const bytes = decodedFiles.get(entry.path);
-      if (bytes === undefined)
-        return yield* new SnapshotArchiveInvalid({ reason: `missing file: ${entry.path}` });
-      parts.push(String(entry.mode), bytes);
+      parts.push(String(entry.mode), entry.bytes);
     }
     if (entry.kind === "symlink") parts.push(entry.target);
   }
-  if ((yield* sha256Hash(encodeHashParts(parts))) !== archive.digest)
-    return yield* new SnapshotArchiveInvalid({ reason: "snapshot digest mismatch" });
-  return { archive, entries: ordered, files: decodedFiles };
+  const actual = yield* sha256Hash(encodeHashParts(parts));
+  if (actual !== archive.digest)
+    return yield* new CollectionVersionArchiveInvalid({
+      reason: { _tag: "HashMismatch", kind: "archive", expected: archive.digest, actual },
+    });
+  return { archive, entries: ordered };
 });

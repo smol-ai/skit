@@ -1,3 +1,4 @@
+import { defineCommand } from "../../commands/definition.js";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Effect } from "effect";
 import { Argument, Command } from "effect/cli";
@@ -9,9 +10,11 @@ import { Registry } from "../index.js";
 import { Renderer } from "../../terminal/renderer.js";
 import { result } from "../../commands/result.js";
 
-const name = Argument.String("name");
+const name = Argument.String("name").pipe(
+  Argument.withDescription("Name of the Registry to use by default."),
+);
 
-export const registryDefaultCliCommand = Command.make(
+export const registryDefaultCliCommand = defineCommand(
   "default",
   { name, json: jsonFlag },
   ({ name }) =>
@@ -37,7 +40,6 @@ export const registryDefaultCliCommand = Command.make(
       subprocesses: credentialStoreSubprocesses,
     },
     outputSchemas: [outputContracts.registryRemote],
-    exitCodes: [0, 11, 12, 64],
     interactive: false,
   }),
 );

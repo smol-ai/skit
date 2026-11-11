@@ -65,7 +65,7 @@ it.effect("add keeps its saved import when the optional description report canno
             Effect.fail(
               new InvalidLibraryState({
                 path: join(home, "state.json"),
-                detail: "Report read unavailable",
+                reason: { _tag: "InvalidData" },
               }),
             ),
         },

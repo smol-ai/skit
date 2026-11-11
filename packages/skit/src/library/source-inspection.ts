@@ -1,4 +1,5 @@
-import { Data, Effect, FileSystem } from "effect";
+import { AddNoSkills } from "./failures.js";
+import { Effect, FileSystem } from "effect";
 import { basename, dirname, join, relative } from "node:path";
 import {
   deterministicTreeHash,
@@ -7,23 +8,10 @@ import {
 } from "../artifact/skit.js";
 import { parseSkillFrontmatter } from "../harnesses/frontmatter.js";
 import { leavePnpmSkill } from "../installed-skills/pnpm-skills.js";
-import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 import { sourceLocator, type ResolvedSkitSource } from "../sources/resolve.js";
 import { originalTreeHash } from "./collection-version.js";
 import { prepareImport } from "./import-collection.js";
 import type { SkitSource } from "./library-contracts.js";
-
-class AddNoSkills
-  extends Data.TaggedError("Library.AddNoSkills")<{ source: string }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Choose a source that contains a SKILL.md.";
-  get message(): string {
-    return `No Skills found in ${this.source}`;
-  }
-}
 
 /** Check every selected local member before retaining any bytes, including declared collections.
  * Preserve the caller's dependency view when resolution canonicalizes or stages directory links.
@@ -111,6 +99,3 @@ export const inspectResolvedSource = Effect.fn("Library.inspectResolvedSource")(
     })),
   };
 });
-
-// Required by the public declaration-only error vocabulary.
-export type { AddNoSkills };

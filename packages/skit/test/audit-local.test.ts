@@ -31,6 +31,54 @@ const link = (target: string, path: string) =>
   Effect.flatMap(FileSystem.FileSystem, (fs) => fs.symlink(target, path));
 
 describe("experimental capability audit", () => {
+  it.effect.each([
+    { source: "# fixture\nunsupported configuration", tag: "UnsupportedLine", line: 2 },
+    { source: '["mcp_servers.local]\n', tag: "UnterminatedKey", line: 1 },
+    {
+      source: String.raw`[mcp_servers.local]
+token = "do-not-print\q"`,
+      tag: "InvalidValue",
+      line: 2,
+    },
+  ] as const)("keeps typed Codex configuration evidence for $tag", ({ source, tag, line }) =>
+    Effect.gen(function* () {
+      const root = yield* scratch("skit-audit-config-reason-");
+      const home = join(root, "home");
+      const path = join(home, ".codex", "config.toml");
+      yield* write(path, source);
+      const raw = yield* auditLocalCapabilities({ home, cwd: root });
+      const report = normalizeAuditReport(raw);
+      const finding = report.findings.find((item) => item.code === "codex-config-parse-failed");
+      expect(finding?.reason).toBe(
+        raw.findings.find((item) => item.code === finding?.code)?.reason,
+      );
+      expect(finding?.reason).toMatchObject({
+        _tag: "CodexConfigurationInvalid",
+        scope: "user",
+        issue: { _tag: tag, line },
+      });
+      expect(finding).not.toHaveProperty("problem");
+      expect(finding?.details).not.toHaveProperty("parseError");
+      if (
+        tag === "InvalidValue" &&
+        finding?.reason._tag === "CodexConfigurationInvalid" &&
+        finding.reason.issue._tag === "InvalidValue"
+      )
+        expect(Schema.isSchemaError(finding.reason.issue.failure)).toBe(true);
+      const wire = yield* Schema.encodeEffect(Schema.toCodecJson(AuditReportV1Alpha4))(report);
+      expect(JSON.stringify(wire)).not.toContain("do-not-print");
+      const readBack = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(AuditReportV1Alpha4))(
+        JSON.parse(JSON.stringify(wire)),
+      );
+      expect(readBack.findings.find((item) => item.code === finding?.code)?.reason).toMatchObject({
+        _tag: "CodexConfigurationInvalid",
+        issue: { _tag: tag, line },
+      });
+      const fs = yield* FileSystem.FileSystem;
+      expect(yield* fs.readFileString(path)).toBe(source);
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+  );
+
   it.effect("validates typed static Skill evidence in the versioned audit report", () =>
     Effect.gen(function* () {
       const root = yield* scratch("skit-audit-contract-");
@@ -87,7 +135,7 @@ describe("experimental capability audit", () => {
 
       expect(observed?.provenance).toEqual({
         confidence: "exact",
-        source: "Codex system skills",
+        origin: { _tag: "BundledSkills", harness: "codex" },
         evidence: join(home, ".codex", "skills", ".system"),
       });
       expect(
@@ -118,9 +166,7 @@ describe("experimental capability audit", () => {
       expect(skills).toHaveLength(2);
       expect(new Set(skills.map((item) => item.canonicalPath)).size).toBe(1);
       expect(skills.every((item) => item.aliases?.length === 2)).toBe(true);
-      expect(skills.every((item) => item.provenance.source === "Skills CLI / skills.sh")).toBe(
-        true,
-      );
+      expect(skills.every((item) => item.provenance.origin._tag === "SkillsSh")).toBe(true);
       expect(
         skills
           .flatMap((item) => item.frontmatterCompatibility ?? [])
@@ -178,7 +224,7 @@ describe("experimental capability audit", () => {
         })).observations.find((item) => item.kind === "skill" && item.name === "ask-matt");
         expect(observed?.provenance).toMatchObject({
           confidence: "matched",
-          source: "SKIT orphan claim",
+          origin: { _tag: "SkitUnrecorded" },
           evidence: join(skill, ".skit-ownership.json"),
           expectedHash: `sha256:${"a".repeat(64)}`,
         });
@@ -228,14 +274,17 @@ describe("experimental capability audit", () => {
             severity: "error",
             code: "invalid-ownership-marker",
             entryIds: [expect.any(String)],
+            reason: { _tag: "OwnershipMarkerInvalid", reason: { _tag: "InvalidFields" } },
           }),
         ]),
       );
-      expect(report.skills.find((skill) => skill.name === "invalid")?.provenance.source).not.toBe(
-        "SKIT projection",
-      );
+      expect(
+        report.skills.find((skill) => skill.name === "invalid")?.provenance.origin._tag,
+      ).not.toBe("SkitManaged");
       const orphanProvenance = report.skills.find((skill) => skill.name === "orphan")?.provenance;
-      expect(orphanProvenance).toEqual(expect.objectContaining({ source: "SKIT orphan claim" }));
+      expect(orphanProvenance).toEqual(
+        expect.objectContaining({ origin: { _tag: "SkitUnrecorded" } }),
+      );
       expect(orphanProvenance).not.toHaveProperty("collectionId");
       expect(orphanProvenance).not.toHaveProperty("transactionId");
       expect(report.skills.find((skill) => skill.name === "orphan")?.harnessIds).toEqual([
@@ -453,9 +502,7 @@ describe("experimental capability audit", () => {
       expect(skills).toHaveLength(2);
       expect(new Set(skills.map((item) => item.canonicalPath)).size).toBe(1);
       expect(skills.every((item) => item.aliases?.length === 2)).toBe(true);
-      expect(skills.every((item) => item.provenance.source === "Skills CLI / skills.sh")).toBe(
-        true,
-      );
+      expect(skills.every((item) => item.provenance.origin._tag === "SkillsSh")).toBe(true);
       expect(skills.find((item) => item.name.includes(":"))?.provenance.parentPlugin).toBe(
         "review@vendor",
       );
@@ -495,7 +542,7 @@ describe("experimental capability audit", () => {
       );
       expect(observed?.provenance).toEqual(
         expect.objectContaining({
-          source: "SKIT orphan claim",
+          origin: { _tag: "SkitUnrecorded" },
           parentPlugin: "review@vendor",
         }),
       );
@@ -528,7 +575,7 @@ describe("experimental capability audit", () => {
         );
         expect(pluginSkill?.provenance).toEqual(
           expect.objectContaining({
-            source: "Claude plugin registry",
+            origin: { _tag: "PluginRegistry", harness: "claude-code" },
             parentPlugin: "review@vendor",
           }),
         );

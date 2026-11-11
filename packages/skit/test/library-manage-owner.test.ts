@@ -355,8 +355,8 @@ for (const readable of [true, false])
           } else {
             assert.deepStrictEqual(outcome.result.recoveryDirectories, []);
             assert.isTrue(
-              outcome.result.warnings.some((warning) =>
-                warning.message.includes("no active replacement is readable"),
+              outcome.result.warnings.some(
+                (warning) => warning.reason._tag === "ReplacementUnreadable",
               ),
             );
             assert.isFalse(yield* f.fs.exists(backup.value.recoveryDirectory));

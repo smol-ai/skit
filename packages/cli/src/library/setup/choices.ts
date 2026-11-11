@@ -1,7 +1,7 @@
+import type { SetupWarning } from "@smolai/skit-core/library/setup";
+import { setupWarning } from "./warnings.js";
 import { Effect } from "effect";
 import {
-  type InstalledSkillChange,
-  type SetupVersionChoice,
   type SetupReviewSummary,
   setupDuplicateActions,
   setupDuplicateChoiceRequired,
@@ -12,17 +12,13 @@ import {
 
 import { Prompter, type Choice } from "../../terminal/prompter.js";
 import { Renderer } from "../../terminal/renderer.js";
-import {
-  renderSetupVersionChoice,
-  renderReviewedChanges,
-} from "../presentation/installed-skill-changes.js";
+import { Block } from "../../terminal/blocks.js";
 
 const skillCount = (count: number) => `${count} skill${count === 1 ? "" : "s"}`;
 
 /** Group and singleton decisions share evidence, eligibility and prompt construction. */
 export const chooseSetupCopyDecisions = Effect.fn("CLI.setup.chooseCopyDecisions")(function* (
   copies: readonly SetupSelectedCopy[],
-  displayPath: (path: string) => string,
 ) {
   const prompter = yield* Prompter;
   const renderer = yield* Renderer;
@@ -42,7 +38,7 @@ export const chooseSetupCopyDecisions = Effect.fn("CLI.setup.chooseCopyDecisions
             : copy.conflict.duplicates.flatMap((duplicate) =>
                 duplicate.aliases.map(
                   (alias) =>
-                    `${displayPath(alias.path)}${alias.via === "symlink" ? ` → ${displayPath(duplicate.canonicalPath)} (symlink${alias.linkPath && alias.linkPath !== alias.path ? ` at ${displayPath(alias.linkPath)}` : ""})` : " (directory)"}`,
+                    `${alias.path}${alias.via === "symlink" ? ` → ${duplicate.canonicalPath} (symlink${alias.linkPath && alias.linkPath !== alias.path ? ` at ${alias.linkPath}` : ""})` : " (directory)"}`,
                 ),
               ),
         ),
@@ -52,20 +48,32 @@ export const chooseSetupCopyDecisions = Effect.fn("CLI.setup.chooseCopyDecisions
       [
         ...(bulk
           ? [
-              "These locations are not all individual symlinks to the selected source. Retain without enabling to avoid another agent copy.",
+              Block.Note({
+                text: [
+                  "These locations are not all individual symlinks to the selected source. Add without enabling to avoid another agent copy.",
+                ],
+              }),
             ]
           : []),
-        ...(bulk ? examples.slice(0, 5) : examples),
-        ...(bulk && examples.length > 5 ? [`… and ${examples.length - 5} more locations`] : []),
-      ].join("\n"),
+        Block.List({
+          items: [
+            ...(bulk ? examples.slice(0, 5) : examples).map((example) => ({
+              text: [{ dim: example }],
+            })),
+            ...(bulk && examples.length > 5
+              ? [{ text: [`… and ${examples.length - 5} more locations`] }]
+              : []),
+          ],
+        }),
+      ],
       `${bulk ? `${group.length} skills` : first.name}: enabling would create another agent copy`,
     );
     const choices: Choice<SetupDuplicateAction | "individual">[] = [
       {
         value: "retain-only",
         label: bulk
-          ? "Retain all in Library without enabling"
-          : "Retain in Library without enabling",
+          ? "Add all to the Library without enabling"
+          : "Add to the Library without enabling",
       },
       // A link where SKIT writes its copy is replaced, so both copies cannot stay.
       ...(!alternatives.includes("keep-both")
@@ -94,137 +102,194 @@ export const chooseSetupCopyDecisions = Effect.fn("CLI.setup.chooseCopyDecisions
   }));
 });
 
-/** The changes guided setup asks the user to approve, one line per effect. */
-export function setupPlanLines(input: {
+/** The changes guided setup asks the user to approve. */
+export function setupPlan(input: {
   readonly summary: SetupReviewSummary;
   readonly displayRoots: string;
-  readonly displayPath: (path: string) => string;
-}) {
-  const { summary, displayPath } = input;
+}): Block[] {
+  const { summary } = input;
+  const table = (titles: readonly string[], rows: ReadonlyArray<readonly string[]>) =>
+    Block.Table({
+      columns: titles.map((title) => ({ title })),
+      rows: rows.map((row) => row.map((cell) => [cell])),
+    });
+  // Long selections show their first five, then how many more.
+  const firstFive = <T>(items: readonly T[], row: (item: T) => readonly string[]) => [
+    table(["Skill", "Path"], items.slice(0, 5).map(row)),
+    ...(items.length > 5
+      ? [Block.Note({ text: [{ dim: `… and ${items.length - 5} more` }] })]
+      : []),
+  ];
+  const facts = [
+    ...(summary.persistRoots
+      ? [{ label: "Save discovery roots", value: [input.displayRoots] }]
+      : []),
+    ...summary.repositoryDecisions.map((decision) => ({
+      label: decision.status === "watched" ? "Watch repository" : "Ignore repository",
+      value: [decision.path],
+    })),
+    ...(summary.manageCount
+      ? [{ label: "Manage existing", value: [`${summary.manageCount}`] }]
+      : []),
+  ];
   return [
     ...(summary.sourceUpdateMayNeedReview
       ? [
-          "Source imports that change an existing active version require a fresh setup review before those copies are updated.",
+          Block.Status({
+            tone: "warn",
+            text: [
+              "Setup leaves existing managed copies unchanged. Use skit update to handle their edits or newer Library versions.",
+            ],
+          }),
         ]
       : []),
-    ...summary.versionChoices.map((choice) =>
-      renderSetupVersionChoice(choice, summary.changes, displayPath),
-    ),
-    ...summary.changes.map((fact) =>
-      renderReviewedChanges(fact, summary.versionChoices, displayPath),
-    ),
-    ...(summary.persistRoots ? [`Save discovery roots: ${input.displayRoots}`] : []),
-    ...summary.repositoryDecisions.map(
-      (decision) =>
-        `${decision.status === "watched" ? "Watch" : "Ignore"} repository: ${displayPath(decision.path)}`,
-    ),
-    ...(summary.createsMachineIdentity ? ["Create this machine's stable Library identity"] : []),
+    ...(summary.createsMachineIdentity
+      ? [Block.Note({ text: ["Create this machine's stable Library identity."] })]
+      : []),
+    ...(facts.length ? [Block.Fields({ rows: facts })] : []),
     ...(summary.sources.length
       ? [
-          `Import installed skills.sh Collections into the SKIT Library: ${summary.sources.length}`,
-          ...summary.sources.flatMap(({ source, lockContentHash, names }) => [
-            `  ${source} · observed lock ${lockContentHash.slice(0, 14)} · ${names.length} skill${names.length === 1 ? "" : "s"}`,
-            ...(names.length <= 5 ? [`    ${names.join(", ")}`] : []),
-          ]),
+          Block.Group({
+            title: `Import installed skills.sh Collections into the SKIT Library (${summary.sources.length})`,
+            children: [
+              table(
+                ["Collection", "Lock", "Skills"],
+                summary.sources.map(({ source, lockContentHash, names }) => [
+                  source,
+                  lockContentHash.slice(0, 14),
+                  names.length <= 5 ? names.join(", ") : skillCount(names.length),
+                ]),
+              ),
+            ],
+          }),
         ]
       : []),
     ...(summary.reconnects.length
       ? [
-          `Reconnect existing Library matches: ${summary.reconnects.length}`,
-          ...summary.reconnects
-            .slice(0, 5)
-            .map(({ name, sourcePath }) => `  ${name} · ${displayPath(sourcePath)}`),
-          ...(summary.reconnects.length > 5
-            ? [`  … and ${summary.reconnects.length - 5} more`]
-            : []),
+          Block.Group({
+            title: `Reconnect existing Library matches (${summary.reconnects.length})`,
+            children: firstFive(summary.reconnects, ({ name, sourcePath }) => [name, sourcePath]),
+          }),
         ]
       : []),
     ...(summary.additions.length
       ? [
-          `Add to Library: ${summary.additions.length}`,
-          ...summary.additions
-            .slice(0, 5)
-            .map((selection) => `  ${selection.name} · ${displayPath(selection.sourcePath)}`),
-          ...(summary.additions.length > 5 ? [`  … and ${summary.additions.length - 5} more`] : []),
+          Block.Group({
+            title: `Add to Library (${summary.additions.length})`,
+            children: firstFive(summary.additions, ({ name, sourcePath }) => [name, sourcePath]),
+          }),
         ]
       : []),
-    ...setupDuplicatePlanLines(summary.duplicates),
-    ...(summary.manageCount ? [`Manage existing: ${summary.manageCount}`] : []),
-    ...summary.authoritativeCopies.flatMap((selection) => [
-      `Authoritative copy: ${selection.name} · ${selection.sourcePath}`,
-      "  Other copies stay in place unless explicitly marked Remove.",
-    ]),
+    ...(summary.duplicates.length
+      ? [
+          Block.Group({
+            title: "Other copies",
+            children: [Block.Fields({ rows: summary.duplicates.map(duplicatePlan) })],
+          }),
+        ]
+      : []),
+    ...(summary.authoritativeCopies.length
+      ? [
+          Block.Group({
+            title: "Authoritative copies",
+            children: [
+              table(
+                ["Skill", "Path"],
+                summary.authoritativeCopies.map(({ name, sourcePath }) => [name, sourcePath]),
+              ),
+              Block.Note({ text: ["Other copies stay in place unless explicitly marked Remove."] }),
+            ],
+          }),
+        ]
+      : []),
     ...(summary.removals.entries.length
       ? [
-          `Remove installed copies: ${summary.removals.entries.length}`,
-          ...summary.removals.entries.map(
-            (entry) =>
-              `  ${entry.name} · ${entry.path}${entry.type === "SymbolicLink" ? " (symlink only; source stays)" : " (move directory to recovery)"}`,
-          ),
-          "Removed copies are moved into the Library's removed/ folder, under this setup's operation ID.",
-          "Library entries and source files outside these locations stay in place.",
+          Block.Group({
+            title: `Remove installed copies (${summary.removals.entries.length})`,
+            children: [
+              table(
+                ["Skill", "Path", "Effect"],
+                summary.removals.entries.map((entry) => [
+                  entry.name,
+                  entry.path,
+                  entry.type === "SymbolicLink"
+                    ? "symlink only; source stays"
+                    : "move directory to recovery",
+                ]),
+              ),
+              Block.Note({
+                text: [
+                  "Removed copies are moved into the Library's removed/ folder, under this setup's operation ID. Library entries and source files outside these locations stay in place.",
+                ],
+              }),
+            ],
+          }),
         ]
       : []),
     ...(summary.repositoryCopiesRemain
       ? [
-          "Repository copies stay in place. To have SKIT manage it later, remove the repository copy and run `skit enable`.",
+          Block.Note({
+            text: [
+              "Repository copies stay in place. To have SKIT manage it later, remove the repository copy and run ",
+              { code: "skit enable" },
+              ".",
+            ],
+          }),
         ]
       : []),
   ];
 }
 
-function setupDuplicatePlanLines(duplicates: SetupReviewSummary["duplicates"]) {
-  return duplicates.map(({ action, names, aliasCount }) => {
-    const examples = names.length <= 5 ? ` · ${names.join(", ")}` : "";
-    if (action === "retain-only")
-      return `Retain only: ${skillCount(names.length)}${examples} · no new Binding or installed skill`;
-    if (action === "keep-both")
-      return `Allow duplicate agent copies: ${skillCount(names.length)}${examples}`;
-    if (action === "preserve-duplicates")
-      return `Preserve existing copies: ${aliasCount} director${aliasCount === 1 ? "y" : "ies"}${examples} · replacements verified before moving originals to recovery`;
-    return `Retire redundant symlinks: ${skillCount(names.length)} · ${aliasCount} symlink${aliasCount === 1 ? "" : "s"}${examples} · sources stay; move records saved`;
-  });
+/** What setup does with other copies of the selected skills, as one labelled fact. */
+function duplicatePlan({ action, names, aliasCount }: SetupReviewSummary["duplicates"][number]) {
+  const examples = names.length <= 5 ? ` (${names.join(", ")})` : "";
+  if (action === "retain-only")
+    return {
+      label: "Add only",
+      value: [`${skillCount(names.length)}${examples}. Nothing new is enabled or installed.`],
+    };
+  if (action === "keep-both")
+    return {
+      label: "Allow duplicate agent copies",
+      value: [`${skillCount(names.length)}${examples}`],
+    };
+  if (action === "preserve-duplicates")
+    return {
+      label: "Back up existing copies",
+      value: [
+        `${aliasCount} director${aliasCount === 1 ? "y" : "ies"}${examples}. Replacements are verified before the originals move to recovery.`,
+      ],
+    };
+  return {
+    label: "Back up redundant symlinks",
+    value: [
+      `${skillCount(names.length)}, ${aliasCount} symlink${aliasCount === 1 ? "" : "s"}${examples}. Sources stay; move records are saved.`,
+    ],
+  };
 }
 
 export const renderSetupAliasRecovery = Effect.fn("CLI.setup.renderAliasRecovery")(
   function* (applied: {
-    readonly warnings: readonly { readonly name: string; readonly message: string }[];
+    readonly warnings: readonly SetupWarning[];
     readonly recoveryDirectories: readonly string[];
   }) {
     const renderer = yield* Renderer;
     for (const warning of applied.warnings)
-      yield* renderer.note(warning.message, `${warning.name}: existing copy kept`);
+      yield* renderer.note(
+        [Block.Status({ tone: "warn", text: [setupWarning(warning)] })],
+        `${warning.name}: existing copy kept`,
+      );
     if (applied.recoveryDirectories.length)
       yield* renderer.note(
-        `Sources stay in place. Symlinks and their move records are saved in:\n${applied.recoveryDirectories.join("\n")}`,
-        `Redundant symlinks retired for ${skillCount(applied.recoveryDirectories.length)}${applied.warnings.length ? ` · ${skillCount(applied.warnings.length)} preserved` : ""}`,
+        [
+          Block.Note({
+            text: ["Sources stay in place. Symlinks and their move records are saved in:"],
+          }),
+          Block.List({
+            items: applied.recoveryDirectories.map((directory) => ({ text: [{ dim: directory }] })),
+          }),
+        ],
+        `Redundant symlinks removed for ${skillCount(applied.recoveryDirectories.length)}${applied.warnings.length ? ` | ${skillCount(applied.warnings.length)} preserved` : ""}`,
       );
   },
 );
-
-/** The application has already supplied eligible alternatives and ownership facts. */
-export const chooseSetupVersions = Effect.fn("CLI.setup.chooseVersions")(function* (
-  alternatives: readonly SetupVersionChoice[],
-  facts: readonly InstalledSkillChange[],
-  displayPath: (path: string) => string,
-) {
-  const prompter = yield* Prompter;
-  const selected: SetupVersionChoice[] = [];
-  for (const skillId of new Set(alternatives.map((choice) => choice.skillId))) {
-    const choices = alternatives.filter((choice) => choice.skillId === skillId);
-    const name = facts.find((fact) => fact.skillId === skillId)?.name ?? skillId;
-    const value = yield* prompter.select(
-      `Which version of ${name} should agents use?`,
-      choices.map((choice, index) => ({
-        value: String(index),
-        label:
-          choice.version === "retained"
-            ? "Use the retained Library version"
-            : `Use current copy at ${displayPath(choice.path!)}`,
-        hint: "Existing copies will be preserved in recovery",
-      })),
-    );
-    selected.push(choices[Number(value)]!);
-  }
-  return selected;
-});

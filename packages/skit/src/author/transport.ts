@@ -36,7 +36,7 @@ export interface AuthorRegistry<E = SkitFailure, R = never, ProtocolError = E> {
     readonly requireAuthentication: boolean;
   }) => Effect.Effect<
     {
-      readonly remote: Sync.Remote;
+      readonly remote: Sync.Remote<ProtocolError>;
       readonly requireAvailable: Effect.Effect<
         void,
         ProtocolError | DestinationExistsWithoutHistory

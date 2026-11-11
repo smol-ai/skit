@@ -1,9 +1,11 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
+import { bannedForm, bannedVerbs } from "./term-rules.mjs";
 
 const pluginPath = join(import.meta.dirname, "oxlint-plugin-skit.mjs");
 // Invoke the installed CLI directly so fixtures do not pay npx's cold-start cost.
@@ -15,6 +17,8 @@ interface Diagnostic {
 }
 
 const allRules = [
+  "no-middle-dot-delimiter",
+  "banned-terms",
   "no-record-any",
   "no-record-unknown",
   "no-run-skit",
@@ -32,9 +36,9 @@ const allRules = [
 ];
 
 /** Runs the plugin over one source file and returns its diagnostics, newest oxlint JSON format. */
-async function lint(source: string): Promise<Diagnostic[]> {
+async function lint(source: string, extension = "ts"): Promise<Diagnostic[]> {
   const directory = await mkdtemp(join(tmpdir(), "skit-lint-"));
-  const file = join(directory, "sample.ts");
+  const file = join(directory, `sample.${extension}`);
   await writeFile(file, source);
   await writeFile(
     join(directory, ".oxlintrc.json"),
@@ -228,7 +232,7 @@ describe("skit/no-unconditional-cause-recovery", () => {
     expect(
       await lint(`
         import * as Fx from "effect/Effect";
-        export const observed = Fx.catchCause((cause) =>
+        export const reraised = Fx.catchCause((cause) =>
           Fx.logWarning("failed", cause).pipe(Fx.andThen(Fx.failCause(cause))));
         export const classified = Fx.catchCause(program, (cause) =>
           Cause.hasInterruptsOnly(cause) ? Fx.failCause(cause) : render(cause));
@@ -506,5 +510,89 @@ describe("skit/no-node-fs", () => {
       { code: "skit(no-node-fs)", line: 1 },
       { code: "skit(no-node-fs)", line: 2 },
     ]);
+  });
+});
+
+describe("skit/banned-terms", () => {
+  test("reads the verbs CONTEXT.md avoids, leaving the Release exception to review", () => {
+    expect(
+      bannedVerbs(readFileSync(join(import.meta.dirname, "..", "CONTEXT.md"), "utf8")),
+    ).toEqual(expect.arrayContaining(["retain", "observe", "bind", "project", "reconcile"]));
+    expect(
+      bannedVerbs(readFileSync(join(import.meta.dirname, "..", "CONTEXT.md"), "utf8")),
+    ).not.toContain("publish");
+  });
+
+  test("recognizes a verb's forms and nouns, not words that merely share letters", () => {
+    const verbs = ["retain", "acquire", "bind", "project", "observe"];
+    for (const word of [
+      "retained",
+      "Retaining",
+      "retention",
+      "acquisition",
+      "bindings",
+      "projection",
+    ])
+      expect(bannedForm(word, verbs)).toBeDefined();
+    for (const word of ["projector", "acquiesce", "observatory", "binary", "retail"])
+      expect(bannedForm(word, verbs)).toBeUndefined();
+  });
+
+  test("rejects banned verbs in declared names and in text a person reads", async () => {
+    expect(
+      await lint(
+        [
+          "export function retainSnapshot() {}",
+          'export const label = "Verifying retained copies";',
+          "export const progress = (n: number) => `Restoring ${n} retained copies`;",
+          "export class SkillBinding {}",
+        ].join("\n"),
+      ),
+    ).toEqual([1, 2, 3, 4].map((line) => ({ code: "skit(banned-terms)", line })));
+  });
+
+  test("allows contract names, outside APIs, and a harness's own projects", async () => {
+    expect(
+      await lint(
+        [
+          'export const kind = "retained_copies";',
+          'export const status = ["retained", "observed"];',
+          'export const run = (effect: { bind: (name: string) => void }) => effect.bind("x");',
+          'export const help = "Codex project configuration";',
+          "export const codexProjectRoot = '.codex';",
+        ].join("\n"),
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe("skit/no-middle-dot-delimiter", () => {
+  test("rejects JSX text and attributes", async () => {
+    const dot = String.fromCodePoint(0xb7);
+    expect(await lint(`<div title="one ${dot} two">one ${dot} two</div>`, "tsx")).toEqual(
+      [1, 1].map((line) => ({ code: "skit(no-middle-dot-delimiter)", line })),
+    );
+  });
+  test("rejects literal and escaped middle dots in strings and templates", async () => {
+    expect(
+      await lint(
+        [
+          `const a = "one ${String.fromCodePoint(0xb7)} two";`,
+          'const b = "one \\u00b7 two";',
+          "const c = `one " + String.fromCodePoint(0xb7) + " ${name}`;",
+          "const d = `one \\u00b7 ${name}`;",
+        ].join("\n"),
+      ),
+    ).toEqual([1, 2, 3, 4].map((line) => ({ code: "skit(no-middle-dot-delimiter)", line })));
+  });
+
+  test("allows ordinary separators and middle dots in comments", async () => {
+    expect(
+      await lint(
+        "// one " +
+          String.fromCodePoint(0xb7) +
+          ' two\nconst a = "one | two"; const b = `one (${name})`;',
+      ),
+    ).toEqual([]);
   });
 });

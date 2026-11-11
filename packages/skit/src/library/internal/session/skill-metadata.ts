@@ -1,16 +1,18 @@
 import { sourceIdentityLabel } from "../../source-identity.js";
-export { sourceIdentityLabel } from "../../source-identity.js";
-import { currentSkillVersion, versionBacking } from "../../library-contracts.js";
+import { currentSkillVersion, versionBacking, type Skill } from "../../library-contracts.js";
 import { readSkitDescriptor } from "../../../artifact/skit.js";
 import { collectionVersionPath } from "../../collection-version.js";
 import { type LibraryState } from "../../library-state.js";
 import { type SkitDescriptor } from "../../../artifact/schemas.js";
 import { Effect, FileSystem, Option, Schema } from "effect";
+import { readAuthoredInputs } from "../content/authored-inputs.js";
 import { join } from "node:path";
 
 export const SkillMetadata = Schema.Struct({
   source: Schema.NullOr(Schema.String),
   revision: Schema.NullOr(Schema.String),
+  /** When Author History observed the selected member inputs, if preserved. */
+  saved_at: Schema.optionalKey(Schema.String),
   source_updated_at: Schema.NullOr(Schema.String),
   /** When the selected bytes were acquired; this is not a source modification time. */
   imported_at: Schema.NullOr(Schema.String),
@@ -32,13 +34,10 @@ const validTimestamp = (value: string | undefined): string | null =>
   value === undefined || Number.isNaN(Date.parse(value)) ? null : new Date(value).toISOString();
 
 /** Provenance belongs to the selected retained bytes, not the Collection's latest acquisition. */
-export const readLibrarySkillMetadata = Effect.fn("Library.readSkillMetadata")(function* (
-  state: LibraryState,
-  originalsPath: string,
-) {
-  const metadata = new Map<string, SkillMetadata>();
+export function makeLibrarySkillMetadataReader(state: LibraryState, originalsPath: string) {
   const descriptors = new Map<string, SkitDescriptor | undefined>();
-  for (const skill of state.skills) {
+  const authoredInputs = new Map<string, Effect.Success<ReturnType<typeof readAuthoredInputs>>>();
+  return Effect.fn("Library.readSkillMetadata")(function* (skill: Skill) {
     const selected = currentSkillVersion(state, skill);
     const backing = selected === undefined ? undefined : versionBacking(state, skill, selected);
     const sourceImport = backing?.acquisition;
@@ -77,14 +76,51 @@ export const readLibrarySkillMetadata = Effect.fn("Library.readSkillMetadata")(f
         );
       sourceUpdated = validTimestamp(descriptor?.source_updated_at) ?? sourceUpdated;
     }
-    metadata.set(skill.skill_id, {
+    let importedAt = sourceImport?.imported_at;
+    let revision = sourceImport?.revision ?? null;
+    let savedAt: string | null = null;
+    if (source?.kind === "authored-workspace" && backing !== undefined) {
+      if (!authoredInputs.has(backing.copy.hash))
+        authoredInputs.set(
+          backing.copy.hash,
+          yield* readAuthoredInputs(collectionVersionPath(originalsPath, backing.copy.hash)),
+        );
+      const selection = authoredInputs
+        .get(backing.copy.hash)
+        ?.selections.find(
+          (item) =>
+            item.declaration.name === skill.name &&
+            item.declaration.path === backing.member.source_path,
+        );
+      if (selection?.imported_at !== undefined) importedAt = selection.imported_at;
+      if (selection !== undefined && "revision_id" in selection.source) {
+        revision = selection.source.revision_id;
+        savedAt = validTimestamp(selection.source.saved_at);
+      }
+    }
+    return {
       source: source === undefined ? null : sourceIdentityLabel(source),
-      revision: sourceImport?.revision ?? null,
+      revision,
+      ...(savedAt === null ? {} : { saved_at: savedAt }),
       source_updated_at: sourceUpdated,
-      imported_at: validTimestamp(sourceImport?.imported_at),
-    });
-  }
-  return metadata;
+      imported_at: validTimestamp(importedAt),
+    } satisfies SkillMetadata;
+  });
+}
+
+/** A bulk passive report uses the same per-read caches as the Library view. */
+export const readLibrarySkillMetadata = Effect.fn("Library.readSkillMetadataReport")(function* (
+  state: LibraryState,
+  originalsPath: string,
+) {
+  const readMetadata = makeLibrarySkillMetadataReader(state, originalsPath);
+  return new Map(
+    yield* Effect.forEach(state.skills, (skill) =>
+      Effect.gen(function* () {
+        return [skill.skill_id, yield* readMetadata(skill)] as const;
+      }),
+    ),
+  );
 });
 
 /** Metadata and lazy content reads for copies already selected by an owner-backed review. */

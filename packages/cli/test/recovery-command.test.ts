@@ -1,3 +1,4 @@
+import { resultExitCode } from "../src/commands/exit-code.js";
 import { basename, join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { it } from "@effect/vitest";
@@ -5,7 +6,8 @@ import { expect } from "vitest";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
-import { renderContract } from "../src/commands/output-presenters.js";
+import { renderRecovery } from "../src/library/recovery/present.js";
+import { Block } from "../src/terminal/blocks.js";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { saveRecoveryFiles } from "./helpers/recovery-files.js";
 import { scratch } from "./helpers/library-home.js";
@@ -40,10 +42,17 @@ it.effect("a client follows returned actions through the real grammar to restore
       response = yield* invoke(action.argv);
       if (response.contract !== "recovery")
         return yield* Effect.die(new Error("Expected recovery facts"));
-      const rendered = renderContract(response, { color: false, detail: "full" });
-      expect(rendered).toContain("File recovery:");
-      expect(rendered).toContain("Library bindings and settings are unchanged");
       const data = response.data;
+      expect(renderRecovery(data)[0]).toEqual(
+        Block.Fields({
+          rows: [
+            {
+              label: "File recovery",
+              value: [data.phase, { dim: " (enabled Skills and settings are unchanged)" }],
+            },
+          ],
+        }),
+      );
       const next = data.actions.find(
         (candidate) =>
           candidate.rel === (data.phase === "inspection" ? "preview-restore" : "apply-restore"),
@@ -89,7 +98,7 @@ it.effect(
       const stale = yield* invoke(apply.argv);
       if (stale.contract !== "recovery")
         return yield* Effect.die(new Error("Expected stale result"));
-      expect(stale.exitCode).toBe(12);
+      expect(resultExitCode(stale)).toBe(1);
       expect(stale.data.phase).toBe("stale");
       expect(stale.data.actions.map((action) => action.rel)).toEqual([
         "inspect",

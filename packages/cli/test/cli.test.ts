@@ -2,7 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { afterAll, describe, expect, test } from "vitest";
 import { Schema } from "effect";
 import { LibraryState } from "@smolai/skit-core/library";
@@ -93,16 +93,16 @@ test("saved login survives separate CLI processes and avoids credential prompts"
 });
 const PackageDocument = Schema.fromJsonString(Schema.Struct({ version: Schema.String }));
 const LibraryStateDocument = Schema.fromJsonString(LibraryState);
-const ProjectionRetentionPlanDocument = Schema.fromJsonString(
+const InstalledEditPlanDocument = Schema.fromJsonString(
   Schema.Struct({
-    schema: Schema.Literal(outputContracts.projectionRetentionPlan.id),
-    data: outputContracts.projectionRetentionPlan.schema,
+    schema: Schema.Literal(outputContracts.installedEditPlan.id),
+    data: outputContracts.installedEditPlan.schema,
   }),
 );
-const ProjectionRetentionResultDocument = Schema.fromJsonString(
+const InstalledEditResultDocument = Schema.fromJsonString(
   Schema.Struct({
-    schema: Schema.Literal(outputContracts.projectionRetention.id),
-    data: outputContracts.projectionRetention.schema,
+    schema: Schema.Literal(outputContracts.installedEdit.id),
+    data: outputContracts.installedEdit.schema,
   }),
 );
 const DoctorDocument = Schema.fromJsonString(
@@ -121,7 +121,7 @@ describe("CLI contracts", () => {
       const result = spawnSync(process.execPath, [bin, command, "--json"], {
         encoding: "utf8",
       });
-      expect(result.status).toBe(64);
+      expect(result.status).toBe(2);
       expect(JSON.parse(result.stderr).error).toEqual(
         expect.objectContaining({
           code: "INVALID_ARGUMENT",
@@ -151,7 +151,7 @@ describe("CLI contracts", () => {
     const result = spawnSync(process.execPath, [bin, "enable", "--wizard", "--json"], {
       encoding: "utf8",
     });
-    expect(result.status).toBe(64);
+    expect(result.status).toBe(2);
     expect(result.stdout).toBe("");
     expect(JSON.parse(result.stderr).error).toEqual(
       expect.objectContaining({ code: "INVALID_ARGUMENT" }),
@@ -164,7 +164,7 @@ describe("CLI contracts", () => {
       [bin, "enable", "review", "--global", "--repo", ".", "--json"],
       { encoding: "utf8" },
     );
-    expect(result.status).toBe(64);
+    expect(result.status).toBe(2);
     expect(JSON.parse(result.stderr).error).toEqual(
       expect.objectContaining({ code: "INVALID_ARGUMENT" }),
     );
@@ -203,7 +203,7 @@ describe("CLI contracts", () => {
       [bin, "auth", "login", "https://registry.test", "--json"],
       { encoding: "utf8", env: { ...process.env, SKIT_NO_INPUT: "1" } },
     );
-    expect(nobodyToApprove.status).toBe(64);
+    expect(nobodyToApprove.status).toBe(2);
     expect(JSON.parse(nobodyToApprove.stderr).error).toMatchObject({ code: "INVALID_ARGUMENT" });
 
     const passwordFlag = spawnSync(
@@ -211,7 +211,7 @@ describe("CLI contracts", () => {
       [bin, "auth", "login", "https://registry.test", "--password", "secret", "--json"],
       { encoding: "utf8" },
     );
-    expect(passwordFlag.status).toBe(64);
+    expect(passwordFlag.status).toBe(2);
     expect(JSON.parse(passwordFlag.stderr).error).toMatchObject({ code: "INVALID_ARGUMENT" });
   });
 
@@ -226,7 +226,7 @@ describe("CLI contracts", () => {
         env,
         timeout: 10_000,
       });
-      expect(result.status).toBe(64);
+      expect(result.status).toBe(2);
       expect(JSON.parse(result.stderr).error).toMatchObject({ code: "INVALID_ARGUMENT" });
       expect(existsSync(join(home, "auth.json"))).toBe(false);
     } finally {
@@ -248,23 +248,39 @@ describe("CLI contracts", () => {
       [bin, "add", "skit:owner/skit", "--home", home, "--json"],
       { encoding: "utf8" },
     );
-    expect(add.status).toBe(12);
-    expect(JSON.parse(add.stderr).error.message).toContain(join(home, "auth.json"));
+    expect(add.status).toBe(1);
+    expect(JSON.parse(add.stderr).error.cause).toContainEqual({
+      _tag: "Fail",
+      error: {
+        _tag: "CredentialsUnusable",
+        path: join(home, "auth.json"),
+        reason: "invalid",
+        failure: { issues: [{ path: [], reason: { _tag: "InvalidValue" } }] },
+      },
+    });
 
     const status = spawnSync(process.execPath, [bin, "auth", "status", "--home", home, "--json"], {
       encoding: "utf8",
     });
-    expect(status.status).toBe(12);
-    expect(JSON.parse(status.stderr).error.message).toContain(join(home, "auth.json"));
+    expect(status.status).toBe(1);
+    expect(JSON.parse(status.stderr).error.cause).toContainEqual({
+      _tag: "Fail",
+      error: {
+        _tag: "CredentialsUnusable",
+        path: join(home, "auth.json"),
+        reason: "invalid",
+        failure: { issues: [{ path: [], reason: { _tag: "InvalidValue" } }] },
+      },
+    });
   });
 
   test("unknown commands preserve the structured JSON error contract", () => {
     const result = spawnSync(process.execPath, [bin, "bogus", "--json"], { encoding: "utf8" });
-    expect(result.status).toBe(64);
+    expect(result.status).toBe(2);
     expect(result.stdout).toBe("");
     expect(JSON.parse(result.stderr)).toEqual(
       expect.objectContaining({
-        schema: "skit.error.v1",
+        schema: "skit.error.v2",
         error: expect.objectContaining({ code: "INVALID_ARGUMENT" }),
       }),
     );
@@ -289,7 +305,7 @@ describe("CLI contracts", () => {
     const result = spawnSync(process.execPath, [bin, "list", "--json", "--revision", "zzz"], {
       encoding: "utf8",
     });
-    expect(result.status).toBe(64);
+    expect(result.status).toBe(2);
     expect(result.stdout).toBe("");
     expect(JSON.parse(result.stderr).error).toEqual(
       expect.objectContaining({ code: "INVALID_ARGUMENT" }),
@@ -350,7 +366,7 @@ describe("CLI contracts", () => {
             encoding: "utf8",
           },
         );
-        expect(processResult.status).toBe(65);
+        expect(processResult.status).toBe(1);
         if (command === "setup") expect(processResult.stderr).toBe("");
         else expect(processResult.stdout).toBe("");
         const failure =
@@ -358,11 +374,18 @@ describe("CLI contracts", () => {
             ? JSON.parse(processResult.stdout).data
             : JSON.parse(processResult.stderr).error;
         expect(failure.code).toBe("VALIDATION_FAILED");
-        expect(failure.message).toContain("schema v2");
-        expect(failure.message).toContain("supports v4–v12");
-        expect(failure.remediation).toContain("Back up the state file");
-        expect(failure.remediation).toContain("skit setup");
-        expect(failure.remediation).not.toContain("author validate");
+        expect(failure).not.toHaveProperty("message");
+        expect(failure).not.toHaveProperty("remediation");
+        expect(failure.cause).toEqual([
+          {
+            _tag: "Fail",
+            error: {
+              _tag: "InvalidLibraryState",
+              path,
+              reason: { _tag: "UnsupportedVersion", version: 2, oldest: 4, current: 12 },
+            },
+          },
+        ]);
         expect(await readFile(path, "utf8")).toBe(original);
       } finally {
         await rm(home, { recursive: true, force: true });
@@ -503,7 +526,7 @@ describe("CLI contracts", () => {
       ],
       { encoding: "utf8" },
     );
-    expect(result.status).toBe(12);
+    expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
     const document = Schema.decodeSync(DoctorDocument)(result.stdout);
     expect(document.data.harnesses.map((check) => check.findings)).toEqual([[], [], []]);
@@ -519,20 +542,20 @@ describe("CLI contracts", () => {
     const result = spawnSync(process.execPath, [bin, "list", "--wat", "--json"], {
       encoding: "utf8",
     });
-    expect(result.status).toBe(64);
+    expect(result.status).toBe(2);
     expect(JSON.parse(result.stderr).error.code).toBe("INVALID_ARGUMENT");
     expect(result.stdout).toBe("");
 
     const bareDisable = spawnSync(process.execPath, [bin, "disable", "--json"], {
       encoding: "utf8",
     });
-    expect(bareDisable.status).toBe(64);
+    expect(bareDisable.status).toBe(2);
     expect(JSON.parse(bareDisable.stderr).error.code).toBe("INVALID_ARGUMENT");
 
     const bareEnable = spawnSync(process.execPath, [bin, "enable", "--json"], {
       encoding: "utf8",
     });
-    expect(bareEnable.status).toBe(64);
+    expect(bareEnable.status).toBe(2);
     expect(JSON.parse(bareEnable.stderr).error.code).toBe("INVALID_ARGUMENT");
   });
 
@@ -567,7 +590,7 @@ describe("CLI contracts", () => {
     const added = spawnSync(process.execPath, [bin, "add", root, "--json", "--home", home], {
       encoding: "utf8",
     });
-    expect(added.status).toBe(65);
+    expect(added.status).toBe(1);
     expect(JSON.parse(added.stderr).error.code).toBe("VALIDATION_FAILED");
     expect(added.stdout).toBe("");
   });
@@ -579,7 +602,7 @@ describe("CLI contracts", () => {
     const result = spawnSync(process.execPath, [bin, "add", root, "--json", "--home", home], {
       encoding: "utf8",
     });
-    expect(result.status).toBe(64);
+    expect(result.status).toBe(2);
     expect(JSON.parse(result.stderr).error.code).toBe("INVALID_ARGUMENT");
   });
 
@@ -595,7 +618,7 @@ describe("CLI contracts", () => {
       { encoding: "utf8" },
     );
     expect(preview.status).toBe(0);
-    expect(JSON.parse(preview.stdout).schema).toBe("skit.add.preview.v4");
+    expect(JSON.parse(preview.stdout).schema).toBe("skit.add.preview.v5");
     expect(existsSync(join(home, "state.json"))).toBe(false);
     expect(
       spawnSync(process.execPath, [bin, "add", source, "--home", home], { encoding: "utf8" })
@@ -661,7 +684,7 @@ describe("CLI contracts", () => {
       ["remove", collectionId, "--dry-run", "--json"],
     ])
       expect(run(...args).status).toBe(0);
-    expect(run("update", "review", "--dry-run", "--json").status).toBe(12);
+    expect(run("update", "review", "--dry-run", "--json").status).toBe(1);
     // `review` is its Collection's only Skill, so it can be removed; the dry run changes nothing.
     expect(run("remove", "review", "--dry-run", "--json").status).toBe(0);
     expect(readFileSync(join(home, "state.json"))).toEqual(stateBefore);
@@ -685,7 +708,7 @@ describe("CLI contracts", () => {
     expect(args(["enable", "review", "--repo", repo]).status).toBe(0);
     await writeFile(join(repo, ".agents", "skills", "review", "SKILL.md"), "changed externally\n");
     const result = args(["disable", "review", "--repo", repo, "--json"]);
-    expect(result.status).toBe(12);
+    expect(result.status).toBe(1);
     // The edited copy is refused before anything is saved, and stays as the user left it.
     expect(JSON.parse(result.stderr).error.code).toBe("CONFLICT");
     expect(readFileSync(join(repo, ".agents", "skills", "review", "SKILL.md"), "utf8")).toBe(
@@ -693,8 +716,8 @@ describe("CLI contracts", () => {
     );
   });
 
-  test("retains selected installed-skill bytes through the built CLI without overwriting disagreement", async () => {
-    const root = await mkdtemp(join(tmpdir(), "skit-cli-projection-retention-"));
+  test("imports installed edits by path through the built CLI without overwriting disagreement", async () => {
+    const root = await mkdtemp(join(tmpdir(), "skit-cli-installed-edit-"));
     const home = join(root, "home");
     const source = join(root, "source");
     const codexRoot = join(root, "codex");
@@ -741,9 +764,40 @@ describe("CLI contracts", () => {
     await writeFile(join(paths.agents, "SKILL.md"), differentBytes);
 
     const stateBeforePreview = await readFile(join(home, "state.json"), "utf8");
-    const previewProcess = run("update", "review", "--from-projection", "claude", "--dry-run");
+    const missingSkill = run("update", "--from", paths.claude, "--dry-run");
+    expect(missingSkill.status).toBe(2);
+    expect(JSON.parse(missingSkill.stderr).error).toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+    expect(JSON.parse(missingSkill.stderr).error.cause).toContainEqual({
+      _tag: "Fail",
+      error: { _tag: "MissingRequirement", reason: { _tag: "InstalledEditSubject" } },
+    });
+    const oldFlag = run("update", "review", "--from-projection", paths.claude, "--dry-run");
+    expect(oldFlag.status).toBe(2);
+    expect(JSON.parse(oldFlag.stderr).error.cause).toContainEqual({
+      _tag: "Fail",
+      error: {
+        _tag: "CommandLineInvalid",
+        errors: [
+          {
+            _tag: "UnrecognizedOption",
+            option: "--from-projection",
+            command: ["skit", "update"],
+            suggestions: [],
+          },
+        ],
+      },
+    });
+    const previewProcess = run(
+      "update",
+      "review",
+      "--from",
+      relative(process.cwd(), paths.claude),
+      "--dry-run",
+    );
     expect(previewProcess.status).toBe(0);
-    const preview = Schema.decodeSync(ProjectionRetentionPlanDocument)(previewProcess.stdout);
+    const preview = Schema.decodeSync(InstalledEditPlanDocument)(previewProcess.stdout);
     expect(
       preview.data.installed_skills.map(({ destination, agreement }) => [destination, agreement]),
     ).toEqual([
@@ -757,10 +811,27 @@ describe("CLI contracts", () => {
     expect(await readFile(join(paths.agents, ".skit-ownership.json"), "utf8")).toBe(
       markerBefore.agents,
     );
+    for (const path of [
+      "claude",
+      "claude-code",
+      preview.data.selected_installed_skill_id,
+      source,
+    ]) {
+      const invalid = run("update", "review", "--from", path, "--dry-run");
+      expect(invalid.status).toBe(1);
+      expect(JSON.parse(invalid.stderr).error.cause).toContainEqual({
+        _tag: "Fail",
+        error: {
+          _tag: "Library.EditImportMissing",
+          reason: { _tag: "InstalledSkillNotFound", selector: path },
+        },
+      });
+    }
+    expect(await readFile(join(home, "state.json"), "utf8")).toBe(stateBeforePreview);
 
-    const applyProcess = run("update", "review", "--from-projection", "claude");
+    const applyProcess = run("update", "review", "--from", paths.claude);
     expect(applyProcess.status).toBe(0);
-    const applied = Schema.decodeSync(ProjectionRetentionResultDocument)(applyProcess.stdout);
+    const applied = Schema.decodeSync(InstalledEditResultDocument)(applyProcess.stdout);
     expect(applied.data.previous_skill_version_id).toBe(preview.data.previous_skill_version_id);
     expect(applied.data.imported_skill_version_id).not.toBe(applied.data.previous_skill_version_id);
     expect(applied.data.imported).toBe(true);
@@ -800,7 +871,7 @@ describe("CLI contracts", () => {
     expect(existsSync(join(configuredClaudeRoot, "review"))).toBe(false);
 
     const doctorProcess = run("doctor");
-    expect(doctorProcess.status).toBe(12);
+    expect(doctorProcess.status).toBe(1);
     const doctor = Schema.decodeSync(DoctorDocument)(doctorProcess.stdout);
     expect(doctor.data.issues).toEqual([
       expect.objectContaining({ code: "PROJECTION_CONFLICT", path: paths.agents }),
@@ -817,13 +888,21 @@ describe("CLI contracts", () => {
     installedSkill.expected_hash = marker.expected_hash;
     installedSkill.current_hash = selectedHash;
     installedSkill.status = "conflicted";
+    installedSkill.conflicts = [
+      {
+        _tag: "ContentChanged",
+        expected: marker.expected_hash,
+        actual: selectedHash,
+        baseline: "marker",
+      },
+    ];
     await writeFile(join(home, "state.json"), `${JSON.stringify(partialState, null, 2)}\n`);
     const beforeRecovery = Schema.decodeSync(LibraryStateDocument)(
       await readFile(join(home, "state.json"), "utf8"),
     );
-    const recoveredProcess = run("update", "review", "--from-projection", "claude");
+    const recoveredProcess = run("update", "review", "--from", paths.claude);
     expect(recoveredProcess.status).toBe(0);
-    const recovered = Schema.decodeSync(ProjectionRetentionResultDocument)(recoveredProcess.stdout);
+    const recovered = Schema.decodeSync(InstalledEditResultDocument)(recoveredProcess.stdout);
     expect(recovered.data.imported).toBe(false);
     expect(recovered.data.imported_skill_version_id).toBe(applied.data.imported_skill_version_id);
     expect(
@@ -841,8 +920,8 @@ describe("CLI contracts", () => {
     expect(afterRecovery.imports.length).toBe(beforeRecovery.imports.length);
 
     const stateBeforeRepeat = await readFile(join(home, "state.json"), "utf8");
-    const repeated = run("update", "review", "--from-projection", "claude-code");
-    expect(repeated.status).toBe(11);
+    const repeated = run("update", "review", "--from", paths.claude);
+    expect(repeated.status).toBe(1);
     expect(await readFile(join(home, "state.json"), "utf8")).toBe(stateBeforeRepeat);
   });
 });

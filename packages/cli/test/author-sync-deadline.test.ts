@@ -6,7 +6,7 @@ import { makeMachineId } from "@smolai/skit-core/universal/consumer";
 import { authorSyncApi } from "../src/registry/author-sync.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer } from "./helpers/http-test-client.js";
-import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
+import { makeAuthorSyncWorld } from "../src/platform/author-sync-fixture/world.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
 const remote = {
@@ -98,7 +98,12 @@ for (const stage of ["headers", "body"] as const)
       yield* TestClock.adjust("1 second");
       expect(yield* Fiber.join(fiber)).toMatchObject({
         _tag: "Failure",
-        failure: { _tag: "RegistryUnreachable", origin: remote.origin },
+        failure: {
+          _tag: "AuthorRequestTimedOut",
+          origin: remote.origin,
+          timeoutMs: 30_000,
+          operation: operation === "available" ? "current" : operation,
+        },
       });
       expect(requests).toBe(1);
       expect(cancelled).toBe(true);
@@ -131,7 +136,7 @@ for (const connection of ["first", "connected"] as const)
       yield* TestClock.adjust("30 seconds");
       expect(yield* Effect.result(Fiber.join(sync))).toMatchObject({
         _tag: "Failure",
-        failure: { _tag: "RegistryUnreachable" },
+        failure: { _tag: "AuthorRequestTimedOut" },
       });
       const before = yield* world.a.files();
       const events = (yield* world.server.events()).slice(previousEvents);

@@ -204,9 +204,6 @@
                   "excerpt"
                 ],
                 "additionalProperties": true
-              },
-              "message": {
-                "type": "string"
               }
             },
             "required": [
@@ -216,8 +213,7 @@
               "evidence",
               "severity",
               "confidence",
-              "location",
-              "message"
+              "location"
             ],
             "additionalProperties": true
           }

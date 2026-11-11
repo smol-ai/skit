@@ -1,101 +1,150 @@
+import { renderListingProvenance } from "./listing-provenance.js";
+import { listingUnavailable } from "./listing-failures.js";
 import { Match } from "effect";
-import { createColors } from "picocolors";
 import { largeListingEntries, type ListingBudget } from "@smolai/skit-core/harnesses";
 import { harnessLabel } from "@smolai/skit-core/harnesses";
-import { compactHomePath } from "../../terminal/home-path.js";
+import { Block } from "../../terminal/blocks.js";
+import { renderBudgetMeter } from "../../terminal/budget-meter.js";
+
+const demandAfter = (
+  budget: { readonly demand: number; readonly harness: string },
+  savings: Readonly<Record<string, number>>,
+) => Math.max(0, budget.demand - (savings[budget.harness] ?? 0));
 
 const amount = (value: number) => value.toLocaleString("en-US");
 
+/** One Harness's listing budget: the estimate, what trimming costs, and the Skills that weigh most. */
 export function renderDoctorListingBudget(
   budget: ListingBudget,
-  context: { readonly color: boolean; readonly detail: "summary" | "full" },
-): string[] {
-  const color = createColors(context.color);
-  const label = color.bold(harnessLabel(budget.harness));
-  return Match.value(budget).pipe(
-    Match.tagsExhaustive({
-      Unavailable: (b) => [
-        `  ${color.yellow("!")} ${label} · budget unavailable`,
-        `      ${color.dim(b.detail)}`,
-      ],
-      DemandOnly: (b) => [
-        `  ${label} · ~${amount(b.demand)} ${b.unit === "characters" ? "characters" : "tokens"} · limit unknown`,
-        ...(context.detail === "full"
-          ? [b.basis, ...b.coverage].map((line) => `      ${color.dim(line)}`)
-          : []),
-      ],
-      Estimated: (b) => {
-        const unit = b.unit === "characters" ? "characters" : "tokens";
-        const outside = b.demand > b.limit;
-        const lines = [
-          `  ${outside ? color.yellow("! Over budget") : color.green("✓ Within budget")} · ${label} · ~${amount(b.demand)} / ${amount(b.limit)} ${unit} · ${((b.demand / b.limit) * 100).toFixed(1)}%`,
-        ];
-        for (const warning of b.warnings ?? []) lines.push(`      ${color.yellow(warning)}`);
-        if (b.shortened)
-          lines.push(
-            `      ${color.yellow(`${b.shortened} description${b.shortened === 1 ? "" : "s"} shortened`)}`,
-          );
-        if (b.omitted)
-          lines.push(
-            `      ${color.yellow(`${b.omitted} skill${b.omitted === 1 ? "" : "s"} omitted`)}`,
-          );
-        if (b.descriptionsDropped.max) {
+  detail: "summary" | "full",
+): Block {
+  const basis = (b: Exclude<ListingBudget, { _tag: "Unavailable" }>) =>
+    detail === "full" ? [renderListingProvenance(b)] : [];
+  return Block.Group({
+    title: harnessLabel(budget.harness),
+    children: Match.value(budget).pipe(
+      Match.tagsExhaustive({
+        Unavailable: (b) => [
+          Block.Status({ tone: "warn", text: ["Budget unavailable"] }),
+          Block.Note({ text: [{ dim: listingUnavailable(b.reason) }] }),
+        ],
+        DemandOnly: (b) => [
+          Block.Status({
+            tone: "info",
+            text: [
+              `~${amount(b.demand)} ${b.unit === "characters" ? "characters" : "tokens"}, limit unknown`,
+            ],
+          }),
+          ...basis(b),
+        ],
+        Estimated: (b) => {
+          const unit = b.unit === "characters" ? "characters" : "tokens";
+          const outside = b.demand > b.limit;
           const { min, max } = b.descriptionsDropped;
-          lines.push(
-            `      ${color.yellow(`${min === max ? min : `${min}–${max}`} descriptions at risk of being dropped`)}`,
-          );
-        }
-        const large = largeListingEntries(b);
-        if (large.length) {
-          lines.push(`      ${color.dim("Skills over 1% of budget, before trimming:")}`);
-          for (const skill of large) {
-            lines.push(
-              `        ${color.bold(skill.name)} · ~${amount(skill.demand)} ${unit} · ${((skill.demand / b.limit) * 100).toFixed(1)}%`,
-            );
-            if (
-              context.detail === "full" ||
-              large.some((other) => other !== skill && other.name === skill.name)
-            )
-              lines.push(`          ${color.dim(compactHomePath(skill.path))}`);
-          }
-        }
-        if (context.detail === "full")
-          lines.push(...[b.basis, ...b.coverage].map((line) => `      ${color.dim(line)}`));
-        return lines;
-      },
-    }),
-  );
+          const large = largeListingEntries(b);
+          // A path tells two same-named Skills apart; with full detail every path is shown.
+          const path = (skill: (typeof large)[number]) =>
+            detail === "full" ||
+            large.some((other) => other !== skill && other.name === skill.name);
+          const paths = large.some(path);
+          return [
+            Block.Status({
+              tone: outside ? "warn" : "ok",
+              text: [
+                `${outside ? "Over budget" : "Within budget"}: ~${amount(b.demand)} / ${amount(b.limit)} ${unit} (${((b.demand / b.limit) * 100).toFixed(1)}%)`,
+              ],
+            }),
+            ...[
+              ...b.diagnostics.map(
+                ({ path, diagnostic }) => `Skipped skill ${path}: ${diagnostic}`,
+              ),
+              ...(b.shortened
+                ? [`${b.shortened} description${b.shortened === 1 ? "" : "s"} shortened`]
+                : []),
+              ...(b.omitted ? [`${b.omitted} skill${b.omitted === 1 ? "" : "s"} omitted`] : []),
+              ...(max
+                ? [`${min === max ? min : `${min}–${max}`} descriptions at risk of being dropped`]
+                : []),
+            ].map((warning) => Block.Status({ tone: "warn", text: [warning] })),
+            ...(large.length
+              ? [
+                  Block.Group({
+                    title: "Skills over 1% of budget, before trimming",
+                    children: [
+                      Block.Table({
+                        columns: [
+                          { title: "Skill" },
+                          { title: unit === "characters" ? "Characters" : "Tokens", align: "end" },
+                          { title: "Share", align: "end" },
+                          ...(paths ? [{ title: "Path" }] : []),
+                        ],
+                        rows: large.map((skill) => [
+                          [{ emph: skill.name }],
+                          [`~${amount(skill.demand)}`],
+                          [`${((skill.demand / b.limit) * 100).toFixed(1)}%`],
+                          ...(paths ? [path(skill) ? [{ dim: skill.path }] : []] : []),
+                        ]),
+                      }),
+                    ],
+                  }),
+                ]
+              : []),
+            ...basis(b),
+          ];
+        },
+      }),
+    ),
+  });
 }
 
-/** Scaled to the unselected demand so the limit stays put; filled cells past the limit are red (▓ without color). */
+/** The selected Skills determine demand; the terminal draws the prompt's meter. */
 export function renderDoctorBudgetSelection(
   budgets: readonly ListingBudget[],
   savings: Readonly<Record<string, number>>,
   columns = 80,
-  useColor = false,
 ): string[] {
-  const color = createColors(useColor);
-  const width = Math.max(8, Math.min(24, columns - 64));
   return budgets.flatMap((budget) => {
     if (budget._tag !== "Estimated") return [];
-    const after = Math.max(0, budget.demand - (savings[budget.harness] ?? 0));
-    const scale = Math.max(budget.demand, budget.limit, 1);
-    const limitCells = Math.round((budget.limit / scale) * width);
-    const bar = (demand: number) => {
-      const filled = Math.min(width, Math.round((demand / scale) * width));
-      return Array.from({ length: width }, (_, index) =>
-        index >= filled
-          ? color.dim("░")
-          : index < limitCells
-            ? "█"
-            : useColor
-              ? color.red("█")
-              : "▓",
-      ).join("");
-    };
-    const unit = budget.unit === "characters" ? "characters" : "tokens";
     return [
-      `${harnessLabel(budget.harness).padEnd(11)} ${bar(after)} ${((after / budget.limit) * 100).toFixed(0)}% · ~${amount(Math.round(after))} / ${amount(budget.limit)} ${unit}`,
+      renderBudgetMeter(
+        {
+          label: harnessLabel(budget.harness),
+          demand: demandAfter(budget, savings),
+          originalDemand: budget.demand,
+          limit: budget.limit,
+          unit: budget.unit === "characters" ? "characters" : "tokens",
+        },
+        columns,
+      ),
     ];
+  });
+}
+
+/** The confirmed selection is compared as facts; prompt bars remain inside the prompt. */
+export function renderDoctorBudgetPreview(
+  budgets: readonly ListingBudget[],
+  savings: Readonly<Record<string, number>>,
+): Block {
+  return Block.Table({
+    columns: [
+      { title: "Harness" },
+      { title: "Current", align: "end" },
+      { title: "After", align: "end" },
+      { title: "Limit", align: "end" },
+      { title: "Unit" },
+    ],
+    rows: budgets.flatMap((budget) =>
+      budget._tag !== "Estimated"
+        ? []
+        : [
+            [
+              [harnessLabel(budget.harness)],
+              [`~${amount(Math.round(budget.demand))}`],
+              [`~${amount(Math.round(demandAfter(budget, savings)))}`],
+              [amount(budget.limit)],
+              [budget.unit === "characters" ? "characters" : "tokens"],
+            ],
+          ],
+    ),
   });
 }

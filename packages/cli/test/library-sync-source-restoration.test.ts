@@ -191,7 +191,7 @@ it.effect("changed declared source bytes fail before saving a fresh Library", ()
     assert.strictEqual(error._tag, "Library.SyncSourceRestoreInvalid");
     if (error._tag === "Library.SyncSourceRestoreInvalid") {
       assert.strictEqual(error.hash, state.collection_versions[0]!.hash);
-      assert.include(error.detail, "source returned");
+      assert.strictEqual(error.reason._tag, "HashMismatch");
     }
     assert.isFalse(yield* f.fs.exists(join(f.freshHome, "state.json")));
     assert.deepStrictEqual(f.server.stored, remote);
@@ -209,8 +209,8 @@ it.effect("invalid restored source metadata reports its hash and cause before sa
     assert.strictEqual(error._tag, "Library.SyncSourceRestoreInvalid");
     if (error._tag === "Library.SyncSourceRestoreInvalid") {
       assert.strictEqual(error.hash, state.collection_versions[0]!.hash);
-      assert.isDefined(error.cause);
-      assert.isNotEmpty(error.detail);
+      if (error.reason._tag === "SourceFetchFailed") assert.isDefined(error.reason.failure);
+      assert.strictEqual(error.reason._tag, "SourceFetchFailed");
     }
     assert.isFalse(yield* f.fs.exists(join(f.freshHome, "state.json")));
     assert.deepStrictEqual(f.server.stored, remote);
@@ -226,7 +226,7 @@ it.effect("a declared copy rejects a source that no longer declares a SKIT", () 
     const error = yield* f.sync().pipe(Effect.flip);
     assert.strictEqual(error._tag, "Library.SyncSourceRestoreInvalid");
     if (error._tag === "Library.SyncSourceRestoreInvalid")
-      assert.include(error.detail, "no declared Descriptor");
+      assert.strictEqual(error.reason._tag, "DescriptorMissing");
     assert.isFalse(yield* f.fs.exists(join(f.freshHome, "state.json")));
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

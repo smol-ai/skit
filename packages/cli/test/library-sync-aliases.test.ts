@@ -272,8 +272,14 @@ it.effect(
       for (const apply of [false, true]) {
         const stopped = yield* b.sync({ apply });
         assert.strictEqual(stopped.status, "conflicted");
-        if (stopped.status === "conflicted")
+        if (stopped.status === "conflicted") {
           assert.deepStrictEqual(stopped.conflicts, [`skill:${skillId}`]);
+          // The conflicting Skill is held out of the merge; it is still named, not identified.
+          assert.deepInclude(stopped.conflict_details?.[0], {
+            _tag: "SkillChanged",
+            name: (yield* b.state).skills[0]!.name,
+          });
+        }
         yield* assertDiskUnchanged(unchanged);
         assert.deepStrictEqual(server.stored, stored);
       }

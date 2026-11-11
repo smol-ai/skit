@@ -252,7 +252,7 @@ const makeRegistry = () => {
       post: (): Effect.Effect<void, SkitFailure> => Effect.void,
     },
   };
-  const remote: Sync.Remote = {
+  const remote: Sync.Remote<SkitFailure> = {
     current: Effect.sync(() => registry.current),
     revision: (id) => {
       const found = revisions.get(id);
@@ -323,20 +323,31 @@ const makeDevice = Effect.fn("Test.makeDevice")(function* (
           decide: (editedAt) => () =>
             DateTime.isGreaterThan(editedAt.theirs, editedAt.ours) ? "theirs" : "ours",
           ...(options.approved === undefined ? {} : { approved: options.approved }),
-          save: (state) =>
+          save: ({ from, to: state }) =>
             Effect.sync(() => {
+              expect(from).toEqual(self.state);
               self.state = state;
               saved.push(state);
             }),
-          prepareWrite: (state) =>
+          prepareWrite: (change) =>
             Effect.sync(() => {
+              expect(change.from).toEqual(self.state);
+              const state =
+                "trees" in change
+                  ? Sync.Writing.make({ ...change.from, ...change.trees, merged: true })
+                  : change.to;
               self.state = state;
               saved.push(state);
+              return state;
             }),
-          write: (_prepared, from, to) =>
+          write: (prepared, from, to) =>
             Effect.sync(() => {
               expect(from).toEqual(History.sortTree(self.files));
+              expect(self.state).toEqual(prepared);
               self.files = to;
+              self.state = prepared.next;
+              saved.push(prepared.next);
+              return prepared.next;
             }),
         });
         expect(result.state).toEqual(self.state);
@@ -400,21 +411,27 @@ describe("run", () => {
           author: { device: makeMachineId(), at: 1 },
           merger: mergeAuthorTree,
           decide: () => () => "ours",
-          save: (state) =>
-            boundary === "after-write" && state._tag === "Idle"
-              ? Effect.fail(new RemoteDown({ step: "save" }))
-              : Effect.sync(() => {
-                  b.state = state;
-                }),
-          prepareWrite: (state) =>
+          save: ({ to: state }) =>
+            Effect.sync(() => {
+              b.state = state;
+            }),
+          prepareWrite: (change) =>
             boundary === "before-write"
               ? Effect.fail(new RemoteDown({ step: "save" }))
               : Effect.sync(() => {
+                  const state =
+                    "trees" in change
+                      ? Sync.Writing.make({ ...change.from, ...change.trees, merged: true })
+                      : change.to;
                   b.state = state;
+                  return state;
                 }),
-          write: (_prepared, _from, to) =>
-            Effect.sync(() => {
+          write: (prepared, _from, to) =>
+            Effect.gen(function* () {
               b.files = to;
+              if (boundary === "after-write") return yield* new RemoteDown({ step: "save" });
+              b.state = prepared.next;
+              return prepared.next;
             }),
         }).pipe(Effect.flip);
         expect(failed).toMatchObject({ _tag: "RemoteDown", step: "save" });
@@ -687,7 +704,10 @@ it.effect(
             merger: () => ({ value: Option.some(invalid), choices: [], conflicts: [] }),
           }),
         ),
-      ).toMatchObject({ _tag: "Sync.InvalidTree", path: "notes/a.txt" });
+      ).toMatchObject({
+        _tag: "Sync.InvalidTree",
+        issue: { _tag: "ParentNotDirectory", path: "notes/a.txt" },
+      });
       expect(a.saved.slice(saved).some((state) => state._tag === "Writing")).toBe(false);
       expect(
         [...registry.registry.revisions.values()].some(

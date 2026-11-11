@@ -70,29 +70,34 @@ export const scanUsage = Effect.fn("Library.scanUsage")(function* (options: Usag
   const clockStart = DateTime.toEpochMillis(began);
   const end = options.end === undefined ? clockStart : Date.parse(options.end);
   const days = options.days ?? 7;
-  if (!Number.isFinite(end) || !Number.isInteger(days) || days < 1 || days > 3650)
+  if (!Number.isFinite(end))
     return yield* new InvalidUsageOptions({
-      message: "Use a valid end timestamp and a whole number of days between 1 and 3650.",
+      reason: { _tag: "InvalidEnd", end: options.end ?? String(end) },
     });
+  if (!Number.isInteger(days) || days < 1 || days > 3650)
+    return yield* new InvalidUsageOptions({ reason: { _tag: "InvalidDays", days } });
   const start = end - days * 86400000;
   const startDate = new Date(start);
   const endDate = new Date(end);
   if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime()))
     return yield* new InvalidUsageOptions({
-      message: "Both window boundaries must be within the supported date range.",
+      reason: { _tag: "DateRangeExceeded", end: options.end ?? new Date(end).toISOString(), days },
     });
   const window = { start: startDate.toISOString(), end: endDate.toISOString() };
   if (options.project !== undefined) {
-    const info = yield* fs.stat(resolve(options.project)).pipe(
+    const directory = resolve(options.project);
+    const info = yield* fs.stat(directory).pipe(
       Effect.mapError(
-        () =>
+        (failure) =>
           new InvalidUsageOptions({
-            message: "The project must be an accessible directory.",
+            reason: { _tag: "ProjectUnreadable", path: directory, failure },
           }),
       ),
     );
     if (info.type !== "Directory")
-      return yield* new InvalidUsageOptions({ message: "The project must be a directory." });
+      return yield* new InvalidUsageOptions({
+        reason: { _tag: "ProjectNotDirectory", path: directory, kind: info.type },
+      });
   }
   const project = options.project === undefined ? null : yield* physical(resolve(options.project));
 

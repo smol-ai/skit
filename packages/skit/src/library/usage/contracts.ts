@@ -1,4 +1,5 @@
-import { Data, Schema } from "effect";
+import { PlatformErrorSchema } from "../../platform/error-schema.js";
+import { Schema } from "effect";
 import { HarnessName } from "../../harnesses/contracts.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 
@@ -60,13 +61,24 @@ export namespace UsageReport {
   export interface Type extends Schema.Schema.Type<typeof UsageReport> {}
 }
 export type UsageReport = UsageReport.Type;
+export const InvalidUsageReason = Schema.TaggedUnion({
+  InvalidEnd: { end: Schema.String },
+  InvalidDays: { days: Schema.NumberFromString },
+  DateRangeExceeded: { end: Schema.String, days: Schema.NumberFromString },
+  ProjectUnreadable: { path: Schema.String, failure: PlatformErrorSchema },
+  ProjectNotDirectory: { path: Schema.String, kind: Schema.String },
+});
+export type InvalidUsageReason = typeof InvalidUsageReason.Type;
+
 export class InvalidUsageOptions
-  extends Data.TaggedError("InvalidUsageOptions")<{ message: string }>
+  extends Schema.TaggedError<InvalidUsageOptions, { readonly brand: unique symbol }>()(
+    "InvalidUsageOptions",
+    { reason: InvalidUsageReason },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "INVALID_ARGUMENT" as const;
-  readonly remediation = "Review the usage options.";
 }
 export interface UsageRoot {
   readonly harness: UsageHarness;

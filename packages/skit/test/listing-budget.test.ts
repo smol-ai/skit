@@ -9,12 +9,12 @@ import {
 
 const settings: ClaudeListingSettings = {
   model: null,
-  modelSource: "not configured",
+  modelSource: { _tag: "Unconfigured" },
   limit: null,
-  limitSource: "Limit unverified",
+  limitSource: { _tag: "Unavailable" },
   cap: 1536,
   overrides: {},
-  notes: [],
+  overrideSources: 0,
 };
 test("shared Codex results preserve demand and allocation; list large contributors in either state", () => {
   for (const count of [1, 10]) {

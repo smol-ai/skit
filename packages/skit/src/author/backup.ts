@@ -9,11 +9,11 @@ import * as History from "../history/history.js";
 import type * as Sync from "../sync/sync.js";
 
 /** Back up chronological observations without making an old edit current again. */
-export const backupAuthorHistory = Effect.fn("Author.backupHistory")(function* (
+export const backupAuthorHistory = Effect.fn("Author.backupHistory")(function* <E>(
   lease: WorkspaceLease,
   key: SyncKey,
   observation: SavedRevision,
-  remote: Pick<Sync.Remote, "post">,
+  remote: Pick<Sync.Remote<E>, "post">,
 ) {
   const history = yield* AuthorHistory;
   let acknowledged = yield* history.backupState.read(key);
@@ -27,7 +27,7 @@ export const backupAuthorHistory = Effect.fn("Author.backupHistory")(function* (
   if (acknowledged !== null && chain.at(-1)?.id !== acknowledged)
     return yield* new AuthorHistoryInvalid({
       path: "history",
-      reason: "the acknowledged backup is not an ancestor of this workspace's observation",
+      reason: { _tag: "BackupNotAncestor", acknowledged, observation: observation.id },
     });
   for (const { id, revision } of chain.toReversed()) {
     if (id === acknowledged) continue;
@@ -41,9 +41,9 @@ export const backupAuthorHistory = Effect.fn("Author.backupHistory")(function* (
 });
 
 /** Upload observations to the connected Registry without moving its current revision. */
-export const backupAuthorWorkspace = Effect.fn("Author.backupWorkspace")(function* (
+export const backupAuthorWorkspace = Effect.fn("Author.backupWorkspace")(function* <E>(
   input: string,
-  remote: Pick<Sync.Remote, "post">,
+  remote: Pick<Sync.Remote<E>, "post">,
 ) {
   const workspaces = yield* AuthorWorkspace;
   const root = yield* workspaces.resolveRoot(input);
@@ -52,7 +52,7 @@ export const backupAuthorWorkspace = Effect.fn("Author.backupWorkspace")(functio
   if (Option.isNone(workspace.identity) || workspace.connection._tag !== "Connected")
     return yield* new AuthorHistoryInvalid({
       path: input,
-      reason: "backup requires a connected workspace",
+      reason: { _tag: "BackupDisconnected" },
     });
   yield* backupAuthorHistory(
     lease,

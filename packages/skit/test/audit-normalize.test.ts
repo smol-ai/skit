@@ -17,7 +17,11 @@ describe("normalized audit report", () => {
           scope: "user",
           path: "/home/example/.claude/settings.json",
           mcp: { transport: "http", url: "https://example.test/mcp", args: [] },
-          provenance: { confidence: "exact", source: "claude-code", evidence: "config" },
+          provenance: {
+            confidence: "exact",
+            origin: { _tag: "Configuration", harness: "claude-code" },
+            evidence: "config",
+          },
         },
         {
           kind: "skill",
@@ -26,7 +30,11 @@ describe("normalized audit report", () => {
           role: "native",
           scope: "user",
           path: "/home/example/.codex/skills/example/SKILL.md",
-          provenance: { confidence: "exact", source: "filesystem", evidence: "skill root" },
+          provenance: {
+            confidence: "unknown",
+            origin: { _tag: "Unknown" },
+            evidence: "skill root",
+          },
         },
       ],
       findings: [
@@ -34,7 +42,11 @@ describe("normalized audit report", () => {
           severity: "warning",
           code: "skill-field-unknown",
           subject: "/home/example/.codex/skills/example/SKILL.md",
-          problem: "Skill frontmatter contains an unknown field",
+          reason: {
+            _tag: "FrontmatterCompatibility",
+            harness: "codex",
+            issue: { code: "field-unknown", field: "metadata", severity: "unknown", sourceIds: [] },
+          },
           locations: ["/home/example/.codex/skills/example/SKILL.md"],
           details: { harness: "codex", field: "metadata" },
         },
@@ -44,6 +56,7 @@ describe("normalized audit report", () => {
     };
 
     const normalized = normalizeAuditReport(report);
+    expect(normalized.skills[0]?.provenance).toBe(report.observations[1]?.provenance);
     expect(normalized.findings[0]?.entryIds).toEqual([normalized.skills[0]?.id]);
     expect(normalized.findings[0]?.entryIds).not.toContain(normalized.mcpServers[0]?.id);
     expect(normalized.findings[0]?.unresolvedSubject).toBeNull();

@@ -58,7 +58,11 @@ it("separates installed, repository-authored, and loose skills", () => {
         scope: "project",
         harnesses: ["codex"],
         owner: { kind: "unknown" },
-        contentIdentity: { status: "none", libraryMatches: [] },
+        contentIdentity: {
+          status: "hashed",
+          currentHash: `sha256:${"a".repeat(64)}`,
+          libraryMatches: [],
+        },
         git: { status: "committed", repository: "/work/large-collection" },
         locks: [
           {
@@ -84,7 +88,7 @@ it("separates installed, repository-authored, and loose skills", () => {
         harnesses: ["claude-code"],
         owner: { kind: "unknown" },
         contentIdentity: {
-          status: "none",
+          status: "hashed",
           currentHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           libraryMatches: [],
         },
@@ -99,7 +103,7 @@ it("separates installed, repository-authored, and loose skills", () => {
         harnesses: ["codex"],
         owner: { kind: "unknown" },
         contentIdentity: {
-          status: "none",
+          status: "hashed",
           currentHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           libraryMatches: [],
         },
@@ -114,7 +118,7 @@ it("separates installed, repository-authored, and loose skills", () => {
         harnesses: ["codex"],
         owner: { kind: "unknown" },
         contentIdentity: {
-          status: "exact",
+          status: "hashed",
           currentHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           libraryMatches: [
             {
@@ -135,7 +139,11 @@ it("separates installed, repository-authored, and loose skills", () => {
         scope: "global",
         harnesses: ["codex"],
         owner: { kind: "unknown" },
-        contentIdentity: { status: "none", libraryMatches: [] },
+        contentIdentity: {
+          status: "hashed",
+          currentHash: `sha256:${"a".repeat(64)}`,
+          libraryMatches: [],
+        },
         git: { status: "outside-git" },
         locks: [
           {
@@ -170,7 +178,11 @@ it("separates installed, repository-authored, and loose skills", () => {
             displayName: "local:managed",
           },
         },
-        contentIdentity: { status: "none", libraryMatches: [] },
+        contentIdentity: {
+          status: "hashed",
+          currentHash: `sha256:${"a".repeat(64)}`,
+          libraryMatches: [],
+        },
         git: { status: "outside-git" },
         locks: [],
       },
@@ -256,7 +268,7 @@ it("presents authored SKITs without treating their source skills as inferred col
         harnesses: [],
         owner: { kind: "authored", skitLocator, collectionId },
         contentIdentity: {
-          status: "exact",
+          status: "hashed",
           currentHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           libraryMatches: [
             {

@@ -20,6 +20,98 @@
           "label": {
             "type": "string"
           },
+          "collection_source": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "github",
+                  "git",
+                  "registry",
+                  "url",
+                  "archive",
+                  "local",
+                  "authored-workspace",
+                  "well-known"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "locator": {
+                "type": "string"
+              },
+              "authority": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              },
+              "workspace_status": {
+                "type": "string",
+                "enum": [
+                  "connected",
+                  "unconnected",
+                  "unavailable",
+                  "identity-mismatch"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "name",
+              "locator"
+            ],
+            "additionalProperties": true
+          },
+          "enabled_skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "global"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "repository"
+                      ]
+                    },
+                    "root": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "root"
+                  ],
+                  "additionalProperties": true
+                }
+              ]
+            }
+          },
           "skills": {
             "type": "array",
             "items": {
@@ -44,6 +136,9 @@
                       "type": "null"
                     }
                   ]
+                },
+                "saved_at": {
+                  "type": "string"
                 },
                 "source_updated_at": {
                   "anyOf": [

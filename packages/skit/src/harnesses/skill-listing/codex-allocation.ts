@@ -1,3 +1,4 @@
+import type { NativeListingDiagnostic } from "./contracts.js";
 import { harnessProfiles } from "../catalog.js";
 import type { ListingBudget } from "./contracts.js";
 
@@ -40,7 +41,7 @@ export interface CodexListingEstimateInput {
   readonly maxContextTokens?: number;
   readonly skills: readonly CodexListingSkill[];
   /** Native discovery diagnostics carried into the estimate. */
-  readonly warnings?: readonly string[];
+  readonly diagnostics?: readonly NativeListingDiagnostic[];
 }
 
 export function estimateCodexListing(
@@ -185,19 +186,21 @@ export function estimateCodexListing(
     descriptionsDropped: { min: 0, max: 0 },
     omitted: selected.omitted,
     fidelity: "modelled",
-    ...(input.warnings?.length ? { warnings: input.warnings } : {}),
+    diagnostics: input.diagnostics ?? [],
+    skippedPaths: [],
     entries: skills.map((skill, index) => ({
       name: skill.name,
       path: skill.path,
       demand: selected.full[index]!,
     })),
     collections: [...collections.values()],
-    basis:
-      unit === "characters"
-        ? "Context window unknown; using Codex's 8,000-character fallback."
-        : `${input.model ?? "Configured model"} · context ${input.contextWindow?.toLocaleString("en-US") ?? "unknown"}; native budget overrides take precedence.`,
-    coverage: [
-      "Includes native discoverable built-ins and other enabled skills. Path aliases are estimated; full instructions loaded later are additional.",
-    ],
+    provenance: {
+      _tag: "CodexAllocation",
+      contextWindow: input.contextWindow,
+      ...(input.maxContextTokens === undefined ? {} : { maxContextTokens: input.maxContextTokens }),
+      fraction: contract.fraction,
+      fallbackCharacters: contract.fallbackCharacters,
+      tokenCap: 10_000,
+    },
   };
 }

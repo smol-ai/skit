@@ -84,12 +84,7 @@ export const scanWorkspaceWrite = Effect.fn("AuthorWorkspace.scanWriteTree")(fun
     )
       return yield* new SkitContractError({
         contract: "Author write target",
-        issues: [
-          {
-            path: target,
-            message: "Expected a canonical relative content path outside control directories",
-          },
-        ],
+        reason: { _tag: "InvalidWriteTarget", path: target },
       });
     let parent = root;
     for (let depth = 0; depth <= parts.length; depth++) {

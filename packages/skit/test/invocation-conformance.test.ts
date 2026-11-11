@@ -196,13 +196,16 @@ effectIt.effect("validation reports drift as an author warning and a publication
         path: CODEX_PATH,
       }),
     ]);
-    expect(authoring.diagnostics[0]?.message).toContain("skit author invocation");
+    expect(authoring.diagnostics[0]).toMatchObject({
+      issue: { skill: "review", policy: "explicit", harness: "claude-code", expected: "explicit" },
+    });
+    expect(authoring.diagnostics[0]).not.toHaveProperty("message");
     expect(publication.diagnostics.every((item) => item.severity === "error")).toBe(true);
     expect(
       yield* createSkitArchive(root, join(root, "release.zip")).pipe(Effect.result),
     ).toMatchObject({
       _tag: "Failure",
-      failure: { _tag: "SkitValidationFailed" },
+      failure: { _tag: "SkitValidationFailed", diagnostics: publication.diagnostics },
     });
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

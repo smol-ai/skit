@@ -20,7 +20,7 @@ it.effect("requires an exact release version before reading the workspace", () =
     Effect.map((failure) =>
       assert.deepStrictEqual(
         failure,
-        new MissingRequirement({ command: "publish", requires: "--version" }),
+        new MissingRequirement({ reason: { _tag: "PublishVersion" } }),
       ),
     ),
   ),

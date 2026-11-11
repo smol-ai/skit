@@ -24,7 +24,7 @@ export type AuthorRemoteHome = typeof AuthorRemoteHome.Type;
 
 export const decodeUrl = (input: string) =>
   Schema.decodeEffect(Schema.URLFromString)(input).pipe(
-    Effect.mapError(() => new AuthorDestinationMalformed({ message: "Invalid URL" })),
+    Effect.mapError(() => new AuthorDestinationMalformed({ kind: "url" })),
   );
 
 /** The canonical form of a remote home: an https origin (or local http) and normalized names. */

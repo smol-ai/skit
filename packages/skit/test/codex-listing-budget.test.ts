@@ -122,11 +122,22 @@ test("applies character fallback and the explicit budget override ceiling", () =
   expect(fallback.unit).toBe("characters");
   expect(fallback.limit).toBe(8_000);
   expect(fallback.fitted).toBe(Array.from("- test: 🐱 (file: /skills/test/SKILL.md)\n").length);
-  expect(estimate([], null, 50_000)).toMatchObject({
+  const capped = estimate([], null, 50_000);
+  expect(capped).toMatchObject({
     unit: "budget-tokens",
     limit: 10_000,
     fitted: 0,
+    provenance: {
+      _tag: "CodexAllocation",
+      contextWindow: null,
+      maxContextTokens: 50_000,
+      tokenCap: 10_000,
+    },
   });
+  const wire = Schema.encodeSync(Schema.toCodecJson(ListingBudget))(capped);
+  const restored = Schema.decodeUnknownSync(ListingBudget)(JSON.parse(JSON.stringify(wire)));
+  expect(restored).toEqual(capped);
+  for (const field of ["basis", "coverage", "warnings"]) expect(wire).not.toHaveProperty(field);
 });
 
 it.effect(
@@ -222,13 +233,17 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
           config: { config: { model: "gpt-6.1-sol", model_context_window: null, skills: null } },
         },
       );
-      const warnings = [
-        "Skipped skill /broken/SKILL.md: missing YAML frontmatter delimited by ---",
+      const diagnostics = [
+        { path: "/broken/SKILL.md", diagnostic: "missing YAML frontmatter delimited by ---" },
       ];
-      expect(withRejectedSkill).toEqual({ ...first, warnings });
-      expect(yield* Schema.decodeEffect(ListingBudget)(withRejectedSkill)).toMatchObject({
+      expect(withRejectedSkill).toEqual({ ...first, diagnostics });
+      expect(
+        yield* Schema.decodeUnknownEffect(ListingBudget)(
+          yield* Schema.encodeEffect(Schema.toCodecJson(ListingBudget))(withRejectedSkill),
+        ),
+      ).toMatchObject({
         _tag: "Estimated",
-        warnings,
+        diagnostics,
       });
       yield* fs.writeFileString(metadataPath, "policy:\n  allow_implicit_invocation: true\n");
       const refreshed = yield* readCodexListingBudget(
@@ -283,7 +298,13 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
         options,
         process.execPath,
       );
-      expect(unreadable).toMatchObject({ _tag: "Unavailable" });
+      expect(unreadable).toMatchObject({
+        _tag: "Unavailable",
+        reason: {
+          _tag: "MetadataInvalid",
+          failure: { path: metadataPath, kind: "Codex metadata" },
+        },
+      });
       for (const text of [
         "policy: *missing\n",
         "policy:\n  allow_implicit_invocation: *missing\n",
@@ -305,7 +326,10 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
         { ...options, overrides: { codex: ["/custom"] } },
         process.execPath,
       );
-      expect(skipped._tag).toBe("Unavailable");
+      expect(skipped).toMatchObject({
+        _tag: "Unavailable",
+        reason: { _tag: "CustomRoot", roots: ["/custom"] },
+      });
     }).pipe(
       Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
       Effect.scoped,
@@ -358,4 +382,46 @@ it.effect("reads the invocation policy from agents/openai.yaml only", () =>
     );
     expect(yield* implicitInvocationAllowed(doc)).toBe(false);
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+);
+
+it.effect.each(["error", "missing"])(
+  "retains a native %s config response as an unavailable budget reason",
+  (kind) =>
+    Effect.gen(function* () {
+      const f = yield* nativeLibraryFixture;
+      const fs = yield* FileSystem.FileSystem;
+      const state = yield* loadLibrary(f.home);
+      yield* fs.writeFileString(
+        join(f.root, "app-server"),
+        `
+require('node:readline').createInterface({input:process.stdin}).on('line',line=>{
+ const request=JSON.parse(line);
+ if(request.method==='skills/list') console.log(JSON.stringify({id:2,result:{data:[{cwd:request.params.cwds[0],skills:[],errors:[]}]}}));
+ if(request.method==='config/read') ${kind === "error" ? "console.log(JSON.stringify({id:3,error:{message:'native config rejected'}}));" : "process.exit(0);"}
+});`,
+      );
+      const budget = yield* readCodexListingBudget(state, { cwd: f.root }, process.execPath);
+      expect(budget._tag).toBe("Unavailable");
+      if (budget._tag === "Unavailable") {
+        expect(budget.reason).toMatchObject({
+          _tag: "DiscoveryFailed",
+          failure: {
+            harness: "codex",
+            cwd: f.root,
+            reason:
+              kind === "error"
+                ? {
+                    _tag: "RemoteError",
+                    method: "config/read",
+                    diagnostic: "native config rejected",
+                  }
+                : { _tag: "ResponseMissing", method: "config/read" },
+          },
+        });
+        const wire = Schema.encodeSync(Schema.toCodecJson(ListingBudget))(budget);
+        expect(wire).not.toHaveProperty("detail");
+        const stored = Schema.decodeUnknownSync(ListingBudget)(JSON.parse(JSON.stringify(wire)));
+        expect(stored).toEqual(budget);
+      }
+    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );

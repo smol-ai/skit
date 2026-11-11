@@ -71,7 +71,7 @@ export const planInventory = Effect.fn("Library.planInventory")(function* (
 ) {
   const files = yield* InstalledSkills.Service;
   const intent = yield* RefreshInventoryIntent.makeEffect(structuredClone(input)).pipe(
-    Effect.mapError(() => new InvalidIntent({ detail: "invalid inventory intent" })),
+    Effect.mapError(() => new InvalidIntent({ intent: "RefreshInventory" })),
   );
   const loaded = yield* planningState(home, options.base);
   const roots = deduplicateInventoryRoots(intent.roots);
@@ -124,7 +124,7 @@ export const applyInventory = Effect.fn("Library.applyInventory")(function* (
   yield* RefreshInventoryPlan.makeEffect(plan).pipe(
     Effect.mapError(
       () =>
-        new InvalidLibraryState({ path: libraryStatePath(home), detail: "invalid inventory plan" }),
+        new InvalidLibraryState({ path: libraryStatePath(home), reason: { _tag: "InvalidData" } }),
     ),
   );
   return yield* applyReviewed(
@@ -142,7 +142,7 @@ export const applyInventory = Effect.fn("Library.applyInventory")(function* (
             .pipe(
               Effect.catchTag("Library.InstalledSkillsChanged", () =>
                 Effect.fail(
-                  new StalePlan({ message: "An inventory backup changed before it could be kept" }),
+                  new StalePlan({ reason: { _tag: "EvidenceChanged", kind: "inventory-backup" } }),
                 ),
               ),
             );

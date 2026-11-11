@@ -4,7 +4,7 @@ import { Cause, Effect, FileSystem } from "effect";
 import { systemError } from "effect/PlatformError";
 import { join } from "node:path";
 
-import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
+import { makeAuthorSyncWorld } from "../src/platform/author-sync-fixture/world.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
 for (const direction of ["file-to-directory", "directory-to-file"] as const)
@@ -35,10 +35,13 @@ for (const direction of ["file-to-directory", "directory-to-file"] as const)
         for (const [path, bytes] of Object.entries(before))
           yield* world.a.edit(path, bytes, "remote");
         yield* world.connect();
-        yield* fs.remove(join(world.b.workspace, "notes"), { recursive: true });
+        yield* world.b.remove("notes");
         for (const [path, bytes] of Object.entries(after))
           yield* world.b.edit(path, bytes, "remote");
-        yield* world.b.sync();
+        // Replacing a file with a directory (or vice versa) removes old paths. Approve that
+        // local removal so A actually has a remote change to pull at the boundaries below.
+        expect((yield* world.b.sync()).status).toBe("waiting_for_removal");
+        expect((yield* world.b.sync(false, true)).status).toBe("pushed");
         let interrupted = false;
         let published = false;
         const stop = (at: typeof boundary) =>

@@ -1,14 +1,10 @@
-import { Data, Effect, Predicate, Schema } from "effect";
+import { PublicationResponseError } from "./request-failures.js";
+import { Effect, Predicate, Schema } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import type { RegistryTransportError } from "./registry-http.js";
 import { validateAuthenticationOrigin } from "./accounts.js";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
-import {
-  SkitContractError,
-  parseContract,
-  releasePublishRequestSchema,
-} from "@smolai/skit-core/api";
+import { parseContract, releasePublishRequestSchema } from "@smolai/skit-core/api";
 import type { AuthorRemoteHome } from "@smolai/skit-core/author";
 import {
   IntegrityFailureResponse,
@@ -19,9 +15,9 @@ import {
 import {
   authenticatedApiMiddleware,
   classifyRegistryApiFailure,
+  registryContractFailure,
   markRegistryResponseDecoding,
   registryApiFailure,
-  registryApiFailureMessage,
 } from "./api-client.js";
 import {
   AuthorSyncRequired,
@@ -32,16 +28,6 @@ import {
   PublicationBlocked,
 } from "./failures.js";
 
-export class PublicationResponseError
-  extends Data.TaggedError("PublicationResponseError")<{
-    message: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Check the Registry's reason, then publish again.";
-}
 function stringField(body: unknown, field: string): string | undefined {
   if (typeof body !== "object" || body === null || !(field in body)) return undefined;
   const value: unknown = Reflect.get(body, field);
@@ -60,11 +46,15 @@ export const publishRelease = Effect.fn("Registry.publishRelease")(function* (
   },
 ) {
   const { remote, token, root, version, revision } = input;
+  const requestedOrigin = URL.parse(remote.origin)?.origin;
   const base = yield* validateAuthenticationOrigin(remote.origin).pipe(
     Effect.mapError(
       () =>
         new PublicationResponseError({
-          message: "Publication requires HTTPS or a local development Registry.",
+          reason: {
+            _tag: "OriginInvalid",
+            ...(requestedOrigin === undefined ? {} : { origin: requestedOrigin }),
+          },
         }),
     ),
   );
@@ -90,17 +80,23 @@ export const publishRelease = Effect.fn("Registry.publishRelease")(function* (
         .replace("{slug}", encodeURIComponent(slug)),
       base,
     );
-    if (
-      destination === null ||
-      destination.origin !== base ||
-      !["https:", "http:"].includes(destination.protocol) ||
-      destination.username !== "" ||
-      destination.password !== "" ||
-      destination.hash !== ""
-    )
+    const issues: Extract<
+      PublicationResponseError["reason"],
+      { _tag: "DestinationInvalid" }
+    >["issues"][number][] =
+      destination === null
+        ? ["malformed-url"]
+        : [
+            ...(destination.origin !== base ? ["different-origin" as const] : []),
+            ...(!["https:", "http:"].includes(destination.protocol) ? ["scheme" as const] : []),
+            ...(destination.username !== "" || destination.password !== ""
+              ? ["credentials" as const]
+              : []),
+            ...(destination.hash !== "" ? ["fragment" as const] : []),
+          ];
+    if (destination === null || issues.length)
       return yield* new PublicationResponseError({
-        message:
-          "Registry discovery returned an invalid publication destination; it must use the selected Registry origin without URL credentials or a fragment.",
+        reason: { _tag: "DestinationInvalid", origin: base, issues },
       });
     return destination.toString();
   }).pipe(
@@ -130,11 +126,18 @@ export const publishRelease = Effect.fn("Registry.publishRelease")(function* (
           return response.text.pipe(
             Effect.orElseSucceed(() => ""),
             Effect.flatMap((text) => {
-              const detail = `SKIT publish failed (${response.status}): ${(text || "Registry returned an invalid error response").slice(0, 1000)}`;
+              const failure = {
+                origin: base,
+                status: response.status,
+                body: text.slice(0, 1000),
+                failure: error,
+              };
               return Effect.fail(
                 response.status === 409
-                  ? new RegistryRejectedWrite({ detail })
-                  : new PublicationResponseError({ message: detail }),
+                  ? new RegistryRejectedWrite(failure)
+                  : new PublicationResponseError({
+                      reason: { _tag: "ResponseFailure", ...failure },
+                    }),
               );
             }),
           );
@@ -161,29 +164,38 @@ export const publishRelease = Effect.fn("Registry.publishRelease")(function* (
       if (classified.kind === "forbidden")
         return new PrincipalNotAuthorized({ action: "publish this SKIT" });
       if (Schema.is(PublishBlockedResponse)(error)) {
-        const details = error.diagnostics
-          .filter((item) => item.severity === "error")
-          .map((item) => item.message)
-          .join("\n");
         return new PublicationBlocked({
           reason: "assessment",
-          detail: details ? `:\n${details}` : "",
+          diagnostics: error.diagnostics
+            .filter((item) => item.severity === "error")
+            .map((item) => ({ _tag: "RegistryDiagnostic" as const, ...item })),
         });
       }
       if (Schema.is(IntegrityFailureResponse)(error) && error.error === "ARCHIVE_MANIFEST_MISMATCH")
         return new AuthorSyncRequired({ root });
-      if (classified.kind === "transport") return classified.error;
-      if (classified.kind === "response_decode" || classified.kind === "request_encoding")
-        return new SkitContractError({
-          contract: classified.kind === "request_encoding" ? "publish request" : "publish response",
-          issues: [{ path: "", message: classified.detail }],
+      if (classified.kind === "transport")
+        return new PublicationResponseError({
+          reason: { _tag: "TransportFailed", origin: base, failure: classified.error },
         });
-      const failure = registryApiFailure(error, { defaultStatus: 400 });
-      const detail = registryApiFailureMessage("SKIT publish", error, { defaultStatus: 400 });
+      if (classified.kind === "response_decode")
+        return new PublicationResponseError({
+          reason: { _tag: "AcknowledgementInvalid", origin: base, failure: classified.failure },
+        });
+      if (classified.kind === "request_encoding")
+        return registryContractFailure("publish request", classified.failure);
+      const response = registryApiFailure(error);
+      const failure = {
+        origin: base,
+        ...(response.status === undefined ? {} : { status: response.status }),
+        ...(response.code === undefined ? {} : { registryCode: response.code }),
+        failure: error,
+      };
       if (failure.status === 409 || Schema.is(ReleaseConflictResponse)(error))
-        return new RegistryRejectedWrite({ detail });
-      if (Schema.is(IntegrityFailureResponse)(error)) return new RegistryRejectedWrite({ detail });
-      return new PublicationResponseError({ message: detail });
+        return new RegistryRejectedWrite(failure);
+      if (Schema.is(IntegrityFailureResponse)(error)) return new RegistryRejectedWrite(failure);
+      return new PublicationResponseError({ reason: { _tag: "ResponseFailure", ...failure } });
     }),
   );
 });
+
+export { PublicationResponseError } from "./request-failures.js";

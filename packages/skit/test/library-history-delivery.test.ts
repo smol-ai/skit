@@ -1,5 +1,17 @@
+import { LibraryRecoveryNotice } from "../src/library/recovery-notice.js";
 import { assert, it } from "@effect/vitest";
-import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Option, Schema } from "effect";
+import {
+  Cause,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  FileSystem,
+  Layer,
+  Logger,
+  Option,
+  Schema,
+} from "effect";
 import { join } from "node:path";
 import { systemError } from "effect/PlatformError";
 import * as Library from "../src/library/library.js";
@@ -300,11 +312,47 @@ it.effect("retains failed delivery for a later healthy owner", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     yield* f.fs.makeDirectory(f.logPath, { recursive: true });
+    const failure = systemError({
+      _tag: "PermissionDenied",
+      module: "FileSystem",
+      method: "readFileString",
+      pathOrDescriptor: f.logPath,
+    });
+    const notices: LibraryRecoveryNotice[] = [];
+    const files = FileSystem.FileSystem.of({
+      ...f.fs,
+      readFileString: (path, ...args) =>
+        path === f.logPath ? Effect.fail(failure) : f.fs.readFileString(path, ...args),
+    });
     const revision = yield* Effect.gen(function* () {
       const owner = yield* Library.Service;
       yield* owner.import.collection(f.request);
       return (yield* owner.read).revision;
-    }).pipe(Effect.provide(f.layer));
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          f.layer.pipe(Layer.provide(Layer.succeed(FileSystem.FileSystem, files))),
+          Logger.layer([
+            Logger.make((entry) => {
+              const values: readonly unknown[] = Array.isArray(entry.message)
+                ? entry.message
+                : [entry.message];
+              for (const value of values)
+                if (Schema.is(LibraryRecoveryNotice)(value)) notices.push(value);
+            }),
+          ]),
+        ),
+      ),
+    );
+    assert.isAtLeast(notices.length, 1);
+    assert.isTrue(
+      notices.every(
+        (notice) =>
+          notice._tag === "HistoryDeliveryPending" &&
+          notice.home === f.home &&
+          notice.failure === failure,
+      ),
+    );
     const queue = (yield* readEnvelope(yield* f.fs.readFileString(f.statePath))).historyDelivery;
     assert.strictEqual(queue?.pending.length, 1);
     yield* f.fs.remove(f.logPath, { recursive: true });

@@ -1,8 +1,11 @@
 import { Schema } from "effect";
+import { CollectionSource } from "@smolai/skit-core/library/queries";
 
 export const RemovePlan = Schema.Struct({
   subject_id: Schema.String,
   subject_kind: Schema.Literals(["collection", "skill"]),
+  collection_label: Schema.optionalKey(Schema.String),
+  collection_source: Schema.optionalKey(CollectionSource),
   versions: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   skills: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   global_enabled: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),

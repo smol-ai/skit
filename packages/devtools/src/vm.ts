@@ -345,6 +345,28 @@ export const makeVm = Effect.gen(function* () {
       allowNonzero: true,
     })).code;
   });
+  const verifyAuthorWatch = Effect.fn("Vm.verifyAuthorWatch")(function* (name: string) {
+    yield* requireTrial(name);
+    yield* withLock(
+      name,
+      Effect.gen(function* () {
+        yield* tart.start(name);
+        yield* tart.job(
+          name,
+          `cd "$HOME/skit"
+        node packages/cli/bin/skit.js author watch --help
+        pnpm --filter @smolai/skit-core exec vitest run test/authored-refresh.test.ts
+        pnpm --filter @smolai/skit exec vitest run --config vitest.unit.config.ts test/author-watch.test.ts
+        pnpm --filter @smolai/skit-server-effect exec vitest run --config vitest.e2e.config.ts test/e2e-author-sync.test.ts`,
+          {},
+          300,
+        );
+      }),
+    );
+    yield* Console.log(
+      `Author watcher verification passed in ${name}. Trial preserved for inspection.`,
+    );
+  });
   const stopVm = Effect.fn("Vm.stop")(function* (name: string) {
     if (name !== baseline) yield* requireTrial(name);
     yield* withLock(name, tart.stop(name));
@@ -390,6 +412,7 @@ export const makeVm = Effect.gen(function* () {
     reset,
     newTrial,
     build,
+    verifyAuthorWatch,
     copyAuth,
     attach,
     stop: stopVm,

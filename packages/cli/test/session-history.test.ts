@@ -1,3 +1,4 @@
+import { classifyFailure } from "../src/commands/failure-classification.js";
 import * as Library from "@smolai/skit-core/library";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
@@ -154,7 +155,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     assert.strictEqual(unchanged.outcome.kind, "unchanged");
     assert.strictEqual(unchanged.pending, undefined);
     if (unchanged.outcome.kind === "unchanged")
-      assert.strictEqual(unchanged.outcome.pending.facts[0]?.writes, "nothing to change");
+      assert.strictEqual(unchanged.outcome.pending.facts[0]?.fileChange, "unchanged");
     assert.deepStrictEqual(libraryCollectionScopes(enabled, collectionId), scopes);
     const beforeRepair = yield* home.durable;
     const installedSkill = beforeRepair.installed_skills[0]!;
@@ -281,7 +282,7 @@ it.effect("refuses a confirmation when the Library changes after its revision ch
     const confirmed = yield* fixture.home.owned(confirmLibraryChange(fixture.proposed));
     assert.strictEqual(confirmed.outcome?.kind, "failed");
     if (confirmed.outcome?.kind === "failed")
-      assert.strictEqual(confirmed.outcome.failure.code, "CONFLICT");
+      assert.strictEqual(classifyFailure(confirmed.outcome.failure).code, "CONFLICT");
     const state = yield* fixture.home.durable;
     assert.deepStrictEqual(state.enabled, []);
     assert.deepStrictEqual(state.repositories, []);

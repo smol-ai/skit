@@ -355,7 +355,9 @@ it.effect("refuses to remove the Library's own storage", () =>
       ),
     ).pipe(Effect.flip);
 
-    assert.strictEqual(error._tag, "Library.InvalidIntent");
+    if (error._tag !== "Library.SetupStepsInvalid") return assert.fail(error._tag);
+    assert.strictEqual(error.reason, "path-in-library-storage");
+    assert.strictEqual(error.path, join(home, "originals"));
     assert.isTrue(yield* fs.exists(join(home, "originals")));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

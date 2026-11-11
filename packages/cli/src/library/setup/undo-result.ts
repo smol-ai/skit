@@ -1,5 +1,8 @@
+import { UndoConflict } from "@smolai/skit-core/library";
+import { undoConflict } from "../recovery/failures.js";
 import type { ContractData } from "../../commands/output-contracts.js";
-import { terminalData } from "../../terminal/text.js";
+import { Block, type Change } from "../../terminal/blocks.js";
+import { actionFields } from "./present.js";
 import { Schema } from "effect";
 import { CollectionId } from "@smolai/skit-core/universal/consumer";
 import { Hash } from "@smolai/skit-core/shared";
@@ -10,7 +13,7 @@ export const SetupUndoOutput = Schema.Struct({
   planId: Schema.optionalKey(Hash),
   status: Schema.Literals(["ready", "conflicted", "undone", "already-undone"]),
   phase: Schema.Literals(["preview", "applied", "stale", "failed"]),
-  conflicts: Schema.Array(Schema.String),
+  conflicts: Schema.Array(UndoConflict),
   files: Schema.Array(
     Schema.Struct({
       path: Schema.String,
@@ -64,21 +67,60 @@ export const setupUndoActions = (home: string, operationId: string, planId?: str
     : []),
 ];
 
-export const renderSetupUndo = (data: ContractData<"setupUndo">) =>
-  [
-    `Setup undo: ${data.status}`,
-    `Operation: ${data.operationId}`,
-    ...data.files.map((file) => `${file.kind}: ${terminalData(file.path)}`),
-    ...data.sourceSelections.map(
-      (source) =>
-        `Restore Collection ${terminalData(source.label)}: ${source.fromSnapshot} → ${source.toSnapshot}`,
-    ),
-    ...(data.intentChanged ? ["Restore prior enablement, versions and invocation choices"] : []),
-    ...(data.settingsChanged ? ["Restore prior discovery roots and repository decisions"] : []),
-    ...data.conflicts.map((conflict) => `Conflict: ${terminalData(conflict)}`),
-    ...(data.failure ? [terminalData(data.failure)] : []),
-    "Retained Library artifacts remain available.",
-    ...data.actions.map(
-      (action) => `${action.rel}: ${action.argv.map((arg) => JSON.stringify(arg)).join(" ")}`,
-    ),
-  ].join("\n");
+export const renderSetupUndo = (data: ContractData<"setupUndo">): Block[] => {
+  const restores: Change[] = [
+    ...data.sourceSelections.map((source): Change => ({
+      action: "update",
+      label: `Restore Collection ${source.label}`,
+      detail: `${source.fromSnapshot} → ${source.toSnapshot}`,
+    })),
+    ...(data.intentChanged
+      ? [
+          {
+            action: "update" as const,
+            label: "Restore prior enablement, versions and invocation choices",
+          },
+        ]
+      : []),
+    ...(data.settingsChanged
+      ? [
+          {
+            action: "update" as const,
+            label: "Restore prior discovery roots and repository decisions",
+          },
+        ]
+      : []),
+  ];
+  return [
+    Block.Fields({
+      rows: [
+        { label: "Setup undo", value: [data.status] },
+        { label: "Operation", value: [data.operationId] },
+      ],
+    }),
+    ...(data.files.length
+      ? [
+          Block.Table({
+            columns: [{ title: "File change" }, { title: "Path" }],
+            rows: data.files.map((file) => [[file.kind], [{ dim: file.path }]]),
+          }),
+        ]
+      : []),
+    ...(restores.length ? [Block.Changes({ items: restores })] : []),
+    ...(data.conflicts.length
+      ? [
+          Block.Group({
+            title: "Conflicts",
+            children: [
+              Block.List({
+                items: data.conflicts.map((conflict) => ({ text: [undoConflict(conflict)] })),
+              }),
+            ],
+          }),
+        ]
+      : []),
+    ...(data.failure ? [Block.Status({ tone: "error", text: [data.failure] })] : []),
+    Block.Note({ text: ["Collection Versions in the Library remain available."] }),
+    ...(data.actions.length ? [Block.Fields({ rows: actionFields(data.actions) })] : []),
+  ];
+};

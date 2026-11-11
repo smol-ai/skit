@@ -1,3 +1,5 @@
+import { SourceRestoreInvalid } from "../../source-restore-failures.js";
+export { SourceRestoreInvalid } from "../../source-restore-failures.js";
 import type { CollectionVersionPlan } from "../../collection-version-plan.js";
 import type { RestoreProgress, RestorePhase } from "../../restore-progress.js";
 import type { Hash } from "../../../shared/hash.js";
@@ -6,7 +8,7 @@ import { collectionVersionPath, originalTreeHash } from "../../collection-versio
 import { resolveSkitSource } from "../../../sources/resolve.js";
 import { deterministicTreeHash } from "../../../artifact/skit.js";
 import { prepareImport } from "../../import-collection.js";
-import { Data, Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Schema } from "effect";
 import { join } from "node:path";
 
 import { writeCollectionVersion } from "./collection-version.js";
@@ -24,19 +26,12 @@ import {
   type SnapshotArchive,
 } from "../../library-contracts.js";
 import { repositorySelectsInstalledSkill } from "../../installation/uninstall.js";
-import { FailureTypeId, type SkitFailure } from "../../../shared/failure.js";
-
-export class RestoreInvalid
-  extends Data.TaggedError("Library.RestoreInvalid")<{ detail: string }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Inspect the Library, then sync again.";
-  get message(): string {
-    return `Cannot restore the Library: ${this.detail}`;
-  }
-}
+import {
+  RestoreInvalid,
+  type RestoreInvalidReason,
+  type RestoreOwnershipConflict,
+} from "../../restore-failures.js";
+export { RestoreInvalid } from "../../restore-failures.js";
 
 /** Access to historical sources and the destination for verified retained bytes. */
 export interface RestoreOptions {
@@ -46,29 +41,14 @@ export interface RestoreOptions {
   readonly progress?: RestoreProgress;
 }
 
-/** Preserve the existing diagnostic tag as source restoration moves behind the core boundary. */
-export class SourceRestoreInvalid
-  extends Data.TaggedError("Library.SyncSourceRestoreInvalid")<{
-    hash: string;
-    detail: string;
-    cause?: unknown;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation =
-    "Restore access to the source, or run `skit update` on the Collection, then run `skit sync` again.";
-  get message(): string {
-    return this.detail;
-  }
-}
-
 /**
  * The Source to refetch an import's exact bytes from: its recorded identity at its
  * revision. Git restores pin the commit separately; a Registry restore names the Release.
  */
-const restorableSource = (sourceImport: Import): SkitSource | undefined => {
+const restorableSource = (
+  sourceImport: Import,
+): { source: SkitSource; commit: string | undefined } | undefined => {
+  if (!importCanBeRefetched(sourceImport)) return undefined;
   const identity = sourceImport.source_identity;
   const subpath =
     (identity.kind === "github" || identity.kind === "git") && identity.collection_root !== "."
@@ -77,25 +57,30 @@ const restorableSource = (sourceImport: Import): SkitSource | undefined => {
   switch (identity.kind) {
     case "github":
       return {
-        type: "github",
-        owner: identity.owner,
-        repository: identity.repository,
-        ...subpath,
+        source: {
+          type: "github",
+          owner: identity.owner,
+          repository: identity.repository,
+          ...subpath,
+        },
+        commit: sourceImport.revision,
       };
     case "git":
-      return { type: "git", remote: identity.remote.value, ...subpath };
+      return {
+        source: { type: "git", remote: identity.remote.value, ...subpath },
+        commit: sourceImport.revision,
+      };
     case "registry":
-      return sourceImport.revision === undefined
-        ? undefined
-        : {
-            type: "registry",
-            namespace: identity.namespace,
-            slug: identity.slug,
-            version: sourceImport.revision,
-            ...(identity.authority === "default" ? {} : { authority: identity.authority }),
-          };
-    default:
-      return undefined;
+      return {
+        source: {
+          type: "registry",
+          namespace: identity.namespace,
+          slug: identity.slug,
+          version: sourceImport.revision,
+          ...(identity.authority === "default" ? {} : { authority: identity.authority }),
+        },
+        commit: undefined,
+      };
   }
 };
 
@@ -105,52 +90,36 @@ const refetchSourceArchive = Effect.fn("Library.restore.refetchSource")(function
   options: RestoreOptions,
 ) {
   const copy = manifest.collection_versions.find((candidate) => candidate.hash === hash);
-  const sourceImport = manifest.imports.find(
-    (candidate) =>
-      candidate.collection_version_id === copy?.collection_version_id &&
-      importCanBeRefetched(candidate),
-  );
-  if (copy === undefined || sourceImport === undefined)
+  const source = manifest.imports
+    .filter((candidate) => candidate.collection_version_id === copy?.collection_version_id)
+    .map(restorableSource)
+    .find((candidate) => candidate !== undefined);
+  if (copy === undefined || source === undefined)
     return yield* new SourceRestoreInvalid({
       hash,
-      detail: "manifest has no exact source-restoration acquisition",
+      reason: { _tag: "SourceImportMissing" },
     });
   const archive = yield* Effect.scoped(
     Effect.gen(function* () {
-      const gitSource =
-        sourceImport.source_identity.kind === "github" ||
-        sourceImport.source_identity.kind === "git";
-      const commit = gitSource ? sourceImport.revision : undefined;
-      if (gitSource && commit === undefined)
-        return yield* new SourceRestoreInvalid({
-          hash,
-          detail: "pinned Git acquisition has no commit",
-        });
-      const source = restorableSource(sourceImport);
-      if (source === undefined)
-        return yield* new SourceRestoreInvalid({
-          hash,
-          detail: "acquisition has no restorable source identity",
-        });
       const profiles = new Set(copy.members.map((member) => member.materialization_profile));
       if (profiles.size !== 1)
         return yield* new SourceRestoreInvalid({
           hash,
-          detail: "retained copy has no single materialization profile",
+          reason: { _tag: "NormalizationProfiles", profiles: [...profiles] },
         });
-      const resolved = yield* resolveSkitSource(source, {
+      const resolved = yield* resolveSkitSource(source.source, {
         registryBaseUrl: options.registryBaseUrl,
         ...(options.registryToken === undefined ? {} : { registryToken: options.registryToken }),
-        ...(commit === undefined
+        ...(source.commit === undefined
           ? {}
-          : { git: { commit, tracking_ref: null }, requireGitRevision: true }),
+          : { git: { commit: source.commit, tracking_ref: null }, requireGitRevision: true }),
       });
       // Declared imports retain the whole resolved SKIT root, including shared and non-Skill files.
       if (profiles.has("declared-skit-skill/v1")) {
         if (resolved.descriptorKind !== "declared")
           return yield* new SourceRestoreInvalid({
             hash,
-            detail: "declared retained copy source has no declared Descriptor",
+            reason: { _tag: "DescriptorMissing" },
           });
         return yield* readSnapshotArchive(resolved.root);
       }
@@ -176,13 +145,13 @@ const refetchSourceArchive = Effect.fn("Library.restore.refetchSource")(function
     Effect.mapError((cause) =>
       cause._tag === "Library.SyncSourceRestoreInvalid"
         ? cause
-        : new SourceRestoreInvalid({ hash, detail: cause.message, cause }),
+        : new SourceRestoreInvalid({ hash, reason: { _tag: "SourceFetchFailed", failure: cause } }),
     ),
   );
   if (archive.digest !== hash)
     return yield* new SourceRestoreInvalid({
       hash,
-      detail: `source returned ${archive.digest}; expected ${hash}`,
+      reason: { _tag: "HashMismatch", actual: archive.digest },
     });
   return archive;
 });
@@ -196,7 +165,7 @@ const silentRestoreProgress: RestoreProgress = {
 export const restorePlanProblem = (
   manifest: LibraryManifest,
   plan: CollectionVersionPlan,
-): string | undefined => {
+): RestoreInvalidReason | undefined => {
   const required = new Set(manifest.collection_versions.map((copy) => copy.hash));
   const copies = new Map(
     manifest.collection_versions.map((copy) => [copy.collection_version_id, copy]),
@@ -208,22 +177,20 @@ export const restorePlanProblem = (
     ...plan.reusable,
     ...plan.download,
   ]) {
-    if (!required.has(hash)) return `plan references foreign retained copy ${hash}`;
+    if (!required.has(hash)) return { _tag: "ForeignCopy", hash };
     covered.add(hash);
   }
   for (const hash of plan.download) {
-    if (!snapshots.has(hash))
-      return `plan requests a private download for source-backed retained copy ${hash}`;
+    if (!snapshots.has(hash)) return { _tag: "DownloadForSourceCopy", hash };
   }
   for (const id of plan.reacquire) {
     const copy = copies.get(id);
-    if (copy === undefined) return `unknown retained copy ${id}`;
-    if (snapshots.has(copy.hash))
-      return `snapshot-backed retained copy ${copy.hash} cannot be reacquired from source`;
+    if (copy === undefined) return { _tag: "UnknownCopy", id };
+    if (snapshots.has(copy.hash)) return { _tag: "SourceRestoreUnavailable", hash: copy.hash };
     covered.add(copy.hash);
   }
   for (const hash of required) {
-    if (!covered.has(hash)) return `retained copy ${hash} not downloaded`;
+    if (!covered.has(hash)) return { _tag: "CopyNotAvailable", hash };
   }
 };
 
@@ -239,10 +206,10 @@ export const completeRestoreArchives = Effect.fn("Library.completeRestoreArchive
   },
 ) {
   const invalid = restorePlanProblem(manifest, plan);
-  if (invalid !== undefined) return yield* new RestoreInvalid({ detail: invalid });
+  if (invalid !== undefined) return yield* new RestoreInvalid({ reason: invalid });
   if (plan.download.length && options.download === undefined)
     return yield* new RestoreInvalid({
-      detail: `snapshot-backed retained copy ${plan.download[0]} not downloaded: no download transport`,
+      reason: { _tag: "DownloadTransportMissing", hashes: plan.download },
     });
   const progress = options.progress ?? silentRestoreProgress;
   const archives = new Map(plan.localArchives.map((archive) => [archive.digest, archive]));
@@ -264,7 +231,7 @@ export const completeRestoreArchives = Effect.fn("Library.completeRestoreArchive
           // Replan on retry rather than silently adding an unplanned transfer.
           if (!(yield* fs.exists(path)))
             return yield* new RestoreInvalid({
-              detail: `retained copy ${hash} disappeared after planning`,
+              reason: { _tag: "ReusableCopyMissing", hash, path },
             });
           if ((yield* originalTreeHash(path)) !== hash) return yield* new ContentAddressCollision();
           existingPaths.set(hash, path);
@@ -286,12 +253,12 @@ export const completeRestoreArchives = Effect.fn("Library.completeRestoreArchive
             Effect.gen(function* () {
               if (options.download === undefined)
                 return yield* new RestoreInvalid({
-                  detail: `snapshot-backed retained copy ${hash} not downloaded`,
+                  reason: { _tag: "DownloadTransportMissing", hashes: [hash] },
                 });
               const archive = yield* options.download(hash);
               if (archive.digest !== hash)
                 return yield* new RestoreInvalid({
-                  detail: `download returned ${archive.digest}; expected ${hash}`,
+                  reason: { _tag: "DownloadHashMismatch", expected: hash, actual: archive.digest },
                 });
               yield* progress.tick({ phase, completed: ++completed });
               return archive;
@@ -307,11 +274,11 @@ export const completeRestoreArchives = Effect.fn("Library.completeRestoreArchive
       (candidate) => candidate.collection_version_id === id,
     );
     if (copy === undefined)
-      return yield* new RestoreInvalid({ detail: `unknown retained copy ${id}` });
+      return yield* new RestoreInvalid({ reason: { _tag: "UnknownCopy", id } });
     // A stale or mismatched plan must never turn private content into a source fetch.
     if (manifest.snapshot_digests.includes(copy.hash))
       return yield* new RestoreInvalid({
-        detail: `snapshot-backed retained copy ${copy.hash} not downloaded`,
+        reason: { _tag: "SourceRestoreUnavailable", hash: copy.hash },
       });
     const subject =
       manifest.imports.find((candidate) => candidate.collection_version_id === id)?.input.value ??
@@ -325,7 +292,7 @@ export const completeRestoreArchives = Effect.fn("Library.completeRestoreArchive
   // Plans describe observations, not authority to omit required content.
   for (const copy of manifest.collection_versions) {
     if (!archives.has(copy.hash) && !existingPaths.has(copy.hash))
-      return yield* new RestoreInvalid({ detail: `retained copy ${copy.hash} not downloaded` });
+      return yield* new RestoreInvalid({ reason: { _tag: "CopyNotAvailable", hash: copy.hash } });
   }
   return { archives: [...archives.values()], existingPaths };
 });
@@ -351,7 +318,14 @@ export const restoredState = Effect.fn("Library.restoredState")(function* (
     }),
   ).pipe(
     Effect.mapError(
-      () => new RestoreInvalid({ detail: "restored state failed Library validation" }),
+      (issue) =>
+        new RestoreInvalid({
+          reason: {
+            _tag: "StateInvalid",
+            stage: "restored-library",
+            failure: new Schema.SchemaError(issue),
+          },
+        }),
     ),
   );
 });
@@ -396,7 +370,7 @@ export const importRestoreArchives = Effect.fn("Library.importRestoreArchives")(
             } else {
               if (archive === undefined)
                 return yield* new RestoreInvalid({
-                  detail: `retained copy ${tree.hash} not downloaded`,
+                  reason: { _tag: "CopyNotAvailable", hash: tree.hash },
                 });
               const verified = yield* verifySnapshotArchive(archive);
               path = yield* Effect.scoped(
@@ -415,9 +389,15 @@ export const importRestoreArchives = Effect.fn("Library.importRestoreArchives")(
           }
           for (const member of tree.members) {
             const directory = member.source_path === "." ? path : join(path, member.source_path);
-            if ((yield* originalTreeHash(directory)) !== member.source_hash)
+            const actual = yield* originalTreeHash(directory);
+            if (actual !== member.source_hash)
               return yield* new RestoreInvalid({
-                detail: `retained member ${member.source_path} source bytes disagree`,
+                reason: {
+                  _tag: "MemberHashMismatch",
+                  path: member.source_path,
+                  expected: member.source_hash,
+                  actual,
+                },
               });
           }
           yield* progress.tick({ phase, completed: index + 1, subject: label });
@@ -434,25 +414,35 @@ function strandedByRestore(current: LibraryState, manifest: LibraryManifest) {
   const versionIds = new Set(
     manifest.skills.flatMap((skill) => skill.versions.map((version) => version.skill_version_id)),
   );
-  const conflicts = [
-    ...current.installed_skills.flatMap((installedSkill) =>
-      (!enabledSkillIds(manifest, manifest.enabled).includes(installedSkill.skill_id) &&
-        !repositorySelectsInstalledSkill(current, installedSkill)) ||
-      (skillIds.has(installedSkill.skill_id) && versionIds.has(installedSkill.skill_version_id))
-        ? []
-        : [`device:${installedSkill.installed_skill_id}:managed-projection`],
-    ),
-    ...current.repositories.flatMap((repository) =>
-      repository.enabled.every((item) =>
-        "skill" in item
-          ? manifest.skills.some((skill) => skill.skill_id === item.skill)
-          : manifest.collections.some((collection) => collection.collection_id === item.collection),
-      )
-        ? []
-        : [`device:${repository.root}:repository-binding`],
-    ),
-  ];
-  return [...new Set(conflicts)].sort();
+  const conflicts: RestoreOwnershipConflict[] = [];
+  const enabled = new Set(enabledSkillIds(manifest, manifest.enabled));
+  for (const installed of current.installed_skills) {
+    if (
+      (!enabled.has(installed.skill_id) && !repositorySelectsInstalledSkill(current, installed)) ||
+      (skillIds.has(installed.skill_id) && versionIds.has(installed.skill_version_id))
+    )
+      continue;
+    conflicts.push({
+      _tag: "InstalledVersionMissing",
+      installedSkillId: installed.installed_skill_id,
+      skillId: installed.skill_id,
+      versionId: installed.skill_version_id,
+      path: installed.path,
+    });
+  }
+  for (const repository of current.repositories) {
+    for (const selection of repository.enabled) {
+      const exists =
+        "skill" in selection
+          ? manifest.skills.some((skill) => skill.skill_id === selection.skill)
+          : manifest.collections.some(
+              (collection) => collection.collection_id === selection.collection,
+            );
+      if (!exists)
+        conflicts.push({ _tag: "RepositorySelectionMissing", root: repository.root, selection });
+    }
+  }
+  return conflicts;
 }
 
 /** Keep current device ownership while replacing the portable Library fields. */
@@ -469,7 +459,10 @@ export const blendRestoredState = Effect.fn("Library.blendRestoredState")(functi
     enabled: restored.enabled,
   });
   const ownership = strandedByRestore(current, manifest);
-  if (ownership.length > 0) return yield* new RestoreInvalid({ detail: ownership.join(", ") });
+  if (ownership.length > 0)
+    return yield* new RestoreInvalid({
+      reason: { _tag: "OwnershipWouldBeStranded", conflicts: ownership },
+    });
   // This device's invocation overrides apply to whatever the restored Library enables.
   const { invocation_policies: localPolicies, ...device } = current;
   return yield* LibraryState.makeEffect({
@@ -484,9 +477,13 @@ export const blendRestoredState = Effect.fn("Library.blendRestoredState")(functi
       : { invocation_policies: localPolicies }),
   }).pipe(
     Effect.mapError(
-      () =>
+      (issue) =>
         new RestoreInvalid({
-          detail: "merged Library conflicts with what this device enables or owns",
+          reason: {
+            _tag: "StateInvalid",
+            stage: "merged-library",
+            failure: new Schema.SchemaError(issue),
+          },
         }),
     ),
   );

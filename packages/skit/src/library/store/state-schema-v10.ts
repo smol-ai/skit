@@ -62,7 +62,7 @@ const installedSkillFromV10 = ({
       return [
         current_hash === undefined
           ? { ...copy, status: "pending" }
-          : { ...copy, status, current_hash },
+          : { ...copy, status, current_hash, conflicts: [] },
       ];
     case "suppressed":
       return [
@@ -94,6 +94,6 @@ export const LibraryStateFromV10 = Schema.Unknown.pipe(
         installed_skills: installed_skills.flatMap(installedSkillFromV10),
       }),
     ),
-    encode: SchemaGetter.forbidden(() => "v10 Library state is decode-only"),
+    encode: SchemaGetter.forbiddenEncoding,
   }),
 );

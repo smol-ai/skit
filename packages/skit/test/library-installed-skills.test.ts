@@ -1,3 +1,7 @@
+import { libraryDoctorReport } from "../src/library/inventory/doctor-report.js";
+import { scanInventory } from "../src/library/inventory/refresh.js";
+import { inspectInstalledSkill } from "../src/installed-skills/files.js";
+import { makeSkillId, makeInstalledSkillId } from "../src/library/entity-ids.js";
 import { openLibrary, inLibrary } from "./helpers/library-store.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Result } from "effect";
@@ -319,7 +323,7 @@ for (const changed of ["bytes", "ownership"] as const)
         if (Result.isFailure(result)) {
           assert.strictEqual(result.failure._tag, "UninstallConflict");
           if (result.failure._tag === "UninstallConflict")
-            assert.include(result.failure.detail, path);
+            assert.strictEqual(result.failure.path, path);
         }
         assert.strictEqual(yield* fs.exists(join(newRoot, "review")), false);
         assert.strictEqual(
@@ -1335,3 +1339,103 @@ it.effect("replaces an edited copy only as approved, keeping the edit in recover
     assert.strictEqual(yield* fs.readFileString(join(backups[0]!.path, "SKILL.md")), "my edit\n");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+for (const reason of [
+  "ContentChanged",
+  "MarkerMissing",
+  "MarkerMissingAndEdited",
+  "MarkerInvalid",
+  "MarkerNotObject",
+  "MarkerInvalidFields",
+  "SkillMismatch",
+  "InstalledSkillMismatch",
+  "MarkerHashMismatch",
+  "Multiple",
+] as const) {
+  it.effect(
+    `retains ${reason} evidence through installed files, refresh and doctor without overwriting`,
+    () =>
+      Effect.gen(function* () {
+        const { fs, home, targetRoot } = yield* boundCollection;
+        const project = installEnabledSkills({
+          home,
+          target: "agents",
+          root: targetRoot,
+          variantsPath: join(home, "variants"),
+        });
+        yield* inLibrary(home)(project);
+        const state = yield* loadLibrary(home);
+        const copy = state.installed_skills[0];
+        assert.ok(copy);
+        const markerPath = join(copy.path, ".skit-ownership.json");
+        const documentPath = join(copy.path, "SKILL.md");
+        const marker = JSON.parse(yield* fs.readFileString(markerPath));
+        const invalidMarker =
+          reason === "MarkerInvalid"
+            ? { text: "not JSON", reason: "InvalidJson" as const }
+            : reason === "MarkerNotObject"
+              ? { text: "null", reason: "NotObject" as const }
+              : reason === "MarkerInvalidFields"
+                ? { text: "{}", reason: "InvalidFields" as const }
+                : undefined;
+        if (
+          reason === "ContentChanged" ||
+          reason === "Multiple" ||
+          reason === "MarkerMissingAndEdited"
+        )
+          yield* fs.writeFileString(documentPath, "my review edits\n");
+        if (reason === "MarkerMissing" || reason === "MarkerMissingAndEdited")
+          yield* fs.remove(markerPath);
+        else if (invalidMarker) yield* fs.writeFileString(markerPath, invalidMarker.text);
+        else {
+          if (reason === "SkillMismatch" || reason === "Multiple") marker.skill_id = makeSkillId();
+          if (reason === "InstalledSkillMismatch" || reason === "Multiple")
+            marker.installed_skill_id = makeInstalledSkillId();
+          if (reason === "MarkerHashMismatch") marker.expected_hash = `sha256:${"f".repeat(64)}`;
+          yield* fs.writeFileString(markerPath, JSON.stringify(marker));
+        }
+        const bytes = yield* fs.readFileString(documentPath);
+        const inspected = yield* inspectInstalledSkill(copy);
+        assert.strictEqual(inspected.kind, "conflicted");
+        if (inspected.kind !== "conflicted") return;
+        if (invalidMarker)
+          assert.deepStrictEqual(inspected.conflicts, [
+            { _tag: "MarkerInvalid", reason: { _tag: invalidMarker.reason } },
+          ]);
+        const expected =
+          reason === "MarkerMissingAndEdited"
+            ? ["MarkerMissing", "ContentChanged"]
+            : reason === "Multiple"
+              ? ["SkillMismatch", "InstalledSkillMismatch", "ContentChanged"]
+              : reason === "MarkerHashMismatch"
+                ? ["MarkerHashMismatch", "ContentChanged"]
+                : invalidMarker
+                  ? ["MarkerInvalid"]
+                  : [reason];
+        assert.deepStrictEqual(
+          inspected.conflicts.map((item) => item._tag),
+          expected,
+        );
+        const observed = yield* scanInventory(state, [{ harness: "codex", root: targetRoot }]);
+        assert.deepStrictEqual(
+          libraryDoctorReport(observed).issues[0]?.conflicts,
+          inspected.conflicts,
+        );
+        // Planning/applying the real update must retain the same facts, not merely refresh's view.
+        yield* inLibrary(home)(project);
+        const saved = yield* loadLibrary(home);
+        assert.deepStrictEqual(
+          libraryDoctorReport(saved).issues[0]?.conflicts,
+          inspected.conflicts,
+        );
+        assert.strictEqual(yield* fs.readFileString(documentPath), bytes);
+        if (reason === "MarkerMissing" || reason === "MarkerMissingAndEdited")
+          assert.isFalse(yield* fs.exists(markerPath));
+        else
+          assert.strictEqual(
+            yield* fs.readFileString(markerPath),
+            invalidMarker ? invalidMarker.text : JSON.stringify(marker),
+          );
+      }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+  );
+}

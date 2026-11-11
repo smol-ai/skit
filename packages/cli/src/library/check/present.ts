@@ -1,8 +1,11 @@
+import { Block } from "../../terminal/blocks.js";
 import type { CheckResult } from "./output.js";
+import { skillsShReason, skillsShStatus } from "./reasons.js";
 
-export function renderCheck(data: CheckResult) {
-  if (data.length === 0) return "The Library has no retained Library subjects.";
-  const lines = data.flatMap((item) => {
+export function renderCheck(data: CheckResult): Block[] {
+  if (data.length === 0)
+    return [Block.Status({ tone: "info", text: ["The Library has no Collections or Skills."] })];
+  return data.flatMap((item): Block[] => {
     const originalIntact = item.collection_versions.every((tree) => tree.original_intact);
     const members = item.skills_sh?.members ?? [];
     const updates = members.filter((member) => member.status === "update-available").length;
@@ -23,18 +26,35 @@ export function renderCheck(data: CheckResult) {
       updates === 0 &&
       problems.length === 0
     )
-      return [`✔ ${item.label} is up to date`];
+      return [Block.Status({ tone: "ok", text: [`${item.label} is up to date`] })];
     if (originalIntact && updates > 0 && problems.length === 0)
       return [
-        `↑ ${item.label} has updates available${members.length > 1 ? ` (${updates} of ${members.length} Skills)` : ""}`,
+        Block.Status({
+          tone: "info",
+          text: [
+            `${item.label} has updates available${members.length > 1 ? ` (${updates} of ${members.length} Skills)` : ""}`,
+          ],
+        }),
       ];
-    if (!originalIntact) return [`✖ ${item.label} has damaged retained bytes`];
+    if (!originalIntact)
+      return [
+        Block.Status({ tone: "error", text: [`${item.label} has a damaged Collection Version`] }),
+      ];
     if (problems.length)
       return [
-        `! ${item.label} needs attention · ${problems.map((member) => `${member.skill_name}: ${member.status}`).join(", ")}`,
+        Block.Status({ tone: "warn", text: [`${item.label} needs attention`] }),
+        ...problems.map((member) =>
+          Block.Group({
+            title: member.skill_name,
+            children: [
+              Block.Note({ text: [skillsShStatus[member.status]] }),
+              ...(member.reason ? skillsShReason(member.reason) : []),
+            ],
+          }),
+        ),
       ];
-    if (item.source_status === "changed") return [`↑ ${item.label} has updates available`];
-    return [`? ${item.label} could not be fully checked`];
+    if (item.source_status === "changed")
+      return [Block.Status({ tone: "info", text: [`${item.label} has updates available`] })];
+    return [Block.Status({ tone: "warn", text: [`${item.label} could not be fully checked`] })];
   });
-  return lines.join("\n");
 }

@@ -147,7 +147,7 @@ await test("the packed CLI installs and runs without workspace dependencies", ()
       const recorded = await Effect.runPromise(story.record);
       const frames = recorded.frames(stories.defaultTerminalEnvironment);
       assert.ok(frames.length > 8);
-      assert.ok(frames.some(frame => frame.status === "Downloading 3 Skill copies · 0/3"));
+      assert.ok(frames.some(frame => frame.status === "Downloading 3 Skill copies | 0/3"));
       assert.ok(recorded.transcript(stories.defaultTerminalEnvironment, process.cwd()).includes(story.name));
       assert.equal("OutputStory" in stories, false);
       assert.equal("events" in recorded, false);

@@ -40,7 +40,11 @@ export function addMcp(
       },
       enabled,
       active: active && enabled,
-      provenance: { confidence: "exact", source: "configuration", evidence: configPath },
+      provenance: {
+        confidence: "exact",
+        origin: { _tag: "Configuration", harness },
+        evidence: configPath,
+      },
     });
   }
 }

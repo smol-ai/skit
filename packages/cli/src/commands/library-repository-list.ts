@@ -1,3 +1,4 @@
+import { defineCommand } from "./definition.js";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Effect } from "effect";
 import { Command } from "effect/cli";
@@ -11,7 +12,7 @@ import { encodeResult as result } from "./encode-result.js";
 
 const flags = { json: jsonFlag };
 
-export const repositoryListCliCommand = Command.make("list", flags, () =>
+export const repositoryListCliCommand = defineCommand("list", flags, () =>
   Effect.gen(function* () {
     const paths = yield* SkitConfiguration;
 
@@ -31,7 +32,6 @@ export const repositoryListCliCommand = Command.make("list", flags, () =>
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read"] },
     outputSchemas: [repositoryOutputContracts.repositoryPolicy],
-    exitCodes: [0, 64],
     interactive: false,
   }),
 );

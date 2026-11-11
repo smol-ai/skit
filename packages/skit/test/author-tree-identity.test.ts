@@ -1,9 +1,10 @@
 import { expect, it } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Option, Schema } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { LinkStat } from "../src/platform/link-stat.js";
-import { scanAuthorTree } from "../src/artifact/tree.js";
+import { scanAuthorTree, normalizeAuthorTreeEntries } from "../src/artifact/tree.js";
+import { TreeError } from "../src/shared/tree-error.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 it.effect("physical identity changes do not change the content hash or native filename", () =>
@@ -50,7 +51,60 @@ it.effect("a native identity scan refuses a symlink root before reading its file
     );
     expect(failure).toMatchObject({
       _tag: "TreeError",
-      reason: { _tag: "CannotRetain", path: "." },
+      reason: { _tag: "RootNotDirectory", entryType: "SymbolicLink", path: root },
+    });
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect(
+  "normalization collisions keep both original names and their shared normalized path",
+  () =>
+    Effect.gen(function* () {
+      const names = ["caf\u00e9.txt", "cafe\u0301.txt"];
+      const failure = yield* Effect.flip(
+        normalizeAuthorTreeEntries(
+          names.map((path) => ({
+            kind: "file" as const,
+            path,
+            bytes: new Uint8Array([1]),
+            mode: 0o644 as const,
+          })),
+        ),
+      );
+      expect(failure.reason).toEqual({
+        _tag: "NormalizedPathCollision",
+        path: names[0],
+        firstPath: names[0],
+        secondPath: names[1],
+      });
+      const wire = yield* Schema.encodeEffect(TreeError)(failure);
+      expect(
+        yield* Schema.decodeUnknownEffect(TreeError)(JSON.parse(JSON.stringify(wire))),
+      ).toEqual(failure);
+    }),
+);
+
+it.effect("a missing root identity is a typed failure before any contents are read", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const links = yield* LinkStat;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-no-inode-" });
+    const failure = yield* Effect.flip(
+      scanAuthorTree(root).pipe(
+        Effect.provideService(LinkStat, {
+          ...links,
+          lstat: (path) =>
+            links.lstat(path).pipe(Effect.map((info) => ({ ...info, ino: Option.none() }))),
+        }),
+        Effect.provideService(FileSystem.FileSystem, {
+          ...fs,
+          readDirectory: () => Effect.die("Read contents without a root identity"),
+        }),
+      ),
+    );
+    expect(failure).toMatchObject({
+      _tag: "TreeError",
+      reason: { _tag: "NativeIdentityMissing", entryType: "Directory", path: root },
     });
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

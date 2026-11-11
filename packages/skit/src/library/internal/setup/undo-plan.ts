@@ -1,3 +1,4 @@
+import { UndoConflict } from "../../recovery-facts.js";
 import { Revision } from "../../snapshot.js";
 import { Schema } from "effect";
 import { Hash } from "../../../shared/hash.js";
@@ -11,7 +12,7 @@ const UndoChange = Schema.Struct({
   operationId: Schema.String,
   planId: Hash,
   status: Schema.Literals(["ready", "conflicted", "already-undone"]),
-  conflicts: Schema.Array(Schema.String),
+  conflicts: Schema.Array(UndoConflict),
   files: Schema.Array(
     Schema.Struct({
       path: Schema.String,

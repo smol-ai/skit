@@ -6,6 +6,7 @@ import { layout, undecided } from "../architecture/layout.mjs";
 import { libraryRules } from "./library-rules.mjs";
 import { effectHygieneRules } from "./effect-hygiene-rules.mjs";
 import { frontendRules } from "./frontend-rules.mjs";
+import { termRules } from "./term-rules.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 const applicationDirectories = ["cli", "tui", "storybook", "skit-server-effect", "devtools"];
@@ -826,10 +827,38 @@ const effectRules = {
 export default {
   meta: { name: "skit" },
   rules: {
+    "no-middle-dot-delimiter": {
+      meta: {
+        type: "problem",
+        docs: { description: "Disallow middle dots in presentation strings" },
+        messages: {
+          forbidden:
+            "Do not use a middle dot as a delimiter. Use labels, parentheses, newlines, or a plain separator.",
+        },
+      },
+      create(context) {
+        const check = (node, value) => {
+          if (typeof value === "string" && value.includes(String.fromCodePoint(0xb7)))
+            context.report({ node, messageId: "forbidden" });
+        };
+        return {
+          Literal(node) {
+            check(node, node.value);
+          },
+          TemplateElement(node) {
+            check(node, node.value.cooked ?? node.value.raw);
+          },
+          JSXText(node) {
+            check(node, node.value);
+          },
+        };
+      },
+    },
     ...effectRules,
     ...effectHygieneRules,
     ...libraryRules,
     ...frontendRules,
+    ...termRules,
     "no-direct-cli-output": {
       meta: {
         type: "problem",

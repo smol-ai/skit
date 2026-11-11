@@ -1,3 +1,5 @@
+import { commandFailure } from "../src/commands/failure-classification.js";
+import { resultExitCode } from "../src/commands/exit-code.js";
 import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { it } from "@effect/vitest";
@@ -124,7 +126,7 @@ it.effect("stale actions fail with continuations and never enable a changed copy
     const failed = yield* invoke(apply.argv);
     if (failed.contract !== "setupFailed")
       return yield* Effect.die(new Error("Expected actionable failure"));
-    expect(failed.exitCode).toBe(12);
+    expect(resultExitCode(failed)).toBe(1);
     expect(failed.data.actions.map((action) => action.rel)).toEqual(["observe", "list-recovery"]);
     expect(yield* f.fs.exists(join(f.home, "state.json"))).toBe(false);
     expect(yield* f.fs.exists(join(f.claude, "review"))).toBe(false);
@@ -257,7 +259,7 @@ it.effect(
       const failed = yield* invoke(argv);
       if (failed.contract !== "setupFailed")
         return yield* Effect.die(new Error("Expected actionable failure"));
-      expect(failed.data.message).toContain("reviewed setup choices changed");
+      expect(commandFailure(failed.data.cause).message).toContain("reviewed setup choices changed");
       expect(yield* f.fs.exists(join(f.home, "state.json"))).toBe(false);
       expect(yield* f.fs.exists(f.source)).toBe(true);
     }).pipe(Effect.provide(skitLayer)),
@@ -315,7 +317,7 @@ it.effect("an older work-dir approval cannot overwrite newer saved discovery set
     const failed = yield* invoke(actionFor(review.data.actions, "apply").argv);
     if (failed.contract !== "setupFailed")
       return yield* Effect.die(new Error("Expected a stale-settings failure"));
-    expect(failed.exitCode).toBe(12);
+    expect(resultExitCode(failed)).toBe(1);
     expect((yield* MachineSettings.read(f.home)).discoveryRoots).toEqual(newer.discoveryRoots);
     expect(yield* f.fs.exists(join(f.home, "state.json"))).toBe(false);
     expect(yield* f.fs.exists(join(f.claude, "review"))).toBe(false);

@@ -18,10 +18,10 @@ export class LibraryRevisionConflict extends Schema.TaggedError<
   LibraryRevisionConflict,
   { readonly brand: unique symbol }
 >()("Library.LibraryRevisionConflict", {}) {}
-class LibrarySnapshotMissing extends Schema.TaggedError<
-  LibrarySnapshotMissing,
+class CollectionVersionMissing extends Schema.TaggedError<
+  CollectionVersionMissing,
   { readonly brand: unique symbol }
->()("Library.LibrarySnapshotMissing", { digest: Schema.String }) {}
+>()("Library.CollectionVersionMissing", { digest: Schema.String }) {}
 class LibraryRevisionInvalid extends Schema.TaggedError<
   LibraryRevisionInvalid,
   { readonly brand: unique symbol }
@@ -36,7 +36,7 @@ export interface Sync {
     manifest: LibraryManifest,
   ) => Effect.Effect<
     RemoteLibrary,
-    DatabaseError | LibraryRevisionInvalid | LibraryRevisionConflict | LibrarySnapshotMissing
+    DatabaseError | LibraryRevisionInvalid | LibraryRevisionConflict | CollectionVersionMissing
   >;
 }
 export const commitLibraryRevision = Effect.fn("LibrarySync.commitRevision")(function* (
@@ -130,7 +130,7 @@ export const makeSync = (
           (cause) => new DatabaseError({ operation: "decode snapshot count", cause }),
         ),
       );
-      if (count.n !== 1) return yield* new LibrarySnapshotMissing({ digest });
+      if (count.n !== 1) return yield* new CollectionVersionMissing({ digest });
     }
     return yield* commitLibraryRevision(library, expected, manifest).pipe(
       Effect.provideService(D1Client.D1Client, sql),

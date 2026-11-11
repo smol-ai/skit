@@ -86,9 +86,11 @@ it.effect("does not merge different same-name Skills across plugin namespaces", 
       yield* f.json(`plugins/${name}/.claude-plugin/plugin.json`, { name });
     }
     const error = yield* f.discover().pipe(Effect.flip);
-    assert.include(error.message, "Select the plugin or Skill directory explicitly");
-    assert.include(error.message, "plugins/finance/skills/review");
-    assert.include(error.message, "plugins/commercial/skills/review");
+    assert.strictEqual(error._tag, "PluginSkillConflict");
+    if (error._tag === "PluginSkillConflict") {
+      assert.include(error.paths, "plugins/finance/skills/review");
+      assert.include(error.paths, "plugins/commercial/skills/review");
+    }
     if (error._tag === "PluginSkillConflict") {
       assert.strictEqual(error.name, "PluginSkillConflict");
       assert.strictEqual(error.skillName, "review");
@@ -193,7 +195,13 @@ it.effect("reports strict:false conflicts without blocking unrelated Skill impor
     });
     const discovered = yield* f.discover();
     assert.deepStrictEqual(discovered.foundSkillPaths, ["tools/skills/review"]);
-    assert.include(discovered.diagnostics?.[0]?.message ?? "", "strict:false");
+    const diagnostic = discovered.diagnostics?.[0];
+    assert.strictEqual(diagnostic?.code, "plugin-manifest-invalid");
+    if (diagnostic?.code === "plugin-manifest-invalid")
+      assert.deepStrictEqual(diagnostic.reason, {
+        _tag: "MarketplaceComponentsConflict",
+        fields: ["skills"],
+      });
     // An explicitly selected Git subpath enforces its plugin declarations.
     for (const args of [
       ["init", "-q"],
@@ -207,7 +215,11 @@ it.effect("reports strict:false conflicts without blocking unrelated Skill impor
       subpath: ".",
     }).pipe(Effect.flip);
     assert.strictEqual(error._tag, "PluginManifestInvalid");
-    assert.include(error.message, "strict:false");
+    if (error._tag === "PluginManifestInvalid")
+      assert.deepStrictEqual(error.reason, {
+        _tag: "MarketplaceComponentsConflict",
+        fields: ["skills"],
+      });
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -305,11 +317,23 @@ it.effect("rejects escaped manifest and discovery-document file links before rea
     yield* f.fs.makeDirectory(join(f.root, ".claude-plugin"));
     yield* f.fs.symlink(join(outside, "plugin.json"), join(f.root, ".claude-plugin/plugin.json"));
     const manifestError = yield* f.discover().pipe(Effect.flip);
-    assert.include(manifestError.message, "Link escapes the Source");
+    assert.strictEqual(manifestError._tag, "PluginManifestInvalid");
+    if (manifestError._tag === "PluginManifestInvalid")
+      assert.deepStrictEqual(manifestError.reason, {
+        _tag: "LinkEscape",
+        root: yield* f.fs.realPath(f.root),
+        target: yield* f.fs.realPath(join(outside, "plugin.json")),
+      });
     yield* f.fs.remove(join(f.root, ".claude-plugin/plugin.json"));
     yield* f.fs.symlink(join(outside, "plugin.json"), join(f.root, "SKILL.md"));
     const documentError = yield* f.discover().pipe(Effect.flip);
-    assert.include(documentError.message, "Link escapes the Source");
+    assert.strictEqual(documentError._tag, "PluginManifestInvalid");
+    if (documentError._tag === "PluginManifestInvalid")
+      assert.deepStrictEqual(documentError.reason, {
+        _tag: "LinkEscape",
+        root: yield* f.fs.realPath(f.root),
+        target: yield* f.fs.realPath(join(outside, "plugin.json")),
+      });
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 

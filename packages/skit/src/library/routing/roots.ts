@@ -5,10 +5,7 @@ import { type InstallDestination } from "../../installed-skills/destination.js";
 import { type InstallScope } from "../scope.js";
 import { harnessDrivers } from "../../harnesses/drivers.js";
 import { installSkillsDirectory, resolveSkillsDirectory } from "../../harnesses/catalog.js";
-import {
-  installDestinationProfiles,
-  installDestinationDirectory,
-} from "../../harnesses/install-destinations.js";
+import { installDestinationProfiles } from "../../harnesses/install-destinations.js";
 import { deduplicateInventoryRoots, type InventoryScanRoot } from "../inventory/roots.js";
 import { pathIsWithin } from "../../platform/path-identity.js";
 
@@ -49,11 +46,12 @@ export function skillsDirectoryFor(
   const override = options.overrides[installDestinationProfiles[target]]?.[0];
   if (scope.kind === "global" && override !== undefined) return resolve(override);
   return resolve(
-    installDestinationDirectory(target, scope.kind === "global" ? "global" : "project", {
-      home: options.home,
-      configHome: options.configHome,
-      ...(scope.kind === "repository" ? { repository: scope.root } : {}),
-    }),
+    installSkillsDirectory(
+      installDestinationProfiles[target],
+      scope.kind === "global"
+        ? { scope: "global", home: options.home, configHome: options.configHome }
+        : { scope: "project", repository: scope.root },
+    ),
   );
 }
 
@@ -91,15 +89,16 @@ export function selectInventoryRoots(
       const roots =
         driver.rootOverride === "extends"
           ? [
-              ...driver.profile.roots
-                .filter((root) => root.scope === "global" && root.readable)
-                .map((root) => resolveSkillsDirectory(root, context)),
+              ...Object.values(driver.profile.roots)
+                .filter((root) => root.scope === "global")
+                .filter((root) => root.readable)
+                .map((root) => resolveSkillsDirectory({ ...root, ...context })),
               ...overrides,
             ]
           : overrides.length > 0
             ? overrides
-            : [installSkillsDirectory(harness, "global", context)];
-      return roots.flatMap((root) => (root === null ? [] : [{ harness, root: resolve(root) }]));
+            : [installSkillsDirectory(harness, { scope: "global", ...context })];
+      return roots.map((root) => ({ harness, root: resolve(root) }));
     }),
     ...state.repositories.flatMap((repository) =>
       Record.toEntries(installDestinationProfiles).map(([target, harness]) => ({

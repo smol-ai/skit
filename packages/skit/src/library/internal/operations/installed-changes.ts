@@ -20,7 +20,9 @@ export const execute = Effect.fn("Library.executeInstalledChange")(function* (
     case "Install": {
       const row = change.row;
       if (!folder)
-        return yield* new StalePlan({ message: `Missing recorded folder at ${row.path}` });
+        return yield* new StalePlan({
+          reason: { _tag: "MissingRecord", at: row.path, record: "installed-folder" },
+        });
       const staged = yield* files.build(
         {
           skillId: row.skill_id,
@@ -33,7 +35,9 @@ export const execute = Effect.fn("Library.executeInstalledChange")(function* (
         originalsPath,
       );
       if (staged.hash !== row.expected_hash)
-        return yield* new StalePlan({ message: `Recorded installed bytes changed at ${row.path}` });
+        return yield* new StalePlan({
+          reason: { _tag: "InstalledBytesChanged", kind: "recorded", path: row.path },
+        });
       const marker = {
         schemaVersion: 5 as const,
         installed_skill_id: row.installed_skill_id,
@@ -45,14 +49,16 @@ export const execute = Effect.fn("Library.executeInstalledChange")(function* (
         ? files.manage(staged, marker, folder, change.verification)
         : files.install(staged, marker, folder);
       if (installed.hash !== row.expected_hash)
-        return yield* new StalePlan({ message: `Installed bytes differ at ${row.path}` });
+        return yield* new StalePlan({
+          reason: { _tag: "InstalledBytesChanged", kind: "installed", path: row.path },
+        });
       return;
     }
     case "Save":
       if (change.backUp) {
         if (change.row.status !== "conflicted")
           return yield* new InstalledSkillInvalid({
-            detail: "Only a reviewed conflict can be backed up",
+            reason: { _tag: "BackupNotReviewed" },
           });
         yield* files.backUp(
           change.row.path,
@@ -67,13 +73,16 @@ export const execute = Effect.fn("Library.executeInstalledChange")(function* (
       return;
     case "Uninstall": {
       const row = state.installed_skills.find((row) => row.installed_skill_id === change.id);
-      if (!row) return yield* new StalePlan({ message: `Missing installed row ${change.id}` });
+      if (!row)
+        return yield* new StalePlan({
+          reason: { _tag: "MissingRecord", at: change.id, record: "installed-row" },
+        });
       yield* files.uninstall(row.root, row.path, row.installed_skill_id);
       return;
     }
     case "Forget":
       return;
     case "Fail":
-      return yield* new InstalledSkillInvalid({ detail: change.reason });
+      return yield* new InstalledSkillInvalid({ reason: change.reason });
   }
 });

@@ -2,7 +2,7 @@ import { Clock, Effect, Option, PlatformError, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import {
   SnapshotArchive,
-  SnapshotArchiveInvalid,
+  CollectionVersionArchiveInvalid,
   verifySnapshotArchive,
 } from "@smolai/skit-core/universal/consumer";
 import type { Principal } from "../../identity/service.js";
@@ -22,38 +22,43 @@ const SnapshotRow = Schema.Struct({
 });
 const JsonUnknown = Schema.fromJsonString(Schema.Unknown);
 
-class SnapshotMissing extends Schema.TaggedError<
-  SnapshotMissing,
+class CollectionVersionArchiveMissing extends Schema.TaggedError<
+  CollectionVersionArchiveMissing,
   { readonly brand: unique symbol }
->()("Library.SnapshotMissing", {}) {}
-class SnapshotForbidden extends Schema.TaggedError<
-  SnapshotForbidden,
+>()("Library.CollectionVersionArchiveMissing", {}) {}
+class CollectionVersionArchiveForbidden extends Schema.TaggedError<
+  CollectionVersionArchiveForbidden,
   { readonly brand: unique symbol }
->()("Library.SnapshotForbidden", {}) {}
-class SnapshotStoreInvalid extends Schema.TaggedError<
-  SnapshotStoreInvalid,
+>()("Library.CollectionVersionArchiveForbidden", {}) {}
+class CollectionVersionArchiveStoreInvalid extends Schema.TaggedError<
+  CollectionVersionArchiveStoreInvalid,
   { readonly brand: unique symbol }
->()("Library.SnapshotStoreInvalid", {}) {}
+>()("Library.CollectionVersionArchiveStoreInvalid", {}) {}
 
-type SnapshotFailure =
+type CollectionVersionArchiveFailure =
   | DatabaseError
   | BlobStorageError
   | PlatformError.PlatformError
-  | SnapshotArchiveInvalid
-  | SnapshotStoreInvalid;
+  | CollectionVersionArchiveInvalid
+  | CollectionVersionArchiveStoreInvalid;
 export interface Snapshots {
   readonly upload: (
     principal: Principal,
     archive: SnapshotArchive,
   ) => Effect.Effect<
     { library_id: string; snapshot_digest: string; reused: boolean },
-    SnapshotFailure
+    CollectionVersionArchiveFailure
   >;
   readonly download: (
     principal: Principal,
     libraryId: string,
     digest: string,
-  ) => Effect.Effect<SnapshotArchive, SnapshotFailure | SnapshotMissing | SnapshotForbidden>;
+  ) => Effect.Effect<
+    SnapshotArchive,
+    | CollectionVersionArchiveFailure
+    | CollectionVersionArchiveMissing
+    | CollectionVersionArchiveForbidden
+  >;
 }
 /** Snapshot reservation, immutable upload and reads share ServerLibrary's storage and lookup. */
 export const makeSnapshots = (
@@ -85,10 +90,10 @@ export const makeSnapshots = (
   });
   const readObject = Effect.fn("LibrarySnapshots.readObject")(function* (key: string) {
     const object = yield* blobs.get("read snapshot object", key);
-    if (Option.isNone(object)) return yield* new SnapshotStoreInvalid();
+    if (Option.isNone(object)) return yield* new CollectionVersionArchiveStoreInvalid();
     const json = new TextDecoder().decode(object.value);
     const value = yield* Schema.decodeEffect(JsonUnknown)(json).pipe(
-      Effect.mapError(() => new SnapshotStoreInvalid()),
+      Effect.mapError(() => new CollectionVersionArchiveStoreInvalid()),
     );
     return yield* verifySnapshotArchive(value).pipe(Effect.provideService(Digest.Digest, digests));
   });
@@ -96,7 +101,7 @@ export const makeSnapshots = (
     own(principal, true).pipe(
       Effect.filterOrFail(
         (library) => library !== undefined,
-        () => new SnapshotStoreInvalid(),
+        () => new CollectionVersionArchiveStoreInvalid(),
       ),
     );
   const upload = Effect.fn("LibrarySnapshots.upload")(function* (
@@ -124,7 +129,8 @@ export const makeSnapshots = (
       onlyIfAbsent: true,
     });
     const imported = yield* readObject(key);
-    if (imported.archive.digest !== digest) return yield* new SnapshotStoreInvalid();
+    if (imported.archive.digest !== digest)
+      return yield* new CollectionVersionArchiveStoreInvalid();
     yield* db(
       "ready snapshot",
       sql`UPDATE library_snapshots SET status = 'ready', size_bytes = ${bytes.length}, ready_at = ${now}
@@ -144,17 +150,18 @@ export const makeSnapshots = (
       sql`SELECT library_id, owner_subject_kind, owner_subject_id, current_revision_id
             FROM libraries WHERE library_id = ${libraryId}`,
     );
-    if (rows[0] === undefined) return yield* new SnapshotMissing();
+    if (rows[0] === undefined) return yield* new CollectionVersionArchiveMissing();
     const library = yield* decodeOwnedLibrary(rows[0]);
     const allowed =
       library.owner_subject_kind === "principal"
         ? library.owner_subject_id === principal.id
         : yield* teams.isMember(principal, library.owner_subject_id);
-    if (!allowed) return yield* new SnapshotForbidden();
+    if (!allowed) return yield* new CollectionVersionArchiveForbidden();
     const snapshot = yield* snapshotRow(libraryId, digest);
-    if (snapshot?.status !== "ready") return yield* new SnapshotMissing();
+    if (snapshot?.status !== "ready") return yield* new CollectionVersionArchiveMissing();
     const imported = yield* readObject(snapshot.r2_key);
-    if (imported.archive.digest !== digest) return yield* new SnapshotStoreInvalid();
+    if (imported.archive.digest !== digest)
+      return yield* new CollectionVersionArchiveStoreInvalid();
     return imported.archive;
   });
   return { upload, download };

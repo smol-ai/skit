@@ -7,7 +7,7 @@ it.effect("requires an exact retained Skill", () =>
     Effect.flip,
     Effect.map((failure) => {
       assert.strictEqual(failure._tag, "MissingRequirement");
-      assert.strictEqual(failure.requires, "<skill>");
+      assert.deepStrictEqual(failure.reason, { _tag: "SecuritySubject", action: "review" });
     }),
   ),
 );

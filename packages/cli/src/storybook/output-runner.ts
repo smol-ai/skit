@@ -1,4 +1,5 @@
 import { Effect, Terminal } from "effect";
+import { Block, renderBlocks } from "../terminal/blocks.js";
 import {
   defaultTerminalEnvironment,
   renderFailureFrame,
@@ -6,7 +7,7 @@ import {
   type TerminalEnvironment,
   type TerminalFrame,
 } from "../commands/output-frame.js";
-import { OutputStory, outputStories, outputStoryKey } from "./output-stories.js";
+import { OutputStory, outputStories, outputStoryKey, storyHome } from "./output-stories.js";
 
 interface Options {
   readonly query?: string;
@@ -32,18 +33,19 @@ function options(argv: ReadonlyArray<string>): Options {
   };
 }
 
-function storyFrame(story: OutputStory, environment: TerminalEnvironment): TerminalFrame {
+function storyFrame(story: OutputStory, base: TerminalEnvironment): TerminalFrame {
+  const environment = { ...base, home: storyHome };
   return OutputStory.$match(story, {
     Result: ({ result }) => renderResultFrame(result, environment),
-    Failure: ({ failure }) => renderFailureFrame(failure, environment.format),
+    Failure: ({ failure }) => renderFailureFrame(failure, environment),
   });
 }
 
 function renderStory(story: OutputStory, environment: TerminalEnvironment): string {
   const frame = storyFrame(story, environment);
   return [
-    `\u001b[1m${outputStoryKey(story)}\u001b[0m`,
-    `${environment.format} · ${environment.detail}${environment.color ? " · color" : ""}`,
+    renderBlocks([Block.Heading({ text: outputStoryKey(story) })], environment),
+    `${environment.format} | ${environment.detail}${environment.color ? " | color" : ""}`,
     ...(frame.stdout ? ["", "stdout", frame.stdout.trimEnd()] : []),
     ...(frame.stderr ? ["", "stderr", frame.stderr.trimEnd()] : []),
     ...(frame.exitCode === undefined ? [] : ["", `exit ${frame.exitCode}`]),

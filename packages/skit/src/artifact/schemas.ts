@@ -9,14 +9,17 @@ const nonEmpty = Schema.String.check(Schema.isMinLength(1));
 const atMost = (length: number) =>
   Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(length));
 const url = Schema.String.check(
-  Schema.makeFilter((value) => {
-    try {
-      new URL(value);
-      return true;
-    } catch {
-      return false;
-    }
-  }),
+  Schema.makeFilter(
+    (value) => {
+      try {
+        new URL(value);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { representation: { id: "skit/schema/url", payload: null } },
+  ),
 );
 const isoTimestamp = Schema.String.check(
   Schema.isPattern(
@@ -27,19 +30,19 @@ export const safePathSchema = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(1_024),
   Schema.makeFilter((value) => /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$)).+$/.test(value), {
-    message: "Path must be safe and relative",
+    representation: { id: "skit/schema/path-relative", payload: null },
   }),
   Schema.makeFilter((value) => !value.includes("\\") && !value.includes("\0"), {
-    message: "Path must not contain backslashes or NUL bytes",
+    representation: { id: "skit/schema/path-portable", payload: null },
   }),
   Schema.makeFilter((value) => value === value.normalize("NFC"), {
-    message: "Path must be NFC normalised",
+    representation: { id: "skit/schema/path-nfc", payload: null },
   }),
 );
 export const kebabNameSchema = Schema.String.check(Schema.isPattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u));
 export const registrySkitSlugSchema = Schema.String.check(
   Schema.makeFilter((value) => normalizeRegistrySkitSlug(value) === value, {
-    message: "SKIT slug must be canonical",
+    representation: { id: "skit/schema/registry-slug", payload: null },
   }),
 );
 const registrySkitIdSchema = Schema.String.check(
@@ -52,7 +55,7 @@ const registrySkitIdSchema = Schema.String.check(
         normalizeRegistrySkitSlug(parts[1]) === parts[1]
       );
     },
-    { message: "Registry SKIT id must contain a canonical Namespace and SKIT slug" },
+    { representation: { id: "skit/schema/registry-id", payload: null } },
   ),
 );
 

@@ -1,3 +1,4 @@
+import type { ClaudeModelSource, ClaudeLimitSource } from "./contracts.js";
 import { Config, Effect, FileSystem, Option, Schema } from "effect";
 import { basename, dirname, join, resolve } from "node:path";
 import { platform } from "node:os";
@@ -49,12 +50,13 @@ export interface ClaudeListingEntry {
 }
 export interface ClaudeListingSettings {
   readonly model: string | null;
-  readonly modelSource: string;
+  readonly modelSource: ClaudeModelSource;
   readonly limit: number | null;
-  readonly limitSource: string;
+  readonly limitSource: ClaudeLimitSource;
   readonly cap: number;
   readonly overrides: Readonly<Record<string, string>>;
-  readonly notes: readonly string[];
+  readonly overrideSources: number;
+  readonly configuredFraction?: { readonly value: number; readonly path?: string };
 }
 interface ClaudeListingSnapshot {
   readonly budget: ListingBudget;
@@ -78,7 +80,7 @@ export function claudeListingResult(
   cwd: string,
   entries: readonly ClaudeListingEntry[],
   settings: ClaudeListingSettings,
-  coverage: readonly string[],
+  skippedPaths: readonly string[],
 ): ListingBudget {
   entries = deduplicateClaudeEntries(entries);
   const costs: ListingEntry[] = entries.map((e) => ({
@@ -107,8 +109,18 @@ export function claudeListingResult(
     demand: costs.reduce((n, e) => n + e.demand, 0),
     entries: costs,
     collections: [...collections.values()],
-    basis: `${settings.model ?? "Model unspecified"} (${settings.modelSource}) · ${settings.limitSource}`,
-    coverage: [...coverage, ...settings.notes],
+    provenance: {
+      _tag: "ClaudeFilesystem" as const,
+      modelSource: settings.modelSource,
+      limitSource: settings.limitSource,
+      descriptionCap: settings.cap,
+      overrideSources: settings.overrideSources,
+      ...(settings.configuredFraction === undefined
+        ? {}
+        : { configuredFraction: settings.configuredFraction }),
+    },
+    skippedPaths,
+    diagnostics: [],
   };
   if (settings.limit === null) return { _tag: "DemandOnly", ...common };
   // Usage order is unavailable. Bound how many whole descriptions must be dropped.
@@ -182,7 +194,7 @@ function resolveClaudeListingSettings(
   sources: ReadonlyMap<string, string>,
   overrideSources: number,
   model: string | null,
-  modelSource: string,
+  modelSource: ClaudeModelSource,
   fixedLimit: number | null,
   pinnedModel: string | null,
   pinSource: string,
@@ -201,33 +213,37 @@ function resolveClaudeListingSettings(
           fraction,
       ),
     );
-  const limitSource =
+  const limitSource: ClaudeLimitSource =
     fixedLimit !== null
-      ? "SLASH_COMMAND_TOOL_CHAR_BUDGET"
+      ? { _tag: "Environment", name: "SLASH_COMMAND_TOOL_CHAR_BUDGET", value: fixedLimit }
       : conversion === undefined
-        ? "Limit unavailable: no context conversion recorded."
-        : `Estimated from ${contextWindow === null ? "native fallback" : resolvedModel} context ${(contextWindow ?? conversion.fallbackContextWindow).toLocaleString("en-US")} × ${conversion.charactersPerToken} characters/token × ${fraction} (Claude Code ${conversion.clientVersion})`;
+        ? { _tag: "Unavailable" }
+        : {
+            _tag: "ContextConversion",
+            contextWindow: contextWindow ?? conversion.fallbackContextWindow,
+            source: contextWindow === null ? "fallback" : "catalog",
+            charactersPerToken: conversion.charactersPerToken,
+            fraction,
+            clientVersion: conversion.clientVersion,
+          };
   return {
     model: resolvedModel,
-    modelSource: pinnedModel !== null ? pinSource : modelSource,
+    modelSource: pinnedModel !== null ? { _tag: "Environment", name: pinSource } : modelSource,
     limit,
     limitSource,
     cap: settings.skillListingMaxDescChars ?? contract.descriptionCap,
     overrides: settings.skillOverrides ?? {},
-    notes: [
-      ...(overrideSources > 1
-        ? [
-            "skillOverrides merging across settings files is assumed to be per-key; native merge semantics are unverified.",
-          ]
-        : []),
-      "Overrides match names only; managed alias matching is not modelled.",
-      ...(settings.skillListingBudgetFraction === undefined
-        ? []
-        : [
-            `Configured fraction ${settings.skillListingBudgetFraction} (${sources.get("skillListingBudgetFraction")}); ${fixedLimit === null ? "using native context conversion" : "using the explicit character override"}.`,
-          ]),
-      "Model aliases assume the current Anthropic API mapping; provider/version-specific mappings and session model/flags are not observable offline.",
-    ],
+    overrideSources,
+    ...(settings.skillListingBudgetFraction === undefined
+      ? {}
+      : {
+          configuredFraction: {
+            value: settings.skillListingBudgetFraction,
+            ...(sources.get("skillListingBudgetFraction") === undefined
+              ? {}
+              : { path: sources.get("skillListingBudgetFraction") }),
+          },
+        }),
   };
 }
 
@@ -241,7 +257,8 @@ export const readClaudeListingSnapshot = Effect.fn("Listing.claudeDiscovery")(fu
       fs.readFileString(path).pipe(
         Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(schema))),
         Effect.mapError(
-          (error) => new ListingReadFailure({ detail: `Cannot read ${path}: ${String(error)}` }),
+          (error) =>
+            new ListingReadFailure({ reason: { _tag: "ReadFailed", path, failure: error } }),
         ),
       );
     const configuredHome = yield* Config.option(Config.String("CLAUDE_CONFIG_DIR"));
@@ -303,31 +320,25 @@ export const readClaudeListingSnapshot = Effect.fn("Listing.claudeDiscovery")(fu
       overrideSources,
       model,
       Option.isSome(environment.model)
-        ? "ANTHROPIC_MODEL"
-        : (sources.get("model") ?? "not configured"),
+        ? { _tag: "Environment", name: "ANTHROPIC_MODEL" }
+        : sources.has("model")
+          ? { _tag: "SettingsFile", path: sources.get("model")! }
+          : { _tag: "Unconfigured" },
       Option.getOrNull(environment.limit),
       pinnedModel,
       pinSource,
     );
-    const coverage = [
-      `Combined description and when_to_use text is capped at ${resolved.cap} characters per entry.`,
-      "Counts name, description and when_to_use with estimated row separators; native row formatting and invocation order are not observable.",
-      "Identical named descriptions are counted once across copies; native precedence for differing descriptions is not predicted.",
-      "Built-in skills, legacy commands, remote/synced and dynamically loaded nested skills may add demand. This is a partial filesystem estimate; full instructions loaded later are additional.",
-    ];
+    const skippedPaths: string[] = [];
     const roots: { root: string; namespace?: string }[] = [
       { root: resolve(options.overrides?.["claude-code"]?.[0] ?? join(configDir, "skills")) },
     ];
     for (let current = resolve(options.cwd); current !== options.home; current = dirname(current)) {
       roots.push(
-        ...harnessProfiles["claude-code"].roots
-          .filter((root) => root.readable && root.scope === "project")
+        ...Object.values(harnessProfiles["claude-code"].roots)
+          .filter((root) => root.scope === "project")
+          .filter((root) => root.readable)
           .map((root) => ({
-            root: resolveSkillsDirectory(root, {
-              home: options.home,
-              configHome: options.configHome,
-              repository: current,
-            }),
+            root: resolveSkillsDirectory({ ...root, repository: current }),
           })),
       );
       if (current === dirname(current)) break;
@@ -374,7 +385,12 @@ export const readClaudeListingSnapshot = Effect.fn("Listing.claudeDiscovery")(fu
           Effect.catchTag("PlatformError", (e) =>
             e.reason._tag === "NotFound" ? Effect.succeed(null) : Effect.fail(e),
           ),
-          Effect.mapError((e) => new ListingReadFailure({ detail: String(e) })),
+          Effect.mapError(
+            (e) =>
+              new ListingReadFailure({
+                reason: { _tag: "ReadFailed", path: directory, failure: e },
+              }),
+          ),
         );
         if (canonical === null) return;
         const key = `${namespace ?? ""}\0${canonical}`;
@@ -382,7 +398,12 @@ export const readClaudeListingSnapshot = Effect.fn("Listing.claudeDiscovery")(fu
         seen.add(key);
         if (++count > 10000)
           return yield* new ListingReadFailure({
-            detail: "Claude skill discovery exceeds 10,000 directories.",
+            reason: {
+              _tag: "DirectoryLimitExceeded",
+              path: directory,
+              limit: 10_000,
+              actual: count,
+            },
           });
         const document = join(canonical, "SKILL.md");
         if (yield* fs.exists(document)) {
@@ -391,7 +412,7 @@ export const readClaudeListingSnapshot = Effect.fn("Listing.claudeDiscovery")(fu
           const fields = parsed ?? (text.startsWith("---") ? null : {});
           if (fields == null)
             return yield* new ListingReadFailure({
-              detail: `Malformed skill metadata: ${document}`,
+              reason: { _tag: "InvalidFrontmatter", path: document },
             });
           const shortName = typeof fields.name === "string" ? fields.name : basename(directory);
           const name = namespace === undefined ? shortName : `${namespace}:${shortName}`;
@@ -415,7 +436,7 @@ export const readClaudeListingSnapshot = Effect.fn("Listing.claudeDiscovery")(fu
           const info = yield* fs.stat(child).pipe(
             Effect.catchTag("PlatformError", (error) => {
               if (error.reason._tag !== "NotFound") return Effect.fail(error);
-              coverage.push(`Skipped unavailable skill path: ${child}`);
+              skippedPaths.push(child);
               return Effect.succeed(null);
             }),
           );
@@ -423,7 +444,9 @@ export const readClaudeListingSnapshot = Effect.fn("Listing.claudeDiscovery")(fu
         }
       }).pipe(
         Effect.catchTag("PlatformError", (e) =>
-          Effect.fail(new ListingReadFailure({ detail: String(e) })),
+          Effect.fail(
+            new ListingReadFailure({ reason: { _tag: "ReadFailed", path: directory, failure: e } }),
+          ),
         ),
       );
     for (const root of roots) yield* walk(root.root, root.namespace);
@@ -431,7 +454,7 @@ export const readClaudeListingSnapshot = Effect.fn("Listing.claudeDiscovery")(fu
     return {
       entries: visible,
       settings: resolved,
-      budget: claudeListingResult(options.cwd, visible, resolved, coverage),
+      budget: claudeListingResult(options.cwd, visible, resolved, skippedPaths),
     } satisfies ClaudeListingSnapshot;
   }).pipe(
     Effect.catchTag(["PlatformError", "ConfigError", "ListingReadFailure"], (e) =>
@@ -441,7 +464,10 @@ export const readClaudeListingSnapshot = Effect.fn("Listing.claudeDiscovery")(fu
           _tag: "Unavailable" as const,
           harness: "claude-code" as const,
           cwd: options.cwd,
-          detail: e._tag === "ListingReadFailure" ? e.detail : String(e),
+          reason:
+            e._tag === "ListingReadFailure"
+              ? { _tag: "ListingReadFailed" as const, failure: e }
+              : { _tag: "NativeReadFailed" as const, failure: e },
         },
       }),
     ),

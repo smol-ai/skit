@@ -9,12 +9,12 @@ import {
   type JsonValue,
 } from "../shared/json.js";
 import type { AuditFinding, AuditEntry } from "./schema.js";
-import { Effect } from "effect";
-import { errorMessage } from "../shared/failure.js";
+import { Effect, Schema } from "effect";
+import type { CodexConfigurationIssue } from "./finding-reasons.js";
 import { canonical, read, walk } from "./io.js";
 import { addMcp } from "./mcp.js";
 
-function tomlPath(source: string): string[] {
+function tomlPath(source: string): string[] | undefined {
   const parts: string[] = [];
   let part = "";
   let quote: string | null = null;
@@ -30,11 +30,12 @@ function tomlPath(source: string): string[] {
       part = "";
     } else part += character;
   }
-  if (quote) throw new Error("unterminated quoted table key");
+  if (quote) return undefined;
   if (part.trim()) parts.push(part.trim());
   return parts;
 }
 
+const QuotedTomlString = Schema.fromJsonString(Schema.String);
 function tomlValue(source: string): JsonValue {
   const value = source.trim();
   if (value === "true") return true;
@@ -44,7 +45,7 @@ function tomlValue(source: string): JsonValue {
     (value.startsWith('"') && value.endsWith('"')) ||
     (value.startsWith("'") && value.endsWith("'"))
   )
-    return value[0] === "'" ? value.slice(1, -1) : JSON.parse(value);
+    return value[0] === "'" ? value.slice(1, -1) : Schema.decodeSync(QuotedTomlString)(value);
   if (value.startsWith("[") && value.endsWith("]")) {
     const matches = value.slice(1, -1).match(/"(?:\\.|[^"\\])*"|'[^']*'|[^,]+/g) ?? [];
     return matches.map((item) => tomlValue(item));
@@ -60,29 +61,37 @@ function nestedTable(table: JsonObject, key: string): JsonObject {
   return created;
 }
 
-function parseToml(source: string | null): { value: JsonObject | null; error: string | null } {
-  if (source === null) return { value: {}, error: null };
+function parseToml(source: string | null): {
+  value: JsonObject | null;
+  issue: typeof CodexConfigurationIssue.Type | null;
+} {
+  if (source === null) return { value: {}, issue: null };
   const value: JsonObject = {};
   let table: JsonObject = value;
+  let lineNumber = 0;
   try {
     for (const raw of source.split(/\r?\n/)) {
+      lineNumber++;
       const line = raw.trim();
       if (!line || line.startsWith("#")) continue;
       if (line.startsWith("[") && line.endsWith("]")) {
         table = value;
-        for (const key of tomlPath(line.slice(1, -1))) table = nestedTable(table, key);
+        const keys = tomlPath(line.slice(1, -1));
+        if (!keys) return { value: null, issue: { _tag: "UnterminatedKey", line: lineNumber } };
+        for (const key of keys) table = nestedTable(table, key);
         continue;
       }
       const assignment = line.match(/^([^=]+?)\s*=\s*(.*)$/);
-      if (!assignment) throw new Error(`unsupported line: ${line}`);
+      if (!assignment) return { value: null, issue: { _tag: "UnsupportedLine", line: lineNumber } };
       const keys = tomlPath(assignment[1]);
+      if (!keys) return { value: null, issue: { _tag: "UnterminatedKey", line: lineNumber } };
       let target = table;
       for (const key of keys.slice(0, -1)) target = nestedTable(target, key);
       target[keys.at(-1)!] = tomlValue(assignment[2]);
     }
-    return { value, error: null };
+    return { value, issue: null };
   } catch (error) {
-    return { value: null, error: errorMessage(error) };
+    return { value: null, issue: { _tag: "InvalidValue", line: lineNumber, failure: error } };
   }
 }
 
@@ -110,14 +119,14 @@ const codexProjectMcp = Effect.fn("Audit.codexProjectMcp")(function* (
 
   const configPath = join(cwd, ".codex", "config.toml");
   const parsed = parseToml(yield* read(configPath));
-  if (parsed.error)
+  if (parsed.issue)
     findings.push({
       severity: "warning",
       code: "codex-project-config-parse-failed",
       subject: configPath,
-      problem: "Codex project configuration could not be parsed",
+      reason: { _tag: "CodexConfigurationInvalid", scope: "project", issue: parsed.issue },
       locations: [configPath],
-      details: { configPath, parseError: parsed.error },
+      details: { configPath },
     });
   else
     addMcp(
@@ -136,14 +145,14 @@ export const auditCodex = Effect.fn("Audit.codex")(function* (home: string, cwd:
   const findings: AuditFinding[] = [];
   const configPath = join(home, ".codex", "config.toml");
   const parsed = parseToml(yield* read(configPath));
-  if (parsed.error)
+  if (parsed.issue)
     findings.push({
       severity: "warning",
       code: "codex-config-parse-failed",
       subject: configPath,
-      problem: "Codex user configuration could not be parsed",
+      reason: { _tag: "CodexConfigurationInvalid", scope: "user", issue: parsed.issue },
       locations: [configPath],
-      details: { configPath, parseError: parsed.error },
+      details: { configPath },
     });
   const config = parsed.value ?? {};
   addMcp(
@@ -165,7 +174,11 @@ export const auditCodex = Effect.fn("Audit.codex")(function* (home: string, cwd:
       scope: "user",
       path: configPath,
       source: stringAt(marketplace, "source") ?? configPath,
-      provenance: { confidence: "exact", source: "Codex configuration", evidence: configPath },
+      provenance: {
+        confidence: "exact",
+        origin: { _tag: "Configuration", harness: "codex" },
+        evidence: configPath,
+      },
     });
 
   const configured = objectAt(config, "plugins") ?? {};
@@ -186,7 +199,11 @@ export const auditCodex = Effect.fn("Audit.codex")(function* (home: string, cwd:
       path: dirname(dirname(manifest)),
       installed: true,
       enabled: pluginEnabled(configured, name),
-      provenance: { confidence: "exact", source: "Codex plugin cache", evidence: manifest },
+      provenance: {
+        confidence: "exact",
+        origin: { _tag: "PluginCache", harness: "codex" },
+        evidence: manifest,
+      },
     });
   }
   for (const name of Object.keys(configured)) {
@@ -200,14 +217,18 @@ export const auditCodex = Effect.fn("Audit.codex")(function* (home: string, cwd:
       path: null,
       installed: false,
       enabled,
-      provenance: { confidence: "exact", source: "Codex configuration", evidence: configPath },
+      provenance: {
+        confidence: "exact",
+        origin: { _tag: "Configuration", harness: "codex" },
+        evidence: configPath,
+      },
     });
     if (enabled)
       findings.push({
         severity: "warning",
         code: "enabled-codex-plugin-not-cached",
         subject: name,
-        problem: `Codex plugin “${name}” is enabled but its installed files were not found`,
+        reason: { _tag: "EnabledPluginFilesMissing", harness: "codex", plugin: name },
         locations: [configPath],
         details: { plugin: name, configPath },
       });

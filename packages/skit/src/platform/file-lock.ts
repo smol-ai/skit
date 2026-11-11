@@ -9,22 +9,8 @@ const Database: new (path: string) => {
   close(): void;
 } = process.versions.bun ? sqlite.Database : sqlite.DatabaseSync;
 
-/** Another process, or another hold in this one, has the lock. */
-export class FileLockBusy extends Schema.TaggedError<
-  FileLockBusy,
-  { readonly brand: unique symbol }
->()("FileLockBusy", {
-  path: Schema.String,
-}) {}
-
-/** The lock could not be taken for any other reason: I/O, or a file that is not a SQLite database. */
-export class FileLockFailed extends Schema.TaggedError<
-  FileLockFailed,
-  { readonly brand: unique symbol }
->()("FileLockFailed", {
-  path: Schema.String,
-  cause: Schema.Defect(),
-}) {}
+import { FileLockBusy, FileLockFailed } from "./file-lock-failures.js";
+export { FileLockBusy, FileLockFailed } from "./file-lock-failures.js";
 
 // Node uses errcode; Bun uses errno. Both report SQLite's SQLITE_BUSY (5).
 const isBusy = Schema.is(

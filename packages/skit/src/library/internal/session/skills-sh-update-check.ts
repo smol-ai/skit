@@ -1,32 +1,12 @@
 import { dirname, join } from "node:path";
-import { Clock, Effect } from "effect";
+import { Clock, Effect, Result } from "effect";
 import { collectionVersionPath } from "../../collection-version.js";
 import type { LibraryState } from "../../library-state.js";
-import { computeSkillsShCompatibleHash } from "../../setup.js";
+import { inspectSkillsShCompatibleHash } from "../../setup/skills-sh/compatible-hash.js";
 import type { LibrarySubject } from "../../subject-resolution.js";
 import { inspectSkillsShGitEvidence } from "./skills-sh-git-evidence.js";
 
-type SkillsShUpdateStatus =
-  | "current"
-  | "update-available"
-  | "removed-upstream"
-  | "lock-stale"
-  | "differs-from-lock-and-upstream"
-  | "unverifiable"
-  | "not-applicable";
-
-export interface SkillsShUpdateMember {
-  readonly skill_name: string;
-  readonly skill_path?: string;
-  readonly hash_kind?: "computedHash" | "skillFolderHash";
-  readonly status: SkillsShUpdateStatus;
-  readonly baseline_commit?: string;
-  readonly baseline_tree?: string;
-  readonly baseline_verification?: "lock-only" | "lock+original-bytes";
-  readonly upstream_commit?: string;
-  readonly upstream_tree?: string;
-  readonly reason?: string;
-}
+import type { SkillsShUpdateMember } from "../../check-facts.js";
 
 const sourceUrl = (
   subject: LibrarySubject,
@@ -74,8 +54,8 @@ export const checkSkillsShSubject = Effect.fn("SkillsSh.checkSubject")(function*
         status: lockFileEntry.source_type === "well-known" ? "not-applicable" : "unverifiable",
         reason:
           lockFileEntry.source_type === "well-known"
-            ? "well-known source"
-            : "source is not a Git repository",
+            ? { _tag: "WellKnownSource" }
+            : { _tag: "GitSourceMissing" },
       })),
     };
   const ref = lockFileEntries.find((lockFileEntry) => lockFileEntry.ref)?.ref ?? "HEAD";
@@ -107,88 +87,114 @@ export const checkSkillsShSubject = Effect.fn("SkillsSh.checkSubject")(function*
       upstream_commit: tip,
     };
     if (!lockFileEntry.skill_path || !claimed || !kind) {
-      members.push({ ...base, status: "unverifiable", reason: "lock has no Skill path or hash" });
+      members.push({
+        ...base,
+        status: "unverifiable",
+        reason: {
+          _tag: "LockIncomplete",
+          missing: [
+            ...(!lockFileEntry.skill_path ? ["skill-path" as const] : []),
+            ...(!claimed || !kind ? ["hash" as const] : []),
+          ],
+        },
+      });
       continue;
     }
     const folder = dirname(lockFileEntry.skill_path).replaceAll("\\", "/");
-    const member = yield* evidence.member(folder, kind, claimed);
-    const tipState = member.tip;
-    if (!tipState) {
-      const baseline = yield* member.baseline;
-      members.push({
-        ...base,
-        ...(baseline
-          ? {
-              baseline_commit: baseline.commit,
-              baseline_tree: baseline.tree,
-              baseline_verification:
-                kind === "computedHash" && lockFileEntry.content_agreement === "agrees"
-                  ? ("lock+original-bytes" as const)
-                  : ("lock-only" as const),
-            }
-          : {}),
-        status: baseline ? "removed-upstream" : "unverifiable",
-        ...(baseline ? {} : { reason: "lock hash not found in searched ref history" }),
-      });
-      continue;
-    }
-    if (kind === "skillFolderHash") {
-      const baseline = yield* member.baseline;
-      members.push({
-        ...base,
-        upstream_tree: tipState.tree,
-        ...(baseline
-          ? {
-              baseline_commit: baseline.commit,
-              baseline_tree: baseline.tree,
-              baseline_verification: "lock-only" as const,
-            }
-          : {}),
-        status: "unverifiable",
-        reason: baseline
-          ? "Git tree hash cannot verify retained filesystem bytes"
-          : "lock tree hash not found in searched ref history",
-      });
-      continue;
-    }
-    const local = yield* computeSkillsShCompatibleHash(join(root, folder), join(root, folder));
-    if (!local) {
-      members.push({
-        ...base,
-        upstream_tree: tipState.tree,
-        status: "unverifiable",
-        reason: "retained Skill bytes are unavailable",
-      });
-      continue;
-    }
-    if (local === claimed && tipState.hash === claimed) {
-      members.push({
-        ...base,
-        upstream_tree: tipState.tree,
-        baseline_commit: tip,
-        baseline_tree: tipState.tree,
-        baseline_verification: "lock+original-bytes",
-        status: "current",
-      });
-      continue;
-    }
-    if (local !== claimed) {
-      members.push({
-        ...base,
-        upstream_tree: tipState.tree,
-        status: tipState.hash === local ? "lock-stale" : "differs-from-lock-and-upstream",
-      });
-      continue;
-    }
-    const baseline = yield* member.baseline;
-    members.push({
-      ...base,
-      upstream_tree: tipState.tree,
-      ...(baseline ? { baseline_commit: baseline.commit, baseline_tree: baseline.tree } : {}),
-      ...(baseline ? { baseline_verification: "lock+original-bytes" as const } : {}),
-      status: baseline ? "update-available" : "unverifiable",
-      ...(baseline ? {} : { reason: "lock hash not found in searched ref history" }),
-    });
+    const checked = yield* Effect.result(
+      Effect.gen(function* () {
+        const member = yield* evidence.member(folder, kind, claimed);
+        const tipState = member.tip;
+        if (!tipState) {
+          const baseline = yield* member.baseline;
+          return {
+            ...base,
+            ...(baseline
+              ? {
+                  baseline_commit: baseline.commit,
+                  baseline_tree: baseline.tree,
+                  baseline_verification:
+                    kind === "computedHash" && lockFileEntry.content_agreement === "agrees"
+                      ? ("lock+original-bytes" as const)
+                      : ("lock-only" as const),
+                }
+              : {}),
+            status: baseline ? "removed-upstream" : "unverifiable",
+            ...(baseline
+              ? {}
+              : { reason: { _tag: "BaselineNotFound" as const, hashKind: kind, ref } }),
+          } satisfies SkillsShUpdateMember;
+        }
+        if (kind === "skillFolderHash") {
+          const baseline = yield* member.baseline;
+          return {
+            ...base,
+            upstream_tree: tipState.tree,
+            ...(baseline
+              ? {
+                  baseline_commit: baseline.commit,
+                  baseline_tree: baseline.tree,
+                  baseline_verification: "lock-only" as const,
+                }
+              : {}),
+            status: "unverifiable",
+            reason: baseline
+              ? { _tag: "TreeHashCannotVerifyOriginalBytes" }
+              : { _tag: "BaselineNotFound", hashKind: kind, ref },
+          } satisfies SkillsShUpdateMember;
+        }
+        const localBytes = yield* inspectSkillsShCompatibleHash(
+          join(root, folder),
+          join(root, folder),
+        );
+        if (Result.isFailure(localBytes)) {
+          return {
+            ...base,
+            upstream_tree: tipState.tree,
+            status: "unverifiable",
+            reason: { _tag: "OriginalBytesUnavailable", failures: localBytes.failure },
+          } satisfies SkillsShUpdateMember;
+        }
+        const local = localBytes.success;
+        if (local === claimed && tipState.hash === claimed) {
+          return {
+            ...base,
+            upstream_tree: tipState.tree,
+            baseline_commit: tip,
+            baseline_tree: tipState.tree,
+            baseline_verification: "lock+original-bytes",
+            status: "current",
+          } satisfies SkillsShUpdateMember;
+        }
+        if (local !== claimed) {
+          return {
+            ...base,
+            upstream_tree: tipState.tree,
+            status: tipState.hash === local ? "lock-stale" : "differs-from-lock-and-upstream",
+          } satisfies SkillsShUpdateMember;
+        }
+        const baseline = yield* member.baseline;
+        return {
+          ...base,
+          upstream_tree: tipState.tree,
+          ...(baseline ? { baseline_commit: baseline.commit, baseline_tree: baseline.tree } : {}),
+          ...(baseline ? { baseline_verification: "lock+original-bytes" as const } : {}),
+          status: baseline ? "update-available" : "unverifiable",
+          ...(baseline
+            ? {}
+            : { reason: { _tag: "BaselineNotFound" as const, hashKind: kind, ref } }),
+        } satisfies SkillsShUpdateMember;
+      }),
+    );
+    members.push(
+      Result.isSuccess(checked)
+        ? checked.success
+        : {
+            ...base,
+            status: "unverifiable",
+            reason: { _tag: "GitEvidenceUnavailable", failure: checked.failure },
+          },
+    );
   }
   return { checked_at: checkedAt, members };
 });

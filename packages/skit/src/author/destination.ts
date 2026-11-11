@@ -5,7 +5,7 @@ import { DestinationFormInvalid } from "./failures.js";
 
 const decodeAuthorSegment = (input: string) =>
   Schema.decodeEffect(Schema.StringFromUriComponent)(input).pipe(
-    Effect.mapError(() => new AuthorDestinationMalformed({ message: "URI malformed" })),
+    Effect.mapError(() => new AuthorDestinationMalformed({ kind: "uri-component" })),
   );
 
 export const parseAuthorDestination = Effect.fn("Author.parseDestination")(function* (

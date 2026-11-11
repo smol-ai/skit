@@ -1,6 +1,8 @@
 // Literal v11 record shapes, frozen at 3ffe1efa6. Never import current domain records here.
 // Shared scalar identities retain their nominal types; record fields and validation stay historical.
 import { Schema } from "effect";
+// Passive diagnostic facts do not define or validate any historical record shape.
+import { manifestViolationIssue } from "../manifest-violation.js";
 import { isAbsolute } from "node:path";
 import { canonicalJson } from "../../shared/json.js";
 import { Hash } from "../../shared/hash.js";
@@ -25,7 +27,7 @@ const SourceRelativePath = Schema.String.check(
       !value.includes("\\") &&
       !value.includes("\0") &&
       value.split("/").every((part) => part.length > 0 && part !== "." && part !== ".."),
-    { message: "Expected a safe relative path" },
+    { representation: { id: "skit/schema/source-relative-path", payload: null } },
   ),
 );
 type SourceRelativePath = typeof SourceRelativePath.Type;
@@ -36,7 +38,9 @@ interface HistoricalLocator extends Schema.Schema.Type<typeof HistoricalLocator>
 const BoundedOriginalEntry = Schema.JsonObject.check(
   Schema.makeFilter(
     (value) => new TextEncoder().encode(canonicalJson(value)).byteLength <= 65_536,
-    { message: "Expected skills.sh original entry no larger than 64 KiB" },
+    {
+      representation: { id: "skit/schema/skills-sh-original-limit", payload: { maxBytes: 65_536 } },
+    },
   ),
 );
 const SourceIdentity = Schema.Union([
@@ -277,53 +281,83 @@ const LibraryManifest = Schema.Struct({
   enabled: Schema.Array(Enabled),
 }).check(
   Schema.makeFilter((manifest) => {
+    const repeated = (values: readonly string[]) => {
+      const seen = new Set<string>();
+      const duplicates = new Set<string>();
+      for (const value of values) {
+        if (seen.has(value)) duplicates.add(value);
+        seen.add(value);
+      }
+      return [...duplicates];
+    };
+    const identifiers = [
+      ["collections", manifest.collections.map((item) => item.collection_id)],
+      ["skills", manifest.skills.map((item) => item.skill_id)],
+      [
+        "collection_versions",
+        manifest.collection_versions.map((item) => item.collection_version_id),
+      ],
+      ["imports", manifest.imports.map((item) => item.import_id)],
+      [
+        "versions",
+        manifest.skills.flatMap((skill) =>
+          skill.versions.map((version) => version.skill_version_id),
+        ),
+      ],
+    ] as const;
+    for (const [entity, values] of identifiers) {
+      const ids = repeated(values);
+      if (ids.length)
+        return manifestViolationIssue([entity === "versions" ? "skills" : entity], {
+          _tag: "DuplicateIdentifiers",
+          entity,
+          ids,
+        });
+    }
     const collections = new Set(manifest.collections.map((item) => item.collection_id));
     const skills = new Set(manifest.skills.map((skill) => skill.skill_id));
-    const versionIds = manifest.skills.flatMap((skill) =>
-      skill.versions.map((version) => version.skill_version_id),
-    );
     const copies = new Map(
       manifest.collection_versions.map((copy) => [copy.collection_version_id, copy]),
     );
-    if (
-      collections.size !== manifest.collections.length ||
-      skills.size !== manifest.skills.length ||
-      copies.size !== manifest.collection_versions.length ||
-      new Set(manifest.imports.map((item) => item.import_id)).size !== manifest.imports.length ||
-      new Set(versionIds).size !== versionIds.length
-    )
-      return {
-        path: ["collections"],
-        issue: "Duplicate Collection, Skill, import, retained-copy or Version IDs",
-      };
-
     for (const collection of manifest.collections) {
+      const subject = { collectionId: collection.collection_id, label: collection.label };
       const owned = manifest.skills.filter(
         (skill) => skill.collection_id === collection.collection_id,
       );
       const paths = owned.map((skill) => skill.path);
-      // A Skill whose path moved upstream leaves its old row behind with its retained history, so
-      // only the Skills the newest source import still contains must have distinct names.
+      const duplicatePaths = repeated(paths);
+      if (duplicatePaths.length)
+        return manifestViolationIssue(["skills"], {
+          _tag: "DuplicateSkillPaths",
+          ...subject,
+          paths: duplicatePaths,
+        });
       const names = currentCollectionSkills(manifest, collection.collection_id).map(
         (skill) => skill.name,
       );
-      if (new Set(paths).size !== paths.length || new Set(names).size !== names.length)
-        return {
-          path: ["skills"],
-          issue: `Collection ${collection.label} (${collection.collection_id}) contains duplicate Skill paths or current names`,
-        };
-      if (
-        paths.some((path, index) => paths.slice(index + 1).some((other) => isNested(path, other)))
-      )
-        return {
-          path: ["skills"],
-          issue: `Collection ${collection.label} (${collection.collection_id}) contains overlapping Skill paths`,
-        };
+      const duplicateNames = repeated(names);
+      if (duplicateNames.length)
+        return manifestViolationIssue(["skills"], {
+          _tag: "DuplicateSkillNames",
+          ...subject,
+          names: duplicateNames,
+        });
+      for (const [index, left] of paths.entries()) {
+        const right = paths.slice(index + 1).find((other) => isNested(left, other));
+        if (right !== undefined)
+          return manifestViolationIssue(["skills"], {
+            _tag: "OverlappingSkillPaths",
+            ...subject,
+            left,
+            right,
+          });
+      }
       if (paths.includes(".") && paths.length !== 1)
-        return {
-          path: ["skills"],
-          issue: `Collection ${collection.label} (${collection.collection_id}) mixes a root Skill with child Skills`,
-        };
+        return manifestViolationIssue(["skills"], {
+          _tag: "RootSkillWithChildren",
+          ...subject,
+          paths,
+        });
     }
     for (const [index, collection] of manifest.collections.entries()) {
       const upstream = collection.upstream;
@@ -336,96 +370,121 @@ const LibraryManifest = Schema.Struct({
             Schema.toEquivalence(Upstream)(upstream, other.upstream),
         );
       if (duplicate !== undefined)
-        return {
-          path: ["collections"],
-          issue: `Collections ${collection.label} (${collection.collection_id}) and ${duplicate.label} (${duplicate.collection_id}) track the same upstream`,
-        };
+        return manifestViolationIssue(["collections"], {
+          _tag: "DuplicateUpstream",
+          first: { collectionId: collection.collection_id, label: collection.label },
+          second: { collectionId: duplicate.collection_id, label: duplicate.label },
+        });
     }
-
-    for (const acquisition of manifest.imports)
+    for (const acquisition of manifest.imports) {
+      if (!collections.has(acquisition.collection_id))
+        return manifestViolationIssue(["imports"], {
+          _tag: "ImportCollectionMissing",
+          importId: acquisition.import_id,
+          collectionId: acquisition.collection_id,
+        });
+      if (!copies.has(acquisition.collection_version_id))
+        return manifestViolationIssue(["imports"], {
+          _tag: "ImportCopyMissing",
+          importId: acquisition.import_id,
+          copyId: acquisition.collection_version_id,
+        });
+    }
+    for (const copy of manifest.collection_versions) {
+      if (copy.members.length === 0)
+        return manifestViolationIssue(["collection_versions"], {
+          _tag: "CopyMembersEmpty",
+          copyId: copy.collection_version_id,
+        });
+      const paths = repeated(copy.members.map((member) => member.source_path));
+      if (paths.length)
+        return manifestViolationIssue(["collection_versions"], {
+          _tag: "CopyMemberPathsDuplicate",
+          copyId: copy.collection_version_id,
+          paths,
+        });
       if (
-        !collections.has(acquisition.collection_id) ||
-        !copies.has(acquisition.collection_version_id)
-      )
-        return {
-          path: ["imports"],
-          issue: `Import ${acquisition.import_id} references missing Collection ${acquisition.collection_id} or retained copy ${acquisition.collection_version_id}`,
-        };
-    for (const copy of manifest.collection_versions)
-      if (
-        copy.members.length === 0 ||
-        new Set(copy.members.map((member) => member.source_path)).size !== copy.members.length ||
         !manifest.imports.some(
           (acquisition) => acquisition.collection_version_id === copy.collection_version_id,
         )
       )
-        return {
-          path: ["collection_versions"],
-          issue: `Retained copy ${copy.collection_version_id} has invalid members or no owning import`,
-        };
-
+        return manifestViolationIssue(["collection_versions"], {
+          _tag: "CopyImportMissing",
+          copyId: copy.collection_version_id,
+        });
+    }
     for (const skill of manifest.skills) {
+      const subject = { skillId: skill.skill_id, name: skill.name };
       if (!collections.has(skill.collection_id))
-        return {
-          path: ["skills"],
-          issue: `Skill ${skill.name} (${skill.skill_id}) references missing Collection ${skill.collection_id}`,
-        };
+        return manifestViolationIssue(["skills"], {
+          _tag: "SkillCollectionMissing",
+          ...subject,
+          collectionId: skill.collection_id,
+        });
       if (
         skill.local_version_id !== undefined &&
         !skill.versions.some((version) => version.skill_version_id === skill.local_version_id)
       )
-        return {
-          path: ["skills"],
-          issue: `Skill ${skill.name} (${skill.skill_id}) selects missing Version ${skill.local_version_id}`,
-        };
+        return manifestViolationIssue(["skills"], {
+          _tag: "SkillVersionMissing",
+          ...subject,
+          versionId: skill.local_version_id,
+        });
       for (const version of skill.versions) {
-        if (
-          skill.versions.filter((other) => other.artifact_hash === version.artifact_hash).length !==
-          1
-        )
-          return {
-            path: ["skills"],
-            issue: `Skill ${skill.name} (${skill.skill_id}) contains more than one Version for ${version.artifact_hash}`,
-          };
-        // Every retained Version is backed by bytes one of its Collection's imports holds.
-        const backed = versionBacking(manifest, skill, version) !== undefined;
-        if (!backed)
-          return {
-            path: ["skills"],
-            issue: `Skill ${skill.name} (${skill.skill_id}) Version ${version.skill_version_id} has no retained import backing`,
-          };
+        const matching = skill.versions.filter(
+          (other) => other.artifact_hash === version.artifact_hash,
+        );
+        if (matching.length !== 1)
+          return manifestViolationIssue(["skills"], {
+            _tag: "ArtifactVersionsDuplicate",
+            ...subject,
+            hash: version.artifact_hash,
+            versionIds: matching.map((item) => item.skill_version_id),
+          });
+        if (versionBacking(manifest, skill, version) === undefined)
+          return manifestViolationIssue(["skills"], {
+            _tag: "VersionBackingMissing",
+            ...subject,
+            versionId: version.skill_version_id,
+          });
       }
     }
-
+    const duplicateDigests = repeated(manifest.snapshot_digests);
+    if (duplicateDigests.length)
+      return manifestViolationIssue(["snapshot_digests"], {
+        _tag: "CollectionVersionHashesDuplicate",
+        digests: manifest.snapshot_digests.filter((digest) => duplicateDigests.includes(digest)),
+      });
+    const expected = librarySnapshotDigests(manifest);
     if (
-      new Set(manifest.snapshot_digests).size !== manifest.snapshot_digests.length ||
       !Schema.toEquivalence(Schema.Array(Schema.String))(
         [...manifest.snapshot_digests].sort(),
-        librarySnapshotDigests(manifest),
+        expected,
       )
     )
-      return {
-        path: ["snapshot_digests"],
-        issue: "Snapshot digests do not match the retained copies that require private snapshots",
-      };
-    if (
-      manifest.enabled.some((item, index) =>
-        manifest.enabled.slice(index + 1).some((other) => sameEnabled(item, other)),
-      )
-    )
-      return { path: ["enabled"], issue: "The enabled list contains duplicate items" };
-    if (
-      manifest.enabled.some((item) =>
-        "collection" in item ? !collections.has(item.collection) : !skills.has(item.skill),
-      )
-    )
-      return { path: ["enabled"], issue: "The enabled list names a missing Skill or Collection" };
+      return manifestViolationIssue(["snapshot_digests"], {
+        _tag: "CollectionVersionHashesMismatch",
+        expected,
+        actual: manifest.snapshot_digests,
+      });
+    for (const [index, item] of manifest.enabled.entries()) {
+      const reference =
+        "collection" in item
+          ? { kind: "collection" as const, id: item.collection }
+          : { kind: "skill" as const, id: item.skill };
+      if (manifest.enabled.slice(index + 1).some((other) => sameEnabled(item, other)))
+        return manifestViolationIssue(["enabled"], { _tag: "EnabledDuplicate", ...reference });
+      if ("collection" in item ? !collections.has(item.collection) : !skills.has(item.skill))
+        return manifestViolationIssue(["enabled"], { _tag: "EnabledSubjectMissing", ...reference });
+    }
     return true;
   }),
 );
 interface LibraryManifest extends Schema.Schema.Type<typeof LibraryManifest> {}
 const AbsoluteDevicePath = Schema.String.check(
-  Schema.makeFilter(isAbsolute, { message: "Expected an absolute device path" }),
+  Schema.makeFilter(isAbsolute, {
+    representation: { id: "skit/schema/path-absolute", payload: null },
+  }),
 );
 type AbsoluteDevicePath = typeof AbsoluteDevicePath.Type;
 const InvocationPolicies = Schema.Record(SkillId, InvocationPolicy);

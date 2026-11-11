@@ -7,13 +7,16 @@ it.effect("requires the Skill and acceptance fields", () =>
     const library = { acceptSecurityFindingEffect: () => Effect.die("unreachable") };
     const missingSkill = yield* securityAcceptCommand(library, {}).pipe(Effect.flip);
     if (missingSkill._tag !== "MissingRequirement") return assert.fail(missingSkill._tag);
-    assert.strictEqual(missingSkill.requires, "<skill>");
+    assert.deepStrictEqual(missingSkill.reason, { _tag: "SecuritySubject", action: "accept" });
 
     const missingFields = yield* securityAcceptCommand(library, { query: "review" }).pipe(
       Effect.flip,
     );
     if (missingFields._tag !== "MissingRequirement") return assert.fail(missingFields._tag);
-    assert.strictEqual(missingFields.requires, "--finding, --principal, and --rationale");
+    assert.deepStrictEqual(missingFields.reason, {
+      _tag: "SecurityAcceptanceFields",
+      missing: ["--finding", "--principal", "--rationale"],
+    });
   }),
 );
 

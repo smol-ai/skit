@@ -13,7 +13,7 @@ const syncStatus = (phase: SyncPhase) => {
         complete: "Inspected this device’s Library",
       };
     case "verify-copies":
-      return { pending: "Verifying retained copies", complete: "Checked retained copies" };
+      return { pending: "Verifying Collection Versions", complete: "Checked Collection Versions" };
     case "read-remote":
       return { pending: "Reading remote Library", complete: "Read remote Library" };
     case "merge":
@@ -29,7 +29,7 @@ const syncStatus = (phase: SyncPhase) => {
     case "save-local":
       return { pending: "Saving this device’s Library", complete: "Saved this device’s Library" };
     case "enable":
-      return { pending: "Enabling synced Skills", complete: "Reconciled enabled Skills" };
+      return { pending: "Enabling synced Skills", complete: "Installed enabled Skills" };
     case "upload":
       return {
         pending: `Uploading ${copies(phase.total)}`,
@@ -42,8 +42,8 @@ const restoreStatus = (phase: RestorePhase) => {
   switch (phase.kind) {
     case "verify-local":
       return {
-        pending: "Checking local retained copies",
-        complete: "Checked for reusable retained copies",
+        pending: "Checking local Collection Versions",
+        complete: "Checked for reusable Collection Versions",
       };
     case "download":
       return {
@@ -54,8 +54,8 @@ const restoreStatus = (phase: RestorePhase) => {
       return { pending: `Fetching ${phase.subject}`, complete: `Fetched ${phase.subject}` };
     case "retain":
       return {
-        pending: `Restoring ${copies(phase.total, "retained")}`,
-        complete: `Restored ${copies(phase.total, "retained")}`,
+        pending: `Storing ${phase.total} Collection Version${phase.total === 1 ? "" : "s"}`,
+        complete: `Stored ${phase.total} Collection Version${phase.total === 1 ? "" : "s"}`,
       };
   }
 };
@@ -72,7 +72,7 @@ export const terminalSyncProgress = (
       renderer.withStatus({ ...syncStatus(phase), persist: "timed" }, operation),
     tick: ({ phase, completed }) =>
       renderer.updateStatus(
-        `${syncStatus(phase).pending}${"total" in phase ? ` · ${completed}/${phase.total}` : ""}`,
+        `${syncStatus(phase).pending}${"total" in phase ? ` | ${completed}/${phase.total}` : ""}`,
       ),
   },
   restore: {
@@ -80,7 +80,7 @@ export const terminalSyncProgress = (
       renderer.withStatus({ ...restoreStatus(phase), persist: "timed" }, operation),
     tick: ({ phase, completed, subject }) =>
       renderer.updateStatus(
-        `${restoreStatus(phase).pending}${"total" in phase ? ` · ${completed}/${phase.total}` : ""}${subject === undefined ? "" : ` · ${subject}`}`,
+        `${restoreStatus(phase).pending}${"total" in phase ? ` | ${completed}/${phase.total}` : ""}${subject === undefined ? "" : ` | ${subject}`}`,
       ),
   },
 });

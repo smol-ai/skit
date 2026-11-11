@@ -49,7 +49,7 @@ export const renderSkillPreview = (input: {
   const content = previewLines(input.content, rightWidth);
   const offset = Math.min(Math.max(0, input.offset), Math.max(0, content.length - pageSize));
   const pane = [
-    color.cyan(color.bold(fitTerminalLine(`SKILL.md · ${input.title}`, rightWidth))),
+    color.cyan(color.bold(fitTerminalLine(`SKILL.md | ${input.title}`, rightWidth))),
     ...content
       .slice(offset, offset + pageSize)
       .map((line) => (/^#{1,6}\s/.test(line) ? color.bold(line) : line)),
@@ -58,7 +58,7 @@ export const renderSkillPreview = (input: {
   pane.push(
     color.dim(
       fitTerminalLine(
-        `Lines ${offset + 1}–${Math.min(content.length, offset + pageSize)}/${content.length} · PgUp/PgDn scroll · Ctrl+P close`,
+        `Lines ${offset + 1}–${Math.min(content.length, offset + pageSize)}/${content.length} | PgUp/PgDn scroll | Ctrl+P close`,
         rightWidth,
       ),
     ),

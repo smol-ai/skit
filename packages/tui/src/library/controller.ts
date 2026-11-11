@@ -1,3 +1,12 @@
+import {
+  DESTINATION_QUESTION,
+  destinationLabel,
+  invocationChoices,
+  invocationBriefing,
+  invocationRowSummary,
+  invocationQuestion,
+  scopeChoiceLabels,
+} from "./invocation";
 import * as Library from "@smolai/skit-core/library";
 import { resolve } from "node:path";
 import { Effect } from "effect";
@@ -10,12 +19,7 @@ import {
   proposeLibraryInvocation,
   confirmLibraryChange,
   cancelLibraryChange,
-  DESTINATION_QUESTION,
-  destinationLabel,
-  invocationChoices,
-  invocationBriefing,
   invocationEligibleScopes,
-  invocationRowSummary,
   scopeChoices,
   type LibrarySessionState,
   type PendingLibraryChange,
@@ -103,8 +107,8 @@ export function createLibraryController(options: Options) {
       title: DESTINATION_QUESTION,
       options: choices.map((choice) => ({
         value: choice.value,
-        label: choice.label,
-        ...(choice.hint ? { hint: choice.hint } : {}),
+        label: scopeChoiceLabels[choice.value],
+        ...(choice.scope.kind === "repository" ? { hint: choice.scope.root } : {}),
       })),
       choose: (value) => next(choices.find((choice) => choice.value === value)!.scope),
     });
@@ -140,7 +144,7 @@ export function createLibraryController(options: Options) {
           : [
               {
                 value: "collection",
-                label: `Enable whole collection · ${row.heading}`,
+                label: `Enable whole collection | ${row.heading}`,
                 hint: "Include new skills and remove deleted ones when you update",
               },
             ]),
@@ -202,7 +206,7 @@ export function createLibraryController(options: Options) {
           : [
               {
                 value: "collection",
-                label: `Disable whole collection · ${row.heading}`,
+                label: `Disable whole collection | ${row.heading}`,
                 hint: "Disable every skill in this collection",
               },
             ]),
@@ -241,7 +245,7 @@ export function createLibraryController(options: Options) {
     const choosePolicy = (scopeRow: ScopeRow) => {
       if (!scopeRow.policy) return;
       openChooser({
-        title: scopeRow.policy.question,
+        title: invocationQuestion(scopeRow.policy),
         briefing: invocationBriefing(scopeRow.policy),
         options: invocationChoices(scopeRow).map((choice) => ({
           value: choice.value,

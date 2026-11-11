@@ -5,7 +5,7 @@ import { isCollectionControlRootEntry } from "../../../artifact/control-files.js
 import { Hash, hashHex, sha256Hash } from "../../../shared/hash.js";
 import { isCanonicalRelativePath, parentDirectories } from "../../../shared/relative-path.js";
 import { collectionVersionPath, originalTreeHash } from "../../collection-version.js";
-import { InvalidLibraryState } from "../../failures.js";
+import { InvalidLibraryState, type InvalidLibraryStateReason } from "../../failures.js";
 
 const StoredFile = Schema.Struct({
   path: TreeFile.fields.path,
@@ -30,14 +30,15 @@ export const readCollectionVersion = Effect.fn("Library.readCollectionVersion")(
   const legacy = collectionVersionPath(originalsPath, hash);
   if (yield* fs.exists(legacy)) return legacy;
   const manifestPath = join(originalsPath, "compositions", "trees", `${hashHex(hash)}.json`);
-  const invalid = (detail: string) => new InvalidLibraryState({ path: manifestPath, detail });
+  const invalid = (reason: InvalidLibraryStateReason) =>
+    new InvalidLibraryState({ path: manifestPath, reason });
   const text = yield* fs
     .readFileString(manifestPath)
     .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
   // Preserve the ordinary missing-whole-tree failure at the caller's read, without writes.
   if (text === undefined) return legacy;
   const manifest = yield* Schema.decodeEffect(Composition)(text).pipe(
-    Effect.mapError((error) => invalid(`invalid composition manifest: ${String(error)}`)),
+    Effect.mapError((error) => invalid({ _tag: "SchemaInvalid", failure: error })),
   );
   const byPath = new Map<string, (typeof manifest.entries)[number]>();
   for (const entry of manifest.entries) {
@@ -48,29 +49,37 @@ export const readCollectionVersion = Effect.fn("Library.readCollectionVersion")(
       first === ".git" ||
       isCollectionControlRootEntry(first, 0)
     )
-      return yield* invalid(`invalid or duplicate composition path: ${entry.path}`);
+      return yield* invalid({ _tag: "InvalidData", issue: entry.path });
     byPath.set(entry.path, entry);
   }
   for (const entry of manifest.entries)
     if (parentDirectories(entry.path).some((parent) => byPath.get(parent)?.kind !== "directory"))
-      return yield* invalid(`composition path lacks a directory parent: ${entry.path}`);
+      return yield* invalid({ _tag: "InvalidData", issue: entry.path });
   const files = new Map<Hash, Uint8Array>();
+  const entries: (typeof TreeDirectory.Type | TreeFile)[] = [];
   for (const entry of manifest.entries) {
-    if (entry.kind !== "file" || files.has(entry.blob)) continue;
-    const blob = join(originalsPath, "compositions", "blobs", hashHex(entry.blob));
-    const bytes = yield* fs
-      .readFile(blob)
-      .pipe(
-        Effect.catchReason("PlatformError", "NotFound", () =>
-          Effect.fail(invalid(`missing composition blob: ${entry.blob}`)),
-        ),
-      );
-    if ((yield* sha256Hash(bytes)) !== entry.blob)
-      return yield* invalid(`composition blob changed: ${entry.blob}`);
-    files.set(entry.blob, bytes);
+    if (entry.kind === "directory") {
+      entries.push(entry);
+      continue;
+    }
+    let bytes = files.get(entry.blob);
+    if (bytes === undefined) {
+      const blob = join(originalsPath, "compositions", "blobs", hashHex(entry.blob));
+      bytes = yield* fs
+        .readFile(blob)
+        .pipe(
+          Effect.catchReason("PlatformError", "NotFound", () =>
+            Effect.fail(invalid({ _tag: "ContentMissing", entry: entry.blob })),
+          ),
+        );
+      if ((yield* sha256Hash(bytes)) !== entry.blob)
+        return yield* invalid({ _tag: "ContentChanged", entry: entry.blob });
+      files.set(entry.blob, bytes);
+    }
+    entries.push({ path: entry.path, kind: "file", mode: entry.mode, bytes });
   }
   const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-composition-read-" });
-  const ordered = manifest.entries.toSorted(
+  const ordered = entries.toSorted(
     (left, right) =>
       left.path.split("/").length - right.path.split("/").length ||
       left.path.localeCompare(right.path),
@@ -79,13 +88,10 @@ export const readCollectionVersion = Effect.fn("Library.readCollectionVersion")(
     const path = join(root, entry.path);
     if (entry.kind === "directory") yield* fs.makeDirectory(path, { mode: 0o700 });
     else {
-      const bytes = files.get(entry.blob);
-      if (bytes === undefined) return yield* invalid(`missing composition file: ${entry.path}`);
       // Copies, never hard links: an installed folder or another read cannot change a blob.
-      yield* fs.writeFile(path, bytes, { flag: "wx", mode: entry.mode });
+      yield* fs.writeFile(path, entry.bytes, { flag: "wx", mode: entry.mode });
     }
   }
-  if ((yield* originalTreeHash(root)) !== hash)
-    return yield* invalid("composition tree does not match its retained hash");
+  if ((yield* originalTreeHash(root)) !== hash) return yield* invalid({ _tag: "ContentChanged" });
   return root;
 });

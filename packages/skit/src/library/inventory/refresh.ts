@@ -1,4 +1,5 @@
-import { Clock, Effect, FileSystem, Result } from "effect";
+import { installedSkillConflicts } from "../../installed-skills/conflict.js";
+import { Clock, Effect, FileSystem } from "effect";
 import { dirname, join, resolve } from "node:path";
 import type { HarnessName } from "../../harnesses/contracts.js";
 import type { InstalledSkill } from "../device-state.js";
@@ -7,14 +8,8 @@ import * as InstalledSkillStatus from "../installed-skill-status.js";
 import { LinkStat } from "../../platform/link-stat.js";
 import { deterministicTreeHash } from "../../artifact/skit.js";
 import { physicalPath, pathIsWithin } from "../../platform/path-identity.js";
-import {
-  expectedInstalledSkillHashResult,
-  installedSkillDisplaced,
-} from "../../installed-skills/files.js";
-import {
-  readOwnershipMarker,
-  inspectOwnershipMarker,
-} from "../../installed-skills/marker-inspection.js";
+import { installedSkillDisplaced } from "../../installed-skills/files.js";
+import { inspectOwnershipMarker } from "../../installed-skills/marker-inspection.js";
 import { type InventoryScanRoot } from "./roots.js";
 export { deduplicateInventoryRoots, type InventoryScanRoot } from "./roots.js";
 
@@ -45,19 +40,19 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
           : InstalledSkillStatus.suppressed(installedSkill, scannedAt);
       }
       const currentHash = yield* deterministicTreeHash(installedSkill.path);
-      const marker = yield* readOwnershipMarker(installedSkill.path);
+      const inspection = yield* inspectOwnershipMarker(installedSkill.path);
       // Recorded before its marker was written, and the folder is still exactly SKIT's bytes:
       // the marker is pending, and the next change that plans this copy writes it.
       if (
         installedSkill.status === "pending" &&
-        marker === null &&
+        inspection.kind === "absent" &&
         currentHash === installedSkill.expected_hash
       )
         return installedSkill;
-      const expected = expectedInstalledSkillHashResult(installedSkill, marker);
-      return marker && Result.isSuccess(expected) && currentHash === expected.success
+      const conflicts = installedSkillConflicts(installedSkill, inspection, currentHash);
+      return conflicts.length === 0
         ? InstalledSkillStatus.installed(installedSkill)
-        : InstalledSkillStatus.conflicted(installedSkill, currentHash);
+        : InstalledSkillStatus.conflicted(installedSkill, currentHash, conflicts);
     }),
   );
   const state = { ...structuredClone(loaded), installed_skills: installedSkills };
@@ -183,7 +178,7 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
         canonicalPath: observed.canonicalPath,
         harnesses,
         currentHash,
-        detail: marker.detail,
+        markerReason: marker.reason,
       });
     } else if (marker.kind === "valid") {
       const claim = {
@@ -199,7 +194,6 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
         currentHash,
         ...claim,
         matchesExpectedHash: currentHash === claim.expectedHash,
-        detail: "Ownership marker is not independently authenticated and cannot authorize removal",
       });
     } else {
       const prior = priorUnmanaged.get((yield* physicalPath(observed.path)).key);

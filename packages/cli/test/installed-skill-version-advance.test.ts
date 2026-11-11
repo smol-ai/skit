@@ -144,6 +144,7 @@ it.effect("heals an untouched installed skill already recorded as conflicted", (
         ...row,
         skill_version_id: selected,
         status: "conflicted" as const,
+        conflicts: [],
         current_hash: row.expected_hash,
       })),
     });

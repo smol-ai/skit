@@ -1,12 +1,38 @@
+import { SourceProcessLimitFailure } from "../platform/source-process-failures.js";
+import { PlatformErrorSchema } from "../platform/error-schema.js";
 import { Schema } from "effect";
 import { FailureTypeId, type SkitFailure } from "./failure.js";
 
-const TreeErrorReason = Schema.Union([
+export const GitInspectionIssue = Schema.TaggedUnion({
+  ProcessFailed: { failure: Schema.Union([SourceProcessLimitFailure, PlatformErrorSchema]) },
+  ExitCode: { operation: Schema.String, exitCode: Schema.Int, stderr: Schema.String },
+  InvalidUtf8: { operation: Schema.String },
+  IncompleteOutput: { operation: Schema.String },
+  DuplicatePaths: { paths: Schema.Array(Schema.String) },
+  UnexpectedPaths: { paths: Schema.Array(Schema.String), requested: Schema.Array(Schema.String) },
+  EmbeddedRepositories: { paths: Schema.Array(Schema.String) },
+  Unavailable: { root: Schema.String },
+  NativeFilenameAmbiguous: { path: Schema.String, names: Schema.Array(Schema.String) },
+});
+export type GitInspectionIssue = typeof GitInspectionIssue.Type;
+
+const NativeEntryType = Schema.Literals([
+  "File",
+  "Directory",
+  "SymbolicLink",
+  "BlockDevice",
+  "CharacterDevice",
+  "FIFO",
+  "Socket",
+  "Unknown",
+]);
+
+export const TreeErrorReason = Schema.Union([
   Schema.TaggedStruct("GitCommandFailed", {
     command: Schema.String,
     exitCode: Schema.Int,
   }),
-  Schema.TaggedStruct("GitInspectionFailed", { detail: Schema.String }),
+  Schema.TaggedStruct("GitInspectionFailed", { issue: GitInspectionIssue }),
   Schema.TaggedStruct("EmbeddedRepository", { path: Schema.String }),
   Schema.TaggedStruct("Submodule", { path: Schema.String }),
   Schema.TaggedStruct("IgnoredRoot", {}),
@@ -15,39 +41,19 @@ const TreeErrorReason = Schema.Union([
   Schema.TaggedStruct("InvalidSymlink", { path: Schema.String }),
   Schema.TaggedStruct("UnsupportedEntry", { path: Schema.String }),
   Schema.TaggedStruct("ChangedDuringRead", { path: Schema.String }),
+  Schema.TaggedStruct("NormalizedPathCollision", {
+    path: Schema.String,
+    firstPath: Schema.String,
+    secondPath: Schema.String,
+  }),
+  Schema.TaggedStruct("NativeIdentityMissing", { path: Schema.String, entryType: NativeEntryType }),
+  Schema.TaggedStruct("RootNotDirectory", { path: Schema.String, entryType: NativeEntryType }),
   Schema.TaggedStruct("CannotRetain", {
-    entryType: Schema.String,
+    entryType: NativeEntryType,
     path: Schema.String,
   }),
-]);
-type TreeErrorReason = typeof TreeErrorReason.Type;
-
-const renderReason = (reason: TreeErrorReason): string => {
-  switch (reason._tag) {
-    case "GitCommandFailed":
-      return `${reason.command} exited with ${reason.exitCode}`;
-    case "GitInspectionFailed":
-      return `Unable to evaluate Git ignore rules for Artifact content: ${reason.detail}`;
-    case "EmbeddedRepository":
-      return `Embedded Git repository is not valid Artifact content: ${reason.path}`;
-    case "Submodule":
-      return `Registered Git submodule is not valid Artifact content: ${reason.path}`;
-    case "IgnoredRoot":
-      return "The SKIT root is ignored by the enclosing Git repository";
-    case "FullyExcludedRoot":
-      return "Git excludes every file in the SKIT root";
-    case "EscapedPath":
-      return `Path escaped tree: ${reason.path}`;
-    case "InvalidSymlink":
-      return `Symlinks are not valid SKIT content: ${reason.path}`;
-    case "UnsupportedEntry":
-      return `Unsupported filesystem entry: ${reason.path}`;
-    case "ChangedDuringRead":
-      return `Filesystem entry changed while reading: ${reason.path}`;
-    case "CannotRetain":
-      return `Cannot retain ${reason.entryType}: ${reason.path}`;
-  }
-};
+]).annotate({ identifier: "TreeErrorReason" });
+export type TreeErrorReason = typeof TreeErrorReason.Type;
 
 /** Content that cannot be published as a SKIT tree. */
 export class TreeError
@@ -58,8 +64,4 @@ export class TreeError
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Remove or replace the reported entry in the SKIT, then retry.";
-  get message() {
-    return renderReason(this.reason);
-  }
 }

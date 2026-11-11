@@ -5,8 +5,6 @@ export {
   AuthorWorkspaceRootInvalid,
   type AuthorWorkspaceUnsafe,
   type AuthorWorkspaceBusy,
-  type AuthorWriteNotPrepared,
-  type AuthorLeaseNotHeld,
   type WorkspaceReadError,
   type AuthorWorkspace,
 } from "./workspace.js";
@@ -15,7 +13,6 @@ export {
   type AuthorHistoryBusy,
   type AuthorSyncStateConflict,
   type AuthorBackupStateConflict,
-  type AuthorSyncStateIllegal,
   type SavedRevision,
   type RefreshError,
   type AuthorHistory,
@@ -40,13 +37,22 @@ export {
   validateSkitDirectory,
 } from "../artifact/skit.js";
 export { createSkitArchive } from "../artifact/archive.js";
-export { type DescriptorFailure } from "../artifact/failures.js";
-export type { DescriptorMalformed, ReadmeFrontmatterMissing } from "../artifact/failures.js";
+export {
+  DescriptorMalformed,
+  ConflictingInvocationDeclaration,
+  SkitValidationFailed,
+} from "../artifact/failures.js";
 export { SkitValidationDiagnostic } from "../artifact/validation-diagnostic.js";
 export { InvocationMetadataGeneration } from "./invocation/generation.js";
 
-export { authorLayer, authorWorkspaceLayer, readAuthorWorkspace } from "./operations.js";
+export {
+  authorLayer,
+  authorWorkspaceLayer,
+  readAuthorWorkspace,
+  updateAuthorWorkspace,
+} from "./operations.js";
 export { syncAuthorWorkspace } from "./sync.js";
+export { watchAuthorWorkspace, AuthorWatchEvent, AuthorWatchRetrying } from "./watch.js";
 export { initializeAuthorWorkspace } from "./initialize.js";
 export { generateAuthorInvocation } from "./invocation.js";
 export { parseAuthorDestination } from "./destination.js";
@@ -70,6 +76,14 @@ export type {
   DestinationFormInvalid,
   DirectoryAlreadyInLibrary,
   NoRemoteHome,
+  NotAnAuthorWorkspace,
   VisibilityNotAccepted,
 } from "./failures.js";
-export type { SkitValidationFailed } from "../artifact/failures.js";
+
+export { AuthorFailure } from "./failures.js";
+
+export type {
+  DuplicateSkillNames,
+  DuplicateSkillPaths,
+  ReadmeFrontmatterMissing,
+} from "../artifact/failures.js";

@@ -10,22 +10,10 @@ import {
   type NativeInvocationPolicy,
 } from "../harnesses/invocation-metadata.js";
 
-/** The command an Author runs to bring a Skill's native metadata into conformance. */
-const INVOCATION_GENERATION_COMMAND = "skit author invocation";
+import { type InvocationConformanceIssue } from "./conformance-issue.js";
+export { InvocationConformanceIssue } from "./conformance-issue.js";
 
 export type DeclaringSkill = Pick<SkitDescriptor["skills"][number], "name" | "path" | "invocation">;
-
-export interface InvocationConformanceIssue {
-  skill: string;
-  harness: AuthoredInvocationHarness;
-  /** Metadata file, relative to the SKIT root. */
-  path: string;
-  field: string;
-  policy: InvocationPolicy;
-  /** The policy the native field must state; `undefined` means the field must be absent. */
-  expected: NativeInvocationPolicy | undefined;
-  actual: NativeInvocationPolicy | undefined;
-}
 
 /**
  * Report every declared Skill whose own native metadata does not yet express its declaration.
@@ -60,17 +48,6 @@ export function assessInvocationConformance(
     }
     return issues;
   });
-}
-
-export function describeInvocationConformanceIssue(issue: InvocationConformanceIssue): string {
-  const adapter = invocationMetadataAdapters[issue.harness];
-  const requirement =
-    issue.expected === undefined
-      ? `must not set ${issue.field}`
-      : `must set ${issue.field}: ${adapter.notation(issue.expected)}`;
-  const found =
-    issue.actual === undefined ? "the field is absent" : `found ${adapter.notation(issue.actual)}`;
-  return `${issue.skill} declares invocation ${issue.policy}, so its ${issue.harness} metadata ${issue.path} ${requirement} (${found}); run \`${INVOCATION_GENERATION_COMMAND}\` to write it`;
 }
 
 export const ResolvedDeclaredPolicy = Schema.Union([

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { defaultTerminalEnvironment } from "@smolai/skit/storybook";
 import { catalog, filterCatalog, renderOutput } from "../src/model";
 
 describe("storybook browser model", () => {
@@ -19,6 +20,7 @@ describe("storybook browser model", () => {
     expect(item?.kind).toBe("output");
     if (item?.kind !== "output") return;
     const rendered = renderOutput(item.index, {
+      ...defaultTerminalEnvironment,
       color: false,
       detail: "summary",
       format: "human",

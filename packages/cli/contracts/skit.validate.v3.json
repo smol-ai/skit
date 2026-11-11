@@ -1,0 +1,1669 @@
+{
+  "$id": "skit.validate.v3",
+  "type": "object",
+  "properties": {
+    "valid": {
+      "type": "boolean"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "valid",
+        "valid-with-warnings",
+        "policy-blocked",
+        "invalid"
+      ]
+    },
+    "identity": {
+      "type": "object",
+      "properties": {
+        "slug": {
+          "type": "string"
+        },
+        "release": {
+          "type": "string"
+        },
+        "releaseContentHash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "contentHash": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "name",
+              "contentHash"
+            ],
+            "additionalProperties": true
+          }
+        }
+      },
+      "required": [
+        "slug",
+        "release",
+        "releaseContentHash",
+        "skills"
+      ],
+      "additionalProperties": true
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "SKILL_FILE_MISSING"
+                ]
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "warning",
+                  "error"
+                ]
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "severity",
+              "path"
+            ],
+            "additionalProperties": true
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "SHARED_SOURCE_MISSING"
+                ]
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "warning",
+                  "error"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "skill": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "severity",
+              "path",
+              "skill"
+            ],
+            "additionalProperties": true
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "SHARED_TARGET_TRAVERSAL"
+                ]
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "warning",
+                  "error"
+                ]
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "severity",
+              "path"
+            ],
+            "additionalProperties": true
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "SECURITY_POLICY_BLOCKED"
+                ]
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "warning",
+                  "error"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "assessment": {
+                "type": "object",
+                "properties": {
+                  "context": {
+                    "type": "string",
+                    "enum": [
+                      "author",
+                      "import",
+                      "project",
+                      "publish"
+                    ]
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "allow",
+                      "warn",
+                      "block"
+                    ]
+                  },
+                  "reasons": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "ruleIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "capabilityIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "ruleIds",
+                        "capabilityIds"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "findingDecisions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "fingerprint": {
+                          "type": "string",
+                          "pattern": "^sha256:[a-f0-9]{64}$"
+                        },
+                        "ruleId": {
+                          "type": "string"
+                        },
+                        "disposition": {
+                          "type": "string",
+                          "enum": [
+                            "unresolved",
+                            "accepted"
+                          ]
+                        },
+                        "acceptance": {
+                          "type": "object",
+                          "properties": {
+                            "fingerprint": {
+                              "type": "string",
+                              "pattern": "^sha256:[a-f0-9]{64}$"
+                            },
+                            "artifactContentHash": {
+                              "type": "string",
+                              "pattern": "^sha256:[a-f0-9]{64}$"
+                            },
+                            "skill_version_id": {
+                              "type": "string"
+                            },
+                            "context": {
+                              "type": "string",
+                              "enum": [
+                                "project"
+                              ]
+                            },
+                            "principal": {
+                              "type": "string"
+                            },
+                            "rationale": {
+                              "type": "string"
+                            },
+                            "acceptedAt": {
+                              "type": "string"
+                            },
+                            "expiresAt": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "fingerprint",
+                            "artifactContentHash",
+                            "skill_version_id",
+                            "context",
+                            "principal",
+                            "rationale",
+                            "acceptedAt"
+                          ],
+                          "additionalProperties": true
+                        }
+                      },
+                      "required": [
+                        "fingerprint",
+                        "ruleId",
+                        "disposition"
+                      ],
+                      "additionalProperties": true
+                    }
+                  }
+                },
+                "required": [
+                  "context",
+                  "outcome",
+                  "reasons",
+                  "findingDecisions"
+                ],
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "code",
+              "severity",
+              "path",
+              "assessment"
+            ],
+            "additionalProperties": true
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "SECURITY_ASSESSMENT_WARNING"
+                ]
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "warning",
+                  "error"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "assessment": {
+                "type": "object",
+                "properties": {
+                  "context": {
+                    "type": "string",
+                    "enum": [
+                      "author",
+                      "import",
+                      "project",
+                      "publish"
+                    ]
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "allow",
+                      "warn",
+                      "block"
+                    ]
+                  },
+                  "reasons": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "ruleIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "capabilityIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "ruleIds",
+                        "capabilityIds"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "findingDecisions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "fingerprint": {
+                          "type": "string",
+                          "pattern": "^sha256:[a-f0-9]{64}$"
+                        },
+                        "ruleId": {
+                          "type": "string"
+                        },
+                        "disposition": {
+                          "type": "string",
+                          "enum": [
+                            "unresolved",
+                            "accepted"
+                          ]
+                        },
+                        "acceptance": {
+                          "type": "object",
+                          "properties": {
+                            "fingerprint": {
+                              "type": "string",
+                              "pattern": "^sha256:[a-f0-9]{64}$"
+                            },
+                            "artifactContentHash": {
+                              "type": "string",
+                              "pattern": "^sha256:[a-f0-9]{64}$"
+                            },
+                            "skill_version_id": {
+                              "type": "string"
+                            },
+                            "context": {
+                              "type": "string",
+                              "enum": [
+                                "project"
+                              ]
+                            },
+                            "principal": {
+                              "type": "string"
+                            },
+                            "rationale": {
+                              "type": "string"
+                            },
+                            "acceptedAt": {
+                              "type": "string"
+                            },
+                            "expiresAt": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "fingerprint",
+                            "artifactContentHash",
+                            "skill_version_id",
+                            "context",
+                            "principal",
+                            "rationale",
+                            "acceptedAt"
+                          ],
+                          "additionalProperties": true
+                        }
+                      },
+                      "required": [
+                        "fingerprint",
+                        "ruleId",
+                        "disposition"
+                      ],
+                      "additionalProperties": true
+                    }
+                  }
+                },
+                "required": [
+                  "context",
+                  "outcome",
+                  "reasons",
+                  "findingDecisions"
+                ],
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "code",
+              "severity",
+              "path",
+              "assessment"
+            ],
+            "additionalProperties": true
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "INVOCATION_METADATA_MISMATCH"
+                ]
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "warning",
+                  "error"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "issue": {
+                "type": "object",
+                "properties": {
+                  "skill": {
+                    "type": "string"
+                  },
+                  "harness": {
+                    "type": "string",
+                    "enum": [
+                      "claude-code",
+                      "codex"
+                    ]
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "field": {
+                    "type": "string"
+                  },
+                  "policy": {
+                    "type": "string",
+                    "enum": [
+                      "explicit",
+                      "implicit",
+                      "host-policy"
+                    ]
+                  },
+                  "expected": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "explicit",
+                          "implicit"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "actual": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "explicit",
+                          "implicit"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "skill",
+                  "harness",
+                  "path",
+                  "field",
+                  "policy"
+                ],
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "code",
+              "severity",
+              "path",
+              "issue"
+            ],
+            "additionalProperties": true
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "CAPABILITY_PATH_MISSING"
+                ]
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "warning",
+                  "error"
+                ]
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "severity",
+              "path"
+            ],
+            "additionalProperties": true
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "EXAMPLE_MANIFEST_INVALID"
+                ]
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "warning",
+                  "error"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "reason": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "Unreadable"
+                        ]
+                      },
+                      "failure": {
+                        "type": "object",
+                        "properties": {
+                          "_tag": {
+                            "type": "string",
+                            "enum": [
+                              "PlatformError"
+                            ]
+                          },
+                          "reason": {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "AlreadyExists",
+                                  "BadResource",
+                                  "Busy",
+                                  "InvalidData",
+                                  "NotFound",
+                                  "PermissionDenied",
+                                  "TimedOut",
+                                  "UnexpectedEof",
+                                  "Unknown",
+                                  "WouldBlock",
+                                  "WriteZero",
+                                  "BadArgument"
+                                ]
+                              },
+                              "module": {
+                                "type": "string"
+                              },
+                              "method": {
+                                "type": "string"
+                              },
+                              "description": {
+                                "type": "string"
+                              },
+                              "syscall": {
+                                "type": "string"
+                              },
+                              "pathOrDescriptor": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "_tag",
+                              "module",
+                              "method"
+                            ],
+                            "additionalProperties": true
+                          }
+                        },
+                        "required": [
+                          "_tag",
+                          "reason"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "failure"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "Malformed"
+                        ]
+                      },
+                      "issue": {
+                        "$ref": "#/definitions/DescriptorIssue"
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "issue"
+                    ],
+                    "additionalProperties": true
+                  }
+                ]
+              }
+            },
+            "required": [
+              "code",
+              "severity",
+              "path",
+              "reason"
+            ],
+            "additionalProperties": true
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "EXAMPLE_PATH_IDENTITY_MISMATCH"
+                ]
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "warning",
+                  "error"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "skill": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "directorySkill": {
+                "type": "string"
+              },
+              "directoryId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "severity",
+              "path",
+              "skill",
+              "id",
+              "directorySkill",
+              "directoryId"
+            ],
+            "additionalProperties": true
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "EXAMPLE_SKILL_UNKNOWN"
+                ]
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "warning",
+                  "error"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "skill": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "severity",
+              "path",
+              "skill"
+            ],
+            "additionalProperties": true
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "EXAMPLE_ID_DUPLICATE"
+                ]
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "warning",
+                  "error"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "skill": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "severity",
+              "path",
+              "skill",
+              "id"
+            ],
+            "additionalProperties": true
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "EXAMPLE_PROMPT_MISSING"
+                ]
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "warning",
+                  "error"
+                ]
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "severity",
+              "path"
+            ],
+            "additionalProperties": true
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "EXAMPLE_FIXTURE_MISSING"
+                ]
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "warning",
+                  "error"
+                ]
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "severity",
+              "path"
+            ],
+            "additionalProperties": true
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "EXAMPLE_SCREENSHOT_MISSING"
+                ]
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "warning",
+                  "error"
+                ]
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "severity",
+              "path"
+            ],
+            "additionalProperties": true
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "EXAMPLE_SCREENSHOT_MEDIA_INVALID"
+                ]
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "warning",
+                  "error"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "mediaType": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "severity",
+              "path",
+              "mediaType"
+            ],
+            "additionalProperties": true
+          }
+        ]
+      }
+    },
+    "audits": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "ruleset": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "enum": [
+                  "skit/skill-static-audit"
+                ]
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "version"
+            ],
+            "additionalProperties": true
+          },
+          "declaredCapabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "inferredCapabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "undeclaredCapabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "triggerBreadth": {
+            "type": "string",
+            "enum": [
+              "explicit_only",
+              "narrow",
+              "broad",
+              "unbounded",
+              "unknown"
+            ]
+          },
+          "authorityEffect": {
+            "type": "string",
+            "enum": [
+              "none",
+              "narrows",
+              "expands",
+              "unknown"
+            ]
+          },
+          "confirmationEffect": {
+            "type": "string",
+            "enum": [
+              "none",
+              "requires",
+              "suppresses",
+              "unknown"
+            ]
+          },
+          "riskFlags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "truncatedEvidence": {
+            "type": "object",
+            "properties": {
+              "critical": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "nonCriticalCapabilities": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "critical",
+              "nonCriticalCapabilities"
+            ],
+            "additionalProperties": true
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "fingerprint": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                },
+                "analysisProfile": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "enum": [
+                        "skit/finding/v1"
+                      ]
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "skill_artifact",
+                        "audited_file"
+                      ]
+                    },
+                    "acceptanceEligible": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "scope",
+                    "acceptanceEligible"
+                  ],
+                  "additionalProperties": true
+                },
+                "artifactContentHash": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                },
+                "ruleId": {
+                  "type": "string"
+                },
+                "evidence": {
+                  "type": "string",
+                  "enum": [
+                    "declared",
+                    "deterministically_observed",
+                    "statically_possible",
+                    "model_suspected",
+                    "not_analyzed"
+                  ]
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "info",
+                    "low",
+                    "medium",
+                    "high",
+                    "critical"
+                  ]
+                },
+                "confidence": {
+                  "type": "string",
+                  "enum": [
+                    "low",
+                    "medium",
+                    "high"
+                  ]
+                },
+                "capability": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "line": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "column": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "excerpt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "line",
+                    "column",
+                    "excerpt"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "analysisProfile",
+                "artifactContentHash",
+                "ruleId",
+                "evidence",
+                "severity",
+                "confidence",
+                "location"
+              ],
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": [
+          "ruleset",
+          "declaredCapabilities",
+          "inferredCapabilities",
+          "undeclaredCapabilities",
+          "triggerBreadth",
+          "authorityEffect",
+          "confirmationEffect",
+          "riskFlags",
+          "truncatedEvidence",
+          "findings"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "assessments": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "context": {
+            "type": "string",
+            "enum": [
+              "author",
+              "import",
+              "project",
+              "publish"
+            ]
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "warn",
+              "block"
+            ]
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "ruleIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "capabilityIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "code",
+                "ruleIds",
+                "capabilityIds"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "findingDecisions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "fingerprint": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                },
+                "ruleId": {
+                  "type": "string"
+                },
+                "disposition": {
+                  "type": "string",
+                  "enum": [
+                    "unresolved",
+                    "accepted"
+                  ]
+                },
+                "acceptance": {
+                  "type": "object",
+                  "properties": {
+                    "fingerprint": {
+                      "type": "string",
+                      "pattern": "^sha256:[a-f0-9]{64}$"
+                    },
+                    "artifactContentHash": {
+                      "type": "string",
+                      "pattern": "^sha256:[a-f0-9]{64}$"
+                    },
+                    "skill_version_id": {
+                      "type": "string"
+                    },
+                    "context": {
+                      "type": "string",
+                      "enum": [
+                        "project"
+                      ]
+                    },
+                    "principal": {
+                      "type": "string"
+                    },
+                    "rationale": {
+                      "type": "string"
+                    },
+                    "acceptedAt": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "fingerprint",
+                    "artifactContentHash",
+                    "skill_version_id",
+                    "context",
+                    "principal",
+                    "rationale",
+                    "acceptedAt"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "fingerprint",
+                "ruleId",
+                "disposition"
+              ],
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": [
+          "context",
+          "outcome",
+          "reasons",
+          "findingDecisions"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "valid",
+    "status",
+    "identity",
+    "diagnostics",
+    "audits",
+    "assessments"
+  ],
+  "additionalProperties": true,
+  "definitions": {
+    "SchemaIssueFact": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          }
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "MissingKey"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "UnexpectedKey"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "InvalidType"
+                  ]
+                },
+                "expected": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "Declaration",
+                          "Null",
+                          "Undefined",
+                          "Void",
+                          "Never",
+                          "Unknown",
+                          "Any",
+                          "String",
+                          "Number",
+                          "Boolean",
+                          "BigInt",
+                          "Symbol",
+                          "Literal",
+                          "UniqueSymbol",
+                          "ObjectKeyword",
+                          "Enum",
+                          "TemplateLiteral",
+                          "Arrays",
+                          "Objects",
+                          "Union",
+                          "Suspend"
+                        ]
+                      },
+                      "values": {
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": true
+                  }
+                }
+              },
+              "required": [
+                "_tag",
+                "expected"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "InvalidValue"
+                  ]
+                },
+                "check": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "payload": {}
+                  },
+                  "required": [
+                    "id",
+                    "payload"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "Forbidden"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "OneOf"
+                  ]
+                },
+                "matches": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "_tag",
+                "matches"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "SchemaFailureEncoded": {
+      "type": "object",
+      "properties": {
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SchemaIssueFact"
+          }
+        }
+      },
+      "required": [
+        "issues"
+      ],
+      "additionalProperties": true
+    },
+    "DescriptorIssue": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "JsonSyntax"
+              ]
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "line": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "column": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "YamlSyntax"
+              ]
+            },
+            "errors": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "ALIAS_PROPS",
+                      "BAD_ALIAS",
+                      "BAD_DIRECTIVE",
+                      "BAD_DQ_ESCAPE",
+                      "BAD_INDENT",
+                      "BAD_PROP_ORDER",
+                      "BAD_SCALAR_START",
+                      "BLOCK_AS_IMPLICIT_KEY",
+                      "BLOCK_IN_FLOW",
+                      "DUPLICATE_KEY",
+                      "IMPOSSIBLE",
+                      "KEY_OVER_1024_CHARS",
+                      "MISSING_CHAR",
+                      "MULTILINE_IMPLICIT_KEY",
+                      "MULTIPLE_ANCHORS",
+                      "MULTIPLE_DOCS",
+                      "MULTIPLE_TAGS",
+                      "NON_STRING_KEY",
+                      "RESOURCE_EXHAUSTION",
+                      "TAB_AS_INDENT",
+                      "TAG_RESOLVE_FAILED",
+                      "UNEXPECTED_TOKEN",
+                      "BAD_COLLECTION_TYPE"
+                    ]
+                  },
+                  "start": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "line": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "column": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "code",
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": true
+              }
+            }
+          },
+          "required": [
+            "_tag",
+            "errors"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "YamlValue"
+              ]
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "Schema"
+              ]
+            },
+            "failure": {
+              "$ref": "#/definitions/SchemaFailureEncoded"
+            }
+          },
+          "required": [
+            "_tag",
+            "failure"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

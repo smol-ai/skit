@@ -235,7 +235,7 @@ it.effect("changed historical source bytes fail before retaining available priva
     assert.strictEqual(error._tag, "Library.SyncSourceRestoreInvalid");
     if (error._tag === "Library.SyncSourceRestoreInvalid") {
       assert.strictEqual(error.hash, f.source.snapshotDigest);
-      assert.include(error.detail, "source returned");
+      assert.strictEqual(error.reason._tag, "HashMismatch");
     }
     assert.strictEqual(yield* f.fs.exists(f.originalsPath), false);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -247,8 +247,11 @@ it.effect("an unavailable pinned source fails before retaining available private
     f.unavailable();
     const error = yield* f.restore().pipe(Effect.flip);
     assert.strictEqual(error._tag, "Library.SyncSourceRestoreInvalid");
-    if (error._tag === "Library.SyncSourceRestoreInvalid")
-      assert.instanceOf(error.cause, SourceNotFound);
+    if (error._tag === "Library.SyncSourceRestoreInvalid") {
+      assert.strictEqual(error.reason._tag, "SourceFetchFailed");
+      if (error.reason._tag === "SourceFetchFailed")
+        assert.instanceOf(error.reason.failure, SourceNotFound);
+    }
     assert.strictEqual(yield* f.fs.exists(f.originalsPath), false);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -454,7 +457,7 @@ it.effect("public staging refuses inconsistent member hashes before content reus
     }).pipe(Effect.flip);
     assert.strictEqual(error._tag, "Library.RestoreInvalid");
     if (error._tag === "Library.RestoreInvalid")
-      assert.strictEqual(error.detail, "invalid target manifest");
+      assert.strictEqual(error.reason._tag, "StateInvalid");
     assert.deepStrictEqual(f.requests, []);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

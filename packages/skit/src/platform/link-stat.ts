@@ -71,7 +71,7 @@ export const FileIdentityNumber = Schema.BigIntFromString;
 export const LegacyFileIdentityNumber = Schema.Int.pipe(
   Schema.decodeTo(Schema.BigInt, {
     decode: SchemaGetter.transform((value: number) => BigInt(value)),
-    encode: SchemaGetter.forbidden(() => "device and inode numbers are saved as text"),
+    encode: SchemaGetter.forbiddenEncoding,
   }),
 );
 

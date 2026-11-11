@@ -1,5 +1,7 @@
+import { SyncInputInvalid } from "@smolai/skit-core/library/sync/failures";
+import { classifyFailure } from "../src/commands/failure-classification.js";
 import { assert, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Result, Schema } from "effect";
 import { join } from "node:path";
 import { devices } from "./helpers/library-sync-devices.js";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -74,7 +76,12 @@ it.effect("remote removal reports a missing device choice without silently pruni
       assert.strictEqual(result.status, "enablement_incomplete");
       if (result.status === "enablement_incomplete")
         assert.isTrue(
-          result.enablement_issues?.some((issue) => issue.includes("no longer in the Library")),
+          result.enablement_issues?.some(
+            (issue) =>
+              issue._tag === "SelectionMissing" &&
+              "skill" in issue.selection &&
+              first.skills.map((skill) => skill.skill_id).includes(issue.selection.skill),
+          ),
         );
       const state = yield* b.state;
       assert.deepStrictEqual(state.device_skill_selection, selected);
@@ -213,8 +220,12 @@ it.effect("an unmanaged symlinked copy blocks enablement after the Library is re
     assert.strictEqual(result.status, "enablement_incomplete");
     if (result.status === "enablement_incomplete")
       assert.isTrue(
-        result.enablement_issues!.some((issue) =>
-          issue.includes(join(account, ".codex", "skills", "first")),
+        result.enablement_issues!.some(
+          (issue) =>
+            issue._tag === "ExistingCopy" &&
+            issue.copy.aliases.some(
+              (alias) => alias.path === join(account, ".codex", "skills", "first"),
+            ),
         ),
       );
     assert.strictEqual((yield* b.state).skills.length, 1);
@@ -250,4 +261,76 @@ it.effect("a whole-collection choice follows membership while an individual does
     assert.isFalse(yield* fs.exists(join(b.root, "new-member")));
     assert.isTrue(yield* fs.exists(join(c.root, "new-member", "SKILL.md")));
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect(
+  "refuses unknown or ambiguous device choices with matching identities and no state changes",
+  () =>
+    Effect.gen(function* () {
+      const { a, b, remote } = yield* devices;
+      const first = yield* a.importSource("one", { name: "shared" });
+      const second = yield* a.importSource("two", { name: "shared" });
+      yield* a.sync();
+      yield* b.sync();
+      const before = yield* b.state;
+      const head = yield* remote;
+      for (const [selection, reason] of [
+        [
+          { skills: ["missing"], collections: [] },
+          { _tag: "SkillSelectionNotUnique", query: "missing", matches: [] },
+        ],
+        [
+          { skills: [], collections: ["missing"] },
+          { _tag: "CollectionSelectionNotUnique", query: "missing", matches: [] },
+        ],
+        [
+          { skills: ["shared"], collections: [] },
+          {
+            _tag: "SkillSelectionNotUnique",
+            query: "shared",
+            matches: [
+              { id: first.skills[0]!.skill_id, name: "shared" },
+              { id: second.skills[0]!.skill_id, name: "shared" },
+            ],
+          },
+        ],
+      ] as const) {
+        const result = yield* Effect.result(b.sync({ deviceSelection: selection }));
+        assert.ok(Result.isFailure(result));
+        if (Result.isFailure(result)) {
+          assert.ok(Schema.is(SyncInputInvalid)(result.failure));
+          if (Schema.is(SyncInputInvalid)(result.failure)) {
+            // Matching identities survive storage without depending on an error sentence.
+            const wire = Schema.encodeSync(Schema.toCodecJson(SyncInputInvalid))(result.failure);
+            const decoded = Schema.decodeUnknownSync(SyncInputInvalid)(
+              JSON.parse(JSON.stringify(wire)),
+            );
+            assert.deepStrictEqual(decoded.reason, reason);
+            assert.ok(!JSON.stringify(wire).includes('"message"'));
+            assert.ok(classifyFailure(decoded).message.includes(reason.query));
+          }
+        }
+        assert.deepStrictEqual(yield* b.state, before);
+        assert.deepStrictEqual(yield* remote, head);
+      }
+      const combined = yield* Effect.result(
+        b.sync({
+          deviceSelection: { skills: [], collections: [] },
+          keepEnabled: [first.skills[0]!.skill_id],
+        }),
+      );
+      assert.ok(Result.isFailure(combined));
+      if (Result.isFailure(combined)) {
+        assert.ok(Schema.is(SyncInputInvalid)(combined.failure));
+        if (Schema.is(SyncInputInvalid)(combined.failure)) {
+          assert.deepStrictEqual(combined.failure.reason, {
+            _tag: "AccountEnabledListWithDeviceSelection",
+            keepEnabled: [first.skills[0]!.skill_id],
+          });
+          assert.ok(classifyFailure(combined.failure).message.includes("--keep-enabled"));
+        }
+      }
+      assert.deepStrictEqual(yield* b.state, before);
+      assert.deepStrictEqual(yield* remote, head);
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

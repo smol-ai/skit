@@ -47,10 +47,10 @@ export const previewSyncInstalledSkills = Effect.fn("Library.sync.planInstalledS
       enabledSkillIds(manifest, repository.enabled).includes(skill.skill_id),
     );
     (deferDeviceConflicts && !repositorySelected ? issues : conflicts).push(
-      SyncConflictDetail.make({
+      SyncConflictDetail.cases.MissingSkillVersion.make({
         key: `skill:${skill.skill_id}:no-selected-version`,
-        message: `${skill.name} has no selected retained Version. Update it or disable its Binding before syncing.`,
         resolution: "local",
+        name: skill.name,
       }),
     );
   }
@@ -64,10 +64,10 @@ export const previewSyncInstalledSkills = Effect.fn("Library.sync.planInstalledS
     )
       continue;
     conflicts.push(
-      SyncConflictDetail.make({
+      SyncConflictDetail.cases.RepositoryEnabledInvalid.make({
         key: `device:${repository.root}:repository-binding`,
-        message: `The repository at ${repository.root} still enables something removed. Disable it there before syncing.`,
         resolution: "local",
+        root: repository.root,
       }),
     );
   }
@@ -112,14 +112,18 @@ export const previewSyncInstalledSkills = Effect.fn("Library.sync.planInstalledS
           !missingVersion
         ) {
           issues.push(
-            SyncConflictDetail.make({
+            SyncConflictDetail.cases.InstalledSkillChanged.make({
               key: `device:${original.installed_skill_id}:modified-projection`,
-              message: `Cannot retire modified Skill at ${original.path}. Save the edited directory outside the skills directory, then restore the managed copy before retrying.`,
               resolution: "local",
+              path: original.path,
             }),
           );
           installedSkills.push(
-            InstalledSkillStatus.conflicted(installedSkill, ownership.currentHash),
+            InstalledSkillStatus.conflicted(
+              installedSkill,
+              ownership.currentHash,
+              ownership.conflicts,
+            ),
           );
           continue;
         }
@@ -139,15 +143,16 @@ export const previewSyncInstalledSkills = Effect.fn("Library.sync.planInstalledS
                 ? { ...installedSkill, skill_version_id: selected.skill_version_id }
                 : installedSkill,
               ownership.currentHash,
+              ownership.conflicts,
             ),
           );
           continue;
         }
         conflicts.push(
-          SyncConflictDetail.make({
+          SyncConflictDetail.cases.InstalledSkillChanged.make({
             key: `device:${original.installed_skill_id}:modified-projection`,
-            message: `Sync would replace or remove ${original.path}, whose bytes or ownership changed. Save the edited directory outside the skills directory, then restore the managed copy before syncing.`,
             resolution: "local",
+            path: original.path,
           }),
         );
         installedSkills.push(installedSkill);
@@ -161,10 +166,10 @@ export const previewSyncInstalledSkills = Effect.fn("Library.sync.planInstalledS
     }
     if (missingVersion && selected === undefined) {
       conflicts.push(
-        SyncConflictDetail.make({
+        SyncConflictDetail.cases.MissingInstalledSkillVersion.make({
           key: `device:${original.installed_skill_id}:managed-projection`,
-          message: `No retained Version can replace ${original.path}.`,
           resolution: "local",
+          path: original.path,
         }),
       );
       installedSkills.push(installedSkill);

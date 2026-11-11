@@ -25,7 +25,8 @@ import { sourceImports } from "../../library-contracts.js";
 import { makeOperationId, type CollectionId } from "../../entity-ids.js";
 import * as MachineSettings from "../../machine-settings.js";
 import { recoveryOperationDirectory } from "../recovery/moves.js";
-import { RecoveryInvalid } from "../../recovery-facts.js";
+import { RecoveryInvalid } from "../../store/operation-failures.js";
+import { type UndoConflict } from "../../recovery-facts.js";
 import {
   planUndoFiles,
   installedSkillChoice,
@@ -41,7 +42,7 @@ const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonic
 interface SetupRecord extends SetupChanges {
   readonly before: SetupIntent;
   readonly after: SetupIntent;
-  readonly conflicts: readonly string[];
+  readonly conflicts: readonly UndoConflict[];
   readonly evidence: unknown;
 }
 
@@ -131,20 +132,18 @@ const recordedSetup = Effect.fn("SetupUndo.recordedSetup")(function* (operation:
         .map((copy) => copy.path),
     ),
     conflicts: operation.steps.some(({ step }) => step._tag === "Restore" || step._tag === "Undo")
-      ? ["Recovery Restore and Undo records cannot themselves be undone by setup undo."]
+      ? [{ _tag: "UnsupportedOperation", kind: "recovery" }]
       : operation.steps.some(({ step }) => step._tag === "Apply")
-        ? [
-            "Recorded Library changes support startup recovery; use the corresponding Library command to change them.",
-          ]
+        ? [{ _tag: "UnsupportedOperation", kind: "apply" }]
         : operation.steps.some(({ step }) => step._tag === "Sync")
-          ? [
-              "Sync records support startup recovery. Undo cannot reverse their remote publication; review bindings and sync again.",
-            ]
+          ? [{ _tag: "UnsupportedOperation", kind: "sync" }]
           : operation._tag === "Pending"
-            ? ["Setup has not finished. Run any SKIT command to finish or stop it, then undo it."]
+            ? [{ _tag: "UnsupportedOperation", kind: "pending" }]
             : [],
     evidence: yield* Schema.encodeEffect(OperationStatus)(operation).pipe(
-      Effect.mapError(() => new RecoveryInvalid({ detail: "Invalid recorded setup evidence" })),
+      Effect.mapError(
+        () => new RecoveryInvalid({ reason: { _tag: "InvalidData", record: "setup-evidence" } }),
+      ),
     ),
   } satisfies SetupRecord;
 });
@@ -159,13 +158,17 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
   const state = inspected.present ? inspected.state : emptyLibraryState();
   const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
     state.operations,
-  ).pipe(Effect.mapError(() => new RecoveryInvalid({ detail: "Invalid setup record" })));
+  ).pipe(
+    Effect.mapError(
+      () => new RecoveryInvalid({ reason: { _tag: "InvalidData", record: "setup-record" } }),
+    ),
+  );
   const recorded = operations.find((operation) => operation.operationId === operationId);
   if (!/^[a-zA-Z0-9_-]+$/.test(operationId))
-    return yield* new RecoveryInvalid({ detail: "Invalid operation identifier" });
+    return yield* new RecoveryInvalid({ reason: { _tag: "InvalidData", record: "operation-id" } });
   if (recorded === undefined)
     return yield* new RecoveryInvalid({
-      detail: `Setup ${operationId} has no undo record: a later setup replaced it`,
+      reason: { _tag: "MissingRecord", record: "undo-record", at: operationId },
     });
   const setup = yield* recordedSetup(recorded);
   const priorBackups: string[] = [];
@@ -180,7 +183,7 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
   const done = undoRecords.some((item) => item.operation._tag === "Done");
   // Only identity is needed for a new source-import observation. Settings undo stays with its owner.
   const machineId = (yield* MachineSettings.read(home)).machineId;
-  const conflicts: string[] = [...setup.conflicts];
+  const conflicts: UndoConflict[] = [...setup.conflicts];
   const sources = done
     ? { conflicts: [], evidence: [], restorations: [] }
     : yield* prepareSetupSourceUndo(
@@ -283,14 +286,16 @@ export const planUndo = Effect.fn("Library.planUndo")(function* (
   const observations = new Map<CollectionId, UndoSourceImport>();
   const current = yield* readUndo(home, intent.operationId, observations);
   if (current.baseRevision !== options.base.revision)
-    return yield* new StalePlan({ message: "The Library changed after undo was reviewed" });
+    return yield* new StalePlan({ reason: { _tag: "LibraryChanged" } });
   return planOf(current, basename(backupDirectory), observations);
 }, Effect.scoped);
 
 /** Recompute the review under the writer, record the inverse, restore files, then publish it. */
 export const applyUndo = Effect.fn("Library.applyUndo")(function* (home: string, input: UndoPlan) {
   const approved = yield* Schema.decodeEffect(UndoPlan)(structuredClone(input)).pipe(
-    Effect.mapError(() => new RecoveryInvalid({ detail: "Invalid undo plan" })),
+    Effect.mapError(
+      () => new RecoveryInvalid({ reason: { _tag: "InvalidData", record: "undo-plan" } }),
+    ),
   );
   const observations = new Map<CollectionId, UndoSourceImport>(
     approved.observations.map(({ collectionId, ...value }) => [collectionId, value]),
@@ -301,14 +306,18 @@ export const applyUndo = Effect.fn("Library.applyUndo")(function* (home: string,
       Effect.gen(function* () {
         const current = yield* readUndo(home, approved.intent.operationId, observations);
         if (!equal(planOf(current, approved.backupId, observations), approved))
-          return yield* new StalePlan({ message: "Undo evidence changed after it was reviewed" });
+          return yield* new StalePlan({ reason: { _tag: "EvidenceChanged", kind: "undo" } });
         const change = { ...current.summary, next: current.next };
         if (current.summary.status === "already-undone")
           return { _tag: "AlreadyUndone", change } satisfies UndoResult;
         if (current.summary.conflicts.length)
-          return yield* new RecoveryInvalid({ detail: current.summary.conflicts.join("; ") });
+          return yield* new RecoveryInvalid({
+            reason: { _tag: "Conflicts", conflicts: current.summary.conflicts },
+          });
         if (!current.files)
-          return yield* new RecoveryInvalid({ detail: "Missing reviewed Undo files" });
+          return yield* new RecoveryInvalid({
+            reason: { _tag: "MissingRecord", record: "undo-files" },
+          });
         const { operations: _beforeOperations, ...before } = current.state;
         const { operations: _afterOperations, ...after } = current.next;
         const program: UndoProgram = {
@@ -331,7 +340,12 @@ export const applyUndo = Effect.fn("Library.applyUndo")(function* (home: string,
         });
         if (result._tag === "Stopped")
           return yield* new RecoveryInvalid({
-            detail: `Recorded Undo ${result.operationId} stopped: ${result.reason._tag === "StepFailed" ? result.reason.error.message : result.reason._tag}. Review Library history before trying again`,
+            reason: {
+              _tag: "OperationStopped",
+              operation: "Undo",
+              operationId: result.operationId,
+              reason: result.reason,
+            },
           });
         return { _tag: "Undone", change, backupId: approved.backupId } satisfies UndoResult;
       }),

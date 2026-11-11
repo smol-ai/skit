@@ -1,3 +1,4 @@
+import { defineCommand } from "./definition.js";
 import { syncOutputContracts, librarySyncCommand } from "../library/sync.js";
 import { Registry } from "../registry/index.js";
 import { Effect } from "effect";
@@ -13,6 +14,10 @@ import { localFlags, optionalString } from "./parameters.js";
 import { Renderer } from "../terminal/renderer.js";
 import { encodeResult as result } from "./encode-result.js";
 import { OptionCombinationInvalid } from "./input-failures.js";
+
+const applySelectionRule = "Changing device selection requires --apply.";
+
+const selectionRule = "Choose either --follow-account or a device selection.";
 
 const apply = Flag.Boolean("apply").pipe(
   Flag.withDescription("Apply the current sync plan."),
@@ -53,7 +58,7 @@ const followAccount = Flag.Boolean("follow-account").pipe(
   Flag.withDefault(false),
 );
 
-export const librarySyncCliCommand = Command.make(
+export const librarySyncCliCommand = defineCommand(
   "sync",
   {
     apply,
@@ -71,13 +76,22 @@ export const librarySyncCliCommand = Command.make(
       const renderer = yield* Renderer;
       const choosing =
         input.deviceOnly || input.deviceSkill.length > 0 || input.deviceCollection.length > 0;
+      const selectionOptions = [
+        ...(input.deviceOnly ? ["--device-only"] : []),
+        ...(input.deviceSkill.length ? ["--device-skill"] : []),
+        ...(input.deviceCollection.length ? ["--device-collection"] : []),
+      ];
       if (input.followAccount && choosing)
         return yield* new OptionCombinationInvalid({
-          detail: "Choose either --follow-account or a device selection.",
+          reason: { _tag: "OptionConflicts", option: "--follow-account", others: selectionOptions },
         });
       if ((input.followAccount || choosing) && !input.apply)
         return yield* new OptionCombinationInvalid({
-          detail: "Changing device selection requires --apply.",
+          reason: {
+            _tag: "RequiresOption",
+            options: [...(input.followAccount ? ["--follow-account"] : []), ...selectionOptions],
+            required: "--apply",
+          },
         });
       const authState = yield* Registry.librarySyncAccount(input.registry).pipe(Effect.result);
       const value = yield* librarySyncCommand({
@@ -96,23 +110,13 @@ export const librarySyncCliCommand = Command.make(
               }
             : {}),
       });
-      yield* renderer.result(
-        result(
-          "librarySync",
-          syncOutputContracts.librarySync,
-          value,
-          value.status === "conflicted" ||
-            value.status === "resolution_invalid" ||
-            value.status === "enablement_incomplete"
-            ? 12
-            : undefined,
-        ),
-      );
+      yield* renderer.result(result("librarySync", syncOutputContracts.librarySync, value));
     }),
 ).pipe(
   Command.withDescription("Sync your Library with skit-server."),
   Command.withExamples([{ command: "skit sync" }, { command: "skit sync --apply" }]),
   Command.annotate(CommandMetadata, {
+    handlerRules: [selectionRule, applySelectionRule],
     effects: {
       capabilities: [
         "filesystem.read",
@@ -124,7 +128,6 @@ export const librarySyncCliCommand = Command.make(
       subprocesses: [...sourceFetchSubprocesses, ...credentialStoreReadSubprocesses],
     },
     outputSchemas: [syncOutputContracts.librarySync],
-    exitCodes: [0, 11, 12, 13, 64, 65],
     interactive: false,
   }),
 );

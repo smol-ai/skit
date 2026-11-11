@@ -1,3 +1,4 @@
+import { defineCommand } from "./definition.js";
 import { Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
 import { Renderer } from "../terminal/renderer.js";
@@ -9,14 +10,17 @@ import { inspectLibrarySource } from "../library/source.js";
 import { localFlags } from "./parameters.js";
 import { encodeResult as result } from "./encode-result.js";
 
-const subject = Argument.String("skill-or-collection").pipe(Argument.optional);
+const subject = Argument.String("skill-or-collection").pipe(
+  Argument.withDescription("Skill or Collection Reference to check; omit it to check the Library."),
+  Argument.optional,
+);
 
-export const checkCliCommand = Command.make("check", { subject, ...localFlags }, (input) =>
+export const checkCliCommand = defineCommand("check", { subject, ...localFlags }, (input) =>
   Effect.gen(function* () {
     const renderer = yield* Renderer;
     const library = yield* Library.Service;
     const value = yield* renderer.withStatus(
-      "Checking retained Collections",
+      "Checking Collections in the Library",
       library.check(Option.getOrUndefined(input.subject), {
         inspectSource: inspectLibrarySource,
         onCollection: (collection) => renderer.updateStatus(`Checking ${collection.display_name}`),
@@ -40,7 +44,6 @@ export const checkCliCommand = Command.make("check", { subject, ...localFlags },
       ],
     },
     outputSchemas: [checkOutputContracts.check],
-    exitCodes: [0, 11, 12, 64, 65],
     interactive: false,
   }),
 );

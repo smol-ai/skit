@@ -420,10 +420,20 @@ export function mergeLibraryManifests(
         ),
     ),
   ];
-  if (conflicts.length === 0 && Result.isFailure(Schema.decodeResult(LibraryManifest)(manifest)))
-    conflicts.push("manifest:invariants");
+  const validation =
+    conflicts.length === 0 ? Schema.decodeResult(LibraryManifest)(manifest) : undefined;
+  const manifestConflict =
+    validation !== undefined && Result.isFailure(validation)
+      ? SyncConflictDetail.cases.LibraryInvalid.make({
+          key: "manifest:invariants",
+          resolution: "local",
+          failure: validation.failure,
+        })
+      : undefined;
+  if (manifestConflict !== undefined) conflicts.push(manifestConflict.key);
   return {
     manifest,
+    manifestConflict,
     conflicts: [...new Set(conflicts)].sort(),
     unresolvable,
     enabledResolution: enabled.resolvedCollections.length
@@ -442,33 +452,50 @@ export function mergeLibraryManifests(
   };
 }
 
+/**
+ * Name each conflict for a person. A conflicting record is held out of the merged Library, so its
+ * name comes from whichever side still has it.
+ */
 function describeLibraryMergeConflicts(
   conflicts: readonly string[],
   manifest: LibraryManifest,
+  sides: readonly LibraryManifest[],
+  manifestConflict: ReturnType<typeof mergeLibraryManifests>["manifestConflict"],
   unresolvable: readonly string[] = [],
 ) {
-  const decoded = Schema.decodeResult(LibraryManifest)(manifest);
-  const invalid = Result.isFailure(decoded) ? decoded.failure.message : "Invalid merged Library";
-  return conflicts.map((key) => {
-    const collection = manifest.collections.find(
-      (item) => key === `collection:${item.collection_id}`,
-    );
-    const skill = manifest.skills.find((item) => key === `skill:${item.skill_id}`);
-    return SyncConflictDetail.make({
-      key,
-      message: unresolvable.includes(key)
-        ? `${collection?.label ?? key} has divergent Source observations and local content that cannot be discarded safely. Preserve the local edit or unpinned Acquisition before syncing; this conflict cannot be taken remotely.`
-        : key === "manifest:invariants"
-          ? `${invalid}. No changes were applied. This diagnostic cannot be taken remotely; reconcile the named records before syncing.`
-          : key.startsWith("collection:")
-            ? `${collection?.label ?? key} has incompatible Source observations, changed on both devices, or was removed while its content changed. --take-remote ${key} takes the remote Collection choice and its dependent records, including its Acquisition and Version history, and replaces this Collection's follow and enablement choices with remote's.`
-            : key.startsWith("skill:")
-              ? `${skill?.name ?? key} differs between devices. --take-remote ${key} selects the remote Skill record.`
-              : `Both devices changed ${key}. Resolve with --take-remote ${key}.`,
-      resolution:
-        key === "manifest:invariants" || unresolvable.includes(key) ? "local" : "take-remote",
-    });
-  });
+  const named = [manifest, ...sides];
+  return [
+    ...(manifestConflict === undefined ? [] : [manifestConflict]),
+    ...conflicts
+      .filter((key) => key !== manifestConflict?.key)
+      .map((key) => {
+        const collection = named
+          .flatMap((library) => library.collections)
+          .find((item) => key === `collection:${item.collection_id}`);
+        const skill = named
+          .flatMap((library) => library.skills)
+          .find((item) => key === `skill:${item.skill_id}`);
+        if (unresolvable.includes(key))
+          return SyncConflictDetail.cases.CollectionChanged.make({
+            key,
+            resolution: "local",
+            label: collection?.label ?? key,
+          });
+        if (key.startsWith("collection:"))
+          return SyncConflictDetail.cases.CollectionChanged.make({
+            key,
+            resolution: "take-remote",
+            label: collection?.label ?? key,
+          });
+        if (key.startsWith("skill:"))
+          return SyncConflictDetail.cases.SkillChanged.make({
+            key,
+            resolution: "take-remote",
+            name: skill?.name ?? key,
+          });
+        return SyncConflictDetail.cases.RecordChanged.make({ key, resolution: "take-remote" });
+      }),
+  ];
 }
 
 type MergePreparation = Data.TaggedEnum<{
@@ -517,6 +544,8 @@ export const prepareLibraryMerge = Effect.fn("Library.prepareMerge")(function* (
   const available = describeLibraryMergeConflicts(
     preliminary.conflicts,
     preliminary.manifest,
+    [alignedLocal, input.remote],
+    preliminary.manifestConflict,
     preliminary.unresolvable,
   );
   if (
@@ -542,6 +571,8 @@ export const prepareLibraryMerge = Effect.fn("Library.prepareMerge")(function* (
       conflicts: describeLibraryMergeConflicts(
         merged.conflicts,
         merged.manifest,
+        [alignedLocal, input.remote],
+        merged.manifestConflict,
         merged.unresolvable,
       ),
     });

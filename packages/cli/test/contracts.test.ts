@@ -98,9 +98,11 @@ describe("generated command contracts", () => {
     expect(encodeResult("enablePlan", enableOutputContracts.enablePlan, enabled)).toEqual(
       result("enablePlan", enabled),
     );
-    // The payload schema is shared, but another contract's envelope ID cannot label this result.
-    // @ts-expect-error a disable definition cannot encode an enable result
-    encodeResult("enablePlan", enableOutputContracts.disablePlan, enabled);
+    // A disable definition rejects an enable result, in its types and when encoding.
+    expect(() =>
+      // @ts-expect-error a disable definition cannot encode an enable result
+      encodeResult("enablePlan", enableOutputContracts.disablePlan, enabled),
+    ).toThrow();
     expect(() =>
       Schema.decodeSync(outputContracts.registryRemote.schema)({
         name: "public",

@@ -1,4 +1,4 @@
-import { RecoveryInvalid } from "../../recovery-facts.js";
+import { RecoveryInvalid } from "../../store/operation-failures.js";
 import { Effect } from "effect";
 import { recoveryFingerprint as libraryFingerprint } from "../../folder-evidence.js";
 
@@ -6,6 +6,6 @@ import { recoveryFingerprint as libraryFingerprint } from "../../folder-evidence
 export const recoveryFingerprint = (root: string, ownership: "include" | "exclude" = "include") =>
   libraryFingerprint(root, ownership).pipe(
     Effect.catchTag("TreeError", (error) =>
-      Effect.fail(new RecoveryInvalid({ detail: error.message })),
+      Effect.fail(new RecoveryInvalid({ reason: { _tag: "InvalidTree", reason: error.reason } })),
     ),
   );

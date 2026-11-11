@@ -5,6 +5,54 @@
     "subject_id": {
       "type": "string"
     },
+    "collection_label": {
+      "type": "string"
+    },
+    "collection_source": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "github",
+            "git",
+            "registry",
+            "url",
+            "archive",
+            "local",
+            "authored-workspace",
+            "well-known"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "locator": {
+          "type": "string"
+        },
+        "authority": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        },
+        "workspace_status": {
+          "type": "string",
+          "enum": [
+            "connected",
+            "unconnected",
+            "unavailable",
+            "identity-mismatch"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "locator"
+      ],
+      "additionalProperties": true
+    },
     "skills": {
       "type": "array",
       "items": {
@@ -52,7 +100,6 @@
     "action": {
       "type": "string",
       "enum": [
-        "enable",
         "disable"
       ]
     },
@@ -154,13 +201,123 @@
           "path": {
             "type": "string"
           },
-          "message": {
-            "type": "string"
+          "reason": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "_tag": {
+                    "type": "string",
+                    "enum": [
+                      "EntryLimitExceeded"
+                    ]
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "count": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "_tag",
+                  "limit",
+                  "count"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_tag": {
+                    "type": "string",
+                    "enum": [
+                      "Unreadable"
+                    ]
+                  },
+                  "error": {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "PlatformError"
+                        ]
+                      },
+                      "reason": {
+                        "type": "object",
+                        "properties": {
+                          "_tag": {
+                            "type": "string",
+                            "enum": [
+                              "AlreadyExists",
+                              "BadResource",
+                              "Busy",
+                              "InvalidData",
+                              "NotFound",
+                              "PermissionDenied",
+                              "TimedOut",
+                              "UnexpectedEof",
+                              "Unknown",
+                              "WouldBlock",
+                              "WriteZero",
+                              "BadArgument"
+                            ]
+                          },
+                          "module": {
+                            "type": "string"
+                          },
+                          "method": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "syscall": {
+                            "type": "string"
+                          },
+                          "pathOrDescriptor": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "_tag",
+                          "module",
+                          "method"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "reason"
+                    ],
+                    "additionalProperties": true
+                  }
+                },
+                "required": [
+                  "_tag",
+                  "error"
+                ],
+                "additionalProperties": true
+              }
+            ]
           }
         },
         "required": [
           "path",
-          "message"
+          "reason"
         ],
         "additionalProperties": true
       }

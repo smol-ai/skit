@@ -1,11 +1,16 @@
 import type { PlatformError } from "effect/PlatformError";
 import { basename, dirname, join, resolve } from "node:path";
-import { Effect, FileSystem, Schema, Order } from "effect";
+import { Effect, FileSystem, Order } from "effect";
 import { parseSkillFrontmatter } from "../harnesses/frontmatter.js";
 import { LinkStat } from "../platform/link-stat.js";
 import { sha256Hash } from "../shared/hash.js";
 import type { HarnessName } from "../harnesses/contracts.js";
-import { Duplicate, DuplicateScanIncomplete, type Destination } from "./installed-skill-facts.js";
+import {
+  Duplicate,
+  DuplicateScanIncomplete,
+  Warning,
+  type Destination,
+} from "./installed-skill-facts.js";
 
 /** Another copy of a skill, as an agent reads it, and every path it is reached by. */
 export const DuplicateCopy = Duplicate;
@@ -39,10 +44,7 @@ const readSkillSymlink = Effect.fn("Install.readSkillSymlink")(function* (path: 
   return { path: resolve(path), via: "directory" as const };
 });
 
-export const DuplicateScanError = Schema.Struct({
-  path: Schema.String,
-  message: Schema.String,
-});
+export const DuplicateScanError = Warning;
 export type DuplicateScanError = typeof DuplicateScanError.Type;
 
 /** A skills directory an agent reads. */
@@ -65,14 +67,14 @@ export const scanSkillsDirectory = Effect.fn("Install.scanSkillsDirectory")(func
     const names = yield* fs.readDirectory(root).pipe(
       Effect.catchTag("PlatformError", (error) => {
         if (error.reason._tag === "NotFound") return Effect.succeed([]);
-        options.errors?.push({ path: root, message: String(error) });
+        options.errors?.push({ path: root, reason: { _tag: "Unreadable", error } });
         return options.blockingNames?.length ? Effect.fail(error) : Effect.succeed([]);
       }),
     );
     if (names.length > 4096) {
       const error = {
         path: root,
-        message: "Skills directory exceeds the 4096-entry observation limit",
+        reason: { _tag: "EntryLimitExceeded" as const, limit: 4096, count: names.length },
       };
       options.errors?.push(error);
       if (options.blockingNames?.length) return yield* new DuplicateScanIncomplete(error);
@@ -102,7 +104,7 @@ export const scanSkillsDirectory = Effect.fn("Install.scanSkillsDirectory")(func
       }).pipe(
         Effect.catchTag("PlatformError", (error: PlatformError) => {
           if (error.reason._tag === "NotFound") return Effect.void;
-          options.errors?.push({ path, message: String(error) });
+          options.errors?.push({ path, reason: { _tag: "Unreadable", error } });
           return options.blockingNames?.includes(entry) ? Effect.fail(error) : Effect.void;
         }),
       );

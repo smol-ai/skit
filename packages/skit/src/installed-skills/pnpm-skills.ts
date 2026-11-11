@@ -3,7 +3,7 @@ import { Cache, Data, Duration, Effect, Exit, FileSystem, Option, Schema } from 
 import { parseDocument } from "yaml";
 import { LinkStat } from "../platform/link-stat.js";
 import { pathIsWithin } from "../platform/path-identity.js";
-import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
+import { PnpmSkillManaged, PnpmEvidenceUnreadable } from "./pnpm-failures.js";
 
 export const PnpmSkillOwner = Schema.Struct({
   kind: Schema.tag("pnpm"),
@@ -34,10 +34,7 @@ const documentAt = Effect.fn("PnpmSkills.document")(function* (
   const result = yield* Effect.result(fs.readFileString(path));
   if (result._tag === "Failure") {
     if (result.failure.reason._tag === "NotFound") return PnpmDocument.Missing();
-    yield* Effect.logDebug("Cannot read pnpm Skill evidence", {
-      path,
-      reason: result.failure.reason._tag,
-    });
+    yield* Effect.logDebug(PnpmEvidenceUnreadable.make({ path, failure: result.failure }));
     return PnpmDocument.Unreadable();
   }
   return yield* Effect.try(() => {
@@ -146,21 +143,6 @@ export const pnpmSkillOwner = Effect.fn("PnpmSkills.owner")(function* (directory
   const checkPnpm = yield* makePnpmSkillCheck();
   return yield* checkPnpm(directory);
 });
-
-class PnpmSkillManaged
-  extends Data.TaggedError("PnpmSkillManaged")<{
-    path: string;
-    package: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly remediation = "Manage this Skill through pnpm's dependency and permission settings.";
-  get message() {
-    return `${this.path} is managed by pnpm (${this.package}); SKIT leaves it in place.`;
-  }
-}
 
 export const leavePnpmSkill = Effect.fn("PnpmSkills.leaveManaged")(function* (path: string) {
   const owner = yield* pnpmSkillOwner(path);

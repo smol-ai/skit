@@ -1,6 +1,6 @@
-import { updateOutputContracts } from "../library/update/output.js";
-import { updateExitCode } from "../library/update/exit-code.js";
-import { EditImportMissing } from "@smolai/skit-core/library/edit";
+import { defineCommand } from "./definition.js";
+import { updateOutputContracts, sourceUpdateOutput } from "../library/update/output.js";
+import { MissingRequirement } from "./input-failures.js";
 import * as Library from "@smolai/skit-core/library";
 import { inspectLibrarySource } from "../library/source.js";
 import { updateAdapters } from "../library/update/adapters.js";
@@ -17,47 +17,58 @@ import { localFlags } from "./parameters.js";
 import { Renderer } from "../terminal/renderer.js";
 import { encodeResult as result } from "./encode-result.js";
 
-const subject = Argument.String("skill-or-collection").pipe(Argument.optional);
+const subject = Argument.String("skill-or-collection").pipe(
+  Argument.withDescription(
+    "Skill or Collection Reference to update; omit it to update all Sources.",
+  ),
+  Argument.optional,
+);
 
 const dryRun = Flag.Boolean("dry-run").pipe(
   Flag.withDescription("Report changes without applying them."),
   Flag.withDefault(false),
 );
 
-const fromProjection = Flag.String("from-projection").pipe(
-  Flag.withDescription("Import edits from this installed skill, given by its ID, harness or path."),
+const installedEditOption = "from";
+const from = Flag.String(installedEditOption).pipe(
+  Flag.withDescription(
+    "Import edits from the installed skill folder at this path; requires <skill>.",
+  ),
   Flag.optional,
 );
 
-export const updateCliCommand = Command.make(
+const installedEditRequirement = {
+  command: `skit update --${installedEditOption}`,
+  requires: "<skill>",
+};
+
+export const updateCliCommand = defineCommand(
   "update",
-  { subject, dryRun, fromProjection, ...localFlags },
+  { subject, dryRun, from, ...localFlags },
   (input) =>
     Effect.gen(function* () {
       const renderer = yield* Renderer;
       const library = yield* Library.Service;
       const query = Option.getOrUndefined(input.subject);
-      const installedSkillSelector = Option.getOrUndefined(input.fromProjection);
-      if (installedSkillSelector !== undefined) {
+      const installedSkillPath = Option.getOrUndefined(input.from);
+      if (installedSkillPath !== undefined) {
         if (query === undefined)
-          return yield* new EditImportMissing({
-            message: "A Skill is required with --from-projection",
-          });
+          return yield* new MissingRequirement({ reason: { _tag: "InstalledEditSubject" } });
         const value = yield* renderer.withStatus(
           input.dryRun
             ? "Inspecting changed installed-skill bytes"
-            : "Retaining changed installed-skill bytes",
+            : "Importing changed installed skill files",
           Effect.gen(function* () {
-            const prepared = yield* library.edit(query, installedSkillSelector);
+            const prepared = yield* library.edit(query, installedSkillPath);
             return input.dryRun
               ? result(
-                  "projectionRetentionPlan",
-                  updateOutputContracts.projectionRetentionPlan,
+                  "installedEditPlan",
+                  updateOutputContracts.installedEditPlan,
                   prepared.preview,
                 )
               : result(
-                  "projectionRetention",
-                  updateOutputContracts.projectionRetention,
+                  "installedEdit",
+                  updateOutputContracts.installedEdit,
                   yield* prepared.apply(),
                 );
           }),
@@ -66,7 +77,7 @@ export const updateCliCommand = Command.make(
       }
       if (input.dryRun) {
         const value = yield* renderer.withStatus(
-          "Checking Source observations",
+          "Checking Sources",
           library.previewSourceUpdates(query, inspectLibrarySource),
         );
         return yield* renderer.result(
@@ -75,27 +86,35 @@ export const updateCliCommand = Command.make(
       }
       const value = yield* library.update(query, yield* updateAdapters);
       yield* renderer.result(
-        result("update", updateOutputContracts.update, value, updateExitCode(value)),
+        result("update", updateOutputContracts.update, sourceUpdateOutput(value)),
       );
     }),
 ).pipe(
-  Command.withDescription("Update sources from their recorded origins."),
+  Command.withDescription("Update sources and installed skills; sync connected Author Workspaces."),
   Command.withExamples([
     { command: "skit update --dry-run" },
-    { command: "skit update my-skill --from-projection claude-code --dry-run" },
+    { command: "skit update my-skill --from ~/.claude/skills/my-skill --dry-run" },
   ]),
   Command.annotate(CommandMetadata, {
+    handlerRules: [
+      `${installedEditRequirement.command} requires ${installedEditRequirement.requires}`,
+    ],
     effects: {
-      capabilities: ["filesystem.read", "filesystem.write", "network.read", "process.execute"],
+      capabilities: [
+        "filesystem.read",
+        "filesystem.write",
+        "network.read",
+        "network.write",
+        "process.execute",
+      ],
       subprocesses: [...sourceFetchSubprocesses, ...credentialStoreReadSubprocesses],
     },
     outputSchemas: [
       updateOutputContracts.update,
       updateOutputContracts.updatePlan,
-      updateOutputContracts.projectionRetention,
-      updateOutputContracts.projectionRetentionPlan,
+      updateOutputContracts.installedEdit,
+      updateOutputContracts.installedEditPlan,
     ],
-    exitCodes: [0, 1, 11, 12, 64, 65],
     interactive: false,
   }),
 );

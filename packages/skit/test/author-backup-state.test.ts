@@ -1,3 +1,5 @@
+import { expectTypeOf, test } from "vitest";
+import type { AuthorHistoryShape } from "../src/author/history.js";
 import { expect, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Option } from "effect";
 import { systemError } from "effect/PlatformError";
@@ -91,13 +93,26 @@ it.effect("backup checkpoints advance contiguous A-B-A observations and preserve
       const history = yield* AuthorHistory;
       expect(yield* history.backupState.read(acknowledged.key)).toBe(acknowledged.id);
       expect(
-        yield* Effect.flip(
+        yield* Effect.exit(
           history.backupState.save(acknowledged.lease, acknowledged.key, {
             from: acknowledged.id,
             to: acknowledged.id,
           }),
         ),
-      ).toMatchObject({ _tag: "AuthorLeaseNotHeld" });
+      ).toMatchObject({
+        _tag: "Failure",
+        cause: {
+          reasons: [
+            {
+              _tag: "Die",
+              defect: {
+                _tag: "AuthorWorkspaceInvariantFailed",
+                reason: { _tag: "LeaseClosed" },
+              },
+            },
+          ],
+        },
+      });
     }).pipe(Effect.provide(ownerLayer(f.home)));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -204,3 +219,70 @@ for (const boundary of ["before-rename", "after-rename"] as const)
       }).pipe(Effect.provide(ownerLayer(f.home)), Effect.scoped);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
+
+it.effect(
+  "a prepared write saves its captured next state and stale checkpoints still conflict",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      yield* Effect.gen(function* () {
+        const history = yield* AuthorHistory;
+        const workspaces = yield* AuthorWorkspace;
+        const root = yield* workspaces.resolveRoot(f.workspace);
+        const lease = yield* workspaces.acquire(root);
+        const { workspaceId } = yield* register(lease);
+        const key = { workspaceId, locator };
+        const observation = yield* history.refresh(root);
+        const idle = Sync.Idle.make({ base: null });
+        const sending = Sync.Sending.make({ base: null, revision: observation.id });
+        yield* history.syncState.save(lease, key, { from: idle, to: sending });
+        const writing = Sync.Writing.make({
+          base: null,
+          from: observation.treeHash,
+          to: observation.treeHash,
+          next: sending,
+          merged: false,
+        });
+        const prepared = yield* history.syncState.prepareWrite(lease, key, {
+          from: sending,
+          to: writing,
+        });
+        expect(yield* history.syncState.read(key)).toEqual(writing);
+        const checkpoint = yield* f.fs.readFileString(f.bindings);
+        expect(
+          yield* Effect.flip(history.syncState.save(lease, key, { from: idle, to: sending })),
+        ).toMatchObject({ _tag: "AuthorSyncStateConflict", found: writing });
+        expect(yield* f.fs.readFileString(f.bindings)).toBe(checkpoint);
+        const resumed = yield* history.syncState.prepareWrite(lease, key, {
+          from: writing,
+          trees: { from: observation.treeHash, to: observation.treeHash },
+        });
+        expect(yield* history.syncState.read(key)).toEqual({ ...writing, merged: true });
+        // Mutating the caller's request after preparation cannot redirect completion.
+        Reflect.set(writing, "next", Sync.Idle.make({ base: observation.id }));
+        expect(yield* resumed.apply()).toEqual(sending);
+        expect(yield* history.syncState.read(key)).toEqual(sending);
+        expect(yield* f.fs.readFileString(join(root, "notes.txt"))).toBe("A");
+        // An operation from before recovery cannot apply after recovery saved another checkpoint.
+        expect(yield* Effect.exit(prepared.apply())).toMatchObject({
+          _tag: "Failure",
+          cause: { reasons: [{ _tag: "Die" }] },
+        });
+      }).pipe(Effect.provide(ownerLayer(f.home)), Effect.scoped);
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+test("sync checkpoint types exclude null-base completion and caller-selected recovery destinations", () => {
+  type Change = Parameters<AuthorHistoryShape["syncState"]["save"]>[2];
+  type Normal = Extract<Change, { readonly to: unknown }>;
+  expectTypeOf<Extract<Normal["from"], typeof Sync.Writing.Type>>().toBeNever();
+  expectTypeOf<{ readonly _tag: "Idle"; readonly base: null }>().not.toExtend<Normal["to"]>();
+  type Resume = Extract<Sync.WriteRequest, { readonly trees: unknown }>;
+  expectTypeOf<Resume>().toEqualTypeOf<{
+    readonly from: typeof Sync.Writing.Type;
+    readonly trees: {
+      readonly from: (typeof Sync.Writing.Type)["from"];
+      readonly to: (typeof Sync.Writing.Type)["to"];
+    };
+  }>();
+});

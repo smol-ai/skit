@@ -122,7 +122,322 @@
                   "type": "string"
                 },
                 "reason": {
-                  "type": "string"
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "WellKnownSource"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "_tag"
+                      ],
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "GitSourceMissing"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "_tag"
+                      ],
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "MirrorUnavailable"
+                          ]
+                        },
+                        "failure": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/definitions/SkillsSh.GitInspectionFailedEncoded"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "_tag": {
+                                  "type": "string",
+                                  "enum": [
+                                    "PlatformError"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "object",
+                                  "properties": {
+                                    "_tag": {
+                                      "type": "string",
+                                      "enum": [
+                                        "AlreadyExists",
+                                        "BadResource",
+                                        "Busy",
+                                        "InvalidData",
+                                        "NotFound",
+                                        "PermissionDenied",
+                                        "TimedOut",
+                                        "UnexpectedEof",
+                                        "Unknown",
+                                        "WouldBlock",
+                                        "WriteZero",
+                                        "BadArgument"
+                                      ]
+                                    },
+                                    "module": {
+                                      "type": "string"
+                                    },
+                                    "method": {
+                                      "type": "string"
+                                    },
+                                    "description": {
+                                      "type": "string"
+                                    },
+                                    "syscall": {
+                                      "type": "string"
+                                    },
+                                    "pathOrDescriptor": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "number"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "module",
+                                    "method"
+                                  ],
+                                  "additionalProperties": true
+                                }
+                              },
+                              "required": [
+                                "_tag",
+                                "reason"
+                              ],
+                              "additionalProperties": true
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "_tag",
+                        "failure"
+                      ],
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "RefUnavailable"
+                          ]
+                        },
+                        "ref": {
+                          "type": "string"
+                        },
+                        "failure": {
+                          "$ref": "#/definitions/SkillsSh.GitInspectionFailedEncoded"
+                        }
+                      },
+                      "required": [
+                        "_tag",
+                        "ref",
+                        "failure"
+                      ],
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "GitEvidenceUnavailable"
+                          ]
+                        },
+                        "failure": {
+                          "$ref": "#/definitions/SkillsSh.GitInspectionFailedEncoded"
+                        }
+                      },
+                      "required": [
+                        "_tag",
+                        "failure"
+                      ],
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "LockIncomplete"
+                          ]
+                        },
+                        "missing": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "skill-path",
+                              "hash"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "_tag",
+                        "missing"
+                      ],
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "BaselineNotFound"
+                          ]
+                        },
+                        "hashKind": {
+                          "type": "string",
+                          "enum": [
+                            "computedHash",
+                            "skillFolderHash"
+                          ]
+                        },
+                        "ref": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "_tag",
+                        "hashKind",
+                        "ref"
+                      ],
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "TreeHashCannotVerifyOriginalBytes"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "_tag"
+                      ],
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "OriginalBytesUnavailable"
+                          ]
+                        },
+                        "failures": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "PlatformError"
+                                ]
+                              },
+                              "reason": {
+                                "type": "object",
+                                "properties": {
+                                  "_tag": {
+                                    "type": "string",
+                                    "enum": [
+                                      "AlreadyExists",
+                                      "BadResource",
+                                      "Busy",
+                                      "InvalidData",
+                                      "NotFound",
+                                      "PermissionDenied",
+                                      "TimedOut",
+                                      "UnexpectedEof",
+                                      "Unknown",
+                                      "WouldBlock",
+                                      "WriteZero",
+                                      "BadArgument"
+                                    ]
+                                  },
+                                  "module": {
+                                    "type": "string"
+                                  },
+                                  "method": {
+                                    "type": "string"
+                                  },
+                                  "description": {
+                                    "type": "string"
+                                  },
+                                  "syscall": {
+                                    "type": "string"
+                                  },
+                                  "pathOrDescriptor": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "number"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "_tag",
+                                  "module",
+                                  "method"
+                                ],
+                                "additionalProperties": true
+                              }
+                            },
+                            "required": [
+                              "_tag",
+                              "reason"
+                            ],
+                            "additionalProperties": true
+                          }
+                        }
+                      },
+                      "required": [
+                        "_tag",
+                        "failures"
+                      ],
+                      "additionalProperties": true
+                    }
+                  ]
                 }
               },
               "required": [
@@ -150,6 +465,213 @@
       "has_imports"
     ],
     "additionalProperties": true
+  },
+  "definitions": {
+    "SourceProcess.OutputTooLargeEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "SourceProcess.OutputTooLarge"
+          ]
+        },
+        "invocation": {
+          "type": "string"
+        },
+        "stream": {
+          "type": "string",
+          "enum": [
+            "stdout",
+            "stderr"
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "actual": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "_tag",
+        "invocation",
+        "stream",
+        "limit",
+        "actual"
+      ],
+      "additionalProperties": true
+    },
+    "SourceProcess.TimedOutEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "SourceProcess.TimedOut"
+          ]
+        },
+        "invocation": {
+          "type": "string"
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "_tag",
+        "invocation",
+        "timeoutMs"
+      ],
+      "additionalProperties": true
+    },
+    "SkillsSh.GitInspectionFailedEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "SkillsSh.GitInspectionFailed"
+          ]
+        },
+        "operation": {
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ProcessFailed"
+                  ]
+                },
+                "failure": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/SourceProcess.OutputTooLargeEncoded"
+                    },
+                    {
+                      "$ref": "#/definitions/SourceProcess.TimedOutEncoded"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "PlatformError"
+                          ]
+                        },
+                        "reason": {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": [
+                                "AlreadyExists",
+                                "BadResource",
+                                "Busy",
+                                "InvalidData",
+                                "NotFound",
+                                "PermissionDenied",
+                                "TimedOut",
+                                "UnexpectedEof",
+                                "Unknown",
+                                "WouldBlock",
+                                "WriteZero",
+                                "BadArgument"
+                              ]
+                            },
+                            "module": {
+                              "type": "string"
+                            },
+                            "method": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "syscall": {
+                              "type": "string"
+                            },
+                            "pathOrDescriptor": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "module",
+                            "method"
+                          ],
+                          "additionalProperties": true
+                        }
+                      },
+                      "required": [
+                        "_tag",
+                        "reason"
+                      ],
+                      "additionalProperties": true
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "_tag",
+                "failure"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ExitCode"
+                  ]
+                },
+                "exitCode": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "stderr": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "exitCode",
+                "stderr"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "operation",
+        "reason"
+      ],
+      "additionalProperties": true
+    }
   },
   "$schema": "http://json-schema.org/draft-07/schema#"
 }

@@ -47,6 +47,7 @@ import { StalePlan, type Approval } from "../library-plan.js";
 import { planIntent } from "../plan-changes.js";
 import { removeCollection } from "./session/remove.js";
 import { updateSources } from "./session/update-sources.js";
+import { updateAuthoredSkills } from "../update-authored-skills.js";
 import { openEditImport } from "./session/edit.js";
 import { libraryQueries, acceptLibrarySecurityFinding } from "./session/queries.js";
 import { refreshInventory, refreshMachineInventory } from "../inventory.js";
@@ -173,7 +174,7 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
       Effect.catchTag("LibraryChanged", () =>
         Effect.fail(
           new StalePlan({
-            message: "The Library changed before the reviewed change could be saved",
+            reason: { _tag: "LibraryChanged" },
           }),
         ),
       ),
@@ -197,7 +198,7 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
     if (plan._tag !== plan.intent._tag)
       return Effect.fail(
         new StalePlan({
-          message: "The plan tag does not match its reviewed intent",
+          reason: { _tag: "PlanInvalid", kind: "intent" },
         }),
       );
     if (plan._tag === "Manage") return applyManaging(home, plan).pipe(applying);
@@ -231,7 +232,7 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
   const syncing = { ...operations, content };
   const editing = { ...operations, import: imports };
   const operation = Effect.provide(importing);
-  const queries = libraryQueries(read, home, roots, importing);
+  const queries = libraryQueries(read, home, roots, importing, files);
   const library: Interface = {
     addSource: (request) =>
       operation(addSource({ import: imports, descriptionLoad: queries.descriptionLoad }, request)),
@@ -248,8 +249,8 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
         operation(readLibrarySkillContent(read, home, skillVersionId)),
     },
     remove: (options) => operation(removeCollection(operations, options)),
-    update: (query, adapters) => operation(updateSources(home, editing, query, adapters)),
-    edit: (query, selector) => operation(openEditImport(home, editing, query, selector)),
+    update: (query, adapters) => operation(updateSources(home, library, query, adapters)),
+    edit: (query, path) => operation(openEditImport(home, editing, query, path)),
     check: (query, options) => operation(queries.check(query, options)),
     previewSourceUpdates: (query, inspect) =>
       operation(queries.previewSourceUpdates(query, inspect)),
@@ -278,7 +279,7 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
           () =>
             new InvalidLibraryState({
               path: libraryStatePath(home),
-              detail: "invalid operation history",
+              reason: { _tag: "InvalidData" },
             }),
         ),
       );
@@ -300,6 +301,12 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
     apply: applyFor,
     import: imports,
     startup,
+    updateAuthoredSkills: (request) =>
+      owned(
+        updateAuthoredSkills(structuredClone(request), operations).pipe(
+          Effect.provideService(InstalledSkills.Service, files),
+        ),
+      ),
     content,
     sync: (options, transport) => operation(syncLibrary(syncing, roots, options, transport)),
     syncSession: (request, options) => operation(openSyncSession(syncing, roots, request, options)),

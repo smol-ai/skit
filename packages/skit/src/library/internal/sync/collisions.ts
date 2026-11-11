@@ -85,18 +85,20 @@ export const resolveSyncInstalledSkillCollisions = Effect.fn(
         if (item.skill_id !== selected.skill_id) disabled.add(item.skill_id);
       continue;
     }
-    const labels = [...new Set(items.map((item) => item.skill_id))].map((id) => {
-      const skill = manifest.skills.find((item) => item.skill_id === id);
-      const collection = manifest.collections.find(
-        (item) => item.collection_id === skill?.collection_id,
-      );
-      return `${skill?.name ?? id} from ${collection?.label ?? id} (${id})`;
-    });
     conflicts.push(
-      SyncConflictDetail.make({
+      SyncConflictDetail.cases.DestinationCollision.make({
         key: `projection:${items.map((item) => item.path).sort()[0]}:collision`,
-        message: `${labels.join("; ")} use the same destination. ${canChoose(items) ? "Keep one enabled Library-wide with skit sync --apply --keep-enabled <skill-id>. Both remain retained." : "Configure distinct projection roots or disable the competing repository selection before syncing."}`,
         resolution: canChoose(items) ? "keep-enabled" : "local",
+        skills: [...new Set(items.map((item) => item.skill_id))].map((id) => {
+          const skill = manifest.skills.find((item) => item.skill_id === id);
+          return {
+            id,
+            name: skill?.name ?? id,
+            collection:
+              manifest.collections.find((item) => item.collection_id === skill?.collection_id)
+                ?.label ?? id,
+          };
+        }),
       }),
     );
   }

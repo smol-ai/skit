@@ -91,7 +91,10 @@ it.effect.each([
       }).pipe(Effect.provideService(HttpClient.HttpClient, client), Effect.flip);
       assert.strictEqual(failure._tag, "SourcePolicyViolation");
       if (failure._tag === "SourcePolicyViolation")
-        assert.strictEqual(failure.reason._tag, "VersionDisagreement");
+        assert.strictEqual(
+          failure.reason._tag,
+          selected === "latest" ? "RegistryVersionInvalid" : "RegistryVersionMismatch",
+        );
       assert.strictEqual(reads, 0);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -104,7 +107,8 @@ it.effect(
         registryBaseUrl: "https://registry.test",
       }).pipe(Effect.flip);
       assert.strictEqual(failure._tag, "SourcePolicyViolation");
-      assert.include(failure.message, "must be a ZIP archive");
+      if (failure._tag === "SourcePolicyViolation")
+        assert.strictEqual(failure.reason._tag, "RegistryArchiveRequired");
       const resolved = yield* resolveSkitSource("https://registry.test/review/SKILL.md");
       const fs = yield* FileSystem.FileSystem;
       assert.strictEqual(yield* fs.readFileString(join(resolved.originalRoot, "SKILL.md")), skill);

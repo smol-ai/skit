@@ -1,4 +1,6 @@
 import type { AuditSkillV1Alpha4 } from "@smolai/skit-core/audit";
+import type { AuditOrigin } from "@smolai/skit-core/audit";
+import { auditOriginKey, auditOriginLabel } from "./provenance";
 
 type GroupableSkill = Pick<AuditSkillV1Alpha4, "provenance" | "canonicalLocation">;
 
@@ -6,7 +8,7 @@ export type SkillGroupIdentity =
   | { kind: "all" }
   | { kind: "collection"; id: string }
   | { kind: "plugin"; id: string }
-  | { kind: "source"; name: string }
+  | { kind: "source"; origin: AuditOrigin }
   | { kind: "unattributed" };
 
 export type SkillGroup<T> = {
@@ -19,14 +21,15 @@ function identityFor(skill: GroupableSkill): SkillGroupIdentity {
   if (skill.provenance.collectionId)
     return { kind: "collection", id: skill.provenance.collectionId };
   if (skill.provenance.parentPlugin) return { kind: "plugin", id: skill.provenance.parentPlugin };
-  if (skill.provenance.source) return { kind: "source", name: skill.provenance.source };
+  if (skill.provenance.origin._tag !== "Unknown")
+    return { kind: "source", origin: skill.provenance.origin };
   return { kind: "unattributed" };
 }
 
 function provenancePriority(skill: GroupableSkill): number {
   if (skill.provenance.collectionId) return 3;
   if (skill.provenance.parentPlugin) return 2;
-  if (skill.provenance.source) return 1;
+  if (skill.provenance.origin._tag !== "Unknown") return 1;
   return 0;
 }
 
@@ -50,7 +53,7 @@ function identityKey(identity: SkillGroupIdentity): string {
     case "plugin":
       return `${identity.kind}:${identity.id}`;
     case "source":
-      return `${identity.kind}:${identity.name}`;
+      return `${identity.kind}:${auditOriginKey(identity.origin)}`;
   }
 }
 
@@ -64,7 +67,7 @@ function identityLabel(identity: SkillGroupIdentity): string {
     case "plugin":
       return identity.id;
     case "source":
-      return identity.name;
+      return auditOriginLabel(identity.origin);
   }
 }
 
@@ -128,6 +131,6 @@ export function groupLocation(identity: SkillGroupIdentity): string {
     case "plugin":
       return `Plugin ${identity.id}`;
     case "source":
-      return `Source ${identity.name}`;
+      return `Source ${auditOriginLabel(identity.origin)}`;
   }
 }

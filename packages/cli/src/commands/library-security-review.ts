@@ -1,3 +1,4 @@
+import { defineCommand } from "./definition.js";
 import { Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 
@@ -9,9 +10,11 @@ import { securityReviewCommand } from "../library/security/review.js";
 import { Renderer } from "../terminal/renderer.js";
 import { encodeResult as result } from "./encode-result.js";
 
-const skill = Argument.String("skill");
+const skill = Argument.String("skill").pipe(
+  Argument.withDescription("Skill Reference whose security findings to inspect."),
+);
 
-export const securityReviewCliCommand = Command.make("review", { skill }, ({ skill }) =>
+export const securityReviewCliCommand = defineCommand("review", { skill }, ({ skill }) =>
   Effect.gen(function* () {
     const renderer = yield* Renderer;
     const library = yield* Library.Service;
@@ -27,7 +30,6 @@ export const securityReviewCliCommand = Command.make("review", { skill }, ({ ski
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read"] },
     outputSchemas: [securityOutputContracts.securityReview],
-    exitCodes: [0, 11, 12, 64, 65],
     interactive: false,
   }),
 );

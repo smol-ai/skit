@@ -10,3 +10,5 @@ export {
   SetEnabledIncomplete,
   setEnabledOutcomes,
 } from "./internal/session/set-enabled.js";
+
+export { ApplyFailure } from "./apply-failure.js";

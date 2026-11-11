@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest";
-import { Cause, Effect, FileSystem, Option } from "effect";
+import { Effect, FileSystem, Option } from "effect";
 import { join } from "node:path";
 import * as Library from "../src/library/library.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
@@ -30,7 +30,7 @@ it.effect("update imports and removal stay with their owner under another ambien
     const updated = yield* a
       .update("review", {
         progress: { around: (_stage, operation) => operation },
-        classifyFailure: (cause) => ({ remediation: Cause.pretty(cause) }),
+        updateAuthoredSkills: () => Effect.die("This fixture has no authored workspace"),
         importSource: (upstream, _previousSkillPaths, imports) =>
           Effect.gen(function* () {
             const current = yield* localImportRequest(source, "2026-11-07T01:00:00.000Z");

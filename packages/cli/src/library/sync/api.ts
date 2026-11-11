@@ -1,4 +1,10 @@
 import {
+  LibraryApiRejected,
+  LibraryApiInvalidResponse,
+  LibraryManifestTooNew,
+  LibraryApiInvalidRequest,
+} from "../../registry/request-failures.js";
+import {
   ConsumerAuthenticatedApi,
   CURRENT_PORTABLE_LIBRARY_SCHEMA,
   LibraryNotFoundResponse,
@@ -6,7 +12,7 @@ import {
   type LibraryManifest,
   type SnapshotArchive,
 } from "@smolai/skit-core/api";
-import { Data, Effect, Option, Predicate, Schema } from "effect";
+import { Effect, Option, Predicate, Schema } from "effect";
 import { HttpClient } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import { LibraryWriteRequest } from "@smolai/skit-core/universal/consumer";
@@ -23,61 +29,6 @@ import {
   registryApiFailure,
 } from "../../registry/api-client.js";
 import { RegistryHttp, RegistryTransportError } from "../../registry/registry-http.js";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
-
-export class LibraryApiRejected
-  extends Data.TaggedError("Library.LibraryApiRejected")<{
-    status: number;
-    reason?: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation =
-    "Check the Registry's reason and the active credential, then run `skit sync` again.";
-  get message(): string {
-    return `The Registry rejected the Library request (${this.status})${this.reason === undefined ? "" : `: ${this.reason}`}`;
-  }
-}
-class LibraryApiInvalidResponse
-  extends Data.TaggedError("Library.LibraryApiInvalidResponse")<{
-    operation: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Check that the Registry runs a compatible SKIT server, then retry.";
-  get message(): string {
-    return `The Registry returned an invalid ${this.operation} response`;
-  }
-}
-export class LibraryManifestTooNew
-  extends Data.TaggedError("Library.LibraryManifestTooNew")<{
-    observed: string;
-    supported: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "VALIDATION_FAILED" as const;
-  readonly remediation = "Upgrade SKIT, then run `skit sync` again.";
-  get message(): string {
-    return `The Registry's Library is ${this.observed}, written by a newer SKIT; this CLI supports ${this.supported}`;
-  }
-}
-class LibraryApiInvalidRequest
-  extends Data.TaggedError("Library.LibraryApiInvalidRequest")<{}>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Run `skit doctor` to inspect the Library, then run `skit sync` again.";
-  get message(): string {
-    return "The Library could not be encoded as a Registry request";
-  }
-}
 
 /** All private Library requests use one generated client in the caller's scope. */
 export const librarySyncApi = Effect.fn("Library.librarySyncApi")(function* (options: {
@@ -129,22 +80,25 @@ export const librarySyncApi = Effect.fn("Library.librarySyncApi")(function* (opt
   }).pipe(Effect.provide(authenticatedApiMiddleware(options.token)));
   const transportFailure = (error: RegistryTransportError) =>
     new RegistryUnreachable({ origin, cause: error });
-  const invalidResponse = (operation: string) => new LibraryApiInvalidResponse({ operation });
+  const invalidResponse = (operation: string, failure: unknown) =>
+    new LibraryApiInvalidResponse({ operation, failure });
   const mapGeneratedFailure = (operation: string, error: unknown) => {
     const classified = classifyRegistryApiFailure(error, [200]);
     if (classified.kind === "transport") return transportFailure(classified.error);
-    if (classified.kind === "request_encoding") return new LibraryApiInvalidRequest();
+    if (classified.kind === "request_encoding")
+      return new LibraryApiInvalidRequest({ failure: classified.failure });
     if (classified.kind === "unauthorized") return new AuthenticationRequired({ origin });
     if (classified.kind === "insufficient_scope")
       return new CredentialLacksScope({ scope: "library:sync" });
-    if (classified.kind === "response_decode") return invalidResponse(operation);
+    if (classified.kind === "response_decode")
+      return invalidResponse(operation, classified.failure);
     const failure = registryApiFailure(error);
     if (failure.status !== undefined)
       return new LibraryApiRejected({
         status: failure.status,
         ...(failure.code === undefined ? {} : { reason: failure.code }),
       });
-    return invalidResponse(operation);
+    return invalidResponse(operation, error);
   };
   const read = Effect.suspend(() =>
     client.librarySync.read({}).pipe(
@@ -172,7 +126,11 @@ export const librarySyncApi = Effect.fn("Library.librarySyncApi")(function* (opt
     const request = yield* LibraryWriteRequest.makeEffect({
       expected_revision_id,
       manifest,
-    }).pipe(Effect.mapError(() => new LibraryApiInvalidRequest()));
+    }).pipe(
+      Effect.mapError(
+        (issue) => new LibraryApiInvalidRequest({ failure: new Schema.SchemaError(issue) }),
+      ),
+    );
     return yield* client.librarySync.write({ payload: request }).pipe(
       Effect.map((response) => response.library),
       Effect.mapError((error) => {
@@ -198,3 +156,5 @@ export const librarySyncApi = Effect.fn("Library.librarySyncApi")(function* (opt
 
 // Required to name inferred sync errors in generated declarations.
 export type { LibraryApiInvalidResponse, LibraryApiInvalidRequest };
+
+export { LibraryApiRejected, LibraryManifestTooNew } from "../../registry/request-failures.js";

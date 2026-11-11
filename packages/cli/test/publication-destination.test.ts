@@ -1,4 +1,5 @@
-import { Effect, Option } from "effect";
+import { PublicationResponseError } from "../src/registry/request-failures.js";
+import { Effect, Option, Schema } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
@@ -43,7 +44,26 @@ it.effect.each([
       ),
       Effect.flip,
     );
-    expect(failure).toMatchObject({ _tag: "PublicationResponseError" });
+    expect(failure).toMatchObject({
+      _tag: "PublicationResponseError",
+      reason: { _tag: "DestinationInvalid", origin: "https://registry.test" },
+    });
+    if (failure._tag !== "PublicationResponseError" || failure.reason._tag !== "DestinationInvalid")
+      throw new Error("Missing destination rejection");
+    const destination = URL.parse(publish, "https://registry.test");
+    if (destination === null) expect(failure.reason.issues).toContain("malformed-url");
+    else {
+      if (destination.origin !== "https://registry.test")
+        expect(failure.reason.issues).toContain("different-origin");
+      if (destination.username || destination.password)
+        expect(failure.reason.issues).toContain("credentials");
+      if (destination.hash) expect(failure.reason.issues).toContain("fragment");
+      if (!["https:", "http:"].includes(destination.protocol))
+        expect(failure.reason.issues).toContain("scheme");
+    }
+    const wire = JSON.stringify(Schema.encodeSync(PublicationResponseError)(failure));
+    expect(wire).not.toContain("user:pass");
+    expect(wire).not.toContain("#fragment");
     expect(requests).toEqual(["https://registry.test/.well-known/agent-skills/"]);
   }).pipe(Effect.scoped),
 );

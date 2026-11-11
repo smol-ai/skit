@@ -165,6 +165,6 @@ export const LibraryStateFromV4 = Schema.Unknown.pipe(
   Schema.refine(Schema.is(LibraryStateV4)),
   Schema.decodeTo(LibraryStateFromV5, {
     decode: SchemaGetter.transform(migrateLibraryStateFromV4),
-    encode: SchemaGetter.forbidden(() => "v4 Library state is decode-only"),
+    encode: SchemaGetter.forbiddenEncoding,
   }),
 );

@@ -1,4 +1,10 @@
+import {
+  invocationBriefing,
+  invocationRowSummary,
+  invocationExplanation,
+} from "../src/library/presentation/invocation.js";
 import { renderSetEnabled } from "../src/library/enable/present.js";
+import { Block } from "../src/terminal/blocks.js";
 import { originalTreePath } from "./helpers/original-tree.js";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { it } from "@effect/vitest";
@@ -16,8 +22,6 @@ import {
   proposeLibraryDisable,
   proposeLibraryEnable,
   proposeLibraryInvocation,
-  invocationBriefing,
-  invocationRowSummary,
 } from "@smolai/skit-core/library/session";
 
 import {
@@ -101,8 +105,16 @@ it.effect(
       expect(policy.agents["claude-code"].effectivePolicy).toBe("explicit");
       expect(policy.agents.codex.effectivePolicy).toBe("implicit");
       expect(invocationRowSummary(policy)).toBe("Varies by agent");
-      expect(invocationBriefing(policy)).toContain("Claude Code: Only when asked");
-      expect(invocationBriefing(policy)).toContain("Codex: Automatically");
+      expect(invocationBriefing(policy)).toContainEqual(
+        Block.Fields({
+          rows: [
+            { label: "Author preference", value: ["Varies by agent"] },
+            { label: "Current", value: ["Varies by agent"] },
+            { label: "Meaning", value: [invocationExplanation(policy)] },
+          ],
+        }),
+      );
+      expect(invocationExplanation(policy)).toContain("Codex: Automatically");
 
       const installedSkill = (yield* home.durable).installed_skills.find(
         (copy) => copy.destination === "agents",
@@ -149,11 +161,11 @@ it.effect(
       expect(disabled.pending?.plan.changes[0]?.subject_id).toBe(row.skillId);
       expect(disabled.pending?.facts[0]).toMatchObject({
         action: "disable",
-        writes: "projection removed",
+        fileChange: "uninstall",
       });
-      expect(renderSetEnabled(disabled.pending!.plan.changes[0]!, false)).toBe(
-        "Would disable review",
-      );
+      expect(renderSetEnabled(disabled.pending!.plan.changes[0]!, false)).toEqual([
+        Block.Changes({ items: [{ action: "remove", label: "Would disable review" }] }),
+      ]);
       const removed = yield* home.owned(confirmLibraryChange(disabled));
       expect(removed.outcome?.kind).toBe("applied");
       expect(removed.skills[0]?.scopes).toEqual([]);
@@ -244,7 +256,10 @@ Tools
         Effect.flatMap(Library.Service, (library) => library.session.open()),
       );
       expect(Result.isFailure(broken.skills[0]!.authorInvocation)).toBe(true);
-      expect(broken.skills[0]?.invocationWarning).toContain("Retained copy for review changed");
+      expect(broken.skills[0]?.invocationFailure).toMatchObject({
+        _tag: "ImportContentInvalid",
+        reason: { _tag: "ContentChanged", kind: "collection", skillName: "review" },
+      });
       expect(yield* home.durable).toEqual(state);
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
@@ -342,7 +357,7 @@ for (const problem of ["missing-skill", "malformed-metadata"] as const)
       const bad = session.skills.find((row) => row.name === "review")!;
       const good = session.skills.find((row) => row.name === "healthy")!;
       expect(Result.isFailure(bad.authorInvocation)).toBe(true);
-      expect(bad.invocationWarning).toContain("Author preference unavailable");
+      expect(bad.invocationFailure).toBeDefined();
       expect(Result.isSuccess(good.authorInvocation)).toBe(true);
       expect(bad.scopes[0]?.policy).toBeUndefined();
       expect(Result.isFailure(libraryPolicyAfter(bad, "declared"))).toBe(true);

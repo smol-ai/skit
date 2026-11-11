@@ -74,7 +74,16 @@ export const LibraryStateFromV11 = Schema.Unknown.pipe(
       ...state,
       schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
       operations: [],
+      // Historical prose cannot establish a more precise marker diagnosis.
+      ...(state.ownershipIssues === undefined
+        ? {}
+        : {
+            ownershipIssues: state.ownershipIssues.map(({ detail: _detail, ...issue }) => issue),
+          }),
+      installed_skills: state.installed_skills.map((copy) =>
+        copy.status === "conflicted" ? { ...copy, conflicts: [] } : copy,
+      ),
     })),
-    encode: SchemaGetter.forbidden(() => "v11 Library state is decode-only"),
+    encode: SchemaGetter.forbiddenEncoding,
   }),
 );

@@ -5,6 +5,7 @@
   "ignorePatterns": ["packages/cli/test/fixtures/source-regressions/humanlayer/**"],
   "jsPlugins": ["./lint/oxlint-plugin-skit.mjs"],
   "rules": {
+    "skit/no-middle-dot-delimiter": "error",
     "effecttsgo/experimental-api-usage": "off",
     "oxc/no-barrel-file": "error",
     "skit/frontend-no-resources": "error",
@@ -27,7 +28,8 @@
       ],
       "rules": {
         "skit/no-unconditional-cause-recovery": "error",
-        "typescript/no-non-null-asserted-optional-chain": "error"
+        "typescript/no-non-null-asserted-optional-chain": "error",
+        "skit/banned-terms": "error"
       }
     },
     {
@@ -67,6 +69,23 @@
       ],
       "rules": {
         "skit/no-direct-cli-output": "error"
+      }
+    },
+    {
+      "files": ["packages/cli/src/**/*.ts"],
+      "excludeFiles": ["packages/cli/src/terminal/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "picocolors",
+                "message": "Colour belongs to terminal/: return Blocks and let renderBlocks draw them."
+              }
+            ]
+          }
+        ]
       }
     },
     {

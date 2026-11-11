@@ -89,7 +89,10 @@ export function copyConflict(
   )
     return { kind: "none" };
   const aliases = duplicateSymlinksToBackUp(selection.sourcePath, duplicates);
-  const selectedHash = instance?.contentIdentity.currentHash;
+  const selectedHash =
+    instance?.contentIdentity.status === "hashed"
+      ? instance.contentIdentity.currentHash
+      : undefined;
   const preservable =
     selectedHash !== undefined &&
     duplicates.every((duplicate) =>
@@ -102,6 +105,7 @@ export function copyConflict(
           isSetupInstallDestination(copy) &&
           !copy.git.repository &&
           (copy.owner.kind === "unknown" || copy.owner.kind === "skills-sh") &&
+          copy.contentIdentity.status === "hashed" &&
           copy.contentIdentity.currentHash === selectedHash
         );
       }),
@@ -138,9 +142,6 @@ export const setupDuplicateChoiceRequired = (copy: Pick<SetupSelectedCopy, "conf
   copy.conflict.kind === "preserve-copies";
 
 export interface SetupExplicitSelection {
-  readonly reconcileSkillIds?: readonly string[];
-  readonly useRetainedSkillIds?: readonly string[];
-  readonly useCopyPaths?: readonly string[];
   readonly sourceIds: readonly string[];
   readonly copyPaths: readonly string[];
   readonly removePaths: readonly string[];
@@ -292,7 +293,8 @@ export function recommendedSetupSelection(
   for (const { instance, selectable, siblings, groupKey } of reviewable) {
     const differs = siblings.some(
       (sibling) =>
-        instance.contentIdentity.currentHash === undefined ||
+        instance.contentIdentity.status !== "hashed" ||
+        sibling.contentIdentity.status !== "hashed" ||
         sibling.contentIdentity.currentHash !== instance.contentIdentity.currentHash,
     );
     if (
@@ -308,26 +310,4 @@ export function recommendedSetupSelection(
     copies.push({ name: instance.name, sourcePath: instance.path });
   }
   return { sources, copies };
-}
-
-/**
- * The exact command that applies a recommended plan, for a person or agent to copy. Paths are the
- * resolved absolute roots, never `~`: agent harnesses match commands against allow rules only when
- * every word is literal, and Codex treats a word containing `~` or `$` as possibly expanded.
- */
-export function setupApplyCommandLine(input: {
-  readonly planId: string;
-  readonly repositoryRoots: readonly string[];
-  readonly needsDuplicateDecision: boolean;
-}): string {
-  const quote = (word: string) =>
-    /^[\w@%+=:,./-]+$/u.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`;
-  return [
-    "skit setup --apply",
-    input.planId,
-    ...input.repositoryRoots.flatMap((root) => ["--work-dir", quote(root)]),
-    ...(input.needsDuplicateDecision
-      ? ["--duplicates", "<retain-only|keep-both|retire-aliases>"]
-      : []),
-  ].join(" ");
 }

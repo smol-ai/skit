@@ -1,79 +1,167 @@
-import { createColors } from "picocolors";
+import { Block, type Change, type Inline, type ListItem } from "../../terminal/blocks.js";
+import {
+  SyncConflictDetail,
+  SyncEnablementIssue,
+  type SyncIssue,
+} from "@smolai/skit-core/library/sync";
+import { Schema } from "effect";
+import { errorMessage } from "@smolai/skit-core/shared";
+import { dataFailure } from "../../commands/data-failure.js";
+import { installedSkillConflictText } from "../presentation/language.js";
 import type { SyncResult } from "./output.js";
+import { renderSyncConflicts, syncConflict } from "./conflict.js";
 
-type SyncData = SyncResult;
-type SyncPlan = NonNullable<SyncData["plan"]>;
+type SyncPlan = NonNullable<SyncResult["plan"]>;
+type PlanChange = SyncPlan["local"][number];
+
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
 /** Name a few Skills; past that, count them so a large Collection stays readable. */
-const skillLine = (marker: string, names: readonly string[]) =>
+const skillChange = (action: Change["action"], names: readonly string[]): Change[] =>
   names.length === 0
     ? []
-    : [
-        names.length <= 5
-          ? `        ${marker} ${names.join(", ")}`
-          : `        ${marker} ${names.length} Skills`,
-      ];
+    : [{ action, label: names.length <= 5 ? names.join(", ") : plural(names.length, "Skill") }];
 
-export function renderLibrarySyncPlan(plan: SyncPlan, color = createColors(false)): string {
-  const markerFor = (action: "add" | "update" | "remove") =>
-    ({ add: "+", update: "~", remove: "-" })[action];
+const collectionChange = (change: Extract<PlanChange, { kind: "collection" }>): Change => ({
+  action: change.action,
+  label:
+    change.label_before && change.label_after && change.label_before !== change.label_after
+      ? `${change.label_before} → ${change.label_after}`
+      : change.label,
+  ...(change.action === "add" ? { detail: plural(change.skills_added.length, "Skill") } : {}),
+  ...(change.action === "update"
+    ? {
+        children: [
+          ...skillChange("add", change.skills_added),
+          ...skillChange("update", change.skills_changed),
+          ...skillChange("remove", change.skills_removed),
+        ],
+      }
+    : {}),
+});
+
+const enabledChange = (change: Extract<PlanChange, { kind: "enabled" }>): Change => ({
+  action: change.action,
+  label: "Enabled Skills",
+  children: [
+    ...change.items_added.map((item): Change => ({ action: "add", label: item.label })),
+    ...change.items_removed.map((item): Change => ({ action: "remove", label: item.label })),
+  ],
+});
+
+export const syncIssue = (issue: SyncIssue): ListItem =>
+  Schema.is(SyncConflictDetail)(issue)
+    ? { text: [syncConflict(issue, "issue")] }
+    : SyncEnablementIssue.match(issue, {
+        SelectionMissing: ({ selection }) => ({
+          text: [
+            "This device selects a ",
+            "skill" in selection ? "Skill" : "Collection",
+            " that is no longer in the Library.",
+          ],
+          detail: [
+            "Choose this device's selection again with ",
+            { code: "--device-skill" },
+            " or ",
+            { code: "--device-collection" },
+            ", or use ",
+            { code: "--follow-account" },
+            " to follow what is enabled everywhere.",
+          ],
+        }),
+        DuplicateScanFailed: ({ failure }) => ({
+          text: ["Could not inspect existing Skill installations."],
+          detail: [dataFailure(failure)?.message ?? errorMessage(failure)],
+        }),
+        ExistingCopy: ({ copy }) => ({
+          text: [
+            copy.name,
+            " already exists at ",
+            ...copy.aliases.flatMap((alias, index): Inline[] => [
+              ...(index ? [", "] : []),
+              { code: alias.path },
+              ...(alias.linkPath === undefined
+                ? []
+                : [
+                    " (symlink ",
+                    { code: alias.linkPath },
+                    " → ",
+                    { code: alias.linkTarget ?? copy.canonicalPath },
+                    ")",
+                  ]),
+            ]),
+            ".",
+          ],
+          detail: [
+            "Resolves to ",
+            { code: copy.canonicalPath },
+            ". Review this copy before enabling.",
+          ],
+        }),
+        InstallationFailed: ({ failure }) => ({
+          text: ["Could not enable the selected Skills."],
+          detail: [dataFailure(failure)?.message ?? errorMessage(failure)],
+        }),
+        InstalledFolderConflicted: ({ path, conflicts }) => ({
+          text: ["Cannot install at ", { code: path }, "."],
+          detail: conflicts.length
+            ? [
+                conflicts.map(installedSkillConflictText).join(" "),
+                " Save any edited files and review the folder before retrying.",
+              ]
+            : [
+                "The saved record has no conflict details. Run ",
+                { code: "skit doctor" },
+                " to check the folder again.",
+              ],
+        }),
+      });
+
+export function presentLibrarySyncPlan(plan: SyncPlan): Block[] {
   // Collections that differ only in fetch records change nothing a person chose or uses.
   const shown = (changes: SyncPlan["local"]) =>
     changes.filter((change) => change.kind !== "collection" || !change.evidence_only);
-  const lines = [color.bold("Library sync plan")];
-  if (plan.enabled_resolution)
-    lines.push(
-      "",
-      `Enabled-list clashes resolved using this device's choices: ${plan.enabled_resolution.collections.map((collection) => collection.label).join(", ")}.`,
+  const side = (title: string, changes: SyncPlan["local"]) => {
+    const collections = changes.flatMap((change) =>
+      change.kind === "collection" ? [collectionChange(change)] : [],
     );
-  for (const [title, changes] of [
-    ["This device", shown(plan.local)],
-    ["Remote Library", shown(plan.remote)],
-  ] as const) {
-    lines.push("", color.cyan(color.bold(title)));
-    if (changes.length === 0) lines.push(color.dim("  No changes."));
-    const collections = changes.filter((change) => change.kind === "collection");
-    const enabled = changes.filter((change) => change.kind === "enabled");
-    if (collections.length) lines.push("  Collections");
-    for (const change of collections) {
-      const marker = markerFor(change.action);
-      const identity =
-        change.label_before && change.label_after && change.label_before !== change.label_after
-          ? `${change.label_before} → ${change.label_after}`
-          : change.label;
-      lines.push(`    ${marker} ${identity}`);
-      if (change.action === "update")
-        lines.push(
-          ...skillLine(markerFor("add"), change.skills_added),
-          ...skillLine(markerFor("update"), change.skills_changed),
-          ...skillLine(markerFor("remove"), change.skills_removed),
-        );
-      else if (change.action === "add")
-        lines.push(
-          `        ${change.skills_added.length} Skill${change.skills_added.length === 1 ? "" : "s"}`,
-        );
-    }
-    if (enabled.length) lines.push("  Enabled");
-    for (const change of enabled) {
-      const marker = markerFor(change.action);
-      lines.push(`    ${marker} Enabled Skills`);
-      for (const item of change.items_added)
-        lines.push(`        ${markerFor("add")} ${item.label}`);
-      for (const item of change.items_removed)
-        lines.push(`        ${markerFor("remove")} ${item.label}`);
-    }
-  }
+    const enabled = changes.flatMap((change) =>
+      change.kind === "enabled" ? [enabledChange(change)] : [],
+    );
+    return Block.Group({
+      title,
+      children: [
+        ...(changes.length === 0 ? [Block.Note({ text: [{ dim: "No changes." }] })] : []),
+        ...(collections.length
+          ? [Block.Changes({ title: "Collections", items: collections })]
+          : []),
+        ...(enabled.length ? [Block.Changes({ title: "Enabled", items: enabled })] : []),
+      ],
+    });
+  };
   const changes = [...shown(plan.local), ...shown(plan.remote)];
   const summary = (["add", "update", "remove"] as const).flatMap((action) => {
     const count = changes.filter((change) => change.action === action).length;
     return count === 0 ? [] : [`${count} to ${action}`];
   });
-  lines.push("", `Plan: ${summary.join(", ") || "no changes"}.`);
-  return lines.join("\n");
+  return [
+    Block.Heading({ text: "Library sync plan" }),
+    ...(plan.enabled_resolution
+      ? [
+          Block.Note({
+            text: [
+              `Enabled-list clashes resolved using this device's choices: ${plan.enabled_resolution.collections.map((collection) => collection.label).join(", ")}.`,
+            ],
+          }),
+        ]
+      : []),
+    side("This device", shown(plan.local)),
+    side("Remote Library", shown(plan.remote)),
+    Block.Note({ text: [`Plan: ${summary.join(", ") || "no changes"}.`] }),
+  ];
 }
 
-export function renderLibrarySync(data: SyncData, color = createColors(false)): string {
-  const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+export function presentLibrarySync(data: SyncResult): Block[] {
   // What syncing did to this device, when it did anything worth knowing.
   const notes = [
     ...(data.merge_base === "empty-first-sync"
@@ -87,36 +175,72 @@ export function renderLibrarySync(data: SyncData, color = createColors(false)): 
     ...(data.uninstalled
       ? [`Removed ${plural(data.uninstalled, "Skill")} no longer enabled from this device.`]
       : []),
-  ];
-  const withNotes = (message: string) =>
-    notes.length ? `${message}\n\n${notes.join("\n")}` : message;
-  const plan = data.plan ? `${renderLibrarySyncPlan(data.plan, color)}\n\n` : "";
-  const unapplied = (command: string) =>
-    `${plan}${notes.length ? `${notes.join("\n")}\n\n` : ""}No changes applied. Run ${command} to apply.`;
+  ].map((text) => Block.Note({ text: [text] }));
+  const status = (tone: "ok" | "info" | "warn" | "error", ...text: Inline[]) =>
+    Block.Status({ tone, text });
   switch (data.status) {
     case "clean":
-      return withNotes("Library is already in sync.");
+      return [status("ok", "Library is already in sync."), ...notes];
     case "push_ready":
     case "pull_ready":
     case "merge_ready":
-      return unapplied("skit sync --apply");
+      return [
+        ...(data.plan ? presentLibrarySyncPlan(data.plan) : []),
+        ...notes,
+        status("info", "No changes applied. Run ", { code: "skit sync --apply" }, " to apply."),
+      ];
     case "pushed":
     case "pulled":
     case "merged":
-      return withNotes("Library synced.");
+      return [status("ok", "Library synced."), ...notes];
     case "local_bytes_changed":
-      return "A stored Skill copy on this device changed unexpectedly; sync stopped.";
+      return [
+        status("error", "A stored Skill copy on this device changed unexpectedly; sync stopped."),
+      ];
     case "conflicted":
       if (data.conflict_details?.length)
-        return withNotes(
-          `Library sync stopped:\n${data.conflict_details.map((detail) => `  ${detail.key}\n    ${detail.message}`).join("\n")}\n\nNo sync changes applied.`,
-        );
-      return withNotes(
-        `This device and the remote Library changed the same things:\n${data.conflicts?.map((key) => `  ${key}`).join("\n") ?? "  unknown conflict"}\n\nKeep the remote version with skit sync --apply --take-remote <key>.`,
-      );
+        return [
+          status("error", "Library sync stopped:"),
+          ...renderSyncConflicts(data.conflict_details),
+          Block.Note({ text: ["No sync changes applied."] }),
+          ...notes,
+        ];
+      return [
+        status("error", "Library sync stopped."),
+        Block.Note({
+          text: ["This result has no named conflict details or confirmed resolution choices."],
+        }),
+        Block.Note({
+          text: [
+            "Preview the current conflicts with ",
+            { code: "skit sync" },
+            " before choosing a resolution. No sync changes applied.",
+          ],
+        }),
+        ...notes,
+      ];
     case "resolution_invalid":
-      return "The requested resolution isn't available. Use --take-remote for a listed resolvable conflict, or --keep-enabled for one Skill in a listed destination collision.";
+      return [
+        status(
+          "error",
+          "The requested resolution isn't available. Use ",
+          { code: "--take-remote" },
+          " for a listed resolvable conflict, or ",
+          { code: "--keep-enabled" },
+          " for one Skill in a listed destination collision.",
+        ),
+      ];
     case "enablement_incomplete":
-      return `Library synced, but enablement is incomplete:\n${data.enablement_issues?.map((issue) => `  ${issue}`).join("\n") ?? "  Inspect the selected Skills."}\n\nResolve the listed issues, then run skit sync --apply again.`;
+      return [
+        status("warn", "Library synced, but enablement is incomplete:"),
+        Block.List({
+          items: data.enablement_issues?.length
+            ? data.enablement_issues.map(syncIssue)
+            : [{ text: ["Inspect the selected Skills."] }],
+        }),
+        Block.Note({
+          text: ["Resolve the listed issues, then run ", { code: "skit sync --apply" }, " again."],
+        }),
+      ];
   }
 }

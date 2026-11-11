@@ -1,3 +1,4 @@
+import { Block } from "../../terminal/blocks.js";
 // The words interactive setup shows, in the order it asks. The steps are fixed before setup scans
 // anything, so "Step 2 of 3" means the same thing from the overview to the final confirmation; a
 // step with nothing to decide says so instead of disappearing from the count announced up front.
@@ -18,7 +19,7 @@ interface SetupStep {
 }
 
 export interface SetupStepPlan {
-  readonly overview: string;
+  readonly overview: readonly Block[];
   readonly step: (key: SetupStepKey) => SetupStep;
 }
 
@@ -31,10 +32,11 @@ export const setupStepPlan = (input: { readonly scanRepositories: boolean }): Se
   );
   return {
     overview: [
-      ...keys.map((key, index) => `  ${index + 1}. ${setupStepTitles[key]}`),
-      "",
-      "Nothing is imported or removed until you confirm.",
-    ].join("\n"),
+      Block.Fields({
+        rows: keys.map((key, index) => ({ label: `${index + 1}.`, value: [setupStepTitles[key]] })),
+      }),
+      Block.Note({ text: ["Nothing is imported or removed until you confirm."] }),
+    ],
     step: (key) => ({
       index: keys.indexOf(key) + 1,
       total: keys.length,

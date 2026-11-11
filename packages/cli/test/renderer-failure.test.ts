@@ -1,11 +1,11 @@
-// The failure envelope callers parse. These moved from dispatch's writeFailure to the Renderer
-// that replaced it; the assertions are unchanged, because the bytes must be.
+// The Renderer emits typed facts in the versioned JSON error envelope.
 
 import { afterEach, describe, expect, vi } from "vitest";
 import { it } from "@effect/vitest";
 import { Cause, Effect } from "effect";
 import { consoleRenderer } from "../src/terminal/console-renderer.js";
 import type { CommandFailure } from "../src/commands/types.js";
+import { describeFailure } from "../src/terminal/failure.js";
 
 function captureStderr() {
   return vi.spyOn(process.stderr, "write").mockImplementation(((
@@ -25,26 +25,24 @@ describe("failure rendering", () => {
     process.exitCode = undefined;
   });
 
-  it.effect("keeps ordinary JSON failures byte-shape compatible", () =>
+  it.effect("emits native diagnostic causes in the v2 JSON envelope", () =>
     Effect.gen(function* () {
       const write = captureStderr();
 
       yield* render(
         {
           code: "CONFLICT",
-          exitCode: 12,
-          message: "Projection failed",
-          remediation: "Run skit doctor.",
+          cause: Cause.fail(new Error("Projection failed")),
+          ...describeFailure({ summary: ["Projection failed"], next: ["Run skit doctor."] }),
         },
         true,
       );
 
       expect(JSON.parse(String(write.mock.calls[0][0]))).toEqual({
-        schema: "skit.error.v1",
+        schema: "skit.error.v2",
         error: {
           code: "CONFLICT",
-          message: "Projection failed",
-          remediation: "Run skit doctor.",
+          cause: [{ _tag: "Fail", error: { name: "Error", message: "Projection failed" } }],
         },
       });
     }),
@@ -54,10 +52,14 @@ describe("failure rendering", () => {
     Effect.gen(function* () {
       captureStderr();
       yield* render(
-        { code: "NOT_FOUND", exitCode: 11, message: "gone", remediation: "add it" },
+        {
+          code: "NOT_FOUND",
+          cause: Cause.fail(new Error("gone")),
+          ...describeFailure({ summary: ["gone"], next: ["add it"] }),
+        },
         true,
       );
-      expect(process.exitCode).toBe(11);
+      expect(process.exitCode).toBe(1);
     }),
   );
 });
@@ -80,9 +82,8 @@ it.effect.each(["stdout", "stderr"] as const)(
           ? renderer.help("help")
           : renderer.failure({
               code: "NOT_FOUND",
-              exitCode: 11,
-              message: "missing",
-              remediation: "retry",
+              cause: Cause.fail(new Error("missing")),
+              ...describeFailure({ summary: ["missing"], next: ["retry"] }),
             });
       const exit = yield* Effect.exit(operation).pipe(
         Effect.ensuring(Effect.sync(() => spy.mockRestore())),

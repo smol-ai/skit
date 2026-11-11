@@ -16,6 +16,7 @@ import {
 } from "../src/storybook/interaction-recorder.js";
 import { Prompter } from "../src/terminal/prompter.js";
 import { setupPrompts } from "../src/library/setup/steps.js";
+import { classifyFailure } from "../src/commands/failure-classification.js";
 
 import { captureDisk, diskChanges, noDiskChanges, type DiskDiff } from "./helpers/disk-snapshot.js";
 import {
@@ -422,7 +423,8 @@ it.effect(
         .pipe(withSandboxDenying(join(f.root, ".codex")));
       const error = failure(exit);
       assert.instanceOf(error, SetupStopped);
-      assert.include(error.detail, "permission denied");
+      assert.strictEqual(error.reason._tag, "StepFailed");
+      assert.include(classifyFailure(error).message, "permission denied");
       assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
       const state = yield* f.home.durable;
       assert.deepStrictEqual(state.collections, []);

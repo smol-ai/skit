@@ -24,7 +24,7 @@ export const applySetupSelections = <E>(
   applySetupPlan(
     {
       manage: { installOptions },
-      withStatus: (_message, stage) => stage,
+      withStage: (_progress, stage) => stage,
     },
     {
       setup,
@@ -34,7 +34,6 @@ export const applySetupSelections = <E>(
       bindings: selections.bindings ?? [],
       ownership: selections.ownership ?? [],
       removals: { entries: [], folders: [] },
-      changes: [],
     },
   ).pipe(
     Effect.updateService(Library.Service, (library) =>

@@ -100,20 +100,12 @@ const scanSetupInstances = Effect.fn("Setup.scanInstances")(function* (
     const authoredCollection = authoredBySkillPath.get(hit.realPath);
     const hashResult = yield* Effect.result(deterministicTreeHash(hit.realPath));
     const contentIdentity = Result.isFailure(hashResult)
-      ? { status: "unhashable" as const, libraryMatches: [] }
-      : (() => {
-          const libraryMatches = librarySkillsByHash.get(hashResult.success) ?? [];
-          return {
-            status:
-              libraryMatches.length === 0
-                ? ("none" as const)
-                : libraryMatches.length === 1
-                  ? ("exact" as const)
-                  : ("ambiguous" as const),
-            currentHash: hashResult.success,
-            libraryMatches,
-          };
-        })();
+      ? { status: "failed" as const, failure: hashResult.failure }
+      : {
+          status: "hashed" as const,
+          currentHash: hashResult.success,
+          libraryMatches: librarySkillsByHash.get(hashResult.success) ?? [],
+        };
     const currentOwnership = yield* ownershipAt(hit.realPath);
     const markerInstalledSkill = currentOwnership.marker
       ? libraryInventory.installed_skills.find(

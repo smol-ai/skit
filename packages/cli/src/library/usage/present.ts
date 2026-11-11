@@ -1,11 +1,5 @@
-import stringWidth from "string-width";
 import type { UsageReport, UsageRow } from "@smolai/skit-core/library/usage";
-
-const safe = (value: string) =>
-  Array.from(value, (char) => {
-    const code = char.charCodeAt(0);
-    return code < 32 || (code >= 127 && code <= 159) ? " " : char;
-  }).join("");
+import { Block } from "../../terminal/blocks.js";
 
 const dateLabel = (value: string) =>
   new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(
@@ -20,16 +14,10 @@ const documentOnly = (row: UsageRow) =>
       row.path !== null &&
       /(?:^|\/)(?:test|tests)\/fixtures(?:\/|$)/.test(row.path)));
 
-export function renderUsage(report: UsageReport): string {
+export function renderUsage(report: UsageReport): Block[] {
   const days = Math.round(
     (Date.parse(report.window.end) - Date.parse(report.window.start)) / 86400000,
   );
-  const lines = [
-    `Skill activity · ${days} ${days === 1 ? "day" : "days"}`,
-    `${dateLabel(report.window.start)} – ${dateLabel(report.window.end)} (UTC)`,
-    ...(report.project ? [`Project: ${safe(report.project)}`] : []),
-    "",
-  ];
   const groups = new Map<
     string,
     {
@@ -62,30 +50,33 @@ export function renderUsage(report: UsageReport): string {
   const sorted = [...groups.values()].sort(
     (a, b) => b.uses - a.uses || b.last.localeCompare(a.last) || a.name.localeCompare(b.name),
   );
-  if (!sorted.length) lines.push("No skill activity observed.");
-  else {
-    const cells = [
-      ["Skill", "Harness", "Uses", "Explicit", "Implicit", "Last seen"],
-      ...sorted.map((row) => [
-        safe(row.name),
-        [...row.harnesses].sort().join(", "),
-        String(row.uses),
-        String(row.explicit),
-        String(row.implicit),
-        dateLabel(row.last),
-      ]),
-    ];
-    const widths = cells[0].map((_, i) => Math.max(...cells.map((row) => stringWidth(row[i]))));
-    for (const [index, row] of cells.entries())
-      lines.push(
-        row
-          .map((cell, i) => {
-            const pad = " ".repeat(widths[i] - stringWidth(cell));
-            return index > 0 && i >= 2 && i < row.length - 1 ? pad + cell : cell + pad;
-          })
-          .join("  ")
-          .trimEnd(),
-      );
-  }
-  return lines.join("\n");
+  return [
+    Block.Heading({ text: `Skill activity (${days} ${days === 1 ? "day" : "days"})` }),
+    Block.Note({
+      text: [{ dim: `${dateLabel(report.window.start)} – ${dateLabel(report.window.end)} (UTC)` }],
+    }),
+    ...(report.project
+      ? [Block.Fields({ rows: [{ label: "Project", value: [report.project] }] })]
+      : []),
+    sorted.length
+      ? Block.Table({
+          columns: [
+            { title: "Skill" },
+            { title: "Harness" },
+            { title: "Uses", align: "end" },
+            { title: "Explicit", align: "end" },
+            { title: "Implicit", align: "end" },
+            { title: "Last seen" },
+          ],
+          rows: sorted.map((row) => [
+            [row.name],
+            [[...row.harnesses].sort().join(", ")],
+            [String(row.uses)],
+            [String(row.explicit)],
+            [String(row.implicit)],
+            [dateLabel(row.last)],
+          ]),
+        })
+      : Block.Note({ text: ["No skill activity found."] }),
+  ];
 }

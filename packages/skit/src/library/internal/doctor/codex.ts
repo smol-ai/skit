@@ -1,7 +1,11 @@
+import { DiscoveryProtocol } from "../../../harnesses/discovery-contracts.js";
+import { HarnessDiscoveryFailed } from "../../../harnesses/discovery-failures.js";
+import { HarnessProbeFailure } from "../../../harnesses/probe-failures.js";
 import type { LibraryInventory } from "../../inventory.js";
 import { configurationForHome } from "../../../platform/index.js";
 import {
   SkillAlias,
+  DuplicateScanError,
   type DuplicateCopy,
   scanSkillsDirectory,
   readableSkillsDirectories,
@@ -42,10 +46,14 @@ export const CodexDoctorCheck = Schema.Struct({
   status: Schema.Literals(["checked", "missing", "failed", "skipped"]),
   cwd: Schema.String,
   version: Schema.optionalKey(Schema.String),
-  detail: Schema.optionalKey(Schema.String),
+  rootOverrides: Schema.optionalKey(Schema.Array(Schema.String)),
+  protocol: Schema.optionalKey(DiscoveryProtocol.pick(["codex-app-server"])),
+  probeFailure: Schema.optionalKey(HarnessProbeFailure),
+  discoveryFailure: Schema.optionalKey(HarnessDiscoveryFailed),
   instances: Schema.Array(CodexDoctorInstance),
   findings: Schema.Array(CodexDoctorFinding),
   errors: Schema.Array(Schema.Struct({ path: Schema.String, message: Schema.String })),
+  aliasErrors: Schema.optionalKey(Schema.Array(DuplicateScanError)),
 });
 export type CodexDoctorCheck = typeof CodexDoctorCheck.Type;
 
@@ -127,7 +135,7 @@ export function codexDuplicateFindings(
 export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
   state: LibraryInventory,
   cwd: string,
-  overrideRoot?: string,
+  overrideRoots?: readonly string[],
   inventoryRoots?: InventoryRootOptions,
 ) {
   const empty = {
@@ -137,19 +145,18 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
     errors: [],
     listingBudget: undefined as ListingBudget | undefined,
   };
-  if (overrideRoot)
+  if (overrideRoots?.some(Boolean))
     return {
       ...empty,
       status: "skipped" as const,
-      detail:
-        "A custom --codex-root does not describe Codex's configured discovery. Run doctor without that override to check native discovery.",
+      rootOverrides: overrideRoots,
     };
   const probe = yield* probeHarness("codex");
   if (probe.status !== "installed" || !probe.executablePath)
     return {
       ...empty,
       status: probe.status === "missing" ? ("missing" as const) : ("failed" as const),
-      detail: probe.error ?? "Codex CLI is unavailable",
+      ...(probe.failure === null ? {} : { probeFailure: probe.failure }),
     };
   const version = probe.version ? { version: probe.version } : {};
   const executable = probe.executablePath;
@@ -164,6 +171,7 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
       ),
     );
     const errors = [...entry.errors];
+    const aliasErrors: DuplicateScanError[] = [];
     const roots =
       inventoryRoots ??
       (yield* Effect.map(configurationForHome(), (paths) => ({
@@ -176,13 +184,10 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
         ...readableSkillsDirectories(roots, { kind: "global" }, ["codex"]),
         ...readableSkillsDirectories(roots, { kind: "repository", root: cwd }, ["codex"]),
       ],
-      { errors },
+      { errors: aliasErrors },
     ).pipe(
       Effect.catchTag("PlatformError", (error) => {
-        errors.push({
-          path: cwd,
-          message: `Could not inspect Codex skill aliases: ${String(error)}`,
-        });
+        aliasErrors.push({ path: cwd, reason: { _tag: "Unreadable", error } });
         return Effect.succeed([]);
       }),
     );
@@ -195,11 +200,8 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
             .pipe(Effect.orElseSucceed(() => resolve(skill.path)));
           const documentHash = yield* fs.readFile(skill.path).pipe(
             Effect.map((bytes) => "sha256:" + createHash("sha256").update(bytes).digest("hex")),
-            Effect.catchTag("PlatformError", () => {
-              errors.push({
-                path: skill.path,
-                message: "Could not read the discovered SKILL.md for content comparison",
-              });
+            Effect.catchTag("PlatformError", (error) => {
+              aliasErrors.push({ path: skill.path, reason: { _tag: "Unreadable", error } });
               return Effect.undefined;
             }),
           );
@@ -222,9 +224,11 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
       ...version,
       listingBudget,
       status: "checked" as const,
+      protocol: "codex-app-server" as const,
       instances,
       findings: codexDuplicateFindings(instances),
       errors,
+      ...(aliasErrors.length ? { aliasErrors } : {}),
     };
   }).pipe(
     Effect.catch((error) =>
@@ -232,7 +236,14 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
         ...empty,
         ...version,
         status: "failed" as const,
-        detail: String(error),
+        protocol: "codex-app-server" as const,
+        discoveryFailure: Schema.is(HarnessDiscoveryFailed)(error)
+          ? error
+          : new HarnessDiscoveryFailed({
+              harness: "codex",
+              cwd,
+              reason: { _tag: "ReadFailed", failure: error },
+            }),
       }),
     ),
   );

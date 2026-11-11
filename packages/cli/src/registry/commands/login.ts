@@ -1,3 +1,4 @@
+import { Block } from "../../terminal/blocks.js";
 import { Effect, Schema } from "effect";
 
 import { Registry, type PendingDeviceLogin } from "../index.js";
@@ -76,7 +77,17 @@ export const authLoginCommand = Effect.fn("CLI.authLogin")(
     const announce = (pending: PendingDeviceLogin) =>
       Effect.gen(function* () {
         yield* renderer.instruction(
-          `Open ${pending.verificationUri}\nand enter the code ${displayUserCode(pending.userCode)}.`,
+          [
+            Block.Note({
+              text: [
+                "Open ",
+                { code: pending.verificationUri },
+                " and enter the code ",
+                { emph: displayUserCode(pending.userCode) },
+                ".",
+              ],
+            }),
+          ],
           "Approve this login in your browser",
         );
         yield* renderer.updateStatus("Waiting for approval in the browser");

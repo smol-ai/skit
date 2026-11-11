@@ -81,7 +81,7 @@ export const auditClaude = Effect.fn("Audit.claude")(function* (
         severity: "warning",
         code: "claude-mcp-registration-unsupported-location",
         subject: name,
-        problem: `MCP server “${name}” is registered in an unsupported location`,
+        reason: { _tag: "McpRegistrationUnsupported", server: name },
         locations: [legacyPath, ...(advertisedMcp.get(name) ?? [])],
         details: {
           server: name,
@@ -108,7 +108,7 @@ export const auditClaude = Effect.fn("Audit.claude")(function* (
       source: marketplaceSource(registration) ?? location,
       provenance: {
         confidence: "exact",
-        source: "Claude marketplace registry",
+        origin: { _tag: "MarketplaceRegistry", harness: "claude-code" },
         evidence: marketplacesPath,
       },
     });
@@ -152,7 +152,7 @@ export const auditClaude = Effect.fn("Audit.claude")(function* (
         enabled: enabled(name),
         provenance: {
           confidence: "exact",
-          source: "Claude plugin registry",
+          origin: { _tag: "PluginRegistry", harness: "claude-code" },
           evidence: installedPath,
         },
       });
@@ -161,7 +161,7 @@ export const auditClaude = Effect.fn("Audit.claude")(function* (
           severity: "warning",
           code: "installed-claude-plugin-payload-missing",
           subject: name,
-          problem: `Claude plugin “${name}” is registered as installed, but its files are missing`,
+          reason: { _tag: "InstalledPluginFilesMissing", harness: "claude-code", plugin: name },
           locations: installPath ? [installPath] : [installedPath],
           details: { plugin: name, installPath },
         });
@@ -179,7 +179,7 @@ export const auditClaude = Effect.fn("Audit.claude")(function* (
           scope,
           provenance: {
             confidence: "exact",
-            source: "Claude plugin registry",
+            origin: { _tag: "PluginRegistry", harness: "claude-code" },
             evidence: installedPath,
             parentPlugin: name,
           },
@@ -200,13 +200,17 @@ export const auditClaude = Effect.fn("Audit.claude")(function* (
         path: null,
         installed: false,
         enabled: true,
-        provenance: { confidence: "exact", source: "Claude enabledPlugins", evidence: legacyPath },
+        provenance: {
+          confidence: "exact",
+          origin: { _tag: "EnabledPluginSetting", harness: "claude-code" },
+          evidence: legacyPath,
+        },
       });
       findings.push({
         severity: "warning",
         code: "enabled-claude-plugin-not-installed",
         subject: name,
-        problem: `Claude plugin “${name}” is enabled but not installed`,
+        reason: { _tag: "EnabledPluginNotInstalled", harness: "claude-code", plugin: name },
         locations: [legacyPath],
         details: { plugin: name },
       });

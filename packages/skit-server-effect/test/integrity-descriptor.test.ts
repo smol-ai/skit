@@ -1,8 +1,12 @@
+import { parseSkitConfig } from "@smolai/skit-core/universal/consumer";
 import { BrowserCrypto } from "@effect/platform-browser";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { skitDescriptorRequestSchema } from "@smolai/skit-core/universal/authoring";
-import { hashInstalledSkillFiles } from "../src/skits/internal/integrity/descriptor.js";
+import {
+  hashInstalledSkillFiles,
+  descriptorError,
+} from "../src/skits/internal/integrity/descriptor.js";
 
 describe("Integrity descriptor", () => {
   it.effect("pins the legacy depth-first code-unit Skill digest", () =>
@@ -38,6 +42,7 @@ describe("Integrity descriptor", () => {
       expect(failure).toMatchObject({
         _tag: "Integrity.Error",
         code: "SHARED_MAPPING_COLLISION",
+        detail: "Shared target collision: SKILL.md",
       });
     }).pipe(Effect.provide(BrowserCrypto.layer)),
   );
@@ -66,3 +71,45 @@ describe("Integrity descriptor", () => {
     }),
   );
 });
+
+it.effect("descriptor failures get server-owned details without losing the transport code", () =>
+  Effect.gen(function* () {
+    const malformed = descriptorError(yield* Effect.flip(parseSkitConfig("{")));
+    expect(malformed.code).toBe("INVALID_DESCRIPTOR");
+    expect(malformed.detail).toContain("Malformed JSON SKIT Descriptor:");
+    const conflict = descriptorError(
+      yield* Effect.flip(
+        parseSkitConfig(
+          JSON.stringify({
+            slug: "tools",
+            skills: [
+              {
+                name: "review",
+                path: "review",
+                invocation: "explicit",
+                trigger_modes: ["implicit"],
+              },
+            ],
+          }),
+        ),
+      ),
+    );
+    expect(conflict).toMatchObject({
+      code: "CONFLICTING_INVOCATION_DECLARATIONS",
+      detail: "review declares conflicting invocation and trigger_modes values",
+    });
+  }),
+);
+
+it.effect("descriptor constraints acquire server wording after parsing structured failures", () =>
+  Effect.gen(function* () {
+    const cause = yield* Effect.flip(
+      parseSkitConfig(
+        JSON.stringify({ slug: "tools", skills: [{ name: "review", path: "../escape" }] }),
+      ),
+    );
+    const failure = descriptorError(cause);
+    expect(failure).toMatchObject({ code: "INVALID_DESCRIPTOR" });
+    expect(failure.detail).toContain('Path must be safe and relative at ["skills"][0]["path"]');
+  }),
+);

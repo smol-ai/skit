@@ -41,7 +41,9 @@ export const runApply = Effect.fn("Library.recordedApplyStep")(function* (
     reason: "update",
     cause:
       cause._tag === "Library.InstalledSkillsChanged"
-        ? new StalePlan({ message: cause.message })
+        ? new StalePlan({
+            reason: { _tag: "EvidenceChanged", path: cause.path, kind: "installed" },
+          })
         : cause,
     failedPaths: path === undefined ? null : [path],
   });
@@ -70,7 +72,7 @@ export const operationScope = Effect.fn("Library.operationScope")(function* (
     const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(state.operations);
     const operation = operations.find((item) => item.operationId === operationId);
     if (operation?._tag !== "Pending" || !operation.steps[index])
-      return yield* new StalePlan({ message: "Installed changes require their Pending operation" });
+      return yield* new StalePlan({ reason: { _tag: "OperationMissing", kind: "install" } });
     const prior = operation.steps[index].applies?.find((item) => item.key === key)?.apply;
     const prepared = prior ?? (yield* prepareApply(writer.home, plan, routing)).step;
     const step = { ...prepared, routing };
@@ -87,7 +89,9 @@ export const operationScope = Effect.fn("Library.operationScope")(function* (
         ? operation?.steps[step.sourceStep]?.step
         : undefined;
     if (source?._tag !== "Sync" || source.phase !== "retire")
-      return yield* new StalePlan({ message: "Sync state requires its recorded publication step" });
+      return yield* new StalePlan({
+        reason: { _tag: "OperationMissing", kind: "sync-publication" },
+      });
     const program = source.program;
     const { operations, ...body } = current;
     if (canonicalJson(body) === canonicalJson(program.after)) return;

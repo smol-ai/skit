@@ -2,14 +2,14 @@
 // Everything here is pure computation over strings and bytes so the Registry Worker can share
 // it with the CLI. Filesystem-backed workflows over a SKIT directory live in skit.ts.
 
-import { Effect, Result, Schema } from "effect";
+import { Effect, Result, Schema, Predicate } from "effect";
 // Hashing is deterministic computation, not IO, so it stays on node:crypto.
 import { createHash } from "node:crypto";
-import { parse as parseYaml } from "yaml";
+import { parseDocument } from "yaml";
+import { yamlIssueFact, YamlWarning, type DescriptorIssue } from "./descriptor-issue.js";
 import { encodeHashParts, type Hash } from "../shared/hash.js";
 
 import {
-  type SkillExampleManifest,
   type SkitDescriptor,
   containedSkillSchema,
   skillExampleSchema,
@@ -84,8 +84,22 @@ function normalizeContainedSkill(skill: ParsedSkill): SkitDescriptor["skills"][n
   } as SkitDescriptor["skills"][number];
 }
 
-const malformed = (format: "json" | "yaml", detail: string) =>
-  new DescriptorMalformed({ format, detail });
+const malformed = (format: "json" | "yaml", issue: DescriptorIssue) =>
+  new DescriptorMalformed({ format, issue });
+
+const jsonSyntax = (error: unknown): Extract<DescriptorIssue, { _tag: "JsonSyntax" }> => {
+  const message =
+    Predicate.hasProperty(error, "message") && Predicate.isString(error.message)
+      ? error.message
+      : "";
+  const offset = /position (\d+)/u.exec(message)?.[1];
+  const location = /line (\d+) column (\d+)/u.exec(message);
+  return {
+    _tag: "JsonSyntax",
+    ...(offset === undefined ? {} : { offset: Number(offset) }),
+    ...(location === null ? {} : { line: Number(location[1]), column: Number(location[2]) }),
+  };
+};
 
 const JsonDocument = Schema.fromJsonString(Schema.Unknown);
 
@@ -107,7 +121,7 @@ const validateDescriptor = Effect.fn("Descriptor.validate")(function* (
   const parsed = yield* Schema.decodeUnknownEffect(skitDescriptorSchema, {
     onExcessProperty: "error",
     errors: "all",
-  })(input).pipe(Effect.mapError((error) => malformed(format, error.message)));
+  })(input).pipe(Effect.mapError((error) => malformed(format, { _tag: "Schema", failure: error })));
   const skills = yield* normalizeSkills(parsed.skills);
   const descriptor: SkitDescriptor = { ...parsed, skills };
   if (new Set(skills.map((skill) => skill.name)).size !== skills.length)
@@ -124,9 +138,20 @@ export const hasSkitReadmeDeclaration = (text: string): boolean =>
 export const parseSkitReadme = Effect.fn("Descriptor.parseReadme")(function* (text: string) {
   const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
   if (!match) return yield* new ReadmeFrontmatterMissing();
+  const document = yield* Effect.try({
+    try: () => parseDocument(match[1]),
+    catch: () => malformed("yaml", { _tag: "YamlValue" }),
+  });
+  for (const warning of document.warnings)
+    yield* Effect.logWarning(YamlWarning.make(yamlIssueFact(warning)));
+  if (document.errors.length)
+    return yield* malformed("yaml", {
+      _tag: "YamlSyntax",
+      errors: document.errors.map(yamlIssueFact),
+    });
   const input = yield* Effect.try({
-    try: () => parseYaml(match[1]) as unknown,
-    catch: (error) => malformed("yaml", String(error)),
+    try: () => document.toJS() as unknown,
+    catch: () => malformed("yaml", { _tag: "YamlValue" }),
   });
   // Generated Agent Skills wrappers used these sentinel IDs before Descriptor
   // identity moved to `slug`. Retained artifacts are immutable, so normalize
@@ -147,12 +172,12 @@ export const parseSkitReadme = Effect.fn("Descriptor.parseReadme")(function* (te
 
 export const parseSkitConfig = Effect.fn("Descriptor.parseConfig")(function* (text: string) {
   const input = yield* Schema.decodeEffect(JsonDocument)(text).pipe(
-    Effect.mapError((error) => malformed("json", error.message)),
+    Effect.mapError((error) => malformed("json", jsonSyntax(error))),
   );
   const parsed = yield* Schema.decodeUnknownEffect(skitConfigSchema, {
     onExcessProperty: "error",
     errors: "all",
-  })(input).pipe(Effect.mapError((error) => malformed("json", error.message)));
+  })(input).pipe(Effect.mapError((error) => malformed("json", { _tag: "Schema", failure: error })));
   return yield* validateDescriptor(
     {
       skit: 1,
@@ -168,11 +193,27 @@ export const parseSkitConfig = Effect.fn("Descriptor.parseConfig")(function* (te
   );
 });
 
-export function parseSkillExample(text: string): SkillExampleManifest {
-  return Schema.decodeUnknownSync(skillExampleSchema, { onExcessProperty: "error" })(
-    parseYaml(text),
-  );
-}
+export const parseSkillExample = Effect.fn("Descriptor.parseExample")(function* (text: string) {
+  const document = yield* Effect.try({
+    try: () => parseDocument(text),
+    catch: () => malformed("yaml", { _tag: "YamlValue" }),
+  });
+  for (const warning of document.warnings)
+    yield* Effect.logWarning(YamlWarning.make(yamlIssueFact(warning)));
+  if (document.errors.length)
+    return yield* malformed("yaml", {
+      _tag: "YamlSyntax",
+      errors: document.errors.map(yamlIssueFact),
+    });
+  const input = yield* Effect.try({
+    try: () => document.toJS() as unknown,
+    catch: () => malformed("yaml", { _tag: "YamlValue" }),
+  });
+  return yield* Schema.decodeUnknownEffect(skillExampleSchema, {
+    onExcessProperty: "error",
+    errors: "all",
+  })(input).pipe(Effect.mapError((error) => malformed("yaml", { _tag: "Schema", failure: error })));
+});
 
 export function hashParts(parts: Array<string | Uint8Array>): Hash {
   return `sha256:${createHash("sha256").update(encodeHashParts(parts)).digest("hex")}`;

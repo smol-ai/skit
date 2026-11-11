@@ -8,6 +8,7 @@ import {
   skitConfigurationLayer,
 } from "@smolai/skit-core/platform";
 import * as Library from "@smolai/skit-core/library";
+import * as Author from "@smolai/skit-core/author";
 import { inventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { rootOverrides, type RootFlags } from "./commands/parameters.js";
 
@@ -35,6 +36,16 @@ export const libraryLayer = (input: CommandInput = {}) =>
 /** Source commands use Library and Registry transport, without constructing Author owners. */
 export const sourceLayer = (input: CommandInput = {}) =>
   Layer.merge(libraryLayer(input), registryHttpLayer());
+
+/** Author init and sync use workspace history alongside the configured Library. */
+export const authorLayer = Layer.unwrap(
+  Effect.map(SkitConfiguration, (paths) =>
+    Layer.merge(
+      Library.layer({ home: paths.skitHome, roots: inventoryRootOptions(paths) }),
+      Author.authorLayer({ home: paths.skitHome }),
+    ),
+  ),
+);
 
 /** Process services for the executable and command metadata tools; never opens Library. */
 export const cliLayer = (json: boolean, home?: string) =>

@@ -37,8 +37,11 @@ contract version bumps under the
 [compatibility policy](./coding-standards.md#name-things-plainly). Regenerate the
 artifacts and update affected consumers and fixtures together.
 
-The release workflow checks the tagged checkout against `origin/dev` using
-`pnpm --filter @smolai/skit contracts:check --base origin/dev`. Development PR CI
+The release workflow checks the tagged checkout against the latest published npm
+package using `pnpm --filter @smolai/skit contracts:check`. The check verifies the
+published tarball's integrity and reads its shipped contracts, rather than trusting
+a development branch or Git tag. An exact published baseline can be selected with
+`--release <version>`. Development PR CI
 does not run this compatibility gate. Generated-artifact and payload-validation
 tests remain part of development CI.
 

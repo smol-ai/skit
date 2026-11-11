@@ -1,9 +1,10 @@
+import { Block } from "../terminal/blocks.js";
 import * as Library from "@smolai/skit-core/library";
 import { MissingRequirement } from "../commands/input-failures.js";
 
 import { type InstallScope } from "@smolai/skit-core/library";
 
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 
 import { NothingToSelect } from "../terminal/interaction-failures.js";
 
@@ -21,10 +22,10 @@ import {
 import { Prompter } from "../terminal/prompter.js";
 import { Renderer } from "../terminal/renderer.js";
 import { promptForScope } from "./presentation/scope-prompt.js";
-import { failureExitCodes } from "../commands/failure-classification.js";
 import { encodeResult as result } from "../commands/encode-result.js";
 
 import { largeCollectionWarning, descriptionLoadMessage } from "./presentation/description-size.js";
+import { collectionChoiceTitle } from "./presentation/collection-source.js";
 
 const DONE = "Done";
 
@@ -53,17 +54,19 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
 ) {
   if (input.subject === undefined && !input.interactive)
     return yield* new MissingRequirement({
-      command: input.action,
-      requires: "a skill or collection",
-      hint: "`skit list --json` lists them. Add `--global` or `--repo <path>` to choose the scope, and `--all` for a whole collection.",
+      reason: { _tag: "SkillSelection", action: input.action },
     });
   const library = yield* Library.Service;
   const base = yield* library.read;
   const view = yield* library.list({ base });
   const prompter = yield* Prompter;
   const renderer = yield* Renderer;
-  const collectionLabel = (collectionId: string) =>
-    view.collections.find((collection) => collection.id === collectionId)?.label;
+  const collectionLabel = (collectionId: string) => {
+    const collection = view.collections.find((collection) => collection.id === collectionId);
+    return collection === undefined
+      ? undefined
+      : collectionChoiceTitle(collection.label, collection.collectionSource);
+  };
   const skillNames = (skillIds: readonly string[]) =>
     skillIds
       .flatMap(
@@ -84,7 +87,12 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
       )
       .map(withLocation);
     if (enabled.length === 0)
-      return yield* new NothingToSelect({ detail: "No Skills are currently enabled" });
+      return yield* new NothingToSelect({
+        reason: {
+          _tag: "EnabledSkills",
+          ...(input.scope === undefined ? {} : { scope: input.scope }),
+        },
+      });
     const everywhere = [...new Set(enabled.map((target) => target.collectionId))].flatMap(
       (collectionId) => {
         const all = enabled.filter((target) => target.collectionId === collectionId);
@@ -121,12 +129,19 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
   if (query === undefined) {
     const collections = view.collections.filter((collection) => collection.members.length > 0);
     if (collections.length === 0)
-      return yield* new NothingToSelect({ detail: "The local Library contains no Skills" });
+      return yield* new NothingToSelect({ reason: { _tag: "LibrarySkills" } });
     query = yield* prompter
       .autocomplete("Select a collection", [
-        ...collections.map((collection): { value: string; label: string } => ({
+        ...collections.map((collection): { value: string; label: string; hint: string } => ({
           value: collection.id,
-          label: collection.label,
+          label: collectionChoiceTitle(collection.label, collection.collectionSource),
+          hint: [
+            view.placements.some((placement) => placement.collectionId === collection.id)
+              ? "Enabled"
+              : "Disabled",
+          ]
+            .filter(Boolean)
+            .join(" | "),
         })),
         { value: DONE, label: DONE },
       ])
@@ -150,7 +165,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
         {
           value: "collection",
           label: input.enabled
-            ? `Enable whole collection · ${descriptionLoadMessage(
+            ? `Enable whole collection | ${descriptionLoadMessage(
                 yield* library.descriptionLoad({ collection: collection.id }, { base }),
               )}`
             : "Disable whole collection",
@@ -192,7 +207,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
                   .filter((target) => target.skillIds.includes(skill.id))
                   .map(
                     (target) =>
-                      `${collectionLabel(target.collectionId) ?? target.collectionId} · ${target.location}`,
+                      `${collectionLabel(target.collectionId) ?? target.collectionId} | ${target.location}`,
                   )
                   .join(", "),
               }),
@@ -214,7 +229,10 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
       .map(withLocation)
       .filter((target) => target.collectionId === collection.id);
     if (!enabled.length) {
-      yield* renderer.note("This collection is not enabled anywhere.", "Nothing to change");
+      yield* renderer.note(
+        [Block.Note({ text: ["This collection is not enabled anywhere."] })],
+        "Nothing to change",
+      );
       return;
     }
     const chosen =
@@ -259,9 +277,9 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
   const plan = yield* library.planEnabled([intent], { base });
   const outcomes = yield* renderer.withStatus(
     input.dryRun
-      ? "Planning Collection Bindings"
+      ? "Planning what to enable"
       : input.enabled
-        ? "Projecting retained Skills"
+        ? "Installing skills"
         : "Removing installed skills",
     Effect.gen(function* () {
       return input.dryRun
@@ -278,6 +296,15 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
       ? outcomes.results.map((value) => ({ kind: "applied" as const, value }))
       : outcomes;
   for (const outcome of reported) {
+    const owner = view.collections.find(
+      (candidate) =>
+        candidate.id === outcome.value.subject_id ||
+        candidate.members.some((member) => member.id === outcome.value.subject_id),
+    );
+    const identity =
+      owner === undefined
+        ? {}
+        : { collection_label: owner.label, collection_source: owner.collectionSource };
     if (input.enabled) {
       const warning = largeCollectionWarning(
         plan.changes.find(
@@ -286,30 +313,41 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
             sameInstallScope(change.scope, outcome.value.scope),
         )!.listingSize,
       );
-      if (warning !== undefined) yield* renderer.note(warning, "Skill listing");
+      if (warning !== undefined)
+        yield* renderer.note([Block.Status({ tone: "warn", text: [warning] })], "Skill listing");
     }
     yield* renderer.result(
       outcome.kind === "plan"
         ? input.enabled
-          ? result("enablePlan", enableOutputContracts.enablePlan, outcome.value)
-          : result("disablePlan", enableOutputContracts.disablePlan, outcome.value)
+          ? result(
+              "enablePlan",
+              enableOutputContracts.enablePlan,
+              yield* Schema.decodeUnknownEffect(
+                Schema.toType(enableOutputContracts.enablePlan.schema),
+              )({ ...outcome.value, ...identity }),
+            )
+          : result(
+              "disablePlan",
+              enableOutputContracts.disablePlan,
+              yield* Schema.decodeUnknownEffect(
+                Schema.toType(enableOutputContracts.disablePlan.schema),
+              )({ ...outcome.value, ...identity }),
+            )
         : input.enabled
-          ? // Completion is decided by the application; the CLI maps its classification to an exit.
+          ? // The output boundary reads the application completion facts.
             result(
               "enable",
               enableOutputContracts.enable,
-              outcome.value,
-              outcome.value.application.status === "incomplete" && incomplete
-                ? failureExitCodes[incomplete.code]
-                : undefined,
+              yield* Schema.decodeUnknownEffect(Schema.toType(enableOutputContracts.enable.schema))(
+                { ...outcome.value, ...identity },
+              ),
             )
           : result(
               "disable",
               enableOutputContracts.disable,
-              outcome.value,
-              outcome.value.application.status === "incomplete" && incomplete
-                ? failureExitCodes[incomplete.code]
-                : undefined,
+              yield* Schema.decodeUnknownEffect(
+                Schema.toType(enableOutputContracts.disable.schema),
+              )({ ...outcome.value, ...identity }),
             ),
     );
   }

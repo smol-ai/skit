@@ -1,14 +1,20 @@
+import {
+  invocationRowSummary,
+  scopeRowLabel,
+  destinationLabel,
+  fileChangeLabels,
+} from "../library/invocation";
+import { auditFindingText } from "../audit/finding-reasons";
+import { auditConfidenceLabel, auditOriginLabel } from "../audit/provenance";
+import { harnessProbeFailure } from "../library/probe-failures";
+import { invocationFailure } from "../library/invocation-failure";
 import type { HarnessProbeResult } from "@smolai/skit-core/harnesses";
 import type {
   AuditEntryV1Alpha4,
   AuditMcpServerV1Alpha4,
   AuditReportV1Alpha4,
 } from "@smolai/skit-core/audit";
-import {
-  invocationRowSummary,
-  type LibrarySkillRow,
-  type PendingLibraryChange,
-} from "@smolai/skit-core/library/session";
+import { type LibrarySkillRow, type PendingLibraryChange } from "@smolai/skit-core/library/session";
 import type { ListingBudget } from "@smolai/skit-core/harnesses";
 import { groupSkills, groupKindLabel, groupLocation, type SkillGroup } from "../audit/skill-groups";
 
@@ -125,7 +131,7 @@ export function auditPresentation(report: AuditReportV1Alpha4) {
       kind === "skill"
         ? (staticAudit?.findings ?? []).map((finding) => {
             const location = finding.location;
-            return `${finding.confidence} confidence · ${location.path ?? capability.location ?? "unknown"}:${location.line}:${location.column} · ${location.excerpt}`;
+            return `${finding.confidence} confidence | ${location.path ?? capability.location ?? "unknown"}:${location.line}:${location.column} | ${location.excerpt}`;
           })
         : [];
     const status: AuditItem["status"] = related.some((finding) => finding.severity === "error")
@@ -136,8 +142,8 @@ export function auditPresentation(report: AuditReportV1Alpha4) {
     const evidence = [
       `Scope: ${{ user: "User configuration", project: "Project configuration", legacy: "Legacy configuration" }[capability.scope]}`,
       `harnesses: ${capability.harnessIds.join(", ") || "none"}`,
-      `Provenance: ${{ exact: "Exact match", matched: "Inferred match", unknown: "Unknown" }[capability.provenance.confidence]} · ${capability.provenance.source ?? "source unavailable"}`,
-      ...related.map((finding) => `${finding.severity}: ${finding.problem}`),
+      `Provenance: ${auditConfidenceLabel(capability.provenance.confidence)} | ${auditOriginLabel(capability.provenance.origin)}`,
+      ...related.map((finding) => `${finding.severity}: ${auditFindingText(finding.reason)}`),
       ...staticFindings,
       ...riskFlags.map(() => "Risk indicator detected; inspect the supporting evidence."),
     ];
@@ -189,7 +195,7 @@ export function auditPresentation(report: AuditReportV1Alpha4) {
           ? finding.details.configPath
           : "audit report",
       status: finding.severity === "error" ? "error" : "warning",
-      summary: finding.code.replaceAll("-", " "),
+      summary: auditFindingText(finding.reason),
       evidence: Object.entries(finding.details).map(
         ([key, value]) => `${key}: ${JSON.stringify(value)}`,
       ),
@@ -232,7 +238,7 @@ export function auditPresentation(report: AuditReportV1Alpha4) {
         status: "clear",
         summary: `${harness.entryIds.length} audit entries across ${roots.length} configuration or content roots.`,
         evidence: [
-          "installation probe: not run · press p",
+          "installation probe: not run | press p",
           `audit profile: ${harness.profileId}`,
           `audit profile version: ${harness.profileVersion}`,
           ...detectionSources.map((root) => `detection source: ${root}`),
@@ -295,15 +301,15 @@ function libraryRow(row: LibrarySkillRow): LibraryRow {
     name: row.name,
     kind: "library-skill",
     location: row.heading,
-    status: row.invocationWarning ? "warning" : "clear",
+    status: row.invocationFailure ? "warning" : "clear",
     summary: enabled
       ? `Active in ${row.scopes.length} place${row.scopes.length === 1 ? "" : "s"}.`
       : "Not active anywhere.",
     evidence: [
-      ...(enabled
-        ? row.scopes.map((scopeRow) => scopeRow.label)
-        : ["not active anywhere · press e to enable"]),
-      ...(row.invocationWarning ? [row.invocationWarning] : []),
+      ...(enabled ? row.scopes.map(scopeRowLabel) : ["not active anywhere | press e to enable"]),
+      ...(row.invocationFailure
+        ? [`Author preference unavailable: ${invocationFailure(row.invocationFailure)}`]
+        : []),
     ],
     agents: enabled ? ["every agent"] : [],
     row,
@@ -339,9 +345,9 @@ export function libraryRows(
         name: members[0]!.heading,
         location: collectionId,
         status: "clear",
-        summary: `${members.length} Skill${members.length === 1 ? "" : "s"} · ${enabled} enabled`,
+        summary: `${members.length} Skill${members.length === 1 ? "" : "s"} | ${enabled} enabled`,
         evidence: members.map(
-          (row) => `${row.name} · ${row.scopes.length ? "enabled" : "not enabled"}`,
+          (row) => `${row.name} | ${row.scopes.length ? "enabled" : "not enabled"}`,
         ),
         agents: [],
       };
@@ -356,7 +362,7 @@ function changeSummary(pending: Pick<PendingLibraryChange, "facts">): string {
   return pending.facts
     .map(
       (fact) =>
-        `${fact.action === "enable" ? "Enable" : "Disable"} ${fact.collectionLabel ?? fact.skills.join(", ")} for every harness (${fact.destination})`,
+        `${fact.action === "enable" ? "Enable" : "Disable"} ${fact.collectionLabel ?? fact.skills.join(", ")} for every harness (${destinationLabel(fact.scope)})`,
     )
     .join("; ");
 }
@@ -380,7 +386,9 @@ export function harnessProbePresentation(item: AuditItem, result: HarnessProbeRe
   next.summary =
     result.status === "installed"
       ? `${result.version ? `Version ${result.version}` : "Installed"}.`
-      : (result.error ?? `Harness probe ${result.status}.`);
+      : result.failure === null
+        ? `Harness probe ${result.status}.`
+        : harnessProbeFailure(result.failure);
   next.evidence = [
     `probe: ${result.status}`,
     `command: ${result.command} --version`,
@@ -389,7 +397,7 @@ export function harnessProbePresentation(item: AuditItem, result: HarnessProbeRe
           `version output: ${result.versionOutput.split("\n").find(Boolean) ?? result.versionOutput}`,
         ]
       : []),
-    ...(result.error ? [`probe error: ${result.error}`] : []),
+    ...(result.failure ? [`probe error: ${harnessProbeFailure(result.failure)}`] : []),
     ...next.evidence.filter((line) => !line.startsWith("installation probe:")),
   ];
   return next;
@@ -444,7 +452,7 @@ export function detailPresentation(
               ? "executable"
               : "location",
           item.kind === "harness"
-            ? (item.harnessProbe?.executablePath ?? "not probed · press p")
+            ? (item.harnessProbe?.executablePath ?? "not probed | press p")
             : item.location,
         ),
         ...(library
@@ -466,8 +474,8 @@ export function detailPresentation(
           : []),
         ...(item.provenance
           ? [
-              field("source", item.provenance.source ?? "unknown"),
-              field("confidence", item.provenance.confidence),
+              field("source", auditOriginLabel(item.provenance.origin)),
+              field("confidence", auditConfidenceLabel(item.provenance.confidence)),
               ...(item.provenance.collectionId
                 ? [field("collection", item.provenance.collectionId)]
                 : []),
@@ -497,7 +505,7 @@ export function detailPresentation(
     budget:
       item.kind === "harness" ? budgets.find((budget) => budget.harness === item.name) : undefined,
     evidenceTitle: collection ? "Skills" : "Evidence",
-    evidence: item.evidence.map((line) => `· ${line}`).join("\n"),
+    evidence: item.evidence.map((line) => `| ${line}`).join("\n"),
     evidenceLast: collection,
     shortcuts: collection
       ? ([
@@ -515,7 +523,7 @@ export function detailPresentation(
           ? item.findingCodes?.some((code) =>
               ["orphaned-projection-claim", "invalid-ownership-marker"].includes(code),
             )
-            ? "Inspect ownership evidence; this legacy marker does not authorize removal"
+            ? "Inspect the folder, its ownership marker and its Library record before changing it"
             : "Disable the installed skill and inspect its content"
           : "Inspect the warnings listed above",
   };
@@ -535,7 +543,7 @@ export function confirmationPresentation(
           ...(showSkills ? [field("included", fact.skills.join(", "))] : []),
         ]),
     field("agents", "every agent"),
-    field("applies to", fact.destination),
+    field("applies to", destinationLabel(fact.scope)),
     ...(fact.action === "enable" && (pending.policies[index] ?? pending.policies[0])
       ? [
           field(
@@ -554,7 +562,7 @@ export function confirmationPresentation(
           ),
         ]
       : []),
-    field("writes", fact.writes),
+    field("writes", fileChangeLabels[fact.fileChange]),
   ]);
   const canShowSkills = pending.facts.some((fact) => fact.wholeCollection);
   return {
@@ -565,9 +573,9 @@ export function confirmationPresentation(
       ? "confirm enable"
       : "confirm disable",
     help: canShowSkills
-      ? `Enter apply · Esc cancel · s ${showSkills ? "hide" : "show"} Skills`
+      ? `Enter apply | Esc cancel | s ${showSkills ? "hide" : "show"} Skills`
       : compact
-        ? "Enter apply · Esc cancel · PgUp/PgDn scroll"
+        ? "Enter apply | Esc cancel | PgUp/PgDn scroll"
         : "enter apply   esc cancel — nothing is written until you apply",
   };
 }
@@ -607,17 +615,17 @@ export function inventoryPresentation(
     subtitle:
       section.key === "library"
         ? collectionId === undefined
-          ? `${items.length} Collections · ${skills.length} Skills`
-          : `${collectionHeading ?? "Collection"} · ${items.length} Skills`
-        : `${section.key === "skills" && skillGroup ? skillGroup.label : section.subtitle} · ${items.length} entries · ${findings} findings`,
+          ? `${items.length} Collections | ${skills.length} Skills`
+          : `${collectionHeading ?? "Collection"} | ${items.length} Skills`
+        : `${section.key === "skills" && skillGroup ? skillGroup.label : section.subtitle} | ${items.length} entries | ${findings} findings`,
     listTitle:
       section.key === "library"
         ? collectionId === undefined
           ? "collections"
           : (collectionHeading ?? "collection")
         : section.key === "skills" && skillGroup
-          ? `skills / ${skillGroup.label} · ${items.length}`
-          : `${section.key} · ${items.length}`,
+          ? `skills / ${skillGroup.label} | ${items.length}`
+          : `${section.key} | ${items.length}`,
     showDescription: !(section.key === "library" && collectionId !== undefined),
     emptyMessage:
       section.key === "library"
