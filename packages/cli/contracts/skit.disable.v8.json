@@ -100,7 +100,6 @@
     "action": {
       "type": "string",
       "enum": [
-        "enable",
         "disable"
       ]
     },

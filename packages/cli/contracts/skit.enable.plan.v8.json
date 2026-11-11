@@ -100,8 +100,7 @@
     "action": {
       "type": "string",
       "enum": [
-        "enable",
-        "disable"
+        "enable"
       ]
     },
     "invocation": {

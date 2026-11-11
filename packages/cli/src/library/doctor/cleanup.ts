@@ -1,6 +1,6 @@
 import { Block } from "../../terminal/blocks.js";
 import { type ListingBudget } from "@smolai/skit-core/harnesses";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import * as Library from "@smolai/skit-core/library";
 import { setEnabledOutcomes } from "@smolai/skit-core/library/enable";
 import { scanDoctorCleanup, cleanupIntents, overBudget } from "./selection.js";
@@ -96,7 +96,15 @@ export const presentDoctorCleanup = Effect.fn("Doctor.cleanup")(function* (
   if (!selected.length) return false;
   const plan = yield* library.planEnabled(cleanupIntents(selected), { base: selection.base });
   for (const change of plan.changes)
-    yield* renderer.result(result("disablePlan", enableOutputContracts.disablePlan, change));
+    yield* renderer.result(
+      result(
+        "disablePlan",
+        enableOutputContracts.disablePlan,
+        yield* Schema.decodeUnknownEffect(Schema.toType(enableOutputContracts.disablePlan.schema))(
+          change,
+        ),
+      ),
+    );
   yield* renderer.note(
     [
       renderDoctorBudgetPreview(excessive, savings(chosen)),
@@ -123,6 +131,14 @@ export const presentDoctorCleanup = Effect.fn("Doctor.cleanup")(function* (
       .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
   );
   for (const outcome of outcomes)
-    yield* renderer.result(result("disable", enableOutputContracts.disable, outcome.value));
+    yield* renderer.result(
+      result(
+        "disable",
+        enableOutputContracts.disable,
+        yield* Schema.decodeUnknownEffect(Schema.toType(enableOutputContracts.disable.schema))(
+          outcome.value,
+        ),
+      ),
+    );
   return true;
 });

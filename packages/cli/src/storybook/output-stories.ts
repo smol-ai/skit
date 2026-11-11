@@ -2407,6 +2407,26 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     }),
   ),
   resultStory(
+    "registry",
+    "defaulted",
+    result("registryRemote", {
+      action: "defaulted",
+      name: "team",
+      origin: "https://registry.example",
+      isDefault: true,
+    }),
+  ),
+  resultStory(
+    "registry",
+    "removed",
+    result("registryRemote", {
+      action: "removed",
+      name: "team",
+      origin: "https://registry.example",
+      isDefault: false,
+    }),
+  ),
+  resultStory(
     "harness-probe",
     "mixed",
     result("experimentalHarnessProbe", {

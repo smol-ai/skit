@@ -4,7 +4,7 @@ import { MissingRequirement } from "../commands/input-failures.js";
 
 import { type InstallScope } from "@smolai/skit-core/library";
 
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 
 import { NothingToSelect } from "../terminal/interaction-failures.js";
 
@@ -319,18 +319,36 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
     yield* renderer.result(
       outcome.kind === "plan"
         ? input.enabled
-          ? result("enablePlan", enableOutputContracts.enablePlan, {
-              ...outcome.value,
-              ...identity,
-            })
-          : result("disablePlan", enableOutputContracts.disablePlan, {
-              ...outcome.value,
-              ...identity,
-            })
+          ? result(
+              "enablePlan",
+              enableOutputContracts.enablePlan,
+              yield* Schema.decodeUnknownEffect(
+                Schema.toType(enableOutputContracts.enablePlan.schema),
+              )({ ...outcome.value, ...identity }),
+            )
+          : result(
+              "disablePlan",
+              enableOutputContracts.disablePlan,
+              yield* Schema.decodeUnknownEffect(
+                Schema.toType(enableOutputContracts.disablePlan.schema),
+              )({ ...outcome.value, ...identity }),
+            )
         : input.enabled
           ? // The output boundary reads the application completion facts.
-            result("enable", enableOutputContracts.enable, { ...outcome.value, ...identity })
-          : result("disable", enableOutputContracts.disable, { ...outcome.value, ...identity }),
+            result(
+              "enable",
+              enableOutputContracts.enable,
+              yield* Schema.decodeUnknownEffect(Schema.toType(enableOutputContracts.enable.schema))(
+                { ...outcome.value, ...identity },
+              ),
+            )
+          : result(
+              "disable",
+              enableOutputContracts.disable,
+              yield* Schema.decodeUnknownEffect(
+                Schema.toType(enableOutputContracts.disable.schema),
+              )({ ...outcome.value, ...identity }),
+            ),
     );
   }
   // A later scope can refuse before accepting intent. Keep the earlier results and
