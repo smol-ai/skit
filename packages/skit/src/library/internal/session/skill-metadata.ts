@@ -1,5 +1,4 @@
 import { sourceIdentityLabel } from "../../source-identity.js";
-export { sourceIdentityLabel } from "../../source-identity.js";
 import { currentSkillVersion, versionBacking } from "../../library-contracts.js";
 import { readSkitDescriptor } from "../../../artifact/skit.js";
 import { collectionVersionPath } from "../../collection-version.js";
