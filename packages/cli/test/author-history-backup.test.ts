@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { Effect, Fiber, FileSystem } from "effect";
+import { Effect, Fiber, FileSystem, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { join } from "node:path";
 import { systemError } from "effect/PlatformError";
@@ -169,24 +169,42 @@ it.effect.each(["lost-response", "lost-acknowledgement"] as const)(
       const result = yield* world.a.sync().pipe(
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
-          rename: (from, to) => {
+          rename: Effect.fn(function* (from: string, to: string) {
             if (
               interruption === "lost-acknowledgement" &&
               !refused &&
               to === join(world.a.home, "author-sync.json")
             ) {
-              refused = true;
-              return Effect.fail(
-                systemError({
+              const document = yield* Schema.decodeEffect(
+                Schema.fromJsonString(
+                  Schema.Struct({
+                    backups: Schema.optionalKey(
+                      Schema.Record(
+                        Schema.String,
+                        Schema.Record(Schema.String, Schema.NullOr(Schema.String)),
+                      ),
+                    ),
+                  }),
+                ),
+              )(yield* fs.readFileString(from)).pipe(Effect.orDie);
+              // The chain can contain older unacknowledged observations. Interrupt the save
+              // that acknowledges this edit, after its POST has actually succeeded.
+              if (
+                Object.values(document.backups ?? {}).some((entries) =>
+                  Object.values(entries).includes(observation.id),
+                )
+              ) {
+                refused = true;
+                return yield* systemError({
                   _tag: "PermissionDenied",
                   module: "FileSystem",
                   method: "rename",
                   pathOrDescriptor: to,
-                }),
-              );
+                });
+              }
             }
-            return fs.rename(from, to);
-          },
+            return yield* fs.rename(from, to);
+          }),
         }),
         Effect.result,
       );
