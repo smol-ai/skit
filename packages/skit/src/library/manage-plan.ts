@@ -1,3 +1,5 @@
+import type { ApplyFailure } from "./apply-failure.js";
+import type { SetupWarning } from "./setup-warning.js";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { HttpClient, HttpClientError } from "effect/http";
 import { dirname, join, resolve } from "node:path";
@@ -22,7 +24,6 @@ const offline = HttpClient.make((request) =>
     new HttpClientError.HttpClientError({
       reason: new HttpClientError.TransportError({
         request,
-        description: "A local Source is resolved without the network",
       }),
     }),
   ),
@@ -240,8 +241,11 @@ export const planManage = Effect.fn("Library.planManage")(function* (
  */
 export const incompleteManageWarning = (
   name: string,
-  incomplete: { readonly reason: "destinations" | "update"; readonly message: string },
+  incomplete: { readonly reason: "destinations" | "update"; readonly failure: ApplyFailure },
 ) =>
   incomplete.reason === "destinations"
-    ? Option.some({ name, message: incomplete.message })
-    : Option.none<{ readonly name: string; readonly message: string }>();
+    ? Option.some<SetupWarning>({
+        name,
+        reason: { _tag: "ApplicationIncomplete", failure: incomplete.failure },
+      })
+    : Option.none<SetupWarning>();

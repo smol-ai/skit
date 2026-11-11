@@ -1,4 +1,5 @@
 import { Context, Data, Effect, Layer, Ref } from "effect";
+import { RuleFailed, type CheckRule } from "./rules.js";
 import type { CommandFailure, CommandResult } from "../commands/types.js";
 import {
   Prompter,
@@ -7,6 +8,7 @@ import {
   type PrompterShape,
 } from "../terminal/prompter.js";
 import { Renderer, type RendererShape } from "../terminal/renderer.js";
+import type { Block } from "../terminal/blocks.js";
 
 /** Choose by value or exact visible label; generated IDs need not be known by fixtures. */
 export type ScriptedAnswer =
@@ -25,6 +27,9 @@ export type PromptKind =
   | "password";
 
 export type InteractionEvent = Data.TaggedEnum<{
+  /** The command line a person would type to run what follows. */
+  Command: { readonly line: string };
+  RuleProven: { readonly rule: string };
   PromptShown: {
     readonly kind: PromptKind;
     readonly message: string;
@@ -33,14 +38,14 @@ export type InteractionEvent = Data.TaggedEnum<{
   PromptAnswered: { readonly answer: string | readonly string[] | boolean };
   Note: {
     readonly title: string;
-    readonly body: string;
-    readonly renderBody?: (color: boolean) => string;
+    readonly body: readonly Block[];
   };
+  Instruction: { readonly title: string; readonly body: readonly Block[] };
   Step: {
     readonly index: number;
     readonly total: number;
     readonly title: string;
-    readonly body: string;
+    readonly body: readonly Block[];
   };
   StatusStarted: { readonly message: string };
   StatusUpdated: { readonly message: string };
@@ -52,8 +57,16 @@ export type InteractionEvent = Data.TaggedEnum<{
 
 export const InteractionEvent = Data.taggedEnum<InteractionEvent>();
 
+/**
+ * Journeys call commands as functions, so each states the command line a person would type for
+ * the run that follows.
+ */
+export type TypeCommand = (line: string) => Effect.Effect<void>;
+
 interface ScriptedInteraction {
   readonly layer: Layer.Layer<Prompter | Renderer>;
+  readonly typed: TypeCommand;
+  readonly checkRule: CheckRule;
   readonly events: Effect.Effect<ReadonlyArray<InteractionEvent>>;
   readonly remaining: Effect.Effect<number>;
   readonly prompts: Effect.Effect<
@@ -81,7 +94,11 @@ export const makeScriptedInteraction = Effect.fn("InteractionRecorder.make")(fun
             return answer;
           const labels = "label" in answer ? [answer.label] : answer.labels;
           const values = yield* Effect.forEach(labels, (label) => {
-            const matches = choices.filter((choice) => choice.label === label);
+            // A title names a choice; the source detail some labels add in parentheses varies by
+            // fixture location, so it is not part of the answer.
+            const matches = choices.filter(
+              (choice) => choice.label === label || choice.label.startsWith(`${label} (`),
+            );
             return matches.length === 1 && !matches[0].disabled
               ? Effect.succeed(matches[0].value)
               : Effect.die(
@@ -204,9 +221,8 @@ export const makeScriptedInteraction = Effect.fn("InteractionRecorder.make")(fun
     result: (result) => record(InteractionEvent.Result({ result })),
     failure: (failure) => record(InteractionEvent.Failure({ failure })),
     help: (text) => record(InteractionEvent.Help({ text })),
-    note: (body, title, options) =>
-      record(InteractionEvent.Note({ title, body, ...(options === undefined ? {} : options) })),
-    instruction: (body, title) => record(InteractionEvent.Note({ title, body })),
+    note: (body, title) => record(InteractionEvent.Note({ title, body })),
+    instruction: (body, title) => record(InteractionEvent.Instruction({ title, body })),
     step: (step, body) => record(InteractionEvent.Step({ ...step, body })),
     updateStatus: (message) => record(InteractionEvent.StatusUpdated({ message })),
     withStatus: (status, operation) =>
@@ -224,6 +240,11 @@ export const makeScriptedInteraction = Effect.fn("InteractionRecorder.make")(fun
         Context.add(Renderer, Renderer.of(renderer)),
       ),
     ),
+    checkRule: (rule, satisfied, observed) =>
+      satisfied
+        ? record(InteractionEvent.RuleProven({ rule }))
+        : Effect.fail(new RuleFailed({ rule, observed })),
+    typed: (line) => record(InteractionEvent.Command({ line })),
     events: Ref.get(events),
     remaining: Ref.get(answers).pipe(Effect.map((current) => current.length)),
     prompts: Ref.get(events).pipe(

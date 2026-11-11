@@ -1,3 +1,4 @@
+import type { InstalledSkillConflict } from "../installed-skills/conflict.js";
 import type { Hash } from "../shared/hash.js";
 import type {
   InstalledSkill,
@@ -46,12 +47,14 @@ export const pending = (copy: InstalledSkill): InstalledSkillPending => ({
 export const conflicted = (
   copy: InstalledSkill,
   current_hash: Hash,
+  conflicts: readonly InstalledSkillConflict[],
   expected_hash: Hash = copy.expected_hash,
 ): InstalledSkillConflicted => ({
   ...recorded(copy),
   expected_hash,
   status: "conflicted",
   current_hash,
+  conflicts,
 });
 
 /** The user deleted its folder at `suppressed_at`, or earlier when that time is unknown. */

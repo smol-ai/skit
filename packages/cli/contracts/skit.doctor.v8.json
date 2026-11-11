@@ -13,6 +13,245 @@
           "code": {
             "type": "string"
           },
+          "conflicts": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "MarkerMissing"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "_tag"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "MarkerInvalid"
+                      ]
+                    },
+                    "reason": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": [
+                                "NotObject"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag"
+                          ],
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": [
+                                "InvalidFields"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag"
+                          ],
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": [
+                                "InvalidJson"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag"
+                          ],
+                          "additionalProperties": true
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "reason"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "SkillMismatch"
+                      ]
+                    },
+                    "expected": {
+                      "type": "string"
+                    },
+                    "actual": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "expected",
+                    "actual"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "InstalledSkillMismatch"
+                      ]
+                    },
+                    "expected": {
+                      "type": "string"
+                    },
+                    "actual": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "actual"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "MarkerHashMismatch"
+                      ]
+                    },
+                    "expected": {
+                      "type": "string",
+                      "pattern": "^sha256:[a-f0-9]{64}$"
+                    },
+                    "actual": {
+                      "type": "string",
+                      "pattern": "^sha256:[a-f0-9]{64}$"
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "expected",
+                    "actual"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "ContentChanged"
+                      ]
+                    },
+                    "expected": {
+                      "type": "string",
+                      "pattern": "^sha256:[a-f0-9]{64}$"
+                    },
+                    "actual": {
+                      "type": "string",
+                      "pattern": "^sha256:[a-f0-9]{64}$"
+                    },
+                    "baseline": {
+                      "type": "string",
+                      "enum": [
+                        "marker",
+                        "library"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "expected",
+                    "actual",
+                    "baseline"
+                  ],
+                  "additionalProperties": true
+                }
+              ]
+            }
+          },
+          "markerReason": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "_tag": {
+                    "type": "string",
+                    "enum": [
+                      "NotObject"
+                    ]
+                  }
+                },
+                "required": [
+                  "_tag"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_tag": {
+                    "type": "string",
+                    "enum": [
+                      "InvalidFields"
+                    ]
+                  }
+                },
+                "required": [
+                  "_tag"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_tag": {
+                    "type": "string",
+                    "enum": [
+                      "InvalidJson"
+                    ]
+                  }
+                },
+                "required": [
+                  "_tag"
+                ],
+                "additionalProperties": true
+              }
+            ]
+          },
           "skillId": {
             "anyOf": [
               {
@@ -91,8 +330,164 @@
         "version": {
           "type": "string"
         },
-        "detail": {
-          "type": "string"
+        "rootOverrides": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "protocol": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "codex-app-server"
+              ]
+            }
+          ]
+        },
+        "probeFailure": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ExecutableMissing"
+                  ]
+                },
+                "command": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "command"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ExitCode"
+                  ]
+                },
+                "command": {
+                  "type": "string"
+                },
+                "exitCode": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "_tag",
+                "command",
+                "exitCode"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ProcessFailed"
+                  ]
+                },
+                "failure": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/SourceProcess.OutputTooLargeEncoded"
+                    },
+                    {
+                      "$ref": "#/definitions/SourceProcess.TimedOutEncoded"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "PlatformError"
+                          ]
+                        },
+                        "reason": {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": [
+                                "AlreadyExists",
+                                "BadResource",
+                                "Busy",
+                                "InvalidData",
+                                "NotFound",
+                                "PermissionDenied",
+                                "TimedOut",
+                                "UnexpectedEof",
+                                "Unknown",
+                                "WouldBlock",
+                                "WriteZero",
+                                "BadArgument"
+                              ]
+                            },
+                            "module": {
+                              "type": "string"
+                            },
+                            "method": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "syscall": {
+                              "type": "string"
+                            },
+                            "pathOrDescriptor": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "module",
+                            "method"
+                          ],
+                          "additionalProperties": true
+                        }
+                      },
+                      "required": [
+                        "_tag",
+                        "reason"
+                      ],
+                      "additionalProperties": true
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "_tag",
+                "failure"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        },
+        "discoveryFailure": {
+          "$ref": "#/definitions/HarnessDiscoveryFailedEncoded"
         },
         "instances": {
           "type": "array",
@@ -288,6 +683,135 @@
             ],
             "additionalProperties": true
           }
+        },
+        "aliasErrors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "reason": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "EntryLimitExceeded"
+                        ]
+                      },
+                      "limit": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "count": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "limit",
+                      "count"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "Unreadable"
+                        ]
+                      },
+                      "error": {
+                        "type": "object",
+                        "properties": {
+                          "_tag": {
+                            "type": "string",
+                            "enum": [
+                              "PlatformError"
+                            ]
+                          },
+                          "reason": {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "AlreadyExists",
+                                  "BadResource",
+                                  "Busy",
+                                  "InvalidData",
+                                  "NotFound",
+                                  "PermissionDenied",
+                                  "TimedOut",
+                                  "UnexpectedEof",
+                                  "Unknown",
+                                  "WouldBlock",
+                                  "WriteZero",
+                                  "BadArgument"
+                                ]
+                              },
+                              "module": {
+                                "type": "string"
+                              },
+                              "method": {
+                                "type": "string"
+                              },
+                              "description": {
+                                "type": "string"
+                              },
+                              "syscall": {
+                                "type": "string"
+                              },
+                              "pathOrDescriptor": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "_tag",
+                              "module",
+                              "method"
+                            ],
+                            "additionalProperties": true
+                          }
+                        },
+                        "required": [
+                          "_tag",
+                          "reason"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "error"
+                    ],
+                    "additionalProperties": true
+                  }
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "reason"
+            ],
+            "additionalProperties": true
+          }
         }
       },
       "required": [
@@ -322,15 +846,373 @@
               "cwd": {
                 "type": "string"
               },
-              "detail": {
-                "type": "string"
+              "reason": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "CustomRoot"
+                        ]
+                      },
+                      "roots": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "roots"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "DescriptionMissing"
+                        ]
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "path": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "name",
+                      "path"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "DiscoveryFailed"
+                        ]
+                      },
+                      "failure": {
+                        "$ref": "#/definitions/HarnessDiscoveryFailedEncoded"
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "failure"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "ListingReadFailed"
+                        ]
+                      },
+                      "failure": {
+                        "$ref": "#/definitions/ListingReadFailureEncoded"
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "failure"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "MetadataInvalid"
+                        ]
+                      },
+                      "failure": {
+                        "$ref": "#/definitions/HarnessMetadataInvalidEncoded"
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "failure"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "NativeReadFailed"
+                        ]
+                      },
+                      "failure": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "PlatformError"
+                                ]
+                              },
+                              "reason": {
+                                "type": "object",
+                                "properties": {
+                                  "_tag": {
+                                    "type": "string",
+                                    "enum": [
+                                      "AlreadyExists",
+                                      "BadResource",
+                                      "Busy",
+                                      "InvalidData",
+                                      "NotFound",
+                                      "PermissionDenied",
+                                      "TimedOut",
+                                      "UnexpectedEof",
+                                      "Unknown",
+                                      "WouldBlock",
+                                      "WriteZero",
+                                      "BadArgument"
+                                    ]
+                                  },
+                                  "module": {
+                                    "type": "string"
+                                  },
+                                  "method": {
+                                    "type": "string"
+                                  },
+                                  "description": {
+                                    "type": "string"
+                                  },
+                                  "syscall": {
+                                    "type": "string"
+                                  },
+                                  "pathOrDescriptor": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "number"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "_tag",
+                                  "module",
+                                  "method"
+                                ],
+                                "additionalProperties": true
+                              }
+                            },
+                            "required": [
+                              "_tag",
+                              "reason"
+                            ],
+                            "additionalProperties": true
+                          },
+                          {
+                            "$ref": "#/definitions/SchemaFailureEncoded"
+                          },
+                          {}
+                        ]
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "failure"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "NativeDiscoveryUnavailable"
+                        ]
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "checked",
+                          "missing",
+                          "failed",
+                          "skipped"
+                        ]
+                      },
+                      "probeFailure": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "ExecutableMissing"
+                                ]
+                              },
+                              "command": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "_tag",
+                              "command"
+                            ],
+                            "additionalProperties": true
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "ExitCode"
+                                ]
+                              },
+                              "command": {
+                                "type": "string"
+                              },
+                              "exitCode": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "_tag",
+                              "command",
+                              "exitCode"
+                            ],
+                            "additionalProperties": true
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "ProcessFailed"
+                                ]
+                              },
+                              "failure": {
+                                "anyOf": [
+                                  {
+                                    "$ref": "#/definitions/SourceProcess.OutputTooLargeEncoded"
+                                  },
+                                  {
+                                    "$ref": "#/definitions/SourceProcess.TimedOutEncoded"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "_tag": {
+                                        "type": "string",
+                                        "enum": [
+                                          "PlatformError"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "object",
+                                        "properties": {
+                                          "_tag": {
+                                            "type": "string",
+                                            "enum": [
+                                              "AlreadyExists",
+                                              "BadResource",
+                                              "Busy",
+                                              "InvalidData",
+                                              "NotFound",
+                                              "PermissionDenied",
+                                              "TimedOut",
+                                              "UnexpectedEof",
+                                              "Unknown",
+                                              "WouldBlock",
+                                              "WriteZero",
+                                              "BadArgument"
+                                            ]
+                                          },
+                                          "module": {
+                                            "type": "string"
+                                          },
+                                          "method": {
+                                            "type": "string"
+                                          },
+                                          "description": {
+                                            "type": "string"
+                                          },
+                                          "syscall": {
+                                            "type": "string"
+                                          },
+                                          "pathOrDescriptor": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "number"
+                                              }
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "_tag",
+                                          "module",
+                                          "method"
+                                        ],
+                                        "additionalProperties": true
+                                      }
+                                    },
+                                    "required": [
+                                      "_tag",
+                                      "reason"
+                                    ],
+                                    "additionalProperties": true
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "_tag",
+                              "failure"
+                            ],
+                            "additionalProperties": true
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "status"
+                    ],
+                    "additionalProperties": true
+                  }
+                ]
               }
             },
             "required": [
               "_tag",
               "harness",
               "cwd",
-              "detail"
+              "reason"
             ],
             "additionalProperties": true
           },
@@ -430,19 +1312,259 @@
                   "additionalProperties": true
                 }
               },
-              "basis": {
-                "type": "string"
+              "provenance": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "CodexAllocation"
+                        ]
+                      },
+                      "contextWindow": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "maxContextTokens": {
+                        "type": "number"
+                      },
+                      "fraction": {
+                        "type": "number"
+                      },
+                      "fallbackCharacters": {
+                        "type": "number"
+                      },
+                      "tokenCap": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "contextWindow",
+                      "fraction",
+                      "fallbackCharacters",
+                      "tokenCap"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "ClaudeFilesystem"
+                        ]
+                      },
+                      "modelSource": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "Environment"
+                                ]
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "_tag",
+                              "name"
+                            ],
+                            "additionalProperties": true
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "SettingsFile"
+                                ]
+                              },
+                              "path": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "_tag",
+                              "path"
+                            ],
+                            "additionalProperties": true
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "Unconfigured"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "_tag"
+                            ],
+                            "additionalProperties": true
+                          }
+                        ]
+                      },
+                      "limitSource": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "Environment"
+                                ]
+                              },
+                              "name": {
+                                "type": "string",
+                                "enum": [
+                                  "SLASH_COMMAND_TOOL_CHAR_BUDGET"
+                                ]
+                              },
+                              "value": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "_tag",
+                              "name",
+                              "value"
+                            ],
+                            "additionalProperties": true
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "ContextConversion"
+                                ]
+                              },
+                              "contextWindow": {
+                                "type": "number"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "catalog",
+                                  "fallback"
+                                ]
+                              },
+                              "charactersPerToken": {
+                                "type": "number"
+                              },
+                              "fraction": {
+                                "type": "number"
+                              },
+                              "clientVersion": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "_tag",
+                              "contextWindow",
+                              "source",
+                              "charactersPerToken",
+                              "fraction",
+                              "clientVersion"
+                            ],
+                            "additionalProperties": true
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "Unavailable"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "_tag"
+                            ],
+                            "additionalProperties": true
+                          }
+                        ]
+                      },
+                      "descriptionCap": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "overrideSources": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "configuredFraction": {
+                        "type": "object",
+                        "properties": {
+                          "value": {
+                            "type": "number"
+                          },
+                          "path": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "modelSource",
+                      "limitSource",
+                      "descriptionCap",
+                      "overrideSources"
+                    ],
+                    "additionalProperties": true
+                  }
+                ]
               },
-              "coverage": {
+              "skippedPaths": {
                 "type": "array",
                 "items": {
                   "type": "string"
                 }
               },
-              "warnings": {
+              "diagnostics": {
                 "type": "array",
                 "items": {
-                  "type": "string"
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "diagnostic": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "diagnostic"
+                  ],
+                  "additionalProperties": true
                 }
               }
             },
@@ -455,8 +1577,9 @@
               "demand",
               "entries",
               "collections",
-              "basis",
-              "coverage"
+              "provenance",
+              "skippedPaths",
+              "diagnostics"
             ],
             "additionalProperties": true
           },
@@ -556,19 +1679,259 @@
                   "additionalProperties": true
                 }
               },
-              "basis": {
-                "type": "string"
+              "provenance": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "CodexAllocation"
+                        ]
+                      },
+                      "contextWindow": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "maxContextTokens": {
+                        "type": "number"
+                      },
+                      "fraction": {
+                        "type": "number"
+                      },
+                      "fallbackCharacters": {
+                        "type": "number"
+                      },
+                      "tokenCap": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "contextWindow",
+                      "fraction",
+                      "fallbackCharacters",
+                      "tokenCap"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "ClaudeFilesystem"
+                        ]
+                      },
+                      "modelSource": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "Environment"
+                                ]
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "_tag",
+                              "name"
+                            ],
+                            "additionalProperties": true
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "SettingsFile"
+                                ]
+                              },
+                              "path": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "_tag",
+                              "path"
+                            ],
+                            "additionalProperties": true
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "Unconfigured"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "_tag"
+                            ],
+                            "additionalProperties": true
+                          }
+                        ]
+                      },
+                      "limitSource": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "Environment"
+                                ]
+                              },
+                              "name": {
+                                "type": "string",
+                                "enum": [
+                                  "SLASH_COMMAND_TOOL_CHAR_BUDGET"
+                                ]
+                              },
+                              "value": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "_tag",
+                              "name",
+                              "value"
+                            ],
+                            "additionalProperties": true
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "ContextConversion"
+                                ]
+                              },
+                              "contextWindow": {
+                                "type": "number"
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "catalog",
+                                  "fallback"
+                                ]
+                              },
+                              "charactersPerToken": {
+                                "type": "number"
+                              },
+                              "fraction": {
+                                "type": "number"
+                              },
+                              "clientVersion": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "_tag",
+                              "contextWindow",
+                              "source",
+                              "charactersPerToken",
+                              "fraction",
+                              "clientVersion"
+                            ],
+                            "additionalProperties": true
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "Unavailable"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "_tag"
+                            ],
+                            "additionalProperties": true
+                          }
+                        ]
+                      },
+                      "descriptionCap": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "overrideSources": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "configuredFraction": {
+                        "type": "object",
+                        "properties": {
+                          "value": {
+                            "type": "number"
+                          },
+                          "path": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "modelSource",
+                      "limitSource",
+                      "descriptionCap",
+                      "overrideSources"
+                    ],
+                    "additionalProperties": true
+                  }
+                ]
               },
-              "coverage": {
+              "skippedPaths": {
                 "type": "array",
                 "items": {
                   "type": "string"
                 }
               },
-              "warnings": {
+              "diagnostics": {
                 "type": "array",
                 "items": {
-                  "type": "string"
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "diagnostic": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "diagnostic"
+                  ],
+                  "additionalProperties": true
                 }
               },
               "limit": {
@@ -633,8 +1996,9 @@
               "demand",
               "entries",
               "collections",
-              "basis",
-              "coverage",
+              "provenance",
+              "skippedPaths",
+              "diagnostics",
               "limit",
               "fitted",
               "shortened",
@@ -675,8 +2039,163 @@
           "version": {
             "type": "string"
           },
-          "detail": {
-            "type": "string"
+          "rootOverrides": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "claude-control-initialize",
+              "opencode-debug-skill",
+              "opencode-http-v2",
+              "devin-skills-list"
+            ]
+          },
+          "probeFailure": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "_tag": {
+                    "type": "string",
+                    "enum": [
+                      "ExecutableMissing"
+                    ]
+                  },
+                  "command": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "_tag",
+                  "command"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_tag": {
+                    "type": "string",
+                    "enum": [
+                      "ExitCode"
+                    ]
+                  },
+                  "command": {
+                    "type": "string"
+                  },
+                  "exitCode": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "_tag",
+                  "command",
+                  "exitCode"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "_tag": {
+                    "type": "string",
+                    "enum": [
+                      "ProcessFailed"
+                    ]
+                  },
+                  "failure": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/definitions/SourceProcess.OutputTooLargeEncoded"
+                      },
+                      {
+                        "$ref": "#/definitions/SourceProcess.TimedOutEncoded"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "_tag": {
+                            "type": "string",
+                            "enum": [
+                              "PlatformError"
+                            ]
+                          },
+                          "reason": {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "AlreadyExists",
+                                  "BadResource",
+                                  "Busy",
+                                  "InvalidData",
+                                  "NotFound",
+                                  "PermissionDenied",
+                                  "TimedOut",
+                                  "UnexpectedEof",
+                                  "Unknown",
+                                  "WouldBlock",
+                                  "WriteZero",
+                                  "BadArgument"
+                                ]
+                              },
+                              "module": {
+                                "type": "string"
+                              },
+                              "method": {
+                                "type": "string"
+                              },
+                              "description": {
+                                "type": "string"
+                              },
+                              "syscall": {
+                                "type": "string"
+                              },
+                              "pathOrDescriptor": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "_tag",
+                              "module",
+                              "method"
+                            ],
+                            "additionalProperties": true
+                          }
+                        },
+                        "required": [
+                          "_tag",
+                          "reason"
+                        ],
+                        "additionalProperties": true
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "_tag",
+                  "failure"
+                ],
+                "additionalProperties": true
+              }
+            ]
+          },
+          "discoveryFailure": {
+            "$ref": "#/definitions/HarnessDiscoveryFailedEncoded"
           },
           "coverage": {
             "type": "string",
@@ -685,12 +2204,6 @@
               "resolved-skills",
               "native-skills"
             ]
-          },
-          "limitations": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
           },
           "skills": {
             "type": "array",
@@ -800,6 +2313,135 @@
               "additionalProperties": true
             }
           },
+          "aliasErrors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "reason": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "EntryLimitExceeded"
+                          ]
+                        },
+                        "limit": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "count": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "_tag",
+                        "limit",
+                        "count"
+                      ],
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "Unreadable"
+                          ]
+                        },
+                        "error": {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": [
+                                "PlatformError"
+                              ]
+                            },
+                            "reason": {
+                              "type": "object",
+                              "properties": {
+                                "_tag": {
+                                  "type": "string",
+                                  "enum": [
+                                    "AlreadyExists",
+                                    "BadResource",
+                                    "Busy",
+                                    "InvalidData",
+                                    "NotFound",
+                                    "PermissionDenied",
+                                    "TimedOut",
+                                    "UnexpectedEof",
+                                    "Unknown",
+                                    "WouldBlock",
+                                    "WriteZero",
+                                    "BadArgument"
+                                  ]
+                                },
+                                "module": {
+                                  "type": "string"
+                                },
+                                "method": {
+                                  "type": "string"
+                                },
+                                "description": {
+                                  "type": "string"
+                                },
+                                "syscall": {
+                                  "type": "string"
+                                },
+                                "pathOrDescriptor": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "number"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "_tag",
+                                "module",
+                                "method"
+                              ],
+                              "additionalProperties": true
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "reason"
+                          ],
+                          "additionalProperties": true
+                        }
+                      },
+                      "required": [
+                        "_tag",
+                        "error"
+                      ],
+                      "additionalProperties": true
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "path",
+                "reason"
+              ],
+              "additionalProperties": true
+            }
+          },
           "findings": {
             "type": "array",
             "items": {
@@ -867,7 +2509,6 @@
           "status",
           "cwd",
           "coverage",
-          "limitations",
           "skills",
           "findings",
           "warnings"
@@ -884,5 +2525,934 @@
     "harnesses"
   ],
   "additionalProperties": true,
+  "definitions": {
+    "SourceProcess.OutputTooLargeEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "SourceProcess.OutputTooLarge"
+          ]
+        },
+        "invocation": {
+          "type": "string"
+        },
+        "stream": {
+          "type": "string",
+          "enum": [
+            "stdout",
+            "stderr"
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "actual": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "_tag",
+        "invocation",
+        "stream",
+        "limit",
+        "actual"
+      ],
+      "additionalProperties": true
+    },
+    "SourceProcess.TimedOutEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "SourceProcess.TimedOut"
+          ]
+        },
+        "invocation": {
+          "type": "string"
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "_tag",
+        "invocation",
+        "timeoutMs"
+      ],
+      "additionalProperties": true
+    },
+    "SchemaIssueFact": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          }
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "MissingKey"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "UnexpectedKey"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "InvalidType"
+                  ]
+                },
+                "expected": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "Declaration",
+                          "Null",
+                          "Undefined",
+                          "Void",
+                          "Never",
+                          "Unknown",
+                          "Any",
+                          "String",
+                          "Number",
+                          "Boolean",
+                          "BigInt",
+                          "Symbol",
+                          "Literal",
+                          "UniqueSymbol",
+                          "ObjectKeyword",
+                          "Enum",
+                          "TemplateLiteral",
+                          "Arrays",
+                          "Objects",
+                          "Union",
+                          "Suspend"
+                        ]
+                      },
+                      "values": {
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": true
+                  }
+                }
+              },
+              "required": [
+                "_tag",
+                "expected"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "InvalidValue"
+                  ]
+                },
+                "check": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "payload": {}
+                  },
+                  "required": [
+                    "id",
+                    "payload"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "Forbidden"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "OneOf"
+                  ]
+                },
+                "matches": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "_tag",
+                "matches"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "SchemaFailureEncoded": {
+      "type": "object",
+      "properties": {
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SchemaIssueFact"
+          }
+        }
+      },
+      "required": [
+        "issues"
+      ],
+      "additionalProperties": true
+    },
+    "HarnessDiscoveryFailedEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "HarnessDiscoveryFailed"
+          ]
+        },
+        "harness": {
+          "type": "string",
+          "enum": [
+            "codex",
+            "claude-code",
+            "opencode",
+            "devin"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "OutputLimitExceeded"
+                  ]
+                },
+                "phase": {
+                  "type": "string",
+                  "enum": [
+                    "startup",
+                    "inventory"
+                  ]
+                },
+                "limitBytes": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "actualBytes": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "endpoint": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "phase",
+                "limitBytes",
+                "actualBytes"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ResponseMissing"
+                  ]
+                },
+                "method": {
+                  "type": "string"
+                },
+                "stderr": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "method"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "DirectoryOmitted"
+                  ]
+                },
+                "returned": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "_tag",
+                "returned"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "RemoteError"
+                  ]
+                },
+                "method": {
+                  "type": "string"
+                },
+                "requestId": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "diagnostic": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ExitCode"
+                  ]
+                },
+                "command": {
+                  "type": "string"
+                },
+                "arguments": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "exitCode": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "stderr": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "command",
+                "arguments",
+                "exitCode",
+                "stderr"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ProcessFailed"
+                  ]
+                },
+                "command": {
+                  "type": "string"
+                },
+                "arguments": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "signal": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "error": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "_tag",
+                "command",
+                "arguments",
+                "signal",
+                "error"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ProcessEnded"
+                  ]
+                },
+                "command": {
+                  "type": "string"
+                },
+                "arguments": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "signal": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "_tag",
+                "command",
+                "arguments",
+                "signal"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ServerAddressInvalid"
+                  ]
+                },
+                "protocol": {
+                  "type": "string"
+                },
+                "hostname": {
+                  "type": "string"
+                },
+                "port": {
+                  "type": "string"
+                },
+                "hasUsername": {
+                  "type": "boolean"
+                },
+                "hasPassword": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "_tag",
+                "protocol",
+                "hostname",
+                "port",
+                "hasUsername",
+                "hasPassword"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "HttpStatus"
+                  ]
+                },
+                "endpoint": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "_tag",
+                "endpoint",
+                "status"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "DirectoryMismatch"
+                  ]
+                },
+                "endpoint": {
+                  "type": "string"
+                },
+                "expected": {
+                  "type": "string"
+                },
+                "actual": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "endpoint",
+                "expected",
+                "actual"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "TimedOut"
+                  ]
+                },
+                "timeoutMs": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "_tag",
+                "timeoutMs"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ReadFailed"
+                  ]
+                },
+                "failure": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "PlatformError"
+                          ]
+                        },
+                        "reason": {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": [
+                                "AlreadyExists",
+                                "BadResource",
+                                "Busy",
+                                "InvalidData",
+                                "NotFound",
+                                "PermissionDenied",
+                                "TimedOut",
+                                "UnexpectedEof",
+                                "Unknown",
+                                "WouldBlock",
+                                "WriteZero",
+                                "BadArgument"
+                              ]
+                            },
+                            "module": {
+                              "type": "string"
+                            },
+                            "method": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "syscall": {
+                              "type": "string"
+                            },
+                            "pathOrDescriptor": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "module",
+                            "method"
+                          ],
+                          "additionalProperties": true
+                        }
+                      },
+                      "required": [
+                        "_tag",
+                        "reason"
+                      ],
+                      "additionalProperties": true
+                    },
+                    {
+                      "$ref": "#/definitions/SourceProcess.OutputTooLargeEncoded"
+                    },
+                    {
+                      "$ref": "#/definitions/SourceProcess.TimedOutEncoded"
+                    },
+                    {
+                      "$ref": "#/definitions/SchemaFailureEncoded"
+                    },
+                    {}
+                  ]
+                }
+              },
+              "required": [
+                "_tag",
+                "failure"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "harness",
+        "cwd",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "ListingReadFailureEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "ListingReadFailure"
+          ]
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ReadFailed"
+                  ]
+                },
+                "path": {
+                  "type": "string"
+                },
+                "failure": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "PlatformError"
+                          ]
+                        },
+                        "reason": {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": [
+                                "AlreadyExists",
+                                "BadResource",
+                                "Busy",
+                                "InvalidData",
+                                "NotFound",
+                                "PermissionDenied",
+                                "TimedOut",
+                                "UnexpectedEof",
+                                "Unknown",
+                                "WouldBlock",
+                                "WriteZero",
+                                "BadArgument"
+                              ]
+                            },
+                            "module": {
+                              "type": "string"
+                            },
+                            "method": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "syscall": {
+                              "type": "string"
+                            },
+                            "pathOrDescriptor": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "module",
+                            "method"
+                          ],
+                          "additionalProperties": true
+                        }
+                      },
+                      "required": [
+                        "_tag",
+                        "reason"
+                      ],
+                      "additionalProperties": true
+                    },
+                    {
+                      "$ref": "#/definitions/SchemaFailureEncoded"
+                    },
+                    {}
+                  ]
+                }
+              },
+              "required": [
+                "_tag",
+                "path",
+                "failure"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "DirectoryLimitExceeded"
+                  ]
+                },
+                "path": {
+                  "type": "string"
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "actual": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "_tag",
+                "path",
+                "limit",
+                "actual"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "InvalidFrontmatter"
+                  ]
+                },
+                "path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "path"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "HarnessMetadataInvalidEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "HarnessMetadataInvalid"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "SKILL.md frontmatter",
+            "Codex metadata",
+            "OpenCode metadata"
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "path",
+        "kind"
+      ],
+      "additionalProperties": true
+    }
+  },
   "$schema": "http://json-schema.org/draft-07/schema#"
 }

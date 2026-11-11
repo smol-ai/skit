@@ -8,9 +8,9 @@ import { type LibraryState } from "../../library-state.js";
 import { Cache, Effect, FileSystem, Result } from "effect";
 import { join, posix } from "node:path";
 import type { AuthorInvocation } from "./invocation.js";
-import { errorMessage } from "../../../shared/failure.js";
 
-export type AuthorInvocationRead = Result.Result<AuthorInvocation, string>;
+import type { AuthorInvocationFailure } from "../../invocation-failure.js";
+export type AuthorInvocationRead = Result.Result<AuthorInvocation, AuthorInvocationFailure>;
 
 /** Verify retained bytes and read invocation evidence, without install assessment or writes. */
 const readInvocation = Effect.fn("Library.readSkillInvocation")(function* (
@@ -23,17 +23,17 @@ const readInvocation = Effect.fn("Library.readSkillInvocation")(function* (
   const backing = version === undefined ? undefined : versionBacking(state, skill, version);
   if (backing === undefined)
     return yield* new ImportContentInvalid({
-      diagnostics: [`Skill ${skill.name} has no selected retained backing`],
+      reason: { _tag: "BackingMissing", skillName: skill.name },
     });
   const root = collectionVersionPath(originalsPath, backing.copy.hash);
   if ((yield* hashTree(root)) !== backing.copy.hash)
     return yield* new ImportContentInvalid({
-      diagnostics: [`Retained copy for ${skill.name} changed`],
+      reason: { _tag: "ContentChanged", kind: "collection", skillName: skill.name },
     });
   const importedPath = join(root, backing.member.source_path);
   if (version === undefined || (yield* hashTree(importedPath)) !== version.source_hash)
     return yield* new ImportContentInvalid({
-      diagnostics: [`Retained Skill ${skill.name} changed`],
+      reason: { _tag: "ContentChanged", kind: "skill", skillName: skill.name },
     });
   const descriptor =
     backing.member.materialization_profile === "declared-skit-skill/v1"
@@ -43,7 +43,7 @@ const readInvocation = Effect.fn("Library.readSkillInvocation")(function* (
   const member = descriptor?.skills.find((member) => member.name === skill.name);
   if (descriptor !== undefined && member === undefined)
     return yield* new ImportContentInvalid({
-      diagnostics: [`Retained descriptor lacks Skill ${skill.name}`],
+      reason: { _tag: "DescriptorSkillMissing", skillName: skill.name },
     });
   const declaring = member ?? { name: skill.name, path: backing.member.source_path };
   const fs = yield* FileSystem.FileSystem;
@@ -88,9 +88,6 @@ export const makeLibrarySkillInvocationReader = Effect.fn("Library.skillInvocati
       lookup: originalTreeHash,
     });
     return (skill: Skill) =>
-      readInvocation(state, originalsPath, skill, (path) => Cache.get(hashes, path)).pipe(
-        Effect.mapError(errorMessage),
-        Effect.result,
-      );
+      Effect.result(readInvocation(state, originalsPath, skill, (path) => Cache.get(hashes, path)));
   },
 );

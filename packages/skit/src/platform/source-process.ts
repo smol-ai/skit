@@ -1,7 +1,7 @@
-import { Data, Context, Effect, Layer, Stream } from "effect";
+import { Context, Effect, Layer, Stream } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
+import { SourceProcessOutputTooLarge, SourceProcessTimedOut } from "./source-process-failures.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_STDOUT_BYTES = 4_000_000;
@@ -20,33 +20,6 @@ export interface SourceProcessResult {
   readonly stdout: Uint8Array;
   readonly stderr: string;
   readonly exitCode: number;
-}
-
-class SourceProcessOutputTooLarge
-  extends Data.TaggedError("SourceProcess.OutputTooLarge")<{
-    invocation: string;
-    stream: "stdout" | "stderr";
-    limit: number;
-    message: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Choose a smaller source, then retry.";
-}
-
-class SourceProcessTimedOut
-  extends Data.TaggedError("SourceProcess.TimedOut")<{
-    invocation: string;
-    timeoutMs: number;
-    message: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Check that the source is reachable, then retry.";
 }
 
 export type SourceProcessFailure =
@@ -134,7 +107,7 @@ export const sourceProcessLayer: Layer.Layer<
                         invocation,
                         stream: name,
                         limit,
-                        message: `${invocation} produced more than ${limit} bytes on ${name}`,
+                        actual: size,
                       }),
                     );
                   if (keep) chunks.push(chunk.slice());
@@ -163,7 +136,6 @@ export const sourceProcessLayer: Layer.Layer<
               new SourceProcessTimedOut({
                 invocation,
                 timeoutMs,
-                message: `${invocation} timed out after ${timeoutMs}ms`,
               }),
             ),
         }),

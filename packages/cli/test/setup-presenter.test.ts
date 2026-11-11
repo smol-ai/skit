@@ -6,8 +6,10 @@ import {
   makeSkillId,
   makeSkillVersionId,
 } from "@smolai/skit-core/universal/consumer";
-import { renderContract } from "../src/commands/output-presenters.js";
-import { result } from "../src/commands/result.js";
+import { renderSetup } from "../src/library/setup/present.js";
+import { Block } from "../src/terminal/blocks.js";
+import { renderBlocks } from "../src/terminal/blocks.js";
+import { TreeError } from "@smolai/skit-core/shared";
 import { classifySetupOnboarding, type SetupSkillInstance } from "@smolai/skit-core/library/setup";
 import { setupDiscoveredSkillChoices } from "../src/library/setup/skills.js";
 
@@ -22,7 +24,7 @@ it("shows all physical copies, groups actual sources, and leaves conflicts and C
     git: { status: "outside-git" },
     locks: [],
     contentIdentity: {
-      status: "none",
+      status: "hashed",
       currentHash: `sha256:${hash.repeat(64)}`,
       libraryMatches: [],
     },
@@ -51,8 +53,7 @@ it("shows all physical copies, groups actual sources, and leaves conflicts and C
       owner: {
         kind: "harness",
         harness: "codex",
-        source: "Codex curated",
-        bundled: false,
+        origin: "curated-plugin",
       } as const,
     },
   ];
@@ -61,11 +62,11 @@ it("shows all physical copies, groups actual sources, and leaves conflicts and C
   expect(rows).toHaveLength(instances.length);
   const choices = rows.map((row) => row.choice);
   expect(choices.find((item) => item.label === "align-me")).toMatchObject({
-    group: "Local source | ~/Work/skills",
+    group: `Local source | ${home}/Work/skills`,
     selected: false,
   });
   expect(rows.find((row) => row.instance.name === "align-me")?.details).toContain(
-    "Link: ~/.claude/skills/align-me → ~/Work/skills/align-me",
+    `Link: ${home}/.claude/skills/align-me → ${home}/Work/skills/align-me`,
   );
   expect(
     choices.every((choice) => choice.description === undefined && choice.detail === undefined),
@@ -115,7 +116,11 @@ it("omits managed installed skills while preserving unmanaged copies and orphane
     owner: { kind: "unknown" },
     git: { status: "outside-git" },
     locks: [],
-    contentIdentity: { status: "none", libraryMatches: [] },
+    contentIdentity: {
+      status: "hashed",
+      currentHash: `sha256:${"a".repeat(64)}`,
+      libraryMatches: [],
+    },
   };
   const membership = {
     installedSkillId: makeInstalledSkillId(),
@@ -145,7 +150,8 @@ it("omits managed installed skills while preserving unmanaged copies and orphane
   const instances = [managed, unmanaged, orphaned];
   const rows = setupDiscoveredSkillChoices(instances, classifySetupOnboarding(instances));
   expect(rows.map((row) => row.instance.path)).toEqual([unmanaged.path, orphaned.path]);
-  expect(rows.find((row) => row.instance === unmanaged)?.choice.selectExplicitly).toBe(true);
+  // Equal known hashes do not require choosing between different content.
+  expect(rows.find((row) => row.instance === unmanaged)?.choice.selectExplicitly).toBeUndefined();
   expect(rows.find((row) => row.instance === orphaned)?.choice.disabled).toBe(true);
   expect(setupDiscoveredSkillChoices([managed], [])).toEqual([]);
 });
@@ -158,7 +164,11 @@ it("rolls up collections with more than five skill names", () => {
     scope: "project",
     harnesses: ["codex"],
     owner: { kind: "unknown" },
-    contentIdentity: { status: "none", libraryMatches: [] },
+    contentIdentity: {
+      status: "hashed",
+      currentHash: `sha256:${"a".repeat(64)}`,
+      libraryMatches: [],
+    },
     git: { status: "committed", repository: "/work/project" },
     locks: [
       {
@@ -176,49 +186,83 @@ it("rolls up collections with more than five skill names", () => {
       },
     ],
   }));
-  const output = renderContract(
-    result("setup", {
-      actions: [],
-      choices: [],
-      machineConfig: {
-        path: "/home/.skit/machine.json",
-        repositoryRoots: ["/work"],
-        repositoryDecisions: [],
-        persisted: false,
+  const blocks = renderSetup({
+    actions: [],
+    choices: [],
+    machineConfig: {
+      path: "/home/.skit/machine.json",
+      repositoryRoots: ["/work"],
+      repositoryDecisions: [],
+      persisted: false,
+    },
+    suggestedRepositoryRoots: [],
+    probes: [],
+    scan: { complete: true, directoriesExamined: 1, repositorySearchDepth: 1 },
+    repositories: [
+      {
+        path: "/work/project",
+        skills: instances.map((instance) => instance.name),
+        status: "undecided",
       },
-      suggestedRepositoryRoots: [],
-      probes: [],
-      scan: { complete: true, directoriesExamined: 1, repositorySearchDepth: 1 },
-      repositories: [
-        {
-          path: "/work/project",
-          skills: instances.map((instance) => instance.name),
-          status: "undecided",
+    ],
+    repositoryConfigs: [],
+    authoredCollections: [],
+    installedSkills: [],
+    collectionGroups: {
+      sources: [{ source: "example/large-collection", instances }],
+      repositories: [],
+      loose: [],
+      installed: [],
+      authored: [],
+    },
+    onboarding: {
+      planId: `sha256:${"0".repeat(64)}`,
+      candidates: [],
+      recommended: { sources: [], copies: [] },
+    },
+    locks: [],
+    instances: [
+      ...instances,
+      {
+        ...instances[0]!,
+        name: "failed-copy",
+        path: "/work/failed-copy",
+        contentIdentity: {
+          status: "failed",
+          failure: new TreeError({ reason: { _tag: "InvalidSymlink", path: "copy.md" } }),
         },
-      ],
-      repositoryConfigs: [],
-      authoredCollections: [],
-      installedSkills: [],
-      collectionGroups: {
-        sources: [{ source: "example/large-collection", instances }],
-        repositories: [],
-        loose: [],
-        installed: [],
-        authored: [],
       },
-      onboarding: {
-        planId: `sha256:${"0".repeat(64)}`,
-        candidates: [],
-        recommended: { sources: [], copies: [] },
-      },
-      locks: [],
-      instances,
-      brokenLinks: [],
-      suppressed: [],
-    }),
-    { color: false, detail: "summary" },
-  );
+    ],
+    brokenLinks: [],
+    suppressed: [],
+  });
 
-  expect(output).toContain("example/large-collection | 6 skills\n    6 committed");
-  expect(output).not.toContain("example/large-collection | 6 skills\n    skill-1");
+  const output = renderBlocks(blocks, { color: false });
+  expect(output).toContain("Symlinks are not valid SKIT content: copy.md");
+  expect(output).toContain("/work/failed-copy");
+  // Past five Skills a Collection shows its counts, not its names.
+  expect(blocks).toContainEqual(
+    Block.Group({
+      title: "Skill collections",
+      children: [
+        Block.Group({
+          title: "Installed collections",
+          children: [
+            Block.Group({
+              title: "example/large-collection",
+              children: [
+                Block.Fields({
+                  rows: [
+                    { label: "Skills", value: ["6"] },
+                    { label: "States", value: ["6 committed"] },
+                    { label: "Harnesses", value: ["Codex"] },
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    }),
+  );
 });

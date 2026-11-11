@@ -1,3 +1,4 @@
+import { defineCommand } from "./definition.js";
 import * as Library from "@smolai/skit-core/library";
 
 import { Effect } from "effect";
@@ -8,7 +9,7 @@ import { listOutputContracts, browseLibrary, presentListCommand } from "../libra
 import { localFlags } from "./parameters.js";
 import { promptsAllowed } from "../terminal/interactivity.js";
 
-export const listCliCommand = Command.make("list", localFlags, (input) =>
+export const listCliCommand = defineCommand("list", localFlags, (input) =>
   Effect.gen(function* () {
     const interactive = promptsAllowed({
       json: input.json,
@@ -27,7 +28,6 @@ export const listCliCommand = Command.make("list", localFlags, (input) =>
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read", "filesystem.write"] },
     outputSchemas: [listOutputContracts.list],
-    exitCodes: [0, 12, 64, 65],
     interactive: true,
   }),
 );

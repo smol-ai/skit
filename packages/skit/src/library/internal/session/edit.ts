@@ -13,31 +13,13 @@ import { collectionVersionPath } from "../../collection-version.js";
 import type { Hash } from "../../../shared/hash.js";
 import type { InstallScope } from "../../scope.js";
 import type { InstalledSkillId } from "../../entity-ids.js";
-import { Data, Clock, Effect } from "effect";
+import { Clock, Effect } from "effect";
 import { StalePlan } from "../../library-plan.js";
 import { resolve } from "node:path";
 import type { EditImportPlan, EditImportResult } from "./edit-contract.js";
-import { FailureTypeId, type SkitFailure } from "../../../shared/failure.js";
+import { EditImportMissing, EditImportAmbiguous } from "../../edit-failures.js";
 import type { TreeRequirements } from "../../../platform/tree-requirements.js";
 import type { Digest } from "effect/crypto";
-export class EditImportMissing
-  extends Data.TaggedError("Library.EditImportMissing")<{ message: string }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "NOT_FOUND" as const;
-  readonly remediation = "Inspect the changed installed skills.";
-}
-
-class EditImportAmbiguous
-  extends Data.TaggedError("Library.EditImportAmbiguous")<{ message: string }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly remediation = "Use an exact Projection ID or path with `--from-projection`.";
-}
-
 const matchingSkill = Effect.fn("Library.EditImport.matchSkill")(function* (
   state: LibraryState,
   query: string,
@@ -48,39 +30,29 @@ const matchingSkill = Effect.fn("Library.EditImport.matchSkill")(function* (
       skill.name === query ||
       skill.versions.some((version) => version.skill_version_id === query),
   );
-  if (matches.length === 0)
-    return yield* new EditImportMissing({ message: `No Skill matches ${query}` });
-  if (matches.length !== 1)
-    return yield* new EditImportAmbiguous({
-      message: `More than one Skill matches ${query}`,
-    });
-  const [match] = matches;
+  const [match, ...others] = matches;
   if (match === undefined)
-    return yield* new EditImportMissing({ message: "The selected Skill is missing" });
+    return yield* new EditImportMissing({ reason: { _tag: "SkillNotFound", query } });
+  if (others.length > 0)
+    return yield* new EditImportAmbiguous({
+      kind: "skill",
+      query,
+      matches: matches.map((skill) => skill.skill_id),
+    });
   return match;
 });
 
 const matchingInstalledSkill = Effect.fn("Library.EditImport.matchInstalledSkill")(function* (
   installedSkills: readonly InstalledSkill[],
-  selector: string,
+  path: string,
 ) {
-  const matches = installedSkills.filter(
-    (installedSkill) =>
-      installedSkill.installed_skill_id === selector ||
-      installedSkill.destination === selector ||
-      resolve(installedSkill.path) === resolve(selector),
+  const match = installedSkills.find(
+    (installedSkill) => resolve(installedSkill.path) === resolve(path),
   );
-  if (matches.length === 0)
-    return yield* new EditImportMissing({
-      message: `No installed skill matches ${selector}`,
-    });
-  if (matches.length !== 1)
-    return yield* new EditImportAmbiguous({
-      message: `More than one installed skill matches ${selector}`,
-    });
-  const [match] = matches;
   if (match === undefined)
-    return yield* new EditImportMissing({ message: "The selected Skill is missing" });
+    return yield* new EditImportMissing({
+      reason: { _tag: "InstalledSkillNotFound", selector: path },
+    });
   return match;
 });
 
@@ -88,22 +60,22 @@ const planEditImport = Effect.fn("Library.planEditImport")(function* (
   home: string,
   state: LibraryState,
   query: string,
-  selector: string,
+  path: string,
 ) {
   const skill = yield* matchingSkill(state, query);
   const previousVersion = currentSkillVersion(state, skill);
   if (previousVersion === undefined)
     return yield* new EditImportMissing({
-      message: `${skill.name} has no selected retained Version`,
+      reason: { _tag: "LibraryVersionMissing", skill: skill.name },
     });
   const candidates = state.installed_skills.filter(
     (installedSkill) => installedSkill.skill_id === skill.skill_id,
   );
-  const selected = yield* matchingInstalledSkill(candidates, selector);
+  const selected = yield* matchingInstalledSkill(candidates, path);
   const currentHash = yield* deterministicTreeHash(selected.path);
   if (currentHash === selected.expected_hash)
     return yield* new EditImportMissing({
-      message: `${selected.path} has not changed from its retained Version`,
+      reason: { _tag: "ContentUnchanged", path: selected.path },
     });
   const prepared = yield* Effect.scoped(
     prepareImport([
@@ -161,16 +133,15 @@ export const openEditImport = Effect.fn("Library.openEditImport")(function* (
   home: string,
   library: Pick<Interface, "read" | "plan" | "apply" | "import">,
   query: string,
-  selector: string,
+  path: string,
 ) {
   const snapshot = yield* library.read;
   const initial = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
   const context = yield* Effect.context<TreeRequirements | Digest.Digest>();
-  const preview = yield* planEditImport(home, initial, query, selector);
+  const preview = yield* planEditImport(home, initial, query, path);
   return {
     preview: structuredClone(preview),
-    apply: () =>
-      applyEditImport(home, library, preview, query, selector).pipe(Effect.provide(context)),
+    apply: () => applyEditImport(home, library, preview, query, path).pipe(Effect.provide(context)),
   };
 }, Effect.scoped);
 
@@ -179,7 +150,7 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
   library: Pick<Interface, "read" | "plan" | "apply" | "import">,
   preview: EditImportPlan,
   query: string,
-  selector: string,
+  path: string,
 ) {
   return yield* writeLibrary(
     home,
@@ -187,12 +158,12 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
       const current = yield* loadLibrary(home);
       if (libraryStateRevision(current) !== preview.revision)
         return yield* new StalePlan({
-          message: "Library state changed after the retention was previewed",
+          reason: { _tag: "LibraryChanged" },
         });
-      const revalidated = yield* planEditImport(home, current, query, selector);
+      const revalidated = yield* planEditImport(home, current, query, path);
       if (canonicalJson(revalidated) !== canonicalJson(preview))
         return yield* new StalePlan({
-          message: "The installed skill's bytes changed after the retention was previewed",
+          reason: { _tag: "ContentChanged", kind: "edit" },
         });
       const selected = current.installed_skills.find(
         (installedSkill) =>
@@ -200,7 +171,7 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
       );
       if (selected === undefined)
         return yield* new StalePlan({
-          message: "The reviewed installed Skill is no longer recorded",
+          reason: { _tag: "MissingRecord", record: "edited-copy" },
         });
       const imported = preview.import_required
         ? yield* library.import.edit({
@@ -221,7 +192,7 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
                 : versionBacking(current, skill, version)?.acquisition;
             if (version === undefined || sourceImport === undefined)
               return yield* new StalePlan({
-                message: "Selected retained Version is incomplete",
+                reason: { _tag: "MissingRecord", record: "selected-version" },
               });
             return {
               skillVersionId: version.skill_version_id,
@@ -290,5 +261,3 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
     }),
   );
 });
-
-export type { EditImportAmbiguous };

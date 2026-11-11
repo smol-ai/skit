@@ -7,8 +7,9 @@ import {
   apiErrorStatuses,
   PrincipalAuthentication,
   RequestDecoding,
+  SkitContractError,
 } from "@smolai/skit-core/api";
-import { Data, Effect, Inspectable, Layer, Predicate, Schema } from "effect";
+import { Effect, Layer, Predicate, Schema } from "effect";
 import { HttpClientError, HttpClientRequest } from "effect/http";
 import { HttpApiMiddleware } from "effect/http-api";
 
@@ -57,18 +58,6 @@ export const registryApiFailure = (
   return { status: options.defaultStatus };
 };
 
-export const registryApiFailureMessage = (
-  operation: string,
-  error: unknown,
-  options: { readonly defaultStatus?: number } = {},
-) => {
-  const failure = registryApiFailure(error, options);
-  const reason = failure.code ?? "Registry returned an invalid error response";
-  return failure.status === undefined
-    ? `${operation} failed: ${reason}`
-    : `${operation} failed (${failure.status}): ${reason}`;
-};
-
 const isResponseBodyReadFailure = (
   error: unknown,
   successStatuses: readonly number[],
@@ -78,20 +67,13 @@ const isResponseBodyReadFailure = (
   successStatuses.includes(error.response.status) &&
   (error.reason._tag === "DecodeError" || error.reason._tag === "EmptyBodyError");
 
-/** Legacy auth/bootstrap clients do not yet mark decoding. Named adapters use the classifier below. */
-export const isSuccessfulResponseDecodeFailure = (
-  error: unknown,
-  successStatuses: readonly number[],
-): boolean => Schema.isSchemaError(error) || isResponseBodyReadFailure(error, successStatuses);
-
 /** Marks only decoding: generated request encoders run before this hook. */
-class RegistryResponseDecodeError extends Data.TaggedError("RegistryResponseDecodeError")<{
-  cause: Schema.SchemaError;
-}> {
-  override toString() {
-    return String(this.cause);
-  }
-}
+class RegistryResponseDecodeError extends Schema.TaggedError<
+  RegistryResponseDecodeError,
+  { readonly brand: unique symbol }
+>()("RegistryResponseDecodeError", {
+  cause: Schema.declare(Schema.isSchemaError),
+}) {}
 
 export const markRegistryResponseDecoding = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
@@ -111,12 +93,20 @@ export const classifyRegistryApiFailure = (error: unknown, successStatuses: read
     const cause = "cause" in error ? error.cause : undefined;
     return {
       kind: "response_decode" as const,
-      detail: Schema.isSchemaError(cause) ? String(cause) : Inspectable.toStringUnknown(error),
+      failure: cause,
     };
   }
   if (isResponseBodyReadFailure(error, successStatuses))
-    return { kind: "response_decode" as const, detail: String(error) };
-  if (Schema.isSchemaError(error))
-    return { kind: "request_encoding" as const, detail: String(error) };
+    return { kind: "response_decode" as const, failure: error };
+  if (Schema.isSchemaError(error)) return { kind: "request_encoding" as const, failure: error };
   return { kind: "other" as const };
 };
+
+/** Keep validation and read failures intact until the frontend or storage boundary uses them. */
+export const registryContractFailure = (contract: string, failure: unknown) =>
+  new SkitContractError({
+    contract,
+    reason: Schema.isSchemaError(failure)
+      ? { _tag: "InvalidData", failure }
+      : { _tag: "ReadFailed", failure },
+  });

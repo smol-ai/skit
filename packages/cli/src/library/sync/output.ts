@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { SyncConflictDetail } from "@smolai/skit-core/library/sync";
+import { SyncConflictDetail, SyncIssue } from "@smolai/skit-core/library/sync";
 
 import { SyncChanges as SyncPlan } from "@smolai/skit-core/library/sync";
 
@@ -28,7 +28,7 @@ export const SyncResult = Schema.Struct({
   conflicts: Schema.optionalKey(Schema.Array(Schema.String)),
   conflict_details: Schema.optionalKey(Schema.Array(SyncConflictDetail)),
   sync_status: Schema.optionalKey(Schema.Literals(["clean", "pulled", "pushed", "merged"])),
-  enablement_issues: Schema.optionalKey(Schema.Array(Schema.String)),
+  enablement_issues: Schema.optionalKey(Schema.Array(SyncIssue)),
   plan: Schema.optionalKey(SyncPlan),
 });
 export type SyncResult = typeof SyncResult.Type;

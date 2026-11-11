@@ -101,7 +101,11 @@ const nativeGitPaths = Effect.fn("Tree.nativeGitPaths")(function* (
             return yield* new TreeError({
               reason: {
                 _tag: "GitInspectionFailed",
-                detail: `Ambiguous native filename for ${entry}`,
+                issue: {
+                  _tag: "NativeFilenameAmbiguous",
+                  path: entry,
+                  names: [nativeName, candidate],
+                },
               },
             });
           nativeName = candidate;
@@ -167,14 +171,15 @@ function gitIncludedPaths(
       }
       return { stdout, staged, rootIgnored };
     }).pipe(
-      Effect.mapError(
-        (cause) =>
-          new TreeError({
-            reason: {
-              _tag: "GitInspectionFailed",
-              detail: cause instanceof Error ? cause.message : String(cause),
-            },
-          }),
+      Effect.mapError((cause) =>
+        cause._tag === "TreeError"
+          ? cause
+          : new TreeError({
+              reason: {
+                _tag: "GitInspectionFailed",
+                issue: { _tag: "ProcessFailed", failure: cause },
+              },
+            }),
       ),
     );
     if (!collected) return undefined;
@@ -270,16 +275,17 @@ export const normalizeAuthorTreeEntries = Effect.fn("Tree.normalizeAuthorEntries
   captured: readonly TreeEntry[],
 ) {
   const entries: TreeEntry[] = [];
-  const names = new Set<string>();
+  const names = new Map<string, string>();
   for (const entry of captured) {
     const path = entry.path.normalize("NFC");
     if (entry.kind === "symlink")
       return yield* new TreeError({ reason: { _tag: "InvalidSymlink", path } });
-    if (names.has(path))
+    const firstPath = names.get(path);
+    if (firstPath !== undefined)
       return yield* new TreeError({
-        reason: { _tag: "CannotRetain", entryType: "ambiguous normalized path", path },
+        reason: { _tag: "NormalizedPathCollision", path, firstPath, secondPath: entry.path },
       });
-    names.add(path);
+    names.set(path, entry.path);
     if (entry.kind === "file") entries.push({ ...entry, path });
   }
   return entries;
@@ -340,9 +346,9 @@ function walkTreeInternal(
         if (Option.isNone(identity))
           return yield* new TreeError({
             reason: {
-              _tag: "CannotRetain",
-              entryType: "entry without native identity",
-              path: entryPath,
+              _tag: "NativeIdentityMissing",
+              entryType: info.type,
+              path: entryPath || canonicalRoot,
             },
           });
         identities.set(entryPath, identity.value);
@@ -351,7 +357,7 @@ function walkTreeInternal(
       const rootInfo = yield* links.lstat(canonicalRoot);
       if (rootInfo.type !== "Directory")
         return yield* new TreeError({
-          reason: { _tag: "CannotRetain", entryType: "non-directory root", path: "." },
+          reason: { _tag: "RootNotDirectory", entryType: rootInfo.type, path: canonicalRoot },
         });
       yield* remember("", rootInfo);
     }

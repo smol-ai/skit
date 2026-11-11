@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { assert, it } from "@effect/vitest";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { librarySyncApi } from "../src/library/sync/api.js";
@@ -38,6 +38,9 @@ it.effect("rejects an undecodable remote Library instead of returning it", () =>
       const failure = yield* Effect.flip(api.read);
 
       assert.strictEqual(failure._tag, "Library.LibraryApiInvalidResponse");
+      if (failure._tag !== "Library.LibraryApiInvalidResponse") return assert.fail(failure._tag);
+      assert.isTrue(Schema.isSchemaError(failure.failure));
+      assert.strictEqual(failure.operation, "read portable Library");
     }).pipe(
       Effect.provide(
         registryHttpLayer(

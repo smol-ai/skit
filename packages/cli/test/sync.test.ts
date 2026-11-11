@@ -18,8 +18,8 @@ import {
 } from "./helpers/library-home.js";
 import { authorInitCommand } from "../src/author/init.js";
 import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
-import { authorLayer, storedTreesAt } from "./helpers/author-history.js";
-import { makeAuthorSyncServer } from "./helpers/author-sync-server.js";
+import { authorLayer, storedTreesAt } from "../src/platform/author-sync-fixture/history.js";
+import { makeAuthorSyncServer } from "../src/platform/author-sync-fixture/server.js";
 
 /**
  * Run the native SKIT sync over one test's transport.
@@ -279,7 +279,7 @@ it.effect("first sync distinguishes credential scope from Namespace authority", 
             }),
         ),
       ),
-    ).toMatchObject({ _tag: "SyncRejected" });
+    ).toMatchObject({ _tag: "AuthorRequestFailed" });
     expect(writes).toBe(0);
   }).pipe(Effect.provide(testPlatformLayer)),
 );

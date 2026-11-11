@@ -1,3 +1,4 @@
+import { bootstrapFailure } from "../src/registry/bootstrap-failures.js";
 import { assert, describe, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Layer, Redacted, Sink, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
@@ -6,7 +7,8 @@ import { ChildProcessSpawner } from "effect/process";
 import { TestClock } from "effect/testing";
 import { NodeFileSystem } from "@effect/platform-node";
 import { skitLayer } from "@smolai/skit-core/platform";
-import { renderContract } from "../src/commands/output-presenters.js";
+import { presentContract } from "../src/commands/output-presenters.js";
+import { Block } from "../src/terminal/blocks.js";
 import { consoleRendererLayer } from "../src/terminal/console-renderer.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { result } from "../src/commands/result.js";
@@ -116,12 +118,22 @@ const stalledUntilInterrupted = (onInterrupt: () => void) =>
 
 describe("server bootstrap journey", () => {
   it("hands completed setup off to login", () => {
-    assert.strictEqual(
-      renderContract(
+    assert.deepStrictEqual(
+      presentContract(
         result("serverBootstrap", { origin: "https://skit.example", status: "complete" }),
         { color: false, detail: "summary" },
       ),
-      "Server setup complete at https://skit.example\nIf email verification is enabled, follow the browser result. If delivery failed, use Resend on the sign-in page.\nNext: skit auth login https://skit.example",
+      [
+        Block.Status({ tone: "ok", text: ["Server setup complete at https://skit.example"] }),
+        Block.Note({
+          text: [
+            "If email verification is enabled, follow the browser result. If delivery failed, use Resend on the sign-in page.",
+          ],
+        }),
+        Block.Note({
+          text: ["Next, run ", { code: "skit auth login https://skit.example" }, "."],
+        }),
+      ],
     );
   });
 
@@ -252,7 +264,12 @@ describe("server bootstrap journey", () => {
       Effect.map((actual) => {
         assert.instanceOf(actual, BootstrapExternalFailure);
         assert.strictEqual(actual.operation, "open-browser");
-        assert.match(actual.message, /exited with status 1$/);
+        assert.deepStrictEqual(actual.reason, {
+          _tag: "ProcessFailed",
+          command: fixture.opens()[0]?.command,
+          exitCode: 1,
+          output: "",
+        });
         assert.lengthOf(fixture.removals(), 1);
       }),
     );
@@ -283,7 +300,11 @@ describe("server bootstrap journey", () => {
       const failure = yield* Fiber.join(fiber);
       assert.instanceOf(failure, BootstrapExternalFailure);
       assert.strictEqual(failure.operation, "status");
-      assert.match(failure.message, /\(504\)/);
+      assert.deepStrictEqual(failure.reason, {
+        _tag: "HttpRejected",
+        origin: "https://skit.example",
+        status: 504,
+      });
       assert.strictEqual(fixture.statusChecks(), 5);
       assert.lengthOf(fixture.removals(), 1);
     }),
@@ -330,7 +351,12 @@ describe("server bootstrap journey", () => {
       Effect.map((actual) => {
         assert.instanceOf(actual, BootstrapExternalFailure);
         assert.strictEqual(actual.operation, "install-secret");
-        assert.match(actual.message, /Wrangler lost its connection after writing the secret$/);
+        assert.deepStrictEqual(actual.reason, {
+          _tag: "ProcessFailed",
+          command: "wrangler",
+          exitCode: 1,
+          output: "Wrangler lost its connection after writing the secret",
+        });
         assert.strictEqual(fixture.statusChecks(), 0);
         assert.lengthOf(fixture.removals(), 1);
       }),
@@ -358,17 +384,23 @@ describe("server bootstrap journey", () => {
         if (operation === "install-secret") {
           assert.instanceOf(failure, BootstrapExternalFailure);
           assert.strictEqual(failure.operation, operation);
-          assert.match(failure.remediation, /network connectivity and Cloudflare service status/);
+          assert.match(
+            bootstrapFailure(failure).remediation,
+            /network connectivity and Cloudflare service status/,
+          );
           assert.strictEqual(fixture.statusChecks(), 0);
           assert.lengthOf(fixture.removals(), 1);
         } else {
           assert.instanceOf(failure, BootstrapCleanupFailed);
           assert.strictEqual(failure.cleanup.operation, operation);
           assert.match(
-            failure.cleanup.remediation,
+            bootstrapFailure(failure.cleanup).remediation,
             /network connectivity and Cloudflare service status/,
           );
-          assert.match(failure.message, /wrangler secret delete SKIT_BOOTSTRAP_SECRET/);
+          assert.match(
+            bootstrapFailure(failure).remediation,
+            /wrangler secret delete SKIT_BOOTSTRAP_SECRET/,
+          );
         }
       }),
     );
@@ -388,16 +420,14 @@ describe("server bootstrap journey", () => {
           assert.instanceOf(failure.original, BootstrapExternalFailure);
           assert.strictEqual(failure.original.operation, "install-secret");
           assert.strictEqual(failure.cleanup.operation, "remove-secret");
-          assert.strictEqual(
-            failure.cleanup.message,
-            "wrangler exited with status 1: Not logged in",
-          );
-          assert.match(
-            failure.message,
-            /^Bootstrap secret installation failed: wrangler exited with status 1: Not logged in/,
-          );
-          assert.match(failure.message, /If the secret was installed/);
-          assert.match(failure.remediation, /^Check that Wrangler is installed and signed in/);
+          assert.deepStrictEqual(failure.cleanup.reason, {
+            _tag: "ProcessFailed",
+            command: "wrangler",
+            exitCode: 1,
+            output: "Not logged in",
+          });
+          assert.match(bootstrapFailure(failure).message, /^Bootstrap secret installation failed/);
+          assert.match(bootstrapFailure(failure).remediation, /^If the secret was installed/);
           assert.strictEqual(fixture.statusChecks(), 0);
         }),
       );
@@ -475,7 +505,10 @@ describe("server bootstrap journey", () => {
         assert.instanceOf(failure, BootstrapCleanupFailed);
         assert.instanceOf(failure.original, BootstrapExternalFailure);
         assert.strictEqual(failure.original.operation, "open-browser");
-        assert.match(failure.message, /wrangler secret delete SKIT_BOOTSTRAP_SECRET/);
+        assert.match(
+          bootstrapFailure(failure).remediation,
+          /wrangler secret delete SKIT_BOOTSTRAP_SECRET/,
+        );
       }),
     );
   });
@@ -519,7 +552,10 @@ describe("server bootstrap journey", () => {
         );
         const failure = yield* Effect.flip(originFromWranglerConfig({ configPath: config }));
         assert.instanceOf(failure, BootstrapConfigInvalid);
-        assert.match(failure.message, /--env <name>/);
+        assert.deepStrictEqual(failure.reason, {
+          _tag: "EnvironmentRequired",
+          environments: ["production"],
+        });
       }),
     ).pipe(Effect.provide(skitLayer)),
   );
@@ -547,11 +583,17 @@ describe("server bootstrap journey", () => {
         const missingOrigin = yield* Effect.flip(
           originFromWranglerConfig({ configPath: config, environment: "bare" }),
         );
-        assert.match(missingOrigin.message, /env\.bare\.vars/);
+        assert.deepStrictEqual(missingOrigin.reason, {
+          _tag: "OriginMissing",
+          environment: "bare",
+        });
         const missingEnvironment = yield* Effect.flip(
           originFromWranglerConfig({ configPath: config, environment: "staging" }),
         );
-        assert.match(missingEnvironment.message, /no env\.staging/);
+        assert.deepStrictEqual(missingEnvironment.reason, {
+          _tag: "EnvironmentMissing",
+          environment: "staging",
+        });
       }),
     ).pipe(Effect.provide(skitLayer)),
   );

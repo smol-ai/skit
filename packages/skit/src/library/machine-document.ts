@@ -83,9 +83,7 @@ type CurrentMachineDocumentEncoded = typeof CurrentMachineDocument.Encoded;
 
 const decodeOnly = <Encoded>(decode: (encoded: Encoded) => CurrentMachineDocumentEncoded) => ({
   decode: SchemaGetter.transform<CurrentMachineDocumentEncoded, Encoded>(decode),
-  encode: SchemaGetter.forbidden<Encoded, CurrentMachineDocumentEncoded>(
-    () => "legacy machine documents are decode-only",
-  ),
+  encode: SchemaGetter.forbiddenEncoding,
 });
 
 const fromV1 = MachineDocumentV1.pipe(
@@ -160,7 +158,23 @@ const fromV5 = MachineDocumentV5.pipe(
   ),
 );
 
-const MachineDocument = Schema.Union([MachineDocumentV6, fromV5, fromV4, fromV3, fromV2, fromV1]);
+export const supportedMachineDocumentVersions: readonly number[] = [
+  MachineDocumentV1,
+  MachineDocumentV2,
+  MachineDocumentV3,
+  MachineDocumentV4,
+  MachineDocumentV5,
+  MachineDocumentV6,
+].map((document) => document.fields.schemaVersion.literal);
+
+export const MachineDocument = Schema.Union([
+  MachineDocumentV6,
+  fromV5,
+  fromV4,
+  fromV3,
+  fromV2,
+  fromV1,
+]);
 export const MachineDocumentJson = Schema.fromJsonString(MachineDocument);
 
 /** What a machine reads as before it has written `machine.json`. */

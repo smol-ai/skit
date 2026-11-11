@@ -1,3 +1,4 @@
+import { defineCommand } from "../../commands/definition.js";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
@@ -9,9 +10,14 @@ import { Renderer } from "../../terminal/renderer.js";
 import { result } from "../../commands/result.js";
 import { authLogoutCommand } from "./logout.js";
 
-const origin = Argument.String("origin").pipe(Argument.optional);
+const origin = Argument.String("origin").pipe(
+  Argument.withDescription(
+    "Registry name or origin to sign out of; may be omitted when exactly one stored account exists.",
+  ),
+  Argument.optional,
+);
 
-export const authLogoutCliCommand = Command.make(
+export const authLogoutCliCommand = defineCommand(
   "logout",
   { origin, json: jsonFlag },
   ({ origin }) =>
@@ -35,7 +41,6 @@ export const authLogoutCliCommand = Command.make(
       subprocesses: credentialStoreSubprocesses,
     },
     outputSchemas: [outputContracts.authLogout],
-    exitCodes: [0, 11, 12, 64],
     interactive: false,
   }),
 );

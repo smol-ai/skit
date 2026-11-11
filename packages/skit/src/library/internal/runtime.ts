@@ -174,7 +174,7 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
       Effect.catchTag("LibraryChanged", () =>
         Effect.fail(
           new StalePlan({
-            message: "The Library changed before the reviewed change could be saved",
+            reason: { _tag: "LibraryChanged" },
           }),
         ),
       ),
@@ -198,7 +198,7 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
     if (plan._tag !== plan.intent._tag)
       return Effect.fail(
         new StalePlan({
-          message: "The plan tag does not match its reviewed intent",
+          reason: { _tag: "PlanInvalid", kind: "intent" },
         }),
       );
     if (plan._tag === "Manage") return applyManaging(home, plan).pipe(applying);
@@ -250,7 +250,7 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
     },
     remove: (options) => operation(removeCollection(operations, options)),
     update: (query, adapters) => operation(updateSources(home, library, query, adapters)),
-    edit: (query, selector) => operation(openEditImport(home, editing, query, selector)),
+    edit: (query, path) => operation(openEditImport(home, editing, query, path)),
     check: (query, options) => operation(queries.check(query, options)),
     previewSourceUpdates: (query, inspect) =>
       operation(queries.previewSourceUpdates(query, inspect)),
@@ -279,7 +279,7 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
           () =>
             new InvalidLibraryState({
               path: libraryStatePath(home),
-              detail: "invalid operation history",
+              reason: { _tag: "InvalidData" },
             }),
         ),
       );

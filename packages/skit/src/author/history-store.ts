@@ -39,7 +39,7 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
   const failed = (cause: unknown) => new History.StoreFailed({ cause });
   const isCorrupt = Schema.is(History.StoreCorrupt);
   const storageError = (cause: unknown) => (isCorrupt(cause) ? cause : failed(cause));
-  const corrupt = (hash: Hash, reason: string) =>
+  const corrupt = (hash: Hash, reason: History.StoreCorruptReason) =>
     new History.StoreCorrupt({ kind: "tree", hash, reason });
   const flush = (parent: string) =>
     syncPaths([
@@ -80,11 +80,11 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
       .readFile(blobPath(blob))
       .pipe(
         Effect.catchReason("PlatformError", "NotFound", () =>
-          Effect.fail(corrupt(tree, `missing file blob ${blob}`)),
+          Effect.fail(corrupt(tree, { _tag: "BlobMissing", blob })),
         ),
       );
-    if ((yield* hashBytes(bytes)) !== blob)
-      return yield* corrupt(tree, `file blob ${blob} does not match its content hash`);
+    const actual = yield* hashBytes(bytes);
+    if (actual !== blob) return yield* corrupt(tree, { _tag: "BlobHashMismatch", blob, actual });
     return bytes;
   });
 
@@ -100,7 +100,7 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
         // remain History.Store's responsibility, including malformed legacy arrays.
         if (text.value.trimStart().startsWith("[")) return text;
         const manifest = yield* Schema.decodeEffect(ManifestDocument)(text.value).pipe(
-          Effect.mapError((error) => corrupt(hash, String(error))),
+          Effect.mapError((error) => corrupt(hash, { _tag: "InvalidData", failure: error })),
         );
         const tree = yield* Effect.forEach(manifest.entries, (entry) =>
           Effect.gen(function* () {
@@ -122,7 +122,7 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
           let document = text;
           if (kind === "tree") {
             const tree = yield* Schema.decodeEffect(TreeDocument)(text).pipe(
-              Effect.mapError((error) => corrupt(hash, String(error))),
+              Effect.mapError((error) => corrupt(hash, { _tag: "InvalidData", failure: error })),
             );
             const blobs = new Set<Hash>();
             const entries = yield* Effect.forEach(tree, (entry) =>

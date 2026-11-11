@@ -1,3 +1,4 @@
+import { ArchiveStreamInvalid } from "./archive-failure.js";
 import { Effect, FileSystem, Stream } from "effect";
 import { systemError, type PlatformError } from "effect/PlatformError";
 import { dirname, join, resolve } from "node:path";
@@ -35,8 +36,7 @@ export function createSkitArchive(
         assessmentContext: "publish",
       });
       const errors = validation.diagnostics.filter((item) => item.severity === "error");
-      if (errors.length)
-        return yield* new SkitValidationFailed({ diagnostics: errors.map((item) => item.code) });
+      if (errors.length) return yield* new SkitValidationFailed({ diagnostics: errors });
       yield* fs.makeDirectory(dirname(resolve(outputPath)), { recursive: true });
       // addBuffer with compress:false owns no file streams or zlib jobs. yazl can queue
       // buffer pumping before the sink starts; always close its output, including read failures.
@@ -46,7 +46,7 @@ export function createSkitArchive(
           Effect.callback<void>((resume) => {
             // yazl types expose only NodeJS.ReadableStream; the implementation is a PassThrough.
             if (!(zip.outputStream instanceof Readable))
-              return resume(Effect.die(new TypeError("Expected yazl Readable output")));
+              return resume(Effect.die(new ArchiveStreamInvalid({ path: resolve(outputPath) })));
             if (zip.outputStream.closed) return resume(Effect.void);
             zip.outputStream.once("close", () => resume(Effect.void));
             zip.outputStream.destroy();

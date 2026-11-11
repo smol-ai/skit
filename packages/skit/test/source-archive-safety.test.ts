@@ -102,7 +102,8 @@ it.effect.each(["http", "registry", "discovery"] as const)(
         Effect.flip,
       );
       assert.strictEqual(failure._tag, "SourcePolicyViolation");
-      assert.include(failure.message, "contains a link");
+      if (failure._tag === "SourcePolicyViolation")
+        assert.strictEqual(failure.reason._tag, "ArchiveLink");
       assert.strictEqual(extractions, 0);
       assert.strictEqual(yield* fs.exists(join(outside, "escaped.txt")), false);
       assert.strictEqual(yield* fs.readFileString(join(outside, "existing.txt")), "unchanged");
@@ -165,7 +166,8 @@ it.effect.each(["tar", "tar.gz"] as const)(
           Effect.flip,
         );
         assert.strictEqual(failure._tag, "SourcePolicyViolation");
-        assert.include(failure.message, "contains a link");
+        if (failure._tag === "SourcePolicyViolation")
+          assert.strictEqual(failure.reason._tag, "ArchiveLink");
         assert.strictEqual(extractions, 0);
       }),
     ).pipe(Effect.provide(skitLayer), Effect.scoped),

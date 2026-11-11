@@ -1,24 +1,27 @@
+import { Block } from "../../terminal/blocks.js";
 import type { AddResult, AddPreview } from "./output.js";
-import { plural, sourceDiagnosticLines } from "../presentation/source.js";
+import { plural, sourceDiagnostics } from "../presentation/source.js";
 
-export const renderAdd = (data: AddResult) => {
+export const renderAdd = (data: AddResult): Block[] => {
   const count = data.skills.length;
   const noun = plural(count, "skill");
-  const summary =
+  return [
     data.action === "updated"
-      ? `Updated ${noun} in your Library.`
+      ? Block.Status({ tone: "ok", text: [`Updated ${noun} in your Library.`] })
       : data.action === "unchanged"
-        ? `${noun} already ${count === 1 ? "has" : "have"} the current retained version.`
-        : `Added ${noun} to your Library.`;
-  return [summary, ...sourceDiagnosticLines(data.diagnostics)].join("\n");
+        ? Block.Status({
+            tone: "info",
+            text: [`${noun} already ${count === 1 ? "has" : "have"} the current version.`],
+          })
+        : Block.Status({ tone: "ok", text: [`Added ${noun} to your Library.`] }),
+    ...sourceDiagnostics(data.diagnostics),
+  ];
 };
 
-export const renderAddPreview = (data: AddPreview) => {
-  const count = data.skills.length;
-  return [
-    `${count} ${count === 1 ? "skill" : "skills"}`,
-    "",
-    ...data.skills.map((skill) => `  ${skill.name}`),
-    ...sourceDiagnosticLines(data.diagnostics),
-  ].join("\n");
-};
+export const renderAddPreview = (data: AddPreview): Block[] => [
+  Block.Changes({
+    title: plural(data.skills.length, "skill"),
+    items: data.skills.map((skill) => ({ action: "add", label: skill.name })),
+  }),
+  ...sourceDiagnostics(data.diagnostics),
+];

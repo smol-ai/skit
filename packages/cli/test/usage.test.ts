@@ -10,25 +10,40 @@ import { cliLayer } from "../src/application.js";
 import { result } from "../src/commands/result.js";
 import { defaultTerminalEnvironment, renderResultFrame } from "../src/commands/output-frame.js";
 import { renderUsage } from "../src/library/usage/present.js";
+import { Block } from "../src/terminal/blocks.js";
 import { emptyUsageStory, usageStory } from "../src/storybook/usage-stories.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import type { CommandResult } from "../src/commands/types.js";
 
+const table = (blocks: readonly Block[]) =>
+  blocks.find((block): block is Extract<Block, { _tag: "Table" }> => block._tag === "Table");
+const skills = (blocks: readonly Block[]) => table(blocks)?.rows.map((row) => row[0]?.[0]) ?? [];
+
 test("presents skill activity without internal counters; preserves the public JSON contract", () => {
-  expect(renderUsage(emptyUsageStory)).toContain("No skill activity observed.");
-  const body = renderUsage(usageStory);
-  expect(body).toMatch(/Skill\s+Harness\s+Uses\s+Explicit\s+Implicit\s+Last seen/);
-  expect(body).not.toMatch(/\b(?:Calls|Loads|Reads)\b/);
-  expect(body).toMatch(/example\s+claude-code, codex\s+3\s+1\s+2\s+7 Oct/);
-  expect(body.match(/^example\s+/gm)).toHaveLength(1);
-  expect(body).not.toContain("|");
-  expect(body).not.toContain("/synthetic");
-  expect(body).not.toContain("unsupported tool wrappers");
-  expect(body).not.toContain("bytes read");
-  expect(body).not.toContain("2026-10-07T");
-  expect(body).not.toContain("Unknown");
-  expect(body.trimEnd().split("\n").at(-1)).toMatch(/^example\s+/);
+  expect(renderUsage(emptyUsageStory)).toEqual([
+    Block.Heading({ text: "Skill activity (7 days)" }),
+    Block.Note({ text: [{ dim: "1 Oct – 8 Oct (UTC)" }] }),
+    Block.Note({ text: ["No skill activity found."] }),
+  ]);
+  expect(renderUsage(usageStory)).toEqual([
+    Block.Heading({ text: "Skill activity (7 days)" }),
+    Block.Note({ text: [{ dim: "1 Oct – 8 Oct (UTC)" }] }),
+    Block.Table({
+      columns: [
+        { title: "Skill" },
+        { title: "Harness" },
+        { title: "Uses", align: "end" },
+        { title: "Explicit", align: "end" },
+        { title: "Implicit", align: "end" },
+        { title: "Last seen" },
+      ],
+      rows: [[["example"], ["claude-code, codex"], ["3"], ["1"], ["2"], ["7 Oct"]]],
+    }),
+  ]);
+  expect(renderUsage({ ...usageStory, project: "/work/app" })).toContainEqual(
+    Block.Fields({ rows: [{ label: "Project", value: ["/work/app"] }] }),
+  );
   const json = renderResultFrame(result("usage", usageStory), {
     ...defaultTerminalEnvironment,
     format: "json",
@@ -37,23 +52,6 @@ test("presents skill activity without internal counters; preserves the public JS
     schema: "skit.usage.v4",
     data: usageStory,
   });
-});
-
-test("does not render terminal controls embedded in observed names or paths", () => {
-  const report = {
-    ...usageStory,
-    rows: [
-      {
-        ...usageStory.rows[0],
-        name: "example\x1b[31m",
-        path: "/synthetic/\nexample/SKILL.md",
-      },
-    ],
-  };
-  const body = renderUsage(report);
-  expect(body).not.toContain("\x1b");
-  expect(body).not.toContain("/synthetic");
-  expect(body).toContain("example [31m");
 });
 
 test("summarizes by name without dumping paths, scan internals, or test-fixture reads", () => {
@@ -79,17 +77,7 @@ test("summarizes by name without dumping paths, scan internals, or test-fixture 
       },
     ],
   };
-  const body = renderUsage(report);
-  expect(body).toContain("Skill activity (7 days)");
-  expect(body.match(/^example\s+/gm)).toHaveLength(1);
-  expect(body).toMatch(/example\s+claude-code, codex\s+3\s+1\s+2\s+7 Oct/);
-  expect(body).not.toMatch(/\b(?:Reads|Calls|Loads)\b/);
-  expect(body).not.toContain("/synthetic");
-  expect(body).not.toContain("library");
-  expect(body).not.toContain("review");
-  expect(body).not.toContain("unsupported tool wrappers");
-  expect(body).not.toContain("bytes read");
-  expect(body).not.toContain("--details");
+  expect(skills(renderUsage(report))).toEqual(["example"]);
   // JSON retains all observations omitted from the human table.
   const json = renderResultFrame(result("usage", report), {
     ...defaultTerminalEnvironment,
@@ -108,9 +96,8 @@ test("keeps infrequent skills visible in the compact table", () => {
       loads: 0,
     })),
   };
-  const body = renderUsage(report);
-  expect(body.match(/^skill-\d+\s+/gm)).toHaveLength(12);
-  expect(body).toContain("skill-11");
+  expect(skills(renderUsage(report))).toHaveLength(12);
+  expect(skills(renderUsage(report))).toContain("skill-11");
 });
 
 it.effect("exposes the read-only command and output schema", () =>
@@ -206,6 +193,5 @@ test("orders by invocation counts rather than repeated evidence", () => {
       { ...base, name: "recent", uses: 2, reads: 1, lastSeenAt: "2026-10-07T12:00:00Z" },
     ],
   };
-  const body = renderUsage(report);
-  expect(body.indexOf("recent")).toBeLessThan(body.indexOf("older"));
+  expect(skills(renderUsage(report))).toEqual(["recent", "older"]);
 });

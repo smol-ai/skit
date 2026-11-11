@@ -1,4 +1,6 @@
 #!/usr/bin/env bun
+import { libraryFailure } from "./library/failures";
+import { invocationFailure } from "./library/invocation-failure";
 import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { probeHarness, type HarnessProbeResult } from "@smolai/skit-core/harnesses";
 
@@ -16,7 +18,8 @@ import {
 } from "@opentui/core";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import { resolve } from "node:path";
-import { Effect, FileSystem, Layer, Schema } from "effect";
+import { Effect, FileSystem, Layer, Logger, Schema } from "effect";
+import { tuiLogger } from "./library/logging";
 
 import { createLibraryController } from "./library/controller";
 import { errorMessage } from "@smolai/skit-core/shared";
@@ -81,6 +84,8 @@ const libraryHost = createLibraryHost(
   ).pipe(
     Layer.provideMerge(skitLayer),
     Layer.provideMerge(skitConfigurationLayer(flag("--skit-home"))),
+    Layer.provideMerge(Logger.layer([tuiLogger])),
+    Layer.provideMerge(Layer.succeed(Logger.LogToStderr, true)),
   ),
   Effect.flatMap(Library.Service, (library) => library.session.open()),
 );
@@ -116,7 +121,7 @@ try {
   await libraryHost.open();
   await refreshListingBudgets();
 } catch (error) {
-  libraryOpenError = errorMessage(error);
+  libraryOpenError = libraryFailure(error);
 }
 
 const { sections, skillItems, skillGroups } = auditPresentation(report);
@@ -443,12 +448,16 @@ function populateDetails(details: ScrollBoxRenderable, item: InventoryItem): voi
   }
   details.scrollTo(0);
   if (item.kind === "library-skill") {
-    if (item.row.invocationWarning)
+    if (item.row.invocationFailure)
       details.add(
-        text("library-invocation-unavailable", item.row.invocationWarning, {
-          width: "100%",
-          fg: tone.warning,
-        }),
+        text(
+          "library-invocation-unavailable",
+          `Author preference unavailable: ${invocationFailure(item.row.invocationFailure)}`,
+          {
+            width: "100%",
+            fg: tone.warning,
+          },
+        ),
       );
     const content = text("library-skill-content", "Loading…", { width: "100%" });
     details.add(content);
@@ -464,7 +473,7 @@ function populateDetails(details: ScrollBoxRenderable, item: InventoryItem): voi
         },
         (error: unknown) => {
           if (detailsScroll === details && revision === detailRevision)
-            content.content = `Unable to read retained Skill\n${errorMessage(error)}`;
+            content.content = `Unable to read retained Skill\n${libraryFailure(error)}`;
         },
       );
     return;

@@ -1,19 +1,24 @@
-import { SkitContractError, type AuthorSkitListResponse } from "@smolai/skit-core/api";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
+import {
+  AuthorListResponseError,
+  AuthorSkitNotFound,
+  AuthorDeleteResponseError,
+  AuthorListPaginationError,
+} from "./request-failures.js";
+import { type AuthorSkitListResponse } from "@smolai/skit-core/api";
 import {
   AuthoringAuthenticatedApi,
   DeleteRequiresPrivateResponse,
   SkitNotFoundResponse,
 } from "@smolai/skit-core/api";
 import type { AuthorRemoteHome } from "@smolai/skit-core/author";
-import { Data, Effect, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { HttpApiClient } from "effect/http-api";
 import {
   authenticatedApiMiddleware,
   classifyRegistryApiFailure,
+  registryContractFailure,
   markRegistryResponseDecoding,
   registryApiFailure,
-  registryApiFailureMessage,
 } from "./api-client.js";
 import { RegistryHttp } from "./registry-http.js";
 import type { ResolvedAuth } from "./accounts.js";
@@ -24,32 +29,6 @@ import {
   RegistryOriginInvalid,
   RegistryUnreachable,
 } from "./failures.js";
-
-class AuthorListResponseError
-  extends Data.TaggedError("AuthorListResponseError")<{ message: string }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Check the Registry's reason, then retry.";
-}
-class AuthorSkitNotFound extends Data.TaggedError("AuthorSkitNotFound")<{}> implements SkitFailure {
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "NOT_FOUND" as const;
-  readonly remediation =
-    "Check the destination, and that you are signed in as its owner, then retry.";
-  get message(): string {
-    return "The private SKIT was not found or is not owned by you";
-  }
-}
-class AuthorDeleteResponseError
-  extends Data.TaggedError("AuthorDeleteResponseError")<{ message: string }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Check the Registry's reason, then retry.";
-}
 
 /** Common authoring failures; endpoint-specific status and decode rules stay below. */
 const authoringFailure = (
@@ -99,23 +78,17 @@ const authorInventoryApi = Effect.fn("Registry.authorInventory")(function* (inpu
           const common = authoringFailure(origin, classified);
           if (common) return common;
           if (classified.kind === "request_encoding")
-            return new SkitContractError({
-              contract: "author SKIT list request",
-              issues: [{ path: "", message: classified.detail }],
-            });
+            return registryContractFailure("author SKIT list request", classified.failure);
           const failure = registryApiFailure(error);
           if (failure.status === 401)
             return new AuthenticationRequired({ origin, scopes: "authoring:write" });
           if (classified.kind === "response_decode")
-            return new SkitContractError({
-              contract: "author SKIT list response",
-              issues: [{ path: "", message: classified.detail }],
-            });
+            return registryContractFailure("author SKIT list response", classified.failure);
           return new AuthorListResponseError({
-            message:
-              failure.status !== undefined || failure.code !== undefined
-                ? registryApiFailureMessage("Author SKIT list", error)
-                : "Registry returned an invalid response",
+            origin,
+            ...(failure.status === undefined ? {} : { status: failure.status }),
+            ...(failure.code === undefined ? {} : { registryCode: failure.code }),
+            failure: error,
           });
         }),
       );
@@ -142,40 +115,21 @@ export const deletePrivateAuthorSkit = Effect.fn("Registry.deletePrivateAuthorSk
         const common = authoringFailure(remote.origin, classified);
         if (common) return common;
         if (classified.kind === "request_encoding")
-          return new SkitContractError({
-            contract: "author SKIT delete request",
-            issues: [{ path: "", message: classified.detail }],
-          });
+          return registryContractFailure("author SKIT delete request", classified.failure);
         if (Schema.is(SkitNotFoundResponse)(error)) return new AuthorSkitNotFound();
         if (Schema.is(DeleteRequiresPrivateResponse)(error)) return new DeleteRequiresPrivate();
         if (classified.kind === "response_decode")
-          return new SkitContractError({
-            contract: "author SKIT delete response",
-            issues: [{ path: "", message: classified.detail }],
-          });
+          return registryContractFailure("author SKIT delete response", classified.failure);
+        const response = registryApiFailure(error);
         return new AuthorDeleteResponseError({
-          message: registryApiFailureMessage("Author SKIT delete", error),
+          origin: remote.origin,
+          ...(response.status === undefined ? {} : { status: response.status }),
+          ...(response.code === undefined ? {} : { registryCode: response.code }),
+          failure: error,
         });
       }),
     );
 });
-
-// Error names are required by inferred consumer declarations; constructors stay private.
-export type { AuthorSkitNotFound, AuthorDeleteResponseError };
-
-class AuthorListPaginationError
-  extends Data.TaggedError("AuthorListPaginationError")<{
-    origin: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Retry; if it persists, report the Registry's inventory to its operator.";
-  get message() {
-    return `Registry ${this.origin} returned non-progressing or excessive inventory pages`;
-  }
-}
 
 export const listAuthorInventory = Effect.fn("Registry.listAuthorInventory")(function* (input: {
   origin?: string;
@@ -198,8 +152,6 @@ export const listAuthorInventory = Effect.fn("Registry.listAuthorInventory")(fun
   } while (cursor);
   return { origin, skits };
 }, Effect.scoped);
-
-export type { AuthorListPaginationError, AuthorListResponseError };
 
 /** Adapt the command's captured account without leaking its credential into Author. */
 export const authorInventoryRegistry = (account: ResolvedAuth) => ({

@@ -401,11 +401,14 @@ it.effect(
             expect(applied.warnings).toEqual([
               expect.objectContaining({
                 name: "review",
-                message: expect.stringContaining("have not converged"),
+                reason: expect.objectContaining({
+                  _tag: "ApplicationIncomplete",
+                  failure: expect.objectContaining({ _tag: "Library.DestinationsIncomplete" }),
+                }),
               }),
               expect.objectContaining({
                 name: "review",
-                message: expect.stringContaining("not installed"),
+                reason: expect.objectContaining({ _tag: "ReplacementMissing" }),
               }),
             ]);
             expect(yield* f.fs.readLink(f.alias)).toBe(f.source);

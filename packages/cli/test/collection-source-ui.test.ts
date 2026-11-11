@@ -9,6 +9,8 @@ import { skitCommand } from "../src/commands/tree.js";
 import type { CommandFailure, CommandResult } from "../src/commands/types.js";
 import { renderResultFrame, defaultTerminalEnvironment } from "../src/commands/output-frame.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
+import { presentContract } from "../src/commands/output-presenters.js";
+import { Block } from "../src/terminal/blocks.js";
 import { browseLibrary } from "../src/library/list/browse.js";
 import { Prompter, PromptCancelled, type Choice } from "../src/terminal/prompter.js";
 import { result } from "../src/commands/result.js";
@@ -163,14 +165,35 @@ it.effect(
       assert.notInclude(rendered(), "authored:workspace_");
       const before = yield* fs.readFileString(join(home, "state.json"));
       yield* run(["enable", workspace, "--all", "--global", "--dry-run", "--codex-root", agents]);
-      assert.include(rendered(), "tim/skills (Author workspace)");
-      assert.include(rendered(), "Would enable review");
+      const presented = () => {
+        const output = presentContract(results.at(-1)!, { color: false, detail: "summary" });
+        return typeof output === "string" ? [] : output;
+      };
+      assert.deepInclude(presented(), Block.Heading({ text: "tim/skills (Author workspace)" }));
+      assert.deepInclude(
+        presented(),
+        Block.Changes({ items: [{ action: "add", label: "Would enable review" }] }),
+      );
       yield* run(["remove", workspace, "--dry-run"]);
-      assert.include(rendered(), "tim/skills (Author workspace)");
-      assert.include(rendered(), "Authored files and the Registry connection remain");
+      assert.deepInclude(presented(), Block.Heading({ text: "tim/skills (Author workspace)" }));
+      assert.deepInclude(
+        presented(),
+        Block.Note({
+          text: [
+            "Removes the Library registration and installed copies. Authored files and the Registry connection remain in the workspace.",
+          ],
+        }),
+      );
       yield* run(["remove", "https://registry.example/tim/skills", "--dry-run"]);
-      assert.include(rendered(), "tim/skills (Registry release)");
-      assert.include(rendered(), "published release stays in the Registry");
+      assert.deepInclude(presented(), Block.Heading({ text: "tim/skills (Registry release)" }));
+      assert.deepInclude(
+        presented(),
+        Block.Note({
+          text: [
+            "Removes this release from the Library; the published release stays in the Registry.",
+          ],
+        }),
+      );
       assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), before);
       assert.isFalse(yield* fs.exists(agents));
       assert.deepStrictEqual(failures, []);
@@ -190,7 +213,7 @@ it.effect(
           path,
           status: "unchanged",
           installed: 0,
-          messages: [],
+          issues: [],
           context: {
             collection_label: "skills",
             total: 1,

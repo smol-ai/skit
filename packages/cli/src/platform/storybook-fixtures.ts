@@ -1,8 +1,23 @@
 import { Effect, FileSystem } from "effect";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import * as Library from "@smolai/skit-core/library";
 import { makeMachineId } from "@smolai/skit-core/universal/consumer";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
+
+/**
+ * The Collections pinned in test/fixtures/collections, found from source or from the bundled
+ * storybook. A compiled dist/test holds only the manifest, so look for a Collection's files.
+ */
+export const pinnedCollections = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  let directory = import.meta.dirname;
+  while (!(yield* fs.exists(join(directory, "test", "fixtures", "collections", "swyxio")))) {
+    if (dirname(directory) === directory)
+      return yield* Effect.die("The pinned Collections in test/fixtures/collections are missing");
+    directory = dirname(directory);
+  }
+  return join(directory, "test", "fixtures", "collections");
+});
 
 /** Real retained bytes and owner-generated identities, shared by the preview journeys. */
 export const importReview = Effect.fn("Storybook.importReview")(function* (root: string) {
@@ -31,9 +46,19 @@ export const importReview = Effect.fn("Storybook.importReview")(function* (root:
   });
 });
 
-export const makeEnablePreviewFixture = Effect.gen(function* () {
+/**
+ * A disposable home folder for one journey: the fixture person's `~`. Resolved, so the paths the
+ * CLI prints are the ones under it.
+ */
+export const makeJourneyHome = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
-  const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-story-library-" });
+  return yield* fs.realPath(yield* fs.makeTempDirectoryScoped({ prefix: "skit-journey-" }));
+});
+
+export const makeEnablePreviewFixture = Effect.fn("Storybook.makeEnablePreviewFixture")(function* (
+  home: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
   const codexRoot = join(home, "codex");
   yield* fs.makeDirectory(codexRoot);
   return {
@@ -42,27 +67,10 @@ export const makeEnablePreviewFixture = Effect.gen(function* () {
     installedEmpty: fs.readDirectory(codexRoot).pipe(Effect.map((files) => files.length === 0)),
   };
 });
-export const makeDoctorPreviewFixture = Effect.gen(function* () {
+export const makeSyncJourneyFixture = Effect.fn("Storybook.makeSyncJourneyFixture")(function* (
+  workspace: string,
+) {
   const fs = yield* FileSystem.FileSystem;
-  const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-doctor-story-" });
-  const home = join(root, "library"),
-    account = join(root, "account");
-  const skillsRoot = join(account, ".agents", "skills"),
-    path = join(skillsRoot, "review");
-  return {
-    root,
-    home,
-    account,
-    skillsRoot,
-    path,
-    installed: fs.exists(join(path, "SKILL.md")),
-    document: fs.readFileString(join(path, "SKILL.md")),
-  };
-});
-
-export const makeSyncJourneyFixture = Effect.gen(function* () {
-  const fs = yield* FileSystem.FileSystem;
-  const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-story-sync-" });
   const seedHome = join(workspace, "seed");
   const machineId = makeMachineId();
   const seeded = yield* Effect.gen(function* () {

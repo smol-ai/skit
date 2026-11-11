@@ -9,19 +9,8 @@ import { isErrno } from "../shared/errno.js";
 import { AuthorWorkspaceMetadataInvalid, AuthorRemoteMetadataInvalid } from "./failures.js";
 import { AuthorRemoteHome, normalizeRemote } from "./remote.js";
 
-/** `workspace_<32 hex>`. Device-local, never portable (ADR-0026). */
-export const WorkspaceId = Schema.String.check(Schema.isPattern(/^workspace_[a-f0-9]{32}$/u)).pipe(
-  Schema.brand("WorkspaceId"),
-);
-export type WorkspaceId = typeof WorkspaceId.Type;
-
-/**
- * The workspace's device-local identity. Whether its Collection is in the Library is the
- * Library's state, never stored here: a workspace is registered while the Library retains a
- * Collection imported from it.
- */
-export const Identity = Schema.Struct({ workspaceId: WorkspaceId });
-export type Identity = typeof Identity.Type;
+import { WorkspaceId, Identity } from "./workspace-contracts.js";
+export { WorkspaceId, Identity } from "./workspace-contracts.js";
 
 /**
  * .skit/workspace.json, skit.author-workspace.v1. Files written by 0.3.0 carry a `registration`

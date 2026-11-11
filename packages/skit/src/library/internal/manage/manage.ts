@@ -1,3 +1,4 @@
+import type { SetupWarning } from "../../setup-warning.js";
 import { Revision, type Snapshot } from "../../snapshot.js";
 import { Effect, Option, Schema, Struct } from "effect";
 import { join } from "node:path";
@@ -5,6 +6,7 @@ import { FailureTypeId, type SkitFailure } from "../../../shared/failure.js";
 import { Hash } from "../../../shared/hash.js";
 import { leavePnpmSkill } from "../../../installed-skills/pnpm-skills.js";
 import { InvalidIntent } from "../../enabled-plan.js";
+import { ManageSelectionInvalid } from "../../failures.js";
 import { makeOperationId, OperationId } from "../../entity-ids.js";
 import { holdsEvidence, parentIsAsRecorded } from "../../folder-evidence.js";
 import type { ImportedCollection } from "../../import-collection.js";
@@ -96,7 +98,7 @@ interface ManageResult {
   readonly results: readonly SetEnabledResult[];
   readonly imported: readonly ImportedCollection[];
   readonly recoveryDirectories: readonly string[];
-  readonly warnings: readonly { readonly name: string; readonly message: string }[];
+  readonly warnings: readonly SetupWarning[];
 }
 export interface ManageOutcome {
   readonly _tag: "Manage";
@@ -115,12 +117,6 @@ class ManageStopped
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  get message() {
-    return `Manage stopped after recording operation ${this.operationId}. No changes were rolled back.`;
-  }
-  get remediation() {
-    return `Inspect Library history and preview undoing operation ${this.operationId}, or review a new setup.`;
-  }
 }
 const checkEvidence = Effect.fn("Library.checkManageEvidence")(function* (intent: ManageIntent) {
   const selected = new Set<string>();
@@ -128,7 +124,10 @@ const checkEvidence = Effect.fn("Library.checkManageEvidence")(function* (intent
     const key =
       intent.mode === "existing" ? selection.name : `${selection.name}\0${selection.source.path}`;
     if (selected.has(key))
-      return yield* new InvalidIntent({ detail: `Duplicate Manage selection: ${selection.name}` });
+      return yield* new ManageSelectionInvalid({
+        skillName: selection.name,
+        reason: "duplicate-selection",
+      });
     selected.add(key);
     if (
       selection.mode === "existing"
@@ -136,7 +135,9 @@ const checkEvidence = Effect.fn("Library.checkManageEvidence")(function* (intent
         : Option.isSome(selection.currentHash) &&
           selection.currentHash.value !== selection.source.treeHash
     )
-      return yield* new StalePlan({ message: `Reviewed content changed for ${selection.name}` });
+      return yield* new StalePlan({
+        reason: { _tag: "ContentChanged", skillName: selection.name, kind: "reviewed" },
+      });
     const folders = [
       selection.source,
       ...selection.approvedCopies,
@@ -150,7 +151,7 @@ const checkEvidence = Effect.fn("Library.checkManageEvidence")(function* (intent
         !(yield* holdsEvidence(folder, folder.path))
       )
         return yield* new StalePlan({
-          message: `Reviewed Manage folder changed at ${folder.path}`,
+          reason: { _tag: "EvidenceChanged", path: folder.path, kind: "manage" },
         });
     }
   }
@@ -161,7 +162,7 @@ export const checkedManageIntent = Effect.fn("Library.checkManageIntent")(functi
 ) {
   return yield* Schema.encodeEffect(ManageIntent, { onExcessProperty: "error" })(input).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(ManageIntent)),
-    Effect.mapError(() => new InvalidIntent({ detail: "Invalid Manage intent" })),
+    Effect.mapError(() => new InvalidIntent({ intent: "Manage" })),
   );
 });
 
@@ -195,7 +196,7 @@ export const planManaging = Effect.fn("Library.planManaging")(function* (
     steps.push({ _tag: "Manage", mode: "new", selections, routing });
   }
   const problem = checkSteps(home, steps);
-  if (Option.isSome(problem)) return yield* new InvalidIntent({ detail: problem.value });
+  if (Option.isSome(problem)) return yield* problem.value;
   const selections: (typeof SelectionChange.Type)[] = [];
   const paths = new Set<string>();
   for (const [index, selection] of intent.selections.entries()) {
@@ -215,15 +216,17 @@ export const planManaging = Effect.fn("Library.planManaging")(function* (
         { base: state },
       );
       if (!managing.applicable || managing.skill?.name !== selection.name)
-        return yield* new InvalidIntent({
-          detail: `${selection.name} cannot be managed without changing its bytes`,
+        return yield* new ManageSelectionInvalid({
+          skillName: selection.name,
+          reason: "candidate-not-manageable",
         });
       if (
         managing.targets.some((target) => target.status === "adoptable") &&
         Option.isNone(ownership.machineId)
       )
-        return yield* new InvalidIntent({
-          detail: `Managing ${selection.name} needs this machine's identity`,
+        return yield* new ManageSelectionInvalid({
+          skillName: selection.name,
+          reason: "machine-identity-missing",
         });
     }
     if (selection.mode === "existing" && installs)
@@ -290,7 +293,7 @@ export const planManaging = Effect.fn("Library.planManaging")(function* (
     folders: yield* Effect.forEach([...paths].sort(), (path) => files.inspect(path)),
   };
   const encoded = yield* Schema.encodeEffect(Reviewed)(reviewed).pipe(
-    Effect.mapError(() => new InvalidIntent({ detail: "Invalid Manage review" })),
+    Effect.mapError(() => new InvalidIntent({ intent: "Manage" })),
   );
   const planId = yield* planIdOf(encoded);
   return { ...reviewed, planId, change: { ...reviewed.change, planId } } satisfies ManagePlan;
@@ -303,7 +306,7 @@ export const applyManaging = Effect.fn("Library.applyManaging")(function* (
   const files = yield* InstalledSkills.Service;
   const plan = yield* Schema.encodeEffect(ManagePlan, { onExcessProperty: "error" })(input).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(ManagePlan)),
-    Effect.mapError(() => new StalePlan({ message: "Invalid Manage plan" })),
+    Effect.mapError(() => new StalePlan({ reason: { _tag: "PlanInvalid", kind: "manage" } })),
   );
   return yield* applyReviewed(
     home,
@@ -312,7 +315,7 @@ export const applyManaging = Effect.fn("Library.applyManaging")(function* (
     (base) =>
       files.check(plan.folders).pipe(
         Effect.catchTag("Library.InstalledSkillsChanged", () =>
-          Effect.fail(new StalePlan({ message: "Reviewed Manage folders changed" })),
+          Effect.fail(new StalePlan({ reason: { _tag: "EvidenceChanged", kind: "manage" } })),
         ),
         Effect.andThen(
           planManaging(home, plan.intent, {
@@ -350,4 +353,4 @@ export const applyManaging = Effect.fn("Library.applyManaging")(function* (
 export type ManagePlanError = Effect.Error<ReturnType<typeof planManaging>>;
 export type ManageApplyError = Effect.Error<ReturnType<typeof applyManaging>>;
 
-export type { ManageStopped };
+export { ManageStopped };

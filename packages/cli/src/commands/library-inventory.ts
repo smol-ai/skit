@@ -1,3 +1,4 @@
+import { defineCommand } from "./definition.js";
 import { Effect } from "effect";
 import { Command } from "effect/cli";
 import { Renderer } from "../terminal/renderer.js";
@@ -20,11 +21,11 @@ const machineInventoryMetadata = {
       "devin --version",
     ],
   },
-  exitCodes: [0, 12, 64, 65],
+
   interactive: false,
 } as const;
 
-export const inventoryCliCommand = Command.make("inventory", localFlags, () =>
+export const inventoryCliCommand = defineCommand("inventory", localFlags, () =>
   Effect.gen(function* () {
     const renderer = yield* Renderer;
     const library = yield* Library.Service;

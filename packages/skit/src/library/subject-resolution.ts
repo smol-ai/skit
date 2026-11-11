@@ -1,5 +1,5 @@
-import { Data, Effect } from "effect";
-import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
+import { LibrarySubjectAmbiguous, LibrarySubjectNotFound } from "./failures.js";
+import { Effect } from "effect";
 import { sourceImports } from "./library-contracts.js";
 import type { LibraryState } from "./library-state.js";
 import { sourceIdentityLabel } from "./source-identity.js";
@@ -22,35 +22,6 @@ export type LibrarySubject =
       readonly skill: Skill;
       readonly skills: readonly [Skill];
     };
-
-export class LibrarySubjectNotFound
-  extends Data.TaggedError("Library.SubjectNotFound")<{
-    query: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "NOT_FOUND" as const;
-  readonly remediation = "Check the retained Skills and Collections for the name.";
-  get message(): string {
-    return `No retained Skill or Collection matches ${this.query}`;
-  }
-}
-
-class LibrarySubjectAmbiguous
-  extends Data.TaggedError("Library.SubjectAmbiguous")<{
-    query: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly remediation =
-    "Run skit list to choose the source, or use its workspace path or full source locator.";
-  get message(): string {
-    return `More than one retained Skill or Collection matches ${this.query}`;
-  }
-}
 
 const collectionSubjects = (state: LibraryState): readonly LibrarySubject[] =>
   state.collections.map((collection): LibrarySubject => ({
@@ -115,10 +86,9 @@ export const resolveLibrarySubject = Effect.fn("Library.resolveSubject")(functio
   query: string,
 ) {
   const matches = matchingLibrarySubjects(state, query);
-  if (matches.length === 0) return yield* new LibrarySubjectNotFound({ query });
-  if (matches.length !== 1) return yield* new LibrarySubjectAmbiguous({ query });
-  const subject = matches[0];
+  const [subject, ...others] = matches;
   if (subject === undefined) return yield* new LibrarySubjectNotFound({ query });
+  if (others.length > 0) return yield* new LibrarySubjectAmbiguous({ query });
   return subject;
 });
 
@@ -164,5 +134,4 @@ export const resolveOwningLibrarySubjects = Effect.fn("Library.resolveOwningSubj
 export const latestSourceImport = (state: LibraryState, subject: LibrarySubject) =>
   sourceImports(state, subjectCollectionId(subject))[0];
 
-// Required by the public declaration-only error vocabulary.
-export type { LibrarySubjectAmbiguous };
+export { LibrarySubjectNotFound } from "./failures.js";

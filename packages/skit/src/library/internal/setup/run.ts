@@ -1,3 +1,7 @@
+import { LibraryRecoveryNotice } from "../../recovery-notice.js";
+import { UpdateSelectionMissing } from "../../setup-failures.js";
+import type { SetupWarning } from "../../setup-warning.js";
+import { stepError } from "../../store/step-error.js";
 import { recordPreparation, prepareRoots } from "./prepare-roots.js";
 import { withLock as withHomeLock } from "../../../platform/home-lock.js";
 import { runUndo } from "./undo-execution.js";
@@ -5,14 +9,10 @@ import { runUndo } from "./undo-execution.js";
 // (ADR-0020, durable Library operations). Never rolls back on its own.
 
 import { Effect, Option, Predicate, Schema } from "effect";
-import { isPlatformError } from "effect/PlatformError";
 import { TreeError } from "../../../shared/tree-error.js";
-import { isSkitFailure } from "../../../shared/failure.js";
 import { isAbsolute, resolve } from "node:path";
-import { InvalidLibraryState, LibraryChanged } from "../../failures.js";
-import { HomeBusy } from "../../../platform/lock-failures.js";
+import { InvalidLibraryState, LibraryChanged, SetupStepsInvalid } from "../../failures.js";
 import { pathIsWithin } from "../../../platform/path-identity.js";
-import { InvalidIntent } from "../../enabled-plan.js";
 import { makeOperationId, type OperationId } from "../../entity-ids.js";
 import { type UpdatedCopy, changeWrites } from "../../installed-update.js";
 import {
@@ -58,7 +58,6 @@ import {
   type RecordedSetupStep,
   type SetupStep,
   type SetupStopReason,
-  type StepError,
   type StepEvidence,
 } from "../../store/state-schema.js";
 
@@ -86,7 +85,7 @@ export type SetupResult =
       readonly operationId: OperationId;
       /** One per step this run ran, in order. */
       readonly steps: readonly SetupStepResult[];
-      readonly warnings: readonly { readonly name: string; readonly message: string }[];
+      readonly warnings: readonly SetupWarning[];
       readonly recoveryDirectories: readonly string[];
     }
   | {
@@ -103,7 +102,8 @@ export type SetupResult =
  */
 export type SetupError =
   | StalePlan
-  | InvalidIntent
+  | SetupStepsInvalid
+  | TreeError
   | LibraryStateReadError
   | Exclude<LibraryStateWriteError, LibraryChanged>;
 
@@ -213,7 +213,7 @@ export const checkSteps = (home: string, steps: readonly SetupStep[]) => {
     if (step._tag !== "Sync" || step.phase === "retire") continue;
     const source = steps[step.sourceStep];
     if (step.sourceStep >= index || source?._tag !== "Sync" || source.phase !== "retire")
-      return Option.some(`Sync step ${index + 1} has no earlier recorded program`);
+      return Option.some(new SetupStepsInvalid({ reason: "sync-program-missing", step: index }));
   }
   for (const step of steps) {
     if (step._tag !== "Undo") continue;
@@ -225,34 +225,34 @@ export const checkSteps = (home: string, steps: readonly SetupStep[]) => {
         pathIsWithin(path, resolve(home)) ||
         pathIsWithin(resolve(home), path)
       )
-        return Option.some(`Undo cannot replace Library storage or a non-normalized path: ${path}`);
+        return Option.some(new SetupStepsInvalid({ reason: "undo-path-not-replaceable", path }));
   }
   const firstRemove = steps.findIndex((step) => step._tag === "Remove");
   if (firstRemove >= 0 && steps.slice(firstRemove).some((step) => step._tag !== "Remove"))
-    return Option.some("Setup removes folders only after every other step");
+    return Option.some(new SetupStepsInvalid({ reason: "removal-not-last" }));
   for (const [index, step] of steps.entries())
     for (const source of importsUsedBy(step))
       if (source >= index || steps[source]?._tag !== "Import")
-        return Option.some(`Setup step ${index + 1} takes its files from a step that imports none`);
+        return Option.some(new SetupStepsInvalid({ reason: "import-step-missing", step: index }));
   const paths: string[] = [];
   for (const { path } of steps.flatMap(removedBy)) {
     if (!isAbsolute(path) || resolve(path) !== path)
-      return Option.some(`Setup removes only absolute, normalized paths: ${path}`);
+      return Option.some(new SetupStepsInvalid({ reason: "path-not-normalized", path }));
     if (
       path === resolve(home) ||
       pathIsWithin(path, resolve(home)) ||
       pathIsWithin(resolve(home), path)
     )
-      return Option.some(`Setup cannot remove the Library's own storage: ${path}`);
+      return Option.some(new SetupStepsInvalid({ reason: "path-in-library-storage", path }));
     if (
       paths.some(
         (other) => other === path || pathIsWithin(other, path) || pathIsWithin(path, other),
       )
     )
-      return Option.some(`Setup removes each folder once, and never one inside another: ${path}`);
+      return Option.some(new SetupStepsInvalid({ reason: "duplicate-removal", path }));
     paths.push(path);
   }
-  return Option.none<string>();
+  return Option.none<SetupStepsInvalid>();
 };
 
 const decodeOperations = (state: LibraryState) =>
@@ -415,30 +415,6 @@ const runStep = Effect.fn("Library.setup.step")(function* (
   }
 });
 
-const storedInFull = Schema.is(
-  Schema.Union([TreeError, HomeBusy, LibraryChanged, InvalidLibraryState]),
-);
-
-/** The error a failed step stores: in full where it can be, otherwise what it says about itself. */
-const stepError = (error: unknown): StepError => {
-  if (storedInFull(error) || isPlatformError(error)) return error;
-  const tag =
-    Predicate.hasProperty(error, "_tag") && Predicate.isString(error._tag)
-      ? error._tag
-      : "UnknownFailure";
-  if (isSkitFailure(error))
-    return { _tag: tag, code: error.code, message: error.message, remediation: error.remediation };
-  return {
-    _tag: tag,
-    code: "OPERATION_FAILED",
-    message:
-      Predicate.hasProperty(error, "message") && Predicate.isString(error.message)
-        ? error.message
-        : String(error),
-    remediation: "Undo this setup, or run setup again once the cause is fixed.",
-  };
-};
-
 /**
  * Run the Pending steps of the operation `operationId` records, under the writer that saved it.
  * A step that differs from its record, fails, or finds the operation gone stops the operation;
@@ -463,7 +439,15 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
       );
     }).pipe(
       // Unsaved, the record stays Pending and the next run finds it.
-      Effect.catch((error) => Effect.logWarning("Setup stopped, but could not record it", error)),
+      Effect.catch((error) =>
+        Effect.logWarning(
+          LibraryRecoveryNotice.cases.SetupStopNotRecorded.make({
+            home,
+            operationId,
+            failure: error,
+          }),
+        ),
+      ),
       Effect.map((): SetupResult => ({ _tag: "Stopped", operationId, completed, reason })),
     );
   const failed = (step: number) => (error: unknown) =>
@@ -495,13 +479,7 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
     return yield* stop({
       _tag: "StepFailed",
       step: ambiguousUpdate,
-      error: {
-        _tag: "Library.UpdateSelectionMissing",
-        code: "CONFLICT",
-        message: "This older setup did not record which Skills were selected for update",
-        remediation:
-          "Preview undoing this setup, or run setup again to review the current changes.",
-      },
+      error: new UpdateSelectionMissing(),
     });
   if (pending.preparation) {
     const prepared = yield* Effect.result(prepareRoots(pending.preparation, pending.steps));
@@ -622,29 +600,25 @@ export const setupOperation = Effect.fn("Library.setupOperation")(function* (
 ) {
   const writer = yield* LibraryWriter;
   const invalid = checkSteps(writer.home, steps);
-  if (Option.isSome(invalid)) return yield* new InvalidIntent({ detail: invalid.value });
+  if (Option.isSome(invalid)) return yield* invalid.value;
   const inspected = yield* inspectLocalLibraryState(writer.home);
   const actual = snapshotOf(inspected).revision;
   if (actual !== options.base.revision)
     return yield* new StalePlan({
-      message: "The Library changed after setup was reviewed",
+      reason: { _tag: "LibraryChanged" },
       expected: options.base.revision,
       actual,
     });
   const state = inspected.present ? inspected.state : emptyLibraryState();
   const operationId = options.operationId;
   if (state.operations.some((operation) => operation.operationId === operationId))
-    return yield* new StalePlan({ message: "This operation is already recorded" });
+    return yield* new StalePlan({ reason: { _tag: "OperationAlreadyRecorded" } });
   const preparation = yield* recordPreparation(steps);
   const pending = yield* encodeOperation(
     OperationStatus.cases.Pending.make({
       operationId,
       ...(preparation === undefined ? {} : { preparation }),
-      steps: yield* Effect.forEach(steps, recordedStep).pipe(
-        Effect.catchTag("TreeError", (error) =>
-          Effect.fail(new InvalidIntent({ detail: `Setup cannot record ${error.message}` })),
-        ),
-      ),
+      steps: yield* Effect.forEach(steps, recordedStep),
       before: recordedLibrary(state),
     }),
   ).pipe(
@@ -652,7 +626,7 @@ export const setupOperation = Effect.fn("Library.setupOperation")(function* (
       () =>
         new InvalidLibraryState({
           path: libraryStatePath(writer.home),
-          detail: "invalid setup record",
+          reason: { _tag: "InvalidData" },
         }),
     ),
   );
@@ -673,7 +647,7 @@ export const setupOperation = Effect.fn("Library.setupOperation")(function* (
       Effect.catchTag("LibraryChanged", () =>
         Effect.fail(
           new StalePlan({
-            message: "The Library changed before setup was recorded",
+            reason: { _tag: "LibraryChanged" },
             expected: options.base.revision,
           }),
         ),
@@ -735,7 +709,7 @@ export const applyRecorded = Effect.fn("Library.applyRecorded")(function* (
   const applied = steps.find((step) => step._tag === "Apply");
   if (applied?._tag !== "Apply")
     return yield* new InstalledSkillInvalid({
-      detail: "Library apply stopped before its outcome could be recorded",
+      reason: { _tag: "ApplyStopped" },
     });
   const outcome = applyOutcome(prepared.step, yield* loadLibrary(home), applied.outcome);
   // A durable attempt is not saved enablement. Fail normally if root preparation stopped
@@ -778,7 +752,7 @@ export const recover = Effect.fn("Library.recover")(function* (home: string) {
             () =>
               new InvalidLibraryState({
                 path: libraryStatePath(home),
-                detail: "invalid setup record",
+                reason: { _tag: "InvalidData" },
               }),
           ),
         )

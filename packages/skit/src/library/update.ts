@@ -5,5 +5,5 @@ export {
   type LibraryProgressCompletion,
   type LibraryProgressReporter,
 } from "./internal/session/source-updates.js";
-export type { GitInspectionFailed } from "./internal/session/skills-sh-git-evidence.js";
-export type { CollectionNotUpdatable } from "./internal/session/source-updates.js";
+
+export { AuthoredSkillIssue } from "./authored-skill-issues.js";

@@ -1,13 +1,22 @@
 import { basename, resolve } from "node:path";
 import { hashParts } from "../artifact/descriptor.js";
-import type * as InstalledSkills from "./installed-skills.js";
 import type { Plan } from "./library-plan.js";
 
-const protection: Record<InstalledSkills.Protection, string> = {
-  repository: "A repository owns this folder",
-  authored: "An author's workspace owns this folder",
-  "package-manager": "A package manager owns this folder",
-};
+import { Schema } from "effect";
+import { StepError } from "./store/state-schema.js";
+import { Protection } from "./installed-skills.js";
+import { InstalledSkillInvalidReason } from "./installation/install-enabled.js";
+
+export const InstalledSkillChangeReason = Schema.TaggedUnion({
+  Unmanaged: {},
+  Protected: { owner: Protection },
+  Unreadable: { reason: InstalledSkillInvalidReason },
+  Modified: { path: Schema.String },
+  NativeDelete: {},
+  SourceVersionChanged: {},
+  PlanningFailed: { error: StepError },
+}).annotate({ identifier: "InstalledSkillChangeReason" });
+export type InstalledSkillChangeReason = typeof InstalledSkillChangeReason.Type;
 
 /**
  * What setup reviews of every Installed Skill change in a plan, keyed by its path: the folder's
@@ -54,7 +63,11 @@ export const reviewInstalledSkillChanges = (plan: Plan) =>
         evidence: hashParts(folders.map((folder) => folder.evidence)),
         metadataChanged: false,
       };
-      const kept = (reason: string) => ({ ...fact, status: "protected" as const, reason });
+      const kept = (reason: InstalledSkillChangeReason) => ({
+        ...fact,
+        status: "protected" as const,
+        reason,
+      });
       switch (change._tag) {
         case "Unchanged":
           return {
@@ -78,7 +91,7 @@ export const reviewInstalledSkillChanges = (plan: Plan) =>
           return { ...fact, status: "incoming-update" as const };
         case "Conflict":
           if ("edited" in change) {
-            if (!change.edited) return kept("The folder holds what SKIT did not write");
+            if (!change.edited) return kept({ _tag: "Unmanaged" });
             // The edit already is the selected Version: only the marker changes.
             if (change.currentHash === change.hash)
               return { ...fact, status: "unchanged" as const, metadataChanged: true };
@@ -87,16 +100,16 @@ export const reviewInstalledSkillChanges = (plan: Plan) =>
           }
           return { ...fact, status: "local-only" as const };
         case "Protected":
-          return kept(protection[change.reason]);
+          return kept({ _tag: "Protected", owner: change.reason });
         case "Unreadable":
-          return kept(`The folder cannot be read as a skill: ${change.reason}`);
+          return kept({ _tag: "Unreadable", reason: change.reason });
         case "Refuse":
-          return kept(change.detail);
+          return kept({ _tag: "Modified", path: change.recorded.path });
         case "KeepDeleted":
           return {
             ...fact,
             status: "native-delete" as const,
-            reason: "The user deleted this folder; it stays deleted",
+            reason: { _tag: "NativeDelete" as const },
           };
         case "Uninstall":
         case "Forget":

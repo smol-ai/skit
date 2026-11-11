@@ -1,5 +1,5 @@
 import { assert, it } from "vitest";
-import { setupApplyCommandLine } from "@smolai/skit-core/library/setup";
+import { setupApplyCommandLine } from "../src/library/setup/apply-command.js";
 
 const planId = `sha256:${"a".repeat(64)}`;
 
@@ -20,6 +20,6 @@ it("prints a literal command an allow rule can match", () => {
       repositoryRoots: ["/Users/me/My Work"],
       needsDuplicateDecision: true,
     }),
-    `skit setup --apply ${planId} --work-dir '/Users/me/My Work' --duplicates <retain-only|keep-both|retire-aliases>`,
+    `skit setup --apply ${planId} --work-dir '/Users/me/My Work' --duplicates <import-only|keep-both>`,
   );
 });

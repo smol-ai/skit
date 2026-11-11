@@ -1,14 +1,16 @@
+import { DiscoveryProtocol } from "../../../harnesses/discovery-contracts.js";
+import { HarnessProbeFailure } from "../../../harnesses/probe-failures.js";
 import type { LibraryInventory } from "../../library-state.js";
 import { LibraryDoctorReport } from "../../inventory/doctor-report.js";
 import {
   DuplicateCopy,
   scanSkillsDirectory,
   readableSkillsDirectories,
-  type DuplicateScanError,
+  DuplicateScanError,
   type InventoryRootOptions,
 } from "../../routing/index.js";
 
-import { Data, Effect, FileSystem, Option, Record, Schema, Stream } from "effect";
+import { Effect, FileSystem, Option, Record, Schema, Stream } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import {
@@ -21,18 +23,7 @@ import { SourceProcess, type SourceProcessResult } from "../../../platform/index
 
 import { CodexDoctorCheck, doctorCodexCheck } from "./codex.js";
 import { readOpenCodeV2Skills } from "./opencode.js";
-import { FailureTypeId, type SkitFailure } from "../../../shared/index.js";
-
-class HarnessDiscoveryFailure
-  extends Data.TaggedError("HarnessDiscoveryFailure")<{
-    message: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Check that the Harness runs, then retry.";
-}
+import { HarnessDiscoveryFailed } from "../../../harnesses/discovery-failures.js";
 
 const HarnessDoctorSkill = Schema.Struct({
   id: Schema.optionalKey(Schema.String),
@@ -68,11 +59,21 @@ export const HarnessDoctorCheck = Schema.Struct({
   status: Schema.Literals(["checked", "missing", "failed", "skipped"]),
   cwd: Schema.String,
   version: Schema.optionalKey(Schema.String),
-  detail: Schema.optionalKey(Schema.String),
+  rootOverrides: Schema.optionalKey(Schema.Array(Schema.String)),
+  protocol: Schema.optionalKey(
+    DiscoveryProtocol.pick([
+      "claude-control-initialize",
+      "opencode-debug-skill",
+      "opencode-http-v2",
+      "devin-skills-list",
+    ]),
+  ),
+  probeFailure: Schema.optionalKey(HarnessProbeFailure),
+  discoveryFailure: Schema.optionalKey(HarnessDiscoveryFailed),
   coverage: Schema.Literals(["callable-commands", "resolved-skills", "native-skills"]),
-  limitations: Schema.Array(Schema.String),
   skills: Schema.Array(HarnessDoctorSkill),
   locations: Schema.optionalKey(Schema.Array(DuplicateCopy)),
+  aliasErrors: Schema.optionalKey(Schema.Array(DuplicateScanError)),
   findings: Schema.Array(NativeDiscoveryFinding),
   warnings: Schema.Array(Schema.String),
 });
@@ -169,7 +170,16 @@ export const readClaudeCommands = Effect.fn("Doctor.readClaudeCommands")(functio
           size += chunk.length;
           return size > 4_000_000
             ? Effect.fail(
-                new HarnessDiscoveryFailure({ message: "Claude discovery exceeded 4 MB" }),
+                new HarnessDiscoveryFailed({
+                  harness: "claude-code",
+                  cwd,
+                  reason: {
+                    _tag: "OutputLimitExceeded",
+                    phase: "inventory",
+                    limitBytes: 4_000_000,
+                    actualBytes: size,
+                  },
+                }),
               )
             : Effect.succeed(chunk);
         }),
@@ -186,13 +196,21 @@ export const readClaudeCommands = Effect.fn("Doctor.readClaudeCommands")(functio
         Stream.runHead,
       );
       if (Option.isNone(envelope) || !envelope.value.response)
-        return yield* new HarnessDiscoveryFailure({
-          message: "Claude exited without an initialize response",
+        return yield* new HarnessDiscoveryFailed({
+          harness: "claude-code",
+          cwd,
+          reason: { _tag: "ResponseMissing", method: "initialize" },
         });
       const response = envelope.value.response;
       if (response.subtype !== "success")
-        return yield* new HarnessDiscoveryFailure({
-          message: response.error ?? "Claude initialize failed",
+        return yield* new HarnessDiscoveryFailed({
+          harness: "claude-code",
+          cwd,
+          reason: {
+            _tag: "RemoteError",
+            method: "initialize",
+            ...(response.error === undefined ? {} : { diagnostic: response.error }),
+          },
         });
       return (yield* Schema.decodeUnknownEffect(
         Schema.Struct({ commands: Schema.Array(ClaudeCommand) }),
@@ -203,7 +221,11 @@ export const readClaudeCommands = Effect.fn("Doctor.readClaudeCommands")(functio
       duration: 15_000,
       orElse: () =>
         Effect.fail(
-          new HarnessDiscoveryFailure({ message: "Claude discovery timed out after 15 seconds" }),
+          new HarnessDiscoveryFailed({
+            harness: "claude-code",
+            cwd,
+            reason: { _tag: "TimedOut", timeoutMs: 15_000 },
+          }),
         ),
     }),
   );
@@ -222,13 +244,12 @@ const result = spawnSync(executable, ['debug','skill','--print-logs','--log-leve
 const size = fs.fstatSync(fd).size;
 fs.closeSync(fd);
 if (result.stderr) process.stderr.write(result.stderr);
-if (result.error || result.status !== 0) {
-  process.stderr.write(String(result.error || ('exit ' + result.status)));
-  process.exitCode = 1;
-} else if (size > 4000000) {
-  process.stderr.write('OpenCode discovery exceeded 4 MB');
-  process.exitCode = 1;
-} else process.stdout.write(fs.readFileSync(file));
+process.stdout.write(JSON.stringify({
+  exitCode: result.status,
+  signal: result.signal,
+  size,
+  ...(result.error ? {error:{message:result.error.message,...(result.error.code ? {code:result.error.code} : {})}} : {})
+}));
 `;
 
 const NATIVE_LIST_LIMITS = { timeoutMs: 15_000, maxOutputBytes: 4_000_000, maxErrorBytes: 32_000 };
@@ -242,31 +263,99 @@ const readOpenCodeSkills = Effect.fn("Doctor.readOpenCodeSkills")(function* (
   cwd: string,
 ) {
   const sourceProcess = yield* SourceProcess;
-  const output = yield* Effect.scoped(
+  return yield* Effect.scoped(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const directory = yield* fs.makeTempDirectoryScoped({ prefix: "skit-opencode-discovery-" });
-      return yield* sourceProcess.output(
+      const file = join(directory, "skills.json");
+      const output = yield* sourceProcess.output(
         process.execPath,
-        ["-e", openCodeCapture, executable, join(directory, "skills.json")],
+        ["-e", openCodeCapture, executable, file],
         { cwd, ...NATIVE_LIST_LIMITS },
       );
+      const arguments_ = ["debug", "skill", "--print-logs", "--log-level", "WARN"];
+      if (output.exitCode !== 0)
+        return yield* new HarnessDiscoveryFailed({
+          harness: "opencode",
+          cwd,
+          reason: {
+            _tag: "ExitCode",
+            command: process.execPath,
+            arguments: ["-e", openCodeCapture, executable, file],
+            exitCode: output.exitCode,
+            stderr: output.stderr,
+          },
+        });
+      const capture = yield* Schema.decodeEffect(
+        Schema.fromJsonString(
+          Schema.Struct({
+            exitCode: Schema.NullOr(Schema.Int),
+            signal: Schema.NullOr(Schema.String),
+            size: Schema.Int,
+            error: Schema.optionalKey(
+              Schema.Struct({ code: Schema.optionalKey(Schema.String), message: Schema.String }),
+            ),
+          }),
+        ),
+      )(new TextDecoder().decode(output.stdout));
+      if (capture.error)
+        return yield* new HarnessDiscoveryFailed({
+          harness: "opencode",
+          cwd,
+          reason: {
+            _tag: "ProcessFailed",
+            command: executable,
+            arguments: arguments_,
+            signal: capture.signal,
+            error: capture.error,
+          },
+        });
+      if (capture.exitCode === null)
+        return yield* new HarnessDiscoveryFailed({
+          harness: "opencode",
+          cwd,
+          reason: {
+            _tag: "ProcessEnded",
+            command: executable,
+            arguments: arguments_,
+            signal: capture.signal,
+          },
+        });
+      if (capture.exitCode !== 0)
+        return yield* new HarnessDiscoveryFailed({
+          harness: "opencode",
+          cwd,
+          reason: {
+            _tag: "ExitCode",
+            command: executable,
+            arguments: arguments_,
+            exitCode: capture.exitCode,
+            stderr: output.stderr,
+          },
+        });
+      if (capture.size > 4_000_000)
+        return yield* new HarnessDiscoveryFailed({
+          harness: "opencode",
+          cwd,
+          reason: {
+            _tag: "OutputLimitExceeded",
+            phase: "inventory",
+            limitBytes: 4_000_000,
+            actualBytes: capture.size,
+          },
+        });
+      const skills: HarnessDoctorSkill[] = (yield* decodeOpenCodeSkills(
+        yield* fs.readFileString(file),
+      )).map((skill) => ({
+        name: skill.name,
+        ...(skill.description === undefined ? {} : { description: skill.description }),
+        path: skill.location,
+        warnings: [],
+        errors: [],
+      }));
+      return { skills, warnings: nativeListWarnings(output) };
     }),
   );
-  if (output.exitCode !== 0)
-    return yield* new HarnessDiscoveryFailure({
-      message: `opencode discovery exited ${output.exitCode}${output.stderr.trim() ? `: ${output.stderr.trim()}` : ""}`,
-    });
-  const skills: HarnessDoctorSkill[] = (yield* decodeOpenCodeSkills(
-    new TextDecoder().decode(output.stdout),
-  )).map((skill) => ({
-    name: skill.name,
-    ...(skill.description === undefined ? {} : { description: skill.description }),
-    path: skill.location,
-    warnings: [],
-    errors: [],
-  }));
-  return { skills, warnings: nativeListWarnings(output) };
 });
 
 /** Devin's own skill list, with its per-skill diagnostics. */
@@ -279,8 +368,16 @@ const readDevinSkills = Effect.fn("Doctor.readDevinSkills")(function* (
     ...NATIVE_LIST_LIMITS,
   });
   if (output.exitCode !== 0)
-    return yield* new HarnessDiscoveryFailure({
-      message: `devin discovery exited ${output.exitCode}${output.stderr.trim() ? `: ${output.stderr.trim()}` : ""}`,
+    return yield* new HarnessDiscoveryFailed({
+      harness: "devin",
+      cwd,
+      reason: {
+        _tag: "ExitCode",
+        command: executable,
+        arguments: ["skills", "list", "--json"],
+        exitCode: output.exitCode,
+        stderr: output.stderr,
+      },
     });
   const skills: HarnessDoctorSkill[] = (yield* decodeDevinSkills(
     new TextDecoder().decode(output.stdout),
@@ -297,12 +394,15 @@ const readDevinSkills = Effect.fn("Doctor.readDevinSkills")(function* (
   return { skills, warnings: nativeListWarnings(output) };
 });
 
-const isOpenCodeV2 = (version: string | undefined) => version?.startsWith("2.") === true;
+const openCodeDriver = (version: string | undefined) =>
+  version?.startsWith("2.") === true
+    ? { protocol: "opencode-http-v2" as const, read: readOpenCodeV2Skills }
+    : { protocol: "opencode-debug-skill" as const, read: readOpenCodeSkills };
 
 /** How doctor reads one Harness's own Skill discovery, and what that reading can and cannot show. */
 export interface NativeDiscovery {
   readonly coverage: HarnessDoctorCheck["coverage"];
-  readonly limitations: (version?: string) => readonly string[];
+  readonly protocol: (version?: string) => Exclude<DiscoveryProtocol, "codex-app-server">;
   readonly read: (
     executable: string,
     cwd: string,
@@ -330,9 +430,7 @@ export interface NativeDiscovery {
 export const nativeDiscovery: Record<NativeDoctorHarness, NativeDiscovery> = {
   "claude-code": {
     coverage: "callable-commands",
-    limitations: () => [
-      "Callable commands only; may include legacy commands and bundled commands. Non-user-invocable skills and file paths are not exposed. Hooks and MCP startup are disabled.",
-    ],
+    protocol: () => "claude-control-initialize",
     read: (executable: string, cwd: string) =>
       readClaudeCommands(executable, cwd).pipe(
         Effect.map((commands) => ({
@@ -343,25 +441,14 @@ export const nativeDiscovery: Record<NativeDoctorHarness, NativeDiscovery> = {
   },
   opencode: {
     coverage: "resolved-skills",
-    limitations: (version?: string) =>
-      isOpenCodeV2(version)
-        ? [
-            "Registered skills after discovery plugin activation and three stable metadata snapshots. Duplicate filesystem IDs are resolved by native precedence without warnings; equal display names can coexist. Skill bodies are omitted.",
-          ]
-        : [
-            "Resolved skills only: duplicate names can replace earlier entries. Native warnings may reveal collisions; the final list cannot prove their absence. Skill bodies are omitted.",
-          ],
+    protocol: (version) => openCodeDriver(version).protocol,
     read: (executable: string, cwd: string, version?: string) =>
-      isOpenCodeV2(version)
-        ? readOpenCodeV2Skills(executable, cwd)
-        : readOpenCodeSkills(executable, cwd),
+      openCodeDriver(version).read(executable, cwd),
     classifyWarnings: classifyOpenCodeWarnings,
   },
   devin: {
     coverage: "native-skills",
-    limitations: () => [
-      "Native list semantics; completeness across duplicate paths has not been established.",
-    ],
+    protocol: () => "devin-skills-list",
     read: (executable: string, cwd: string) => readDevinSkills(executable, cwd),
   },
 };
@@ -377,7 +464,6 @@ const doctorHarnessCheck = Effect.fn("Doctor.harness")(function* (
     harness,
     cwd,
     coverage,
-    limitations: discovery.limitations(),
     findings: [],
     skills: [],
     warnings: [],
@@ -386,8 +472,7 @@ const doctorHarnessCheck = Effect.fn("Doctor.harness")(function* (
     return {
       ...empty,
       status: "skipped" as const,
-      detail:
-        "Custom skills directories do not describe the harness's native discovery. Run doctor without root overrides.",
+      rootOverrides: overrides,
     };
   const probe = yield* probeHarness(harness);
   const version = probe.version ? { version: probe.version } : {};
@@ -396,12 +481,12 @@ const doctorHarnessCheck = Effect.fn("Doctor.harness")(function* (
       ...empty,
       ...version,
       status: probe.status === "missing" ? ("missing" as const) : ("failed" as const),
-      detail: probe.error ?? "Harness unavailable",
+      ...(probe.failure === null ? {} : { probeFailure: probe.failure }),
     };
   const native = {
     ...empty,
     ...version,
-    limitations: discovery.limitations(probe.version ?? undefined),
+    protocol: discovery.protocol(probe.version ?? undefined),
   };
   return yield* discovery.read(probe.executablePath, cwd, probe.version ?? undefined).pipe(
     Effect.map((result) => ({
@@ -411,7 +496,17 @@ const doctorHarnessCheck = Effect.fn("Doctor.harness")(function* (
       status: "checked" as const,
     })),
     Effect.catch((error) =>
-      Effect.succeed({ ...native, status: "failed" as const, detail: String(error) }),
+      Effect.succeed({
+        ...native,
+        status: "failed" as const,
+        discoveryFailure: Schema.is(HarnessDiscoveryFailed)(error)
+          ? error
+          : new HarnessDiscoveryFailed({
+              harness,
+              cwd,
+              reason: { _tag: "ReadFailed", failure: error },
+            }),
+      }),
     ),
   );
 });
@@ -522,7 +617,7 @@ export const inspectNativeDiscovery = Effect.fn("Doctor.inspectNativeDiscovery")
   const { cwd } = options;
   const { codex, claude, harnesses } = yield* Effect.all(
     {
-      codex: doctorCodexCheck(inventory, cwd, options.overrides.codex?.[0], options),
+      codex: doctorCodexCheck(inventory, cwd, options.overrides.codex, options),
       claude: readClaudeListingSnapshot(inventory, { ...options, cwd }),
       harnesses: Effect.forEach(
         Record.keys(nativeDiscovery),
@@ -548,20 +643,27 @@ export const inspectNativeDiscovery = Effect.fn("Doctor.inspectNativeDiscovery")
         _tag: "Unavailable" as const,
         harness: "codex" as const,
         cwd,
-        detail: "detail" in codex ? codex.detail : "Native discovery unavailable",
+        reason:
+          "discoveryFailure" in codex && codex.discoveryFailure
+            ? { _tag: "DiscoveryFailed" as const, failure: codex.discoveryFailure }
+            : options.overrides.codex !== undefined
+              ? { _tag: "CustomRoot" as const, roots: options.overrides.codex }
+              : {
+                  _tag: "NativeDiscoveryUnavailable" as const,
+                  status: codex.status,
+                  ...("probeFailure" in codex && codex.probeFailure
+                    ? { probeFailure: codex.probeFailure }
+                    : {}),
+                },
       },
       claude.budget,
     ],
     harnesses: harnesses.map((check) => {
-      const warnings = [
-        ...check.warnings,
-        ...aliasErrors.map(
-          (error) => `Could not inspect skill aliases at ${error.path}: ${error.message}`,
-        ),
-      ];
+      const warnings = check.warnings;
       const located = {
         ...check,
         locations: locations.filter((location) => location.harness === check.harness),
+        ...(aliasErrors.length ? { aliasErrors } : {}),
         warnings,
         findings: warningFindings(warnings),
       };

@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import type { ScopeChoice } from "@smolai/skit-core/library/session";
-import { DESTINATION_QUESTION, scopeChoices } from "@smolai/skit-core/library/session";
+import { scopeChoices } from "@smolai/skit-core/library/session";
+import { DESTINATION_QUESTION, scopeChoiceLabels } from "./invocation.js";
 import { Prompter } from "../../terminal/prompter.js";
 
 export const promptForScope = Effect.fn("CLI.promptForScope")(function* (
@@ -13,8 +14,8 @@ export const promptForScope = Effect.fn("CLI.promptForScope")(function* (
     DESTINATION_QUESTION,
     available.map((item) => ({
       value: item.value,
-      label: item.label,
-      ...(item.hint ? { hint: item.hint } : {}),
+      label: scopeChoiceLabels[item.value],
+      ...(item.scope.kind === "repository" ? { hint: item.scope.root } : {}),
     })),
   );
   const selected = available.find((item) => item.value === choice);

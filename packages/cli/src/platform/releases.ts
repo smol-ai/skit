@@ -1,23 +1,12 @@
-import { Data, Clock, Config, Effect, FileSystem, Schema } from "effect";
+import { Clock, Config, Effect, FileSystem, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { type BuildInfo, FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
+import { type BuildInfo } from "@smolai/skit-core/shared";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 
+import { UpdateCheckTimedOut } from "./release-failures.js";
 import { defaultChannel, decideRelease, type ReleaseCheck } from "../releases.js";
-
-class UpdateCheckTimedOut
-  extends Data.TaggedError("UpdateCheckTimedOut")<{}>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Retry when the network is available.";
-  get message(): string {
-    return "The release check timed out";
-  }
-}
 
 const DAY = 86_400_000;
 const DistTags = Schema.Record(Schema.String, Schema.String);
@@ -82,7 +71,7 @@ const makeReleaseNotice = Effect.gen(function* () {
     ).pipe(
       Effect.timeoutOrElse({
         duration: "1500 millis",
-        orElse: () => Effect.fail(new UpdateCheckTimedOut()),
+        orElse: () => Effect.fail(new UpdateCheckTimedOut({ source, timeoutMs: 1_500 })),
       }),
       Effect.map((tags) => ({ tags, reason: undefined })),
       Effect.catch((error) => Effect.succeed({ tags: undefined, reason: String(error) })),

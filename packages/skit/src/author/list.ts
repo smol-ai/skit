@@ -1,21 +1,7 @@
-import { Data, Effect } from "effect";
-import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
+import { Effect } from "effect";
+import { AuthorListIdentityError } from "./failures.js";
 import { skitLocator } from "./destination.js";
 import type { AuthorRegistry } from "./transport.js";
-
-export class AuthorListIdentityError
-  extends Data.TaggedError("AuthorListIdentityError")<{
-    identity: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Report the invalid identity to the Registry's operator.";
-  get message() {
-    return `Registry returned invalid SKIT identity: ${this.identity}`;
-  }
-}
 
 export const listAuthorSkits = Effect.fn("Author.list")(function* <E, R>(
   registry: Pick<AuthorRegistry<E, R>, "list">,
@@ -42,3 +28,5 @@ export const listAuthorSkits = Effect.fn("Author.list")(function* <E, R>(
   );
   return { registry: origin, skits: inventory };
 });
+
+export { AuthorListIdentityError } from "./failures.js";

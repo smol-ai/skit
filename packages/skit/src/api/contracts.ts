@@ -1,4 +1,6 @@
-import { Data, Effect, Result, Schema, SchemaIssue, type SchemaAST } from "effect";
+import { SchemaFailure } from "../shared/schema-issue.js";
+import { TreePathIssue } from "../history/history.js";
+import { Effect, Result, Schema, type SchemaAST } from "effect";
 import {
   registrySkitSlugSchema,
   skitDescriptorWireSchema,
@@ -19,7 +21,7 @@ export const apiBase64Schema = Schema.String.check(
       if (!/^[0-9A-Za-z+/]*$/.test(content)) return false;
       return padding === 0 ? content.length % 4 === 0 : content.length % 4 === 4 - padding;
     },
-    { expected: "a base64 encoded string" },
+    { representation: { id: "skit/schema/base64", payload: null } },
   ),
 );
 export const apiNonEmptyString = Schema.NonEmptyString;
@@ -35,26 +37,24 @@ export const skitValidationDiagnosticsSchema = Schema.Array(skitValidationDiagno
 export const skitDescriptorRequestSchema = skitDescriptorWireSchema;
 
 /** A Registry response that does not match the SKIT API contract it claims. */
+const SkitContractErrorReason = Schema.TaggedUnion({
+  InvalidData: { failure: SchemaFailure },
+  InvalidTree: { issue: TreePathIssue },
+  InvalidWriteTarget: { path: Schema.String },
+  UnsupportedTreeEntry: { path: Schema.String, kind: Schema.Literals(["directory", "symlink"]) },
+  ReadFailed: { failure: Schema.Defect() },
+});
+type SkitContractErrorReason = typeof SkitContractErrorReason.Type;
+
 export class SkitContractError
-  extends Data.TaggedError("SkitContractError")<{
-    contract: string;
-    issues: ReadonlyArray<{ path: string; message: string }>;
-  }>
+  extends Schema.TaggedError<SkitContractError, { readonly brand: unique symbol }>()(
+    "SkitContractError",
+    { contract: Schema.String, reason: SkitContractErrorReason },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Check that the Registry runs a compatible SKIT server, then retry.";
-  get message(): string {
-    return `${this.contract} does not match the SKIT API contract: ${this.issues.map((issue) => `${issue.path || "<root>"}: ${issue.message}`).join("; ")}`;
-  }
-}
-const formatContractIssues = SchemaIssue.makeFormatterStandardSchemaV1();
-function contractIssues(error: Schema.SchemaError): Array<{ path: string; message: string }> {
-  return formatContractIssues(error.issue).issues.map((issue) => ({
-    path: issue.path?.map(String).join(".") ?? "",
-    message: issue.message,
-  }));
 }
 export function parseContract<S extends Schema.ConstraintDecoder<unknown>>(
   contract: string,
@@ -64,7 +64,7 @@ export function parseContract<S extends Schema.ConstraintDecoder<unknown>>(
 ): Effect.Effect<S["Type"], SkitContractError> {
   return Schema.decodeUnknownEffect(schema, { errors: "all", ...options })(value).pipe(
     Effect.mapError(
-      (failure) => new SkitContractError({ contract, issues: contractIssues(failure) }),
+      (failure) => new SkitContractError({ contract, reason: { _tag: "InvalidData", failure } }),
     ),
   );
 }

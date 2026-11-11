@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Option } from "effect";
+import { Effect, FileSystem, Option, Schema } from "effect";
 import { join } from "node:path";
 import * as Library from "../src/library/library.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
@@ -11,6 +11,31 @@ import { recoveryFingerprint } from "../src/library/folder-evidence.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { copySkitFixtureEffect } from "./helpers/skit-fixture.js";
 import { collectionVersionPath, originalTreeHash } from "../src/library/collection-version.js";
+import { InstalledSkillInvalid } from "../src/library/installation/install-enabled.js";
+import { planInstalledSkillChanges } from "../src/library/setup/installed-skills.js";
+import { snapshotOf } from "../src/library/snapshot.js";
+
+it.effect("a failed installation preview keeps its typed source failure", () =>
+  Effect.gen(function* () {
+    const f = yield* authoredFixture;
+    const failure = new InstalledSkillInvalid({
+      reason: { _tag: "InputsChanged", skillName: "review" },
+    });
+    const changes = yield* planInstalledSkillChanges(
+      { plan: () => Effect.fail(failure) },
+      snapshotOf({ present: true, state: f.state }),
+    );
+    assert.strictEqual(changes.length, f.state.installed_skills.length);
+    assert.isAbove(changes.length, 0);
+    for (const change of changes) {
+      if (!("reason" in change) || change.reason?._tag !== "PlanningFailed")
+        return yield* Effect.die("Missing recorded planning failure");
+      assert.isTrue(Schema.is(InstalledSkillInvalid)(change.reason.error));
+      if (Schema.is(InstalledSkillInvalid)(change.reason.error))
+        assert.deepStrictEqual(change.reason.error.reason, failure.reason);
+    }
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
 
 const authoredFixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;

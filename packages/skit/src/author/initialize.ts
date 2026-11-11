@@ -92,7 +92,7 @@ export const initializeAuthorWorkspace = Effect.fn("Author.initialize")(function
     importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
   });
   if (validated.descriptor.skills.length === 0)
-    return yield* new ImportContentInvalid({ diagnostics: ["retained Skills are missing"] });
+    return yield* new ImportContentInvalid({ reason: { _tag: "SelectedSkillsMissing" } });
   return { initialized, entry };
   // The lease ends with the command.
 }, Effect.scoped);

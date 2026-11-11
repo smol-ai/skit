@@ -11,7 +11,7 @@ import {
   type SetupApproval,
 } from "../../enabled-plan.js";
 import type { InvocationOption } from "./invocation-option.js";
-import { OptionCombinationInvalid } from "../../../shared/input-failures.js";
+import { SetEnabledInvalid } from "../../enabled-plan.js";
 import { resolveLibrarySubject } from "../../subject-resolution.js";
 
 /** Names, members and scopes chosen by the front end; resolved by Library. */
@@ -46,9 +46,7 @@ export const expandSetEnabledIntent = Effect.fn("SetEnabled.expandIntent")(funct
   const selectedNames =
     intent.members !== undefined && intent.members !== "whole" ? intent.members : undefined;
   if (selectedNames?.some((name) => !subject.skills.some((skill) => skill.name === name)))
-    return yield* new OptionCombinationInvalid({
-      detail: "Selected Skill is absent from this Collection",
-    });
+    return yield* new SetEnabledInvalid({ reason: "selected-skill-absent" });
   const collectionId =
     subject.kind === "collection" ? subject.collection.collection_id : subject.skill.collection_id;
   const scopes = uniqueInstallScopes(

@@ -121,3 +121,72 @@ it.effect("verbatim history and normalized sync inputs use identical inventory k
     );
   }),
 );
+
+it.effect("changed missing paths start a fresh confirmation period", () =>
+  Effect.gen(function* () {
+    const owner = makeRemovalCheck();
+    const first = yield* owner.check("w", baseline, smaller);
+    yield* TestClock.adjust("9 seconds");
+    const different = {
+      inventory: { files: ["a", "c"], members: baseline.inventory.members },
+      membershipReadable: true,
+    };
+    const changed = yield* owner.check("w", first.accepted, different);
+    expect(changed.decision.status).toBe("waiting");
+    yield* TestClock.adjust("1 second");
+    expect((yield* owner.check("w", changed.accepted, different)).decision.removedFiles).toEqual(
+      [],
+    );
+    yield* TestClock.adjust("9 seconds");
+    expect((yield* owner.check("w", changed.accepted, different)).decision.removedFiles).toEqual([
+      "b",
+    ]);
+  }),
+);
+
+it.effect("unreadability and bulk pauses cannot resume an earlier confirmation period", () =>
+  Effect.gen(function* () {
+    for (const pause of [
+      { inventory: smaller.inventory, membershipReadable: false },
+      { inventory: { files: [], members: [] }, membershipReadable: true },
+    ]) {
+      const owner = makeRemovalCheck();
+      const first = yield* owner.check("w", baseline, smaller);
+      yield* TestClock.adjust("10 seconds");
+      const paused = yield* owner.check("w", first.accepted, pause);
+      expect(paused.decision.status).toBe(pause.membershipReadable ? "blocked" : "waiting");
+      const resumed = yield* owner.check("w", paused.accepted, smaller);
+      expect(resumed.decision.status).toBe("waiting");
+      expect(resumed.decision.removedFiles).toEqual([]);
+      yield* TestClock.adjust("10 seconds");
+      expect((yield* owner.check("w", resumed.accepted, smaller)).decision.removedFiles).toEqual([
+        "c",
+      ]);
+    }
+  }),
+);
+
+it.effect("a file returning cancels its pending removal confirmation", () =>
+  Effect.gen(function* () {
+    const owner = makeRemovalCheck();
+    const pending = yield* owner.check("w", baseline, smaller);
+    yield* TestClock.adjust("9 seconds");
+    const restored = yield* owner.check("w", pending.accepted, {
+      inventory: baseline.inventory,
+      membershipReadable: true,
+    });
+    expect(restored.decision.status).toBe("accepted");
+    expect(restored.decision.removedFiles).toEqual([]);
+    yield* TestClock.adjust("1 second");
+    const missingAgain = yield* owner.check("w", restored.accepted, smaller);
+    expect(missingAgain.decision.status).toBe("waiting");
+    yield* TestClock.adjust("9 seconds");
+    expect((yield* owner.check("w", missingAgain.accepted, smaller)).decision.heldFiles).toEqual([
+      "c",
+    ]);
+    yield* TestClock.adjust("1 second");
+    expect((yield* owner.check("w", missingAgain.accepted, smaller)).decision.removedFiles).toEqual(
+      ["c"],
+    );
+  }),
+);

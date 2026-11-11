@@ -1,5 +1,5 @@
 import { sourceIdentityLabel } from "../../source-identity.js";
-import { currentSkillVersion, versionBacking } from "../../library-contracts.js";
+import { currentSkillVersion, versionBacking, type Skill } from "../../library-contracts.js";
 import { readSkitDescriptor } from "../../../artifact/skit.js";
 import { collectionVersionPath } from "../../collection-version.js";
 import { type LibraryState } from "../../library-state.js";
@@ -34,14 +34,10 @@ const validTimestamp = (value: string | undefined): string | null =>
   value === undefined || Number.isNaN(Date.parse(value)) ? null : new Date(value).toISOString();
 
 /** Provenance belongs to the selected retained bytes, not the Collection's latest acquisition. */
-export const readLibrarySkillMetadata = Effect.fn("Library.readSkillMetadata")(function* (
-  state: LibraryState,
-  originalsPath: string,
-) {
-  const metadata = new Map<string, SkillMetadata>();
+export function makeLibrarySkillMetadataReader(state: LibraryState, originalsPath: string) {
   const descriptors = new Map<string, SkitDescriptor | undefined>();
   const authoredInputs = new Map<string, Effect.Success<ReturnType<typeof readAuthoredInputs>>>();
-  for (const skill of state.skills) {
+  return Effect.fn("Library.readSkillMetadata")(function* (skill: Skill) {
     const selected = currentSkillVersion(state, skill);
     const backing = selected === undefined ? undefined : versionBacking(state, skill, selected);
     const sourceImport = backing?.acquisition;
@@ -102,15 +98,29 @@ export const readLibrarySkillMetadata = Effect.fn("Library.readSkillMetadata")(f
         savedAt = validTimestamp(selection.source.saved_at);
       }
     }
-    metadata.set(skill.skill_id, {
+    return {
       source: source === undefined ? null : sourceIdentityLabel(source),
       revision,
       ...(savedAt === null ? {} : { saved_at: savedAt }),
       source_updated_at: sourceUpdated,
       imported_at: validTimestamp(importedAt),
-    });
-  }
-  return metadata;
+    } satisfies SkillMetadata;
+  });
+}
+
+/** A bulk passive report uses the same per-read caches as the Library view. */
+export const readLibrarySkillMetadata = Effect.fn("Library.readSkillMetadataReport")(function* (
+  state: LibraryState,
+  originalsPath: string,
+) {
+  const readMetadata = makeLibrarySkillMetadataReader(state, originalsPath);
+  return new Map(
+    yield* Effect.forEach(state.skills, (skill) =>
+      Effect.gen(function* () {
+        return [skill.skill_id, yield* readMetadata(skill)] as const;
+      }),
+    ),
+  );
 });
 
 /** Metadata and lazy content reads for copies already selected by an owner-backed review. */

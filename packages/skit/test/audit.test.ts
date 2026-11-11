@@ -26,6 +26,7 @@ describe("static capability evidence", () => {
     });
 
     expect(left.findings[0].fingerprint).toBe(right.findings[0].fingerprint);
+    expect(left.findings[0]).not.toHaveProperty("message");
     expect(left.findings[0]).toEqual(
       expect.objectContaining({
         artifactContentHash: hash,

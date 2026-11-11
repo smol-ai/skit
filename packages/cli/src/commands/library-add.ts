@@ -1,3 +1,5 @@
+import { Block } from "../terminal/blocks.js";
+import { defineCommand } from "./definition.js";
 import * as Library from "@smolai/skit-core/library";
 import { Effect } from "effect";
 import { descriptionLoadMessage } from "../library/presentation/description-size.js";
@@ -15,7 +17,9 @@ import { Renderer } from "../terminal/renderer.js";
 import { encodeResult as result } from "./encode-result.js";
 import { addSourceRequest } from "../registry/library-source.js";
 
-const source = Argument.String("source");
+const source = Argument.String("source").pipe(
+  Argument.withDescription("Source path, Git URL, or Registry collection to add to the Library."),
+);
 
 const registry = optionalString("registry", "Resolve a Registry source through a name or URL.");
 
@@ -24,7 +28,7 @@ const preview = Flag.Boolean("list").pipe(
   Flag.withDefault(false),
 );
 
-export const addCliCommand = Command.make(
+export const addCliCommand = defineCommand(
   "add",
   { source, registry, preview, ...localFlags },
   (input) =>
@@ -45,9 +49,15 @@ export const addCliCommand = Command.make(
       );
       yield* renderer.result(result("add", addOutputContracts.add, added));
       yield* renderer.note(
-        descriptionLoad === undefined
-          ? "Description size unavailable."
-          : descriptionLoadMessage(descriptionLoad),
+        [
+          Block.Note({
+            text: [
+              descriptionLoad === undefined
+                ? "Description size unavailable."
+                : descriptionLoadMessage(descriptionLoad),
+            ],
+          }),
+        ],
         "Description size",
       );
     }),
@@ -64,7 +74,6 @@ export const addCliCommand = Command.make(
       subprocesses: [...sourceFetchSubprocesses, ...credentialStoreReadSubprocesses],
     },
     outputSchemas: [addOutputContracts.add, addOutputContracts.addPreview],
-    exitCodes: [0, 11, 12, 64, 65],
     interactive: false,
   }),
 );

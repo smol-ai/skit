@@ -1,3 +1,5 @@
+import { harnessProfile } from "../../../harnesses/catalog.js";
+import type { AuthoredSkillIssue } from "../../authored-skill-issues.js";
 import { Effect, FileSystem, Schema } from "effect";
 import { dirname, join } from "node:path";
 import { stringify } from "yaml";
@@ -5,7 +7,6 @@ import { type SkitDescriptor } from "../../../artifact/schemas.js";
 import { readSkitDescriptor, validateSkitDirectory } from "../../../artifact/skit.js";
 import { walkTree } from "../../../artifact/tree.js";
 import type { TreeFile } from "../../../artifact/tree-entry.js";
-import { errorMessage } from "../../../shared/failure.js";
 import { Hash } from "../../../shared/hash.js";
 import { originalTreeHash, originalTreeHashFromEntries } from "../../collection-version.js";
 import { installedSkillHash } from "../../installed-skill-hash.js";
@@ -89,13 +90,15 @@ export const prepareAuthored = Effect.fn("Library.prepareAuthored")(function* (
     declaration._tag === "Success"
       ? declaration.success
       : (metadata?.descriptor ?? previousDescriptor);
-  const messages: string[] =
-    declaration._tag === "Failure" ? [`Descriptor held: ${errorMessage(declaration.failure)}`] : [];
-  if (descriptor === undefined) return { root: undefined, messages };
+  const issues: AuthoredSkillIssue[] =
+    declaration._tag === "Failure"
+      ? [{ _tag: "DescriptorHeld", failure: declaration.failure }]
+      : [];
+  if (descriptor === undefined) return { root: undefined, issues };
   if (files.some((file) => file.path === authoredInputsFile))
     return {
       root: undefined,
-      messages: [`${authoredInputsFile} is reserved for retained input provenance`],
+      issues: [{ _tag: "ReservedInputPath" as const, path: authoredInputsFile }],
     };
   const selected: Array<{
     files: readonly TreeFile[];
@@ -117,13 +120,10 @@ export const prepareAuthored = Effect.fn("Library.prepareAuthored")(function* (
         (!removal.allowAllRemovals && !removal.removedMembers.includes(previous.path)))
     ) {
       members.push(previous);
-      messages.push(`Keeping ${previous.name}: membership removal awaits confirmation`);
     }
   }
   for (const member of members) {
-    const previous = previousDescriptor?.skills.find(
-      (item) => item.path === member.path && item.name === member.name,
-    );
+    const previous = previousDescriptor?.skills.find((item) => item.path === member.path);
     const provenance = metadata?.selections.find((item) => item.declaration.path === member.path);
     const present = descriptor.skills.some((item) => item.path === member.path);
     const previousPaths =
@@ -149,47 +149,53 @@ export const prepareAuthored = Effect.fn("Library.prepareAuthored")(function* (
         (removal === undefined ||
           (!removal.allowAllRemovals && !removal.removedFiles.includes(path))),
     );
-    const candidate =
-      present && missing.length === 0
-        ? yield* Effect.gen(function* () {
-            const root = yield* stage(inputs(files, member), { ...descriptor, skills: [member] });
-            const checked = yield* validateSkitDirectory(root, "retained", {
-              assessmentContext: "import",
-            });
-            const errors = checked.diagnostics.filter((item) => item.severity === "error");
-            if (errors.length > 0)
-              return { valid: false as const, messages: errors.map((item) => item.message) };
-            const primary = yield* fs.readFileString(join(root, member.path, "SKILL.md"));
-            const metadataIssues = harnesses.flatMap((harness) =>
-              evaluateSkillFrontmatter(primary, harness, { directoryName: member.name })
-                .issues.filter((issue) => issue.severity === "error")
-                .map(
-                  (issue) =>
-                    `${harness}: ${issue.code}${issue.field === null ? "" : ` (${issue.field})`}`,
-                ),
-            );
-            if (metadataIssues.length > 0)
-              return { valid: false as const, messages: metadataIssues };
-            return {
-              valid: true as const,
-              artifactHash: yield* installedSkillHash({
-                collectionVersionPath: root,
-                sourcePath: member.path,
-                shared: member.shared,
+    const completeInputs = present && missing.length === 0;
+    if (!completeInputs)
+      issues.push(
+        missing.length > 0
+          ? { _tag: "InputRemovalPending", skill: member.name, paths: missing }
+          : { _tag: "MembershipRemovalPending", skill: member.name, path: member.path },
+      );
+    const candidate = completeInputs
+      ? yield* Effect.gen(function* () {
+          const root = yield* stage(inputs(files, member), { ...descriptor, skills: [member] });
+          const checked = yield* validateSkitDirectory(root, "retained", {
+            assessmentContext: "import",
+          });
+          const errors = checked.diagnostics.filter((item) => item.severity === "error");
+          if (errors.length > 0) {
+            issues.push({ _tag: "ValidationHeld", skill: member.name, diagnostics: errors });
+            return { valid: false as const };
+          }
+          const primary = yield* fs.readFileString(join(root, member.path, "SKILL.md"));
+          const reports = harnesses
+            .map((harness) =>
+              evaluateSkillFrontmatter(primary, harnessProfile(harness).frontmatter.default, {
+                directoryName: member.name,
               }),
-            };
-          }).pipe(
-            Effect.catch((error) =>
-              Effect.succeed({ valid: false as const, messages: [errorMessage(error)] }),
-            ),
-          )
-        : {
-            valid: false as const,
-            messages:
-              missing.length > 0
-                ? missing.map((path) => `Input removal awaits confirmation: ${path}`)
-                : ["Membership removal awaits confirmation"],
+            )
+            .filter((report) => report.issues.some((issue) => issue.severity === "error"));
+          if (reports.length > 0) {
+            issues.push({ _tag: "MetadataHeld", skill: member.name, reports });
+            return { valid: false as const };
+          }
+          return {
+            valid: true as const,
+            artifactHash: yield* installedSkillHash({
+              collectionVersionPath: root,
+              sourcePath: member.path,
+              shared: member.shared,
+            }),
           };
+        }).pipe(
+          Effect.catch((failure) =>
+            Effect.sync(() => {
+              issues.push({ _tag: "PreparationFailed", skill: member.name, failure });
+              return { valid: false as const };
+            }),
+          ),
+        )
+      : { valid: false as const };
     const hash = inputHash(files, member);
     if (
       candidate.valid &&
@@ -229,9 +235,8 @@ export const prepareAuthored = Effect.fn("Library.prepareAuthored")(function* (
         },
       });
     }
-    if (!candidate.valid) messages.push(`${member.name}: ${candidate.messages.join("; ")}`);
   }
-  if (selected.length === 0) return { root: undefined, messages };
+  if (selected.length === 0) return { root: undefined, issues };
   let sharedRoot = "skit-inputs";
   while (
     files.some((file) => within(file.path, sharedRoot)) ||
@@ -267,7 +272,7 @@ export const prepareAuthored = Effect.fn("Library.prepareAuthored")(function* (
     )
       return yield* new InvalidLibraryState({
         path: root,
-        detail: `Selected inputs for ${member.name} do not reproduce their validated artifact`,
+        reason: { _tag: "ContentChanged", entry: member.name },
       });
   }
   yield* fs.writeFileString(
@@ -277,5 +282,5 @@ export const prepareAuthored = Effect.fn("Library.prepareAuthored")(function* (
       selections: selected.map((item) => item.provenance),
     }),
   );
-  return { root, messages };
+  return { root, issues };
 });

@@ -3,8 +3,8 @@ import { Effect, Fiber, FileSystem } from "effect";
 import { TestClock } from "effect/testing";
 import { join } from "node:path";
 import { systemError } from "effect/PlatformError";
-import { authorLayer, refreshWorkspace } from "./helpers/author-history.js";
-import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
+import { authorLayer, refreshWorkspace } from "../src/platform/author-sync-fixture/history.js";
+import { makeAuthorSyncWorld } from "../src/platform/author-sync-fixture/world.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
 for (const connection of ["first", "connected"] as const)

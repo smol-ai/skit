@@ -11,8 +11,6 @@ export const CommandDescription = Schema.Struct({
   stability: Schema.Literals(["stable", "experimental"]),
   effects: CommandEffects,
   outputSchemas: Schema.Array(Schema.String),
-  successExitCodes: Schema.Array(Schema.Int),
-  errorExitCodes: Schema.Array(Schema.Int),
   interactive: Schema.Boolean,
   flags: Schema.Record(Schema.String, Schema.Struct({ type: Schema.String })),
 });

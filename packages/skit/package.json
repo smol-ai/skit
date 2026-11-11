@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./sync/failures": {
+      "types": "./dist/sync/failures.d.ts",
+      "import": "./dist/sync/failures.js"
+    },
     "./harnesses": {
       "types": "./dist/harnesses/index.d.ts",
       "import": "./dist/harnesses/index.js"
@@ -99,6 +103,106 @@
     "./library/recovery": {
       "types": "./dist/library/recovery.d.ts",
       "import": "./dist/library/recovery.js"
+    },
+    "./author/failures": {
+      "types": "./dist/author/failures.d.ts",
+      "import": "./dist/author/failures.js"
+    },
+    "./author/workspace-contracts": {
+      "types": "./dist/author/workspace-contracts.d.ts",
+      "import": "./dist/author/workspace-contracts.js"
+    },
+    "./author/history-failures": {
+      "types": "./dist/author/history-failures.d.ts",
+      "import": "./dist/author/history-failures.js"
+    },
+    "./sync": {
+      "types": "./dist/sync/sync.d.ts",
+      "import": "./dist/sync/sync.js"
+    },
+    "./machine-settings/failures": {
+      "types": "./dist/library/machine-settings-failures.d.ts",
+      "import": "./dist/library/machine-settings-failures.js"
+    },
+    "./library/setup/failures": {
+      "types": "./dist/library/setup-failures.d.ts",
+      "import": "./dist/library/setup-failures.js"
+    },
+    "./library/usage/contracts": {
+      "types": "./dist/library/usage/contracts.d.ts",
+      "import": "./dist/library/usage/contracts.js"
+    },
+    "./library/source/failures": {
+      "types": "./dist/sources/fetch-failures.d.ts",
+      "import": "./dist/sources/fetch-failures.js"
+    },
+    "./library/source-restore/failures": {
+      "types": "./dist/library/source-restore-failures.d.ts",
+      "import": "./dist/library/source-restore-failures.js"
+    },
+    "./harnesses/probe-failures": {
+      "types": "./dist/harnesses/probe-failures.d.ts",
+      "import": "./dist/harnesses/probe-failures.js"
+    },
+    "./auditing/probe-failures": {
+      "types": "./dist/auditing/probe-failures.d.ts",
+      "import": "./dist/auditing/probe-failures.js"
+    },
+    "./library/source/plugin-failures": {
+      "types": "./dist/sources/plugin-failures.d.ts",
+      "import": "./dist/sources/plugin-failures.js"
+    },
+    "./library/source/installer": {
+      "types": "./dist/sources/installer-guidance.d.ts",
+      "import": "./dist/sources/installer-guidance.js"
+    },
+    "./installed-skills/pnpm-failures": {
+      "types": "./dist/installed-skills/pnpm-failures.d.ts",
+      "import": "./dist/installed-skills/pnpm-failures.js"
+    },
+    "./library/import/failures": {
+      "types": "./dist/library/import-failures.d.ts",
+      "import": "./dist/library/import-failures.js"
+    },
+    "./library/update/failures": {
+      "types": "./dist/library/update-failures.d.ts",
+      "import": "./dist/library/update-failures.js"
+    },
+    "./library/restore/failures": {
+      "types": "./dist/library/restore-failures.d.ts",
+      "import": "./dist/library/restore-failures.js"
+    },
+    "./library/audit/failures": {
+      "types": "./dist/library/audit/failures.d.ts",
+      "import": "./dist/library/audit/failures.js"
+    },
+    "./library/sync/failures": {
+      "types": "./dist/library/sync-input-failures.d.ts",
+      "import": "./dist/library/sync-input-failures.js"
+    },
+    "./harnesses/discovery-failures": {
+      "types": "./dist/harnesses/discovery-failures.d.ts",
+      "import": "./dist/harnesses/discovery-failures.js"
+    },
+    "./harnesses/listing-contracts": {
+      "types": "./dist/harnesses/skill-listing/contracts.d.ts",
+      "import": "./dist/harnesses/skill-listing/contracts.js"
+    },
+    "./harnesses/discovery-contracts": {
+      "types": "./dist/harnesses/discovery-contracts.d.ts",
+      "import": "./dist/harnesses/discovery-contracts.js"
+    },
+    "./library/recorded-failures": {
+      "types": "./dist/library/recorded-failures.d.ts",
+      "import": "./dist/library/recorded-failures.js"
+    },
+    "./library/manifest-violation": {
+      "types": "./dist/library/manifest-violation.d.ts",
+      "import": "./dist/library/manifest-violation.js"
+    },
+    "./library/local-state-violation": {
+      "types": "./dist/library/local-state-violation.d.ts",
+      "import": "./dist/library/local-state-violation.js"
     }
   },
   "scripts": {

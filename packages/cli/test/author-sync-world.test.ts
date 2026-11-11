@@ -32,9 +32,13 @@ const SyncCheckpoint = Schema.Union([
   }),
 ]);
 import { testPlatformLayer } from "./helpers/platform.js";
-import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
-import { makeAuthorSyncServer } from "./helpers/author-sync-server.js";
-import { authorLayer, refreshWorkspace, storedTreesAt } from "./helpers/author-history.js";
+import { makeAuthorSyncWorld } from "../src/platform/author-sync-fixture/world.js";
+import { makeAuthorSyncServer } from "../src/platform/author-sync-fixture/server.js";
+import {
+  authorLayer,
+  refreshWorkspace,
+  storedTreesAt,
+} from "../src/platform/author-sync-fixture/history.js";
 
 const locator = "skit://registry.example/swyx/tools";
 
@@ -71,15 +75,14 @@ it.effect.each(["before-create", "after-create", "after-post", "after-move"] as 
   (boundary) =>
     Effect.gen(function* () {
       const world = yield* makeAuthorSyncWorld();
-      const fs = yield* FileSystem.FileSystem;
       yield* world.server.dropNextResponse("a", boundary);
       expect(yield* Effect.result(world.a.sync(true))).toMatchObject({ _tag: "Failure" });
       yield* world.a.restart();
       const before = yield* world.a.files();
       yield* world.a.sync();
       expect(yield* world.a.files()).toEqual(before);
-      expect(yield* fs.exists(join(world.a.workspace, "skit.remote.json"))).toBe(true);
-      expect(yield* fs.exists(join(world.a.workspace, ".skit/connection.json"))).toBe(false);
+      expect(yield* world.a.exists("skit.remote.json")).toBe(true);
+      expect(yield* world.a.exists(".skit/connection.json")).toBe(false);
       expect(yield* world.server.current()).not.toBeNull();
       expect(yield* world.server.currentHistory()).toHaveLength(1);
       expect((yield* world.a.sync()).status).toBe("up_to_date");
@@ -91,7 +94,6 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const world = yield* makeAuthorSyncWorld();
-      const fs = yield* FileSystem.FileSystem;
       const gate = yield* world.server.gate("a", "before-create");
       const first = yield* world.a.startSync(true);
       yield* gate.reached();
@@ -100,8 +102,8 @@ it.effect(
       expect(yield* Effect.flip(Fiber.join(first))).toMatchObject({
         _tag: "DestinationExistsWithoutHistory",
       });
-      expect(yield* fs.exists(join(world.a.workspace, ".skit/connection.json"))).toBe(false);
-      expect(yield* fs.exists(join(world.a.workspace, "skit.remote.json"))).toBe(false);
+      expect(yield* world.a.exists(".skit/connection.json")).toBe(false);
+      expect(yield* world.a.exists("skit.remote.json")).toBe(false);
       expect(yield* world.server.currentHistory()).toHaveLength(1);
     }).pipe(Effect.provide(testPlatformLayer)),
 );
@@ -122,7 +124,7 @@ it.effect(
       expect(yield* Effect.flip(world.b.sync(true))).toMatchObject({
         _tag: "DestinationExistsWithoutHistory",
       });
-      expect(yield* fs.exists(join(world.b.workspace, ".skit/connection.json"))).toBe(false);
+      expect(yield* world.b.exists(".skit/connection.json")).toBe(false);
       // The same original invocation can also be repeated after a restart.
       yield* world.a.restart();
       expect((yield* world.a.sync(true)).status).toBe("created");
@@ -157,24 +159,23 @@ it.effect.each([
   ({ render }) =>
     Effect.gen(function* () {
       const world = yield* makeAuthorSyncWorld();
-      const fs = yield* FileSystem.FileSystem;
       yield* world.connect();
       const path = join(world.a.home, "author-sync.json");
-      const saved = yield* fs.readFileString(path);
+      const saved = yield* world.a.readCheckpoint();
       const invalid = render(yield* workspaceIdOf(world.a));
       const files = yield* world.a.files();
       const revisions = yield* world.server.revisions();
-      yield* fs.writeFileString(path, invalid);
+      yield* world.a.writeCheckpoint(invalid);
       const failure = yield* Effect.flip(world.a.sync());
       expect(failure).toMatchObject({
         _tag: "AuthorSyncStateInvalid",
         path,
         code: "OPERATION_FAILED",
       });
-      expect(yield* fs.readFileString(path)).toBe(invalid);
+      expect(yield* world.a.readCheckpoint()).toBe(invalid);
       expect(yield* world.a.files()).toEqual(files);
       expect(yield* world.server.revisions()).toEqual(revisions);
-      yield* fs.writeFileString(path, saved);
+      yield* world.a.writeCheckpoint(saved);
       expect((yield* world.a.sync()).status).toBe("up_to_date");
     }).pipe(Effect.provide(testPlatformLayer)),
 );
@@ -191,7 +192,7 @@ it.effect("first connection recovers when saving the portable remote home fails"
     yield* fs.makeDirectory(remote);
     yield* gate.release();
     expect(Exit.isFailure(yield* Fiber.await(running))).toBe(true);
-    expect(yield* fs.exists(join(world.a.workspace, ".skit/connection.json"))).toBe(true);
+    expect(yield* world.a.exists(".skit/connection.json")).toBe(true);
     expect(yield* world.server.revisions()).toHaveLength(0);
     yield* fs.remove(remote, { recursive: true });
     yield* world.a.restart();
@@ -351,7 +352,7 @@ it.effect(
       const canonical = native.normalize("NFC");
       yield* world.connect();
       yield* fs.writeFileString(join(world.a.workspace, native), "native authored bytes\n");
-      const aliases = yield* fs.exists(join(world.a.workspace, canonical));
+      const aliases = yield* world.a.exists(canonical);
       yield* world.a.sync();
       yield* world.b.sync();
       expect(yield* world.b.read(canonical)).toBe("native authored bytes\n");
@@ -366,7 +367,7 @@ it.effect(
           failure: { _tag: "AuthorNonNfcPathUnsupported" },
         });
         expect(yield* world.a.read(native)).toBe("native authored bytes\n");
-        expect(yield* fs.exists(join(world.a.workspace, canonical))).toBe(false);
+        expect(yield* world.a.exists(canonical)).toBe(false);
       }
       expect(
         (yield* fs.readDirectory(world.a.workspace)).filter(
@@ -401,7 +402,7 @@ it.effect.each(["distinct", "hardlink"] as const)(
         return;
       }
       if (kind === "hardlink") {
-        yield* fs.remove(join(world.b.workspace, canonical));
+        yield* world.b.remove(canonical);
         yield* fs.link(join(world.b.workspace, native), join(world.b.workspace, canonical));
       }
       const privateValue =
@@ -453,7 +454,7 @@ it.effect("a new incoming NFC name cannot create a twin beside an ignored NFD en
       context.skip(true, "filesystem aliases NFC/NFD entries; real twin proof requires Linux VM");
       return;
     }
-    yield* fs.remove(join(world.b.workspace, canonical));
+    yield* world.b.remove(canonical);
     yield* Effect.sync(() => execFileSync("git", ["init", "--quiet", world.b.workspace]));
     yield* Effect.sync(() =>
       execFileSync("git", ["-C", world.b.workspace, "config", "core.precomposeunicode", "false"]),
@@ -466,7 +467,7 @@ it.effect("a new incoming NFC name cannot create a twin beside an ignored NFD en
       failure: { _tag: "AuthorNormalizationTwin" },
     });
     expect(yield* world.b.read(native)).toBe("private native bytes\n");
-    expect(yield* fs.exists(join(world.b.workspace, canonical))).toBe(false);
+    expect(yield* world.b.exists(canonical)).toBe(false);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
@@ -733,11 +734,11 @@ it.effect("a folder emptied by sync is removed, but one holding an ignored file 
     yield* world.b.sync();
     // B keeps a private, ignored note inside one of the folders A is about to delete.
     yield* fs.writeFileString(join(world.b.workspace, "extra/kept/notes.local"), "private\n");
-    yield* fs.remove(join(world.a.workspace, "extra"), { recursive: true });
+    yield* world.a.remove("extra");
     yield* world.a.sync(false, true);
     yield* world.b.sync();
-    expect(yield* fs.exists(join(world.b.workspace, "extra/gone"))).toBe(false);
-    expect(yield* fs.exists(join(world.b.workspace, "extra/kept/SKILL.md"))).toBe(false);
+    expect(yield* world.b.exists("extra/gone")).toBe(false);
+    expect(yield* world.b.exists("extra/kept/SKILL.md")).toBe(false);
     expect(yield* fs.readFileString(join(world.b.workspace, "extra/kept/notes.local"))).toBe(
       "private\n",
     );
@@ -915,7 +916,7 @@ it.effect("an interrupted pull never moves current and the next sync pulls again
     yield* world.a.edit("notes/deleted.txt", "remove remotely");
     yield* world.a.sync();
     yield* world.b.sync();
-    yield* fs.remove(join(world.b.workspace, "notes/deleted.txt"));
+    yield* world.b.remove("notes/deleted.txt");
     yield* world.b.edit("notes/new.txt", "remote addition");
     yield* world.b.sync(false, true);
     const revisions = (yield* world.server.currentHistory()).length;
@@ -943,7 +944,7 @@ it.effect("an interrupted pull never moves current and the next sync pulls again
     const beforeRetry = (yield* world.server.events()).length;
     expect((yield* world.a.sync()).status).toBe("pulled");
     expect(yield* world.a.read("notes/new.txt")).toBe("remote addition");
-    expect(yield* fs.exists(join(world.a.workspace, "notes/deleted.txt"))).toBe(false);
+    expect(yield* world.a.exists("notes/deleted.txt")).toBe(false);
     expect(reads((yield* world.server.events()).slice(beforeRetry))).toBe(true);
     yield* expectConverged(world);
     expect((yield* world.a.sync()).status).toBe("up_to_date");
@@ -1084,12 +1085,11 @@ it.effect("same-file overlaps edited at once keep the later syncing input and co
 it.effect("edit beats local deletion, and the deleting tree stays on the server", () =>
   Effect.gen(function* () {
     const world = yield* makeAuthorSyncWorld();
-    const fs = yield* FileSystem.FileSystem;
     yield* world.connect();
     yield* world.a.edit("notes/shared.txt", "base");
     yield* world.a.sync();
     yield* world.b.sync();
-    yield* fs.remove(join(world.b.workspace, "notes/shared.txt"));
+    yield* world.b.remove("notes/shared.txt");
     yield* world.a.edit("notes/shared.txt", "remote edit", "remote");
     yield* world.a.sync();
     const before = (yield* world.server.currentHistory()).length;
@@ -1156,11 +1156,10 @@ it.effect("a late device with different files merges with no base and keeps both
 it.effect("a late device with no files pulls the SKIT", () =>
   Effect.gen(function* () {
     const world = yield* makeAuthorSyncWorld();
-    const fs = yield* FileSystem.FileSystem;
     yield* world.connect();
     yield* world.a.edit("notes/a.txt", "already on the remote\n", "remote");
     yield* world.a.sync();
-    for (const file of yield* world.c.files()) yield* fs.remove(join(world.c.workspace, file.path));
+    for (const file of yield* world.c.files()) yield* world.c.remove(file.path);
     expect((yield* world.c.sync()).status).toBe("pulled");
     expect(yield* world.c.files()).toEqual(yield* world.a.files());
   }).pipe(Effect.provide(testPlatformLayer)),
@@ -1196,14 +1195,13 @@ it.effect("an editor save during a push is kept locally and sent by the next syn
 it.effect("a merge stopped by a newer edit keeps remote changes for the next merge", () =>
   Effect.gen(function* () {
     const world = yield* makeAuthorSyncWorld();
-    const fs = yield* FileSystem.FileSystem;
     yield* world.connect();
     yield* world.a.edit("notes/deleted.txt", "remove on B");
     yield* world.a.sync();
     yield* world.b.sync();
     const localBase = yield* world.server.current();
     yield* world.b.edit("notes/remote.txt", "remote addition");
-    yield* fs.remove(join(world.b.workspace, "notes/deleted.txt"));
+    yield* world.b.remove("notes/deleted.txt");
     yield* world.b.sync(false, true);
     yield* world.a.edit("notes/a.txt", "first local save");
     yield* world.a.backUp();
@@ -1215,8 +1213,8 @@ it.effect("a merge stopped by a newer edit keeps remote changes for the next mer
     expect(yield* Effect.flip(Fiber.join(pending))).toMatchObject({
       _tag: "LocalFilesChangedDuringSync",
     });
-    expect(yield* fs.exists(join(world.a.workspace, "notes/remote.txt"))).toBe(false);
-    expect(yield* fs.exists(join(world.a.workspace, "notes/deleted.txt"))).toBe(true);
+    expect(yield* world.a.exists("notes/remote.txt")).toBe(false);
+    expect(yield* world.a.exists("notes/deleted.txt")).toBe(true);
     // A newer remote revision must merge with the newer local edit too.
     yield* world.b.edit("notes/remote.txt", "newer remote addition");
     yield* world.b.sync();
@@ -1231,7 +1229,7 @@ it.effect("a merge stopped by a newer edit keeps remote changes for the next mer
     expect(input?.revision.parents).toEqual([localBase]);
     expect(yield* world.a.read("notes/a.txt")).toBe("newer local save");
     expect(yield* world.a.read("notes/remote.txt")).toBe("newer remote addition");
-    expect(yield* fs.exists(join(world.a.workspace, "notes/deleted.txt"))).toBe(false);
+    expect(yield* world.a.exists("notes/deleted.txt")).toBe(false);
     yield* world.b.sync();
     yield* expectConverged(world);
   }).pipe(Effect.provide(testPlatformLayer)),
@@ -1242,39 +1240,25 @@ it.effect.each(["pull", "merge"] as const)(
   (operation) =>
     Effect.gen(function* () {
       const world = yield* makeAuthorSyncWorld();
-      const fs = yield* FileSystem.FileSystem;
       yield* world.connect();
       yield* world.b.edit("notes/1.txt", "first remote file");
       yield* world.b.edit("notes/2.txt", "second remote file");
       yield* world.b.sync();
       if (operation === "merge") yield* world.a.edit("notes/a.txt", "independent local edit");
-      const appliedFirst = yield* Deferred.make<void>();
-      const pending = yield* world.a.startSync().pipe(
-        Effect.provideService(FileSystem.FileSystem, {
-          ...fs,
-          link: Effect.fn("Test.interruptPartialApplication")(function* (from, to) {
-            yield* fs.link(from, to);
-            if (to.endsWith("/notes/1.txt")) {
-              yield* Deferred.succeed(appliedFirst, undefined);
-              return yield* Effect.never;
-            }
-          }),
-        }),
-      );
-      yield* Deferred.await(appliedFirst);
+      const { pending, written } = yield* world.a.startSyncPausingAfterWrite("notes/1.txt");
+      yield* written;
       expect(yield* world.a.read("notes/1.txt")).toBe("first remote file");
-      expect(yield* fs.exists(join(world.a.workspace, "notes/2.txt"))).toBe(false);
+      expect(yield* world.a.exists("notes/2.txt")).toBe(false);
       yield* world.a.restart();
       expect(Exit.hasInterrupts(yield* Fiber.await(pending))).toBe(true);
-      const bindingPath = join(world.a.home, "author-sync.json");
-      const beforePreview = yield* fs.readFileString(bindingPath);
+      const beforePreview = yield* world.a.readCheckpoint();
       expect((yield* savedStates(world.a))?.[locator]).toMatchObject({
         _tag: "Writing",
         next: { _tag: operation === "pull" ? "Idle" : "Sending" },
       });
       expect((yield* world.a.preview()).status).toBe("ready");
-      expect(yield* fs.readFileString(bindingPath)).toBe(beforePreview);
-      expect(yield* fs.exists(join(world.a.workspace, "notes/2.txt"))).toBe(false);
+      expect(yield* world.a.readCheckpoint()).toBe(beforePreview);
+      expect(yield* world.a.exists("notes/2.txt")).toBe(false);
       // The other device can advance a file already written on A before A resumes.
       yield* TestClock.adjust("1 minute");
       yield* world.b.edit("notes/1.txt", "newer remote version");
@@ -1301,7 +1285,7 @@ it.effect("repeatedly interrupted pulls keep real edits and finish remote deleti
     yield* world.b.edit("notes/1.txt", "first downloaded file");
     yield* world.b.edit("notes/2.txt", "second downloaded file");
     yield* world.b.edit("notes/edited.txt", "remote: downloaded edit\nlocal: original\n");
-    yield* fs.remove(join(world.b.workspace, "notes/deleted.txt"));
+    yield* world.b.remove("notes/deleted.txt");
     yield* world.b.sync(false, true);
 
     for (const path of ["notes/1.txt", "notes/2.txt"]) {
@@ -1327,7 +1311,7 @@ it.effect("repeatedly interrupted pulls keep real edits and finish remote deleti
           "remote: original\nlocal: real local edit\n",
           "remote",
         );
-        yield* fs.remove(join(world.a.workspace, "skills/review/SKILL.md"));
+        yield* world.a.remove("skills/review/SKILL.md");
       }
     }
 
@@ -1335,8 +1319,8 @@ it.effect("repeatedly interrupted pulls keep real edits and finish remote deleti
     expect(yield* world.a.read("notes/edited.txt")).toBe(
       "remote: downloaded edit\nlocal: real local edit\n",
     );
-    expect(yield* fs.exists(join(world.a.workspace, "notes/deleted.txt"))).toBe(false);
-    expect(yield* fs.exists(join(world.a.workspace, "skills/review/SKILL.md"))).toBe(false);
+    expect(yield* world.a.exists("notes/deleted.txt")).toBe(false);
+    expect(yield* world.a.exists("skills/review/SKILL.md")).toBe(false);
     // The real edit is also recorded on its original base without any downloaded additions.
     const input = (yield* world.server.revisions()).find(
       ({ tree }) =>
@@ -1366,7 +1350,7 @@ it.effect("a history failure after a pull cannot leave a stale base", () =>
           readDirectory: Effect.fn("Test.failHistoryAfterApplication")(function* (path) {
             if (
               path === (yield* fs.realPath(world.a.workspace)) &&
-              (yield* fs.exists(join(world.a.workspace, "notes/remote.txt")))
+              (yield* world.a.exists("notes/remote.txt"))
             )
               return yield* fs.readDirectory(join(world.a.home, "missing-history-directory"));
             return yield* fs.readDirectory(path);
@@ -1542,11 +1526,10 @@ it.effect.prop(
 it.effect("an empty workspace blocks deletion until that removal is allowed", () =>
   Effect.gen(function* () {
     const world = yield* makeAuthorSyncWorld();
-    const fs = yield* FileSystem.FileSystem;
     yield* world.connect();
     const before = yield* world.b.files();
     const revisions = (yield* world.server.currentHistory()).length;
-    for (const file of yield* world.a.files()) yield* fs.remove(join(world.a.workspace, file.path));
+    for (const file of yield* world.a.files()) yield* world.a.remove(file.path);
     const blocked = {
       status: "blocked",
       changed: false,
@@ -1571,13 +1554,12 @@ it.effect("an empty workspace blocks deletion until that removal is allowed", ()
 it.effect("large partial deletion blocks and small deletion waits unless explicitly allowed", () =>
   Effect.gen(function* () {
     const world = yield* makeAuthorSyncWorld();
-    const fs = yield* FileSystem.FileSystem;
     yield* world.connect();
     for (let i = 0; i < 12; i++) yield* world.a.edit(`notes/${i}.txt`, "keep me");
     yield* world.a.sync();
     yield* world.b.sync();
     const before = yield* world.b.files();
-    for (let i = 0; i < 8; i++) yield* fs.remove(join(world.a.workspace, `notes/${i}.txt`));
+    for (let i = 0; i < 8; i++) yield* world.a.remove(`notes/${i}.txt`);
     expect(yield* world.a.sync()).toMatchObject({
       status: "blocked",
       deleting: 8,

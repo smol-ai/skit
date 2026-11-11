@@ -1,3 +1,4 @@
+import { defineCommand } from "../../commands/definition.js";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
@@ -10,7 +11,12 @@ import { result } from "../../commands/result.js";
 import { personReachable, promptsAllowed } from "../../terminal/interactivity.js";
 import { authLoginCommand } from "./login.js";
 
-const registry = Argument.String("registry").pipe(Argument.optional);
+const registry = Argument.String("registry").pipe(
+  Argument.withDescription(
+    "Registry name or origin to sign in to; omit it to use the default Registry.",
+  ),
+  Argument.optional,
+);
 
 const relogin = Flag.Boolean("relogin").pipe(
   Flag.withDescription("Replace the saved credential even if it is still valid."),
@@ -28,7 +34,7 @@ const scopes = Flag.String("scopes").pipe(
   Flag.optional,
 );
 
-export const authLoginCliCommand = Command.make(
+export const authLoginCliCommand = defineCommand(
   "login",
   { registry, alias, scopes, relogin, json: jsonFlag },
   ({ registry, alias, scopes, relogin, json }) =>
@@ -76,7 +82,6 @@ export const authLoginCliCommand = Command.make(
       subprocesses: [...credentialStoreSubprocesses, "open", "xdg-open"],
     },
     outputSchemas: [outputContracts.authLogin, outputContracts.authLoginPending],
-    exitCodes: [0, 11, 12, 64],
     interactive: true,
   }),
 );

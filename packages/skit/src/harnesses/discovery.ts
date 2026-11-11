@@ -12,11 +12,11 @@ export function harnessLabel(harness: HarnessName): string {
 /** The filesystem markers whose presence shows a Harness installed. */
 function installMarkers(harness: HarnessName, context: { home: string; configHome: string }) {
   const driver = harnessDrivers[harness];
-  const native = driver.profile.roots.find(
-    (root) => root.scope === "global" && root.role === "native",
-  );
+  const native = Object.values(driver.profile.roots)
+    .filter((root) => root.scope === "global")
+    .find((root) => root.role === "native");
   return [
-    ...(native ? [dirname(resolveSkillsDirectory(native, context))] : []),
+    ...(native ? [dirname(resolveSkillsDirectory({ ...native, ...context }))] : []),
     ...driver.installMarkers,
   ];
 }

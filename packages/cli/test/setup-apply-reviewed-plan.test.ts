@@ -12,7 +12,7 @@ import {
   SetupStopped,
   type SetupDuplicateAction,
 } from "@smolai/skit-core/library/setup";
-import { OptionCombinationInvalid } from "../src/commands/input-failures.js";
+import { SetupReviewInputInvalid } from "@smolai/skit-core/library/setup/failures";
 
 import { prepareSetupUndo } from "../src/library/setup/undo.js";
 import { captureDisk, diskChanges, noDiskChanges } from "./helpers/disk-snapshot.js";
@@ -394,7 +394,8 @@ it.effect("keep-both is refused for a linked skill before anything is written", 
 
     const refused = failure(yield* f.run({ planId, duplicates: "keep-both" }));
 
-    assert.instanceOf(refused, OptionCombinationInvalid);
+    assert.instanceOf(refused, SetupReviewInputInvalid);
+    assert.strictEqual((refused as SetupReviewInputInvalid).reason._tag, "KeepBothReplacesLink");
     assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

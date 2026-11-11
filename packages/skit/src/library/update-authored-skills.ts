@@ -1,3 +1,5 @@
+import { LibraryChanged } from "./failures.js";
+import type { AuthoredSkillIssue } from "./authored-skill-issues.js";
 import { Clock, Effect, FileSystem, Schema } from "effect";
 import { dirname, join } from "node:path";
 import type { TreeEntry } from "../artifact/tree-entry.js";
@@ -6,7 +8,13 @@ import type { TreeFile } from "../artifact/tree-entry.js";
 import { isCanonicalRelativePath } from "../shared/relative-path.js";
 import { TreeError } from "../shared/tree-error.js";
 import type { Interface } from "./library.js";
-import { sourceImports, currentCollectionSkills, enabledSkillIds } from "./library-contracts.js";
+import {
+  sourceImports,
+  currentCollectionSkills,
+  enabledSkillIds,
+  type Import,
+  type CollectionVersion,
+} from "./library-contracts.js";
 import { originalTreeHash } from "./collection-version.js";
 import { readCollectionVersion } from "./internal/content/read-collection-version.js";
 import { importAuthoredCollection } from "./import-collection.js";
@@ -81,6 +89,7 @@ const readAuthoredInstallation = Effect.fn("Library.readAuthoredInstallation")(f
 /** Bytes already preserved by Author history; the Library never reads the editable root. */
 export interface AuthoredSkillsUpdate {
   readonly workspaceId: string;
+  readonly expectedImportId?: string;
   readonly input: string;
   readonly tree: readonly TreeEntry[];
   readonly revisionId: string;
@@ -92,22 +101,10 @@ export interface AuthoredSkillsUpdate {
 const prepareAuthoredUpdate = Effect.fn("Library.prepareAuthoredUpdate")(function* (
   home: string,
   request: AuthoredSkillsUpdate,
-  state: LibraryState,
+  previous: { readonly version: CollectionVersion; readonly importedAt: string } | undefined,
   active: readonly InstallDestination[],
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const collection = state.collections.find((candidate) =>
-    sourceImports(state, candidate.collection_id).some(
-      (item) =>
-        item.source_identity.kind === "authored-workspace" &&
-        item.source_identity.workspace_id === request.workspaceId,
-    ),
-  );
-  if (collection === undefined) return undefined;
-  const previousImport = sourceImports(state, collection.collection_id)[0];
-  const previous = state.collection_versions.find(
-    (copy) => copy.collection_version_id === previousImport?.collection_version_id,
-  );
   const captured = yield* normalizeAuthorTreeEntries(request.tree);
   for (const entry of captured)
     if (!isCanonicalRelativePath(entry.path))
@@ -119,30 +116,30 @@ const prepareAuthoredUpdate = Effect.fn("Library.prepareAuthoredUpdate")(functio
     yield* fs.makeDirectory(dirname(path), { recursive: true, mode: 0o700 });
     yield* fs.writeFile(path, entry.bytes, { flag: "wx", mode: entry.mode });
   }
-  const previousRoot =
+  const previousCollection =
     previous === undefined
       ? undefined
-      : yield* readCollectionVersion(libraryOriginalsPath(home), previous.hash);
+      : {
+          root: yield* readCollectionVersion(libraryOriginalsPath(home), previous.version.hash),
+          importedAt: previous.importedAt,
+        };
   const importedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
   const prepared = yield* prepareAuthored(
     staging,
     captured.filter((entry): entry is TreeFile => entry.kind === "file"),
     { revisionId: request.revisionId, savedAt: request.savedAt, importedAt },
-    previousRoot === undefined || previousImport === undefined
-      ? undefined
-      : { root: previousRoot, importedAt: previousImport.imported_at },
+    previousCollection,
     active.map((destination) =>
       destination === "agents" ? ("codex" as const) : ("claude-code" as const),
     ),
     request.removal,
   );
+  if (prepared.root === undefined) return { root: undefined, issues: prepared.issues };
   return {
-    collection,
-    previous,
-    importedAt,
     root: prepared.root,
-    messages: prepared.messages,
-    hash: prepared.root === undefined ? previous?.hash : yield* originalTreeHash(prepared.root),
+    issues: prepared.issues,
+    importedAt,
+    hash: yield* originalTreeHash(prepared.root),
   };
 });
 
@@ -154,29 +151,48 @@ export const updateAuthoredSkills = Effect.fn("Library.updateAuthoredSkills")(fu
   const writer = yield* LibraryWriter;
   const state = yield* loadLibrary(writer.home);
   const installedSkills = yield* InstalledSkills.Service;
-  const prepared = yield* prepareAuthoredUpdate(
-    writer.home,
-    request,
-    state,
-    yield* installedSkills.active,
+  const active = yield* installedSkills.active;
+  const collection = state.collections.find((candidate) =>
+    sourceImports(state, candidate.collection_id).some(
+      (item) =>
+        item.source_identity.kind === "authored-workspace" &&
+        item.source_identity.workspace_id === request.workspaceId,
+    ),
   );
-  if (prepared === undefined)
+  if (
+    request.expectedImportId !== undefined &&
+    (collection === undefined ||
+      sourceImports(state, collection.collection_id)[0]?.import_id !== request.expectedImportId)
+  )
+    return yield* new LibraryChanged({ path: writer.home });
+  if (collection === undefined)
     return {
       status: "unregistered" as const,
       installed: 0,
       installed_copies: [],
-      messages: [] as string[],
+      issues: [] as AuthoredSkillIssue[],
     };
-  const { collection, previous, importedAt } = prepared;
+  const previousImport = sourceImports(state, collection.collection_id)[0];
+  const previous = state.collection_versions.find(
+    (copy) => copy.collection_version_id === previousImport?.collection_version_id,
+  );
+  const prepared = yield* prepareAuthoredUpdate(
+    writer.home,
+    request,
+    previous === undefined || previousImport === undefined
+      ? undefined
+      : { version: previous, importedAt: previousImport.imported_at },
+    active,
+  );
   if (prepared.root === undefined)
     return {
       status: "held" as const,
       installed: 0,
       installed_copies: [],
-      messages: prepared.messages,
+      issues: prepared.issues,
       context: yield* readAuthoredInstallation(state, collection.collection_id),
     };
-  const hash = prepared.hash!;
+  const { hash, importedAt } = prepared;
   if (hash !== previous?.hash)
     yield* importAuthoredCollection({
       root: prepared.root,
@@ -187,7 +203,7 @@ export const updateAuthoredSkills = Effect.fn("Library.updateAuthoredSkills")(fu
       importedAt,
     });
   const current = yield* loadLibrary(writer.home);
-  const messages = [...prepared.messages];
+  const issues = [...prepared.issues];
   const installedCopies: Array<typeof AuthoredInstalledCopy.Type> = [];
   // One changed installed folder must not block unrelated Skills. No replacement approvals.
   for (const skill of current.skills.filter(
@@ -200,7 +216,7 @@ export const updateAuthoredSkills = Effect.fn("Library.updateAuthoredSkills")(fu
     }).pipe(
       Effect.catchTag("UninstallConflict", (error) =>
         Effect.sync(() => {
-          messages.push(`${skill.name}: ${error.message}`);
+          issues.push({ _tag: "UninstallBlocked", skill: skill.name, failure: error });
           return undefined;
         }),
       ),
@@ -211,22 +227,32 @@ export const updateAuthoredSkills = Effect.fn("Library.updateAuthoredSkills")(fu
         if (copy._tag === "Installed")
           installedCopies.push({ skill: skill.name, path: copy.copy.path });
         if (copy._tag === "Failed")
-          messages.push(`${skill.name} at ${copy.path}: ${copy.cause.message}`);
+          issues.push({
+            _tag: "CopyFailed",
+            skill: skill.name,
+            path: copy.path,
+            failure: copy.cause,
+          });
         if (copy._tag === "Conflicted" || copy._tag === "Pending")
-          messages.push(
-            `${skill.name} at ${copy.copy.path}: ${copy._tag === "Conflicted" ? "copy conflicts with the retained version; left unchanged" : "installation is pending"}`,
-          );
+          issues.push({
+            _tag: copy._tag === "Conflicted" ? "CopyConflicted" : "CopyPending",
+            skill: skill.name,
+            path: copy.copy.path,
+          });
       }
     } else
-      messages.push(
-        `${skill.name}${result.failedPaths?.length ? ` at ${result.failedPaths.join(", ")}` : ""}: ${result.cause.message}`,
-      );
+      issues.push({
+        _tag: "InstallationFailed",
+        skill: skill.name,
+        paths: result.failedPaths ?? [],
+        failure: result.cause,
+      });
   }
   return {
     status: hash === previous?.hash ? ("unchanged" as const) : ("updated" as const),
     installed: installedCopies.length,
     installed_copies: installedCopies,
-    messages,
+    issues,
     context: yield* readAuthoredInstallation(current, collection.collection_id),
   };
 });
@@ -236,12 +262,13 @@ export const updateAuthoredSkills = Effect.fn("Library.updateAuthoredSkills")(fu
 export const inspectAuthoredSkills = Effect.fn("Library.inspectAuthoredSkills")(function* (
   home: string,
   state: LibraryState,
-  sourceImport: LibraryState["imports"][number],
+  sourceImport: Import & {
+    readonly source_identity: Extract<Import["source_identity"], { kind: "authored-workspace" }>;
+  },
+  previous: CollectionVersion,
   active: readonly InstallDestination[],
 ) {
   const identity = sourceImport.source_identity;
-  if (identity.kind !== "authored-workspace")
-    return yield* Effect.die("Expected an authored Source");
   const { tree, removal } = yield* inspectAuthorWorkspace(
     sourceImport.input.value,
     home,
@@ -257,11 +284,9 @@ export const inspectAuthoredSkills = Effect.fn("Library.inspectAuthoredSkills")(
       savedAt: new Date(0).toISOString(),
       removal,
     },
-    state,
+    { version: previous, importedAt: sourceImport.imported_at },
     active,
   );
-  if (prepared === undefined) return yield* Effect.die("Expected a registered Author Workspace");
-  const previous = prepared.previous!;
   if (prepared.root === undefined)
     return {
       kind: "authored" as const,
@@ -276,13 +301,13 @@ export const inspectAuthoredSkills = Effect.fn("Library.inspectAuthoredSkills")(
         verbatim_path: member.source_path,
       })),
       members: previous.members,
-      messages: prepared.messages,
+      issues: prepared.issues,
     };
   const descriptor = yield* readSkitDescriptor(prepared.root);
   const selectedRoot = prepared.root;
   return {
     kind: "authored" as const,
-    snapshot_digest: prepared.hash!,
+    snapshot_digest: prepared.hash,
     skills: descriptor.skills.map((skill) => ({ name: skill.name, verbatim_path: skill.path })),
     members: yield* Effect.forEach(descriptor.skills, (skill) =>
       Effect.gen(function* () {
@@ -296,6 +321,6 @@ export const inspectAuthoredSkills = Effect.fn("Library.inspectAuthoredSkills")(
         };
       }),
     ),
-    messages: prepared.messages,
+    issues: prepared.issues,
   };
 }, Effect.scoped);

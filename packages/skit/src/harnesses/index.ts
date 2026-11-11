@@ -15,7 +15,6 @@ export { captureBounded } from "./probe-process.js";
 export { HarnessName, type SkillsDirectoryOverrides } from "./contracts.js";
 export { HarnessMetadataInvalid } from "./metadata-failures.js";
 export { harnessDrivers } from "./drivers.js";
-export { installDestinationHarnesses } from "./install-destinations.js";
 export { readCodexSkills } from "./skill-listing/codex-discovery.js";
 export { largeListingEntries, ListingBudget } from "./skill-listing/contracts.js";
 export { readListingBudgets } from "./skill-listing/discovery.js";

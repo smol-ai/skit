@@ -1,4 +1,4 @@
-import { Data, Effect, Option } from "effect";
+import { Effect, Option } from "effect";
 import type * as Library from "../../library.js";
 import { StalePlan } from "../../library-plan.js";
 import { isRemoteSyncPlan } from "./sync.js";
@@ -13,8 +13,8 @@ import {
   type InventoryRootOptions,
 } from "../../routing/roots.js";
 import { canonicalJson } from "../../../shared/json.js";
-import { FailureTypeId, type SkitFailure } from "../../../shared/failure.js";
-import { OptionCombinationInvalid } from "../../../shared/input-failures.js";
+import { SyncLocalChanged } from "./conflict.js";
+import { SyncInputInvalid } from "../../sync-input-failures.js";
 import { prepareLibraryMerge } from "./merge.js";
 import { planLibrarySync } from "./plan.js";
 import { selectDeviceSkills } from "./device-selection.js";
@@ -22,18 +22,6 @@ import { resolveSyncInstalledSkillCollisions } from "./collisions.js";
 import { previewSyncInstalledSkills } from "./installed-skills.js";
 import type { SyncConflictDetail } from "./conflict.js";
 import type { SyncChanges } from "../../sync-changes.js";
-
-export class SyncLocalChanged
-  extends Data.TaggedError("Library.SyncLocalChanged")<{}>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Sync again.";
-  get message(): string {
-    return "The local Library changed while sync was running";
-  }
-}
 
 export interface SyncSessionRequest {
   readonly origin: string;
@@ -166,9 +154,8 @@ export function openSyncSession(
     const device = withDeviceSkillSelection(merge.device, selected);
     const installation = prepareDeviceInstallation(device, merge.manifest);
     if (installation.independent && input.keepEnabled?.length)
-      return yield* new OptionCombinationInvalid({
-        detail:
-          "--keep-enabled changes account bindings and cannot be combined with a device selection.",
+      return yield* new SyncInputInvalid({
+        reason: { _tag: "AccountEnabledListWithDeviceSelection", keepEnabled: input.keepEnabled },
       });
     const collision = yield* around(
       { kind: "check-destinations" },
@@ -218,7 +205,7 @@ export function openSyncSession(
       return Effect.gen(function* () {
         if (!same(yield* libraryManifestFromLocalState(staged.state), desired))
           return yield* new StalePlan({
-            message: "Staged Sync content differs from the reviewed target",
+            reason: { _tag: "SyncChanged", part: "target" },
           });
         const plan = yield* library
           .plan(

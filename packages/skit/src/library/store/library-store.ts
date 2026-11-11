@@ -1,3 +1,4 @@
+import { LibraryRecoveryNotice } from "../recovery-notice.js";
 import type { HistoryAction } from "./history-delivery.js";
 import type { OperationId } from "../entity-ids.js";
 import { Context, Effect, FileSystem, Option, References } from "effect";
@@ -77,12 +78,38 @@ const historyWorkflow = Effect.map(References.CurrentLogAnnotations, (annotation
 export const recoverLibraryHistory = (home: string, actionId?: OperationId) =>
   deliverLibraryHistory(home, actionId).pipe(
     Effect.catchTags({
-      PlatformError: (error) => Effect.logWarning("Library history delivery is pending", error),
+      PlatformError: (error) =>
+        Effect.logWarning(
+          LibraryRecoveryNotice.cases.HistoryDeliveryPending.make({
+            home,
+            ...(actionId === undefined ? {} : { actionId }),
+            failure: error,
+          }),
+        ),
       InvalidLibraryState: (error) =>
-        Effect.logWarning("Library history delivery is pending", error),
+        Effect.logWarning(
+          LibraryRecoveryNotice.cases.HistoryDeliveryPending.make({
+            home,
+            ...(actionId === undefined ? {} : { actionId }),
+            failure: error,
+          }),
+        ),
       LibraryAuditInvalid: (error) =>
-        Effect.logWarning("Library history delivery is pending", error),
-      HomeBusy: (error) => Effect.logWarning("Library history delivery is pending", error),
+        Effect.logWarning(
+          LibraryRecoveryNotice.cases.HistoryDeliveryPending.make({
+            home,
+            ...(actionId === undefined ? {} : { actionId }),
+            failure: error,
+          }),
+        ),
+      HomeBusy: (error) =>
+        Effect.logWarning(
+          LibraryRecoveryNotice.cases.HistoryDeliveryPending.make({
+            home,
+            ...(actionId === undefined ? {} : { actionId }),
+            failure: error,
+          }),
+        ),
     }),
   );
 

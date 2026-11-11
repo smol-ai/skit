@@ -67,3 +67,6 @@ export const refreshMachineInventory = Effect.fn("Library.refreshMachineInventor
 });
 
 export { DoctorReport, inspectNativeDiscovery } from "./internal/doctor/harnesses.js";
+
+export { InstalledSkillConflict } from "../installed-skills/conflict.js";
+export { OwnershipMarkerInvalidReason } from "../installed-skills/marker-failures.js";

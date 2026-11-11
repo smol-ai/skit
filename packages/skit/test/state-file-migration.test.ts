@@ -43,7 +43,11 @@ it.effect(
       const failure = yield* Effect.flip(openedState(home));
       assert.strictEqual(failure._tag, "InvalidLibraryState");
       if (failure._tag === "InvalidLibraryState")
-        assert.match(failure.detail, /was written by a newer SKIT/);
+        assert.deepInclude(failure.reason, {
+          _tag: "UnsupportedVersion",
+          version: CURRENT_LIBRARY_STATE_VERSION + 0.5,
+          current: CURRENT_LIBRARY_STATE_VERSION,
+        });
       assert.strictEqual(yield* fs.readFileString(path), bytes);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -866,6 +870,7 @@ it.effect(
           path: rows[4]!.path,
           status: "conflicted",
           current_hash: hash,
+          conflicts: [],
         },
         {
           ...copy,
@@ -899,6 +904,42 @@ it.effect("migrates v11 state to v12 with no operation records", () =>
     });
     assert.isTrue(
       (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v11.backup-")),
+    );
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("v11 ownership issue prose does not become a fabricated marker diagnosis", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-v11-marker-issue-" });
+    const historical = JSON.stringify({
+      ...JSON.parse(yield* fs.readFileString(join(fixtures, "v11-well-known-subset.json"))),
+      ownershipIssues: [
+        {
+          code: "INVALID_OWNERSHIP_MARKER",
+          path: "/skills/review",
+          canonicalPath: "/skills/review",
+          harnesses: ["codex"],
+          currentHash: `sha256:${"a".repeat(64)}`,
+          detail: "legacy diagnostic",
+        },
+      ],
+    });
+    yield* fs.writeFileString(join(home, "state.json"), historical);
+    const loaded = yield* openedState(home);
+    assert.isTrue(loaded.present);
+    if (!loaded.present) return;
+    const issue = loaded.state.ownershipIssues?.[0];
+    assert.strictEqual(issue?.code, "INVALID_OWNERSHIP_MARKER");
+    assert.notProperty(issue, "detail");
+    assert.notProperty(issue, "markerReason");
+    const backup = (yield* fs.readDirectory(home)).find((name) =>
+      name.startsWith("state.json.v11.backup-"),
+    );
+    assert.isDefined(backup);
+    assert.deepStrictEqual(
+      JSON.parse(yield* fs.readFileString(join(home, backup!))),
+      JSON.parse(historical),
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -1045,7 +1086,8 @@ it.effect(
       yield* fs.writeFileString(join(home, "state.json"), '{"schemaVersion":1e309}');
       const failure = yield* Effect.flip(openedState(home));
       assert.strictEqual(failure._tag, "InvalidLibraryState");
-      if (failure._tag === "InvalidLibraryState")
-        assert.include(failure.detail, "schema vInfinity was written by a newer SKIT");
+      if (failure._tag === "InvalidLibraryState" && failure.reason._tag === "UnsupportedVersion")
+        assert.strictEqual(failure.reason.version, Number.MAX_VALUE);
+      else assert.fail("Expected an unsupported version");
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

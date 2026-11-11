@@ -24,7 +24,7 @@ import { Effect } from "effect";
 import { enabledCollections } from "./set-enabled-request.js";
 import { librarySubjects } from "../../subject-resolution.js";
 import { readDescriptionLoad } from "./description-load.js";
-import { readLibrarySkillMetadata } from "./skill-metadata.js";
+import { makeLibrarySkillMetadataReader } from "./skill-metadata.js";
 import { makeLibrarySkillInvocationReader } from "./invocation-source.js";
 import { readCollectionSource } from "../../collection-source.js";
 
@@ -39,15 +39,18 @@ export const libraryView = (
   const skills = state.skills.map((skill) => {
     const collection = state.collections.find((item) => item.collection_id === skill.collection_id);
     return {
-      id: skill.skill_id,
-      name: skill.name,
-      collectionId: skill.collection_id,
-      versionId: currentSkillVersion(state, skill)?.skill_version_id,
-      versions: skill.versions.map((version) => ({
-        id: version.skill_version_id,
-        hash: version.artifact_hash,
-      })),
-      collectionLabel: collection?.label,
+      record: skill,
+      value: {
+        id: skill.skill_id,
+        name: skill.name,
+        collectionId: skill.collection_id,
+        versionId: currentSkillVersion(state, skill)?.skill_version_id,
+        versions: skill.versions.map((version) => ({
+          id: version.skill_version_id,
+          hash: version.artifact_hash,
+        })),
+        collectionLabel: collection?.label,
+      },
     };
   });
   const names = new Map(state.skills.map((skill) => [skill.skill_id, skill.name]));
@@ -77,10 +80,12 @@ export const libraryView = (
   const collections = state.collections.map((collection) => ({
     id: collection.collection_id,
     label: collection.label,
-    members: skills.filter((skill) => skill.collectionId === collection.collection_id),
+    members: skills
+      .filter(({ value }) => value.collectionId === collection.collection_id)
+      .map(({ value }) => value),
   }));
   const readFacts = Effect.fn("LibraryView.readFacts")(function* () {
-    const metadata = yield* readLibrarySkillMetadata(state, originalsPath);
+    const readMetadata = makeLibrarySkillMetadataReader(state, originalsPath);
     const sources = new Map(
       yield* Effect.forEach(state.collections, (collection) =>
         Effect.map(
@@ -89,28 +94,29 @@ export const libraryView = (
         ),
       ),
     );
-    return yield* Effect.forEach(skills, (skill) => {
-      const provenance = metadata.get(skill.id);
-      const collectionSource = sources.get(skill.collectionId);
-      if (provenance === undefined)
-        return Effect.die(`Missing metadata for retained Skill ${skill.id}`);
-      return Effect.succeed(
-        structuredClone({
-          ...skill,
-          ...provenance,
-          ...(collectionSource?.kind === "authored-workspace"
-            ? { source: collectionSource.locator || "Author workspace" }
-            : {}),
-          ...(collectionSource === undefined ? {} : { collectionSource }),
-          scopes: placements
-            .filter((placement) => placement.skillIds.includes(skill.id))
-            .map((placement) => ({
-              scope: placement.scope,
-              invocation: placement.invocationBySkill[skill.id] ?? "declared",
-            })),
-        }),
-      );
-    });
+    return yield* Effect.forEach(skills, ({ record, value }) =>
+      Effect.gen(function* () {
+        const provenance = yield* readMetadata(record);
+        const collectionSource = sources.get(value.collectionId);
+        return {
+          record,
+          value: structuredClone({
+            ...value,
+            ...provenance,
+            ...(collectionSource?.kind === "authored-workspace"
+              ? { source: collectionSource.locator || null }
+              : {}),
+            ...(collectionSource === undefined ? {} : { collectionSource }),
+            scopes: placements
+              .filter((placement) => placement.skillIds.includes(value.id))
+              .map((placement) => ({
+                scope: placement.scope,
+                invocation: placement.invocationBySkill[value.id] ?? "declared",
+              })),
+          }),
+        };
+      }),
+    );
   });
   return {
     /** Portable data from this captured revision; returned documents cannot change the view. */
@@ -153,24 +159,23 @@ export const libraryView = (
     skillsShCollectionIds,
     placements: structuredClone(placements),
     readSkills: Effect.fn("LibraryView.readSkills")(function* () {
-      const facts = yield* readFacts();
+      const rows = yield* readFacts();
       const readInvocation = yield* makeLibrarySkillInvocationReader(state, originalsPath);
       return yield* Effect.forEach(
-        facts.flatMap((skill) =>
-          skill.versionId === undefined ? [] : [{ ...skill, versionId: skill.versionId }],
+        rows.flatMap(({ record, value }) =>
+          value.versionId === undefined
+            ? []
+            : [{ record, value: { ...value, versionId: value.versionId } }],
         ),
-        (skill) =>
+        ({ record, value }) =>
           Effect.gen(function* () {
-            const imported = state.skills.find((imported) => imported.skill_id === skill.id);
-            if (imported === undefined)
-              return yield* Effect.die(`Missing retained Skill ${skill.id}`);
-            const authorInvocation = yield* readInvocation(imported);
-            return { ...skill, authorInvocation };
+            const authorInvocation = yield* readInvocation(record);
+            return { ...value, authorInvocation };
           }),
       );
     }),
     readSubjects: Effect.fn("LibraryView.readSubjects")(function* () {
-      const facts = yield* readFacts();
+      const facts = (yield* readFacts()).map(({ value }) => value);
       return yield* Effect.forEach(librarySubjects(state), (subject) =>
         Effect.gen(function* () {
           const members = facts.filter((skill) =>

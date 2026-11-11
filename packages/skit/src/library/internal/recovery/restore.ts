@@ -1,7 +1,8 @@
 import { Effect, Schema } from "effect";
 import { Revision, type Snapshot } from "../../snapshot.js";
 import { Hash } from "../../../shared/hash.js";
-import { RecoveryInspection, RecoveryInvalid } from "../../recovery-facts.js";
+import { RecoveryInspection } from "../../recovery-facts.js";
+import { RecoveryInvalid } from "../../store/operation-failures.js";
 import { RecoveryRestore } from "../../store/state-schema.js";
 
 import { planningState, applyReviewed } from "../../reviewed-plan.js";
@@ -34,7 +35,11 @@ export const planRestore = Effect.fn("Library.planRestore")(function* (
     planId: program.summary.planId,
     change: program.summary,
     program,
-  }).pipe(Effect.mapError(() => new RecoveryInvalid({ detail: "Invalid Restore review" })));
+  }).pipe(
+    Effect.mapError(
+      () => new RecoveryInvalid({ reason: { _tag: "InvalidData", record: "restore-review" } }),
+    ),
+  );
 });
 export type RestorePlanError = Effect.Error<ReturnType<typeof planRestore>>;
 export interface RestoreOutcome {
@@ -57,7 +62,12 @@ export const applyRestore = (home: string, plan: RestorePlan) =>
         });
         if (result._tag === "Stopped")
           return yield* new RecoveryInvalid({
-            detail: "Recorded restore stopped; inspect its saved entries before retrying",
+            reason: {
+              _tag: "OperationStopped",
+              operation: "Restore",
+              operationId: result.operationId,
+              reason: result.reason,
+            },
           });
         const after = yield* inspectRecoveryOperation(home, again.intent.operationId);
         const phase = after.entries.every((entry) => entry.status === "at-original")

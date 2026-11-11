@@ -5,6 +5,7 @@ import type { LibraryManifest, SnapshotArchive } from "../../library-contracts.j
 import type { RestoreProgress } from "../../restore-progress.js";
 import type { InventoryRootOptions } from "../../routing/roots.js";
 import type { SyncChanges } from "../../sync-changes.js";
+import type { SyncIssue } from "../../sync-issues.js";
 import { openSyncSession, type SyncSessionRequest } from "./session.js";
 import { silentSyncProgress, type SyncPhase, type SyncProgress } from "./progress.js";
 
@@ -97,7 +98,7 @@ const prepareSyncTransfer = Effect.fn("Library.sync.prepareTransfer")(function* 
       });
       if (staged.missing.length)
         return yield* new RestoreInvalid({
-          detail: `retained copies unavailable: ${staged.missing.join(", ")}`,
+          reason: { _tag: "CopiesUnavailable", ids: staged.missing },
         });
       return staged;
     }),
@@ -192,7 +193,7 @@ export const syncLibrary = Effect.fn("Library.sync")(function* <
       : {
           installed: 0,
           uninstalled: 0,
-          enablementIssues: [] as readonly string[],
+          enablementIssues: [] as readonly SyncIssue[],
         };
     return {
       ...note,

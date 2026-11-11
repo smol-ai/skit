@@ -3,7 +3,10 @@ import { join } from "node:path";
 import { originalTreeHash } from "./collection-version.js";
 import { walkTree } from "../artifact/tree.js";
 import { SnapshotArchive, type SnapshotArchiveEntry } from "./library-contracts.js";
-import { SnapshotArchiveInvalid, verifySnapshotArchive } from "./snapshot-archive-universal.js";
+import {
+  CollectionVersionArchiveInvalid,
+  verifySnapshotArchive,
+} from "./snapshot-archive-universal.js";
 
 export { verifySnapshotArchive } from "./snapshot-archive-universal.js";
 
@@ -46,14 +49,19 @@ export const writeVerifiedSnapshot = Effect.fn("Library.writeVerifiedSnapshot")(
     const path = join(root, entry.path);
     if (entry.kind === "directory") yield* fs.makeDirectory(path, { mode: 0o700 });
     if (entry.kind === "file") {
-      const bytes = verified.files.get(entry.path);
-      if (bytes === undefined)
-        return yield* new SnapshotArchiveInvalid({ reason: `missing file: ${entry.path}` });
-      yield* fs.writeFile(path, bytes, { flag: "wx", mode: entry.mode });
+      yield* fs.writeFile(path, entry.bytes, { flag: "wx", mode: entry.mode });
     }
     if (entry.kind === "symlink") yield* fs.symlink(entry.target, path);
   }
-  if ((yield* originalTreeHash(root)) !== verified.archive.digest)
-    return yield* new SnapshotArchiveInvalid({ reason: "materialized tree digest mismatch" });
+  const actual = yield* originalTreeHash(root);
+  if (actual !== verified.archive.digest)
+    return yield* new CollectionVersionArchiveInvalid({
+      reason: {
+        _tag: "HashMismatch",
+        kind: "materialized",
+        expected: verified.archive.digest,
+        actual,
+      },
+    });
   return root;
 });

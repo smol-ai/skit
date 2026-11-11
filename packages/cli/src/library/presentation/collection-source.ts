@@ -1,4 +1,5 @@
 import type { CollectionSource } from "@smolai/skit-core/library/queries";
+import { Block, type Field } from "../../terminal/blocks.js";
 import { metadataSource } from "./skill-metadata.js";
 
 const sourceKinds = {
@@ -22,7 +23,11 @@ export function collectionWarnings(source?: CollectionSource): string[] {
     case "unconnected":
       return ["Not connected to a Registry"];
     case "unavailable":
-      return ["Workspace metadata unavailable; showing last-known location"];
+      return [
+        source.locator
+          ? "Workspace metadata unavailable; showing last-known location"
+          : "Workspace location is not recorded",
+      ];
     case "identity-mismatch":
       return ["Folder identity does not match this workspace"];
     default:
@@ -30,7 +35,7 @@ export function collectionWarnings(source?: CollectionSource): string[] {
   }
 }
 
-export function collectionDetails(source?: CollectionSource): string[] {
+function collectionDetails(source?: CollectionSource): string[] {
   if (source === undefined) return [];
   if (source.kind === "authored-workspace")
     return [
@@ -45,6 +50,36 @@ export function collectionDetails(source?: CollectionSource): string[] {
       ? `Registry: ${source.authority}`
       : `Source: ${metadataSource(source.locator)}`,
     ...(source.revision ? [`Revision: ${source.revision}`] : []),
+  ];
+}
+
+/** Which Collection a result is about, and where it comes from, as the head of its output. */
+export function collectionIdentity(label: string, source?: CollectionSource): Block[] {
+  const rows: Field[] =
+    source === undefined
+      ? []
+      : source.kind === "authored-workspace"
+        ? [
+            ...(source.locator
+              ? [{ label: "Source", value: [{ dim: metadataSource(source.locator) }] }]
+              : []),
+            ...(source.authority ? [{ label: "Registry", value: [source.authority] }] : []),
+          ]
+        : [
+            ...(source.kind !== "registry"
+              ? [{ label: "Source", value: [{ dim: metadataSource(source.locator) }] }]
+              : source.authority
+                ? [{ label: "Registry", value: [source.authority] }]
+                : []),
+            ...(source.revision ? [{ label: "Revision", value: [source.revision] }] : []),
+          ];
+  return [
+    Block.Heading({ text: collectionTitle(label, source) }),
+    ...(rows.length ? [Block.Fields({ rows })] : []),
+    ...(source?.kind === "authored-workspace" && !source.locator
+      ? [Block.Status({ tone: "warn", text: ["Workspace location unavailable"] })]
+      : []),
+    ...collectionWarnings(source).map((warning) => Block.Status({ tone: "warn", text: [warning] })),
   ];
 }
 

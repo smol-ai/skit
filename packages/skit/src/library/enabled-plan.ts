@@ -1,4 +1,4 @@
-import { Effect, Schema, Data } from "effect";
+import { Effect, Schema } from "effect";
 import { currentCollectionSkills, enabledSkillIds, Enabled } from "./library-contracts.js";
 import { enabledAt, globalEnabled } from "./enabled.js";
 import { type LibraryState } from "./library-state.js";
@@ -47,25 +47,48 @@ export interface Request {
   readonly allowDuplicate?: boolean;
   readonly setup?: SetupApproval;
 }
+/**
+ * A request the Library cannot plan as given: malformed when it arrived, or one whose plan the
+ * Library could not put together. `intent` names the request. Front ends write the words.
+ */
 export class InvalidIntent
-  extends Data.TaggedError("Library.InvalidIntent")<{ detail: string }>
+  extends Schema.TaggedError<InvalidIntent, { readonly brand: unique symbol }>()(
+    "Library.InvalidIntent",
+    { intent: Schema.Literals(["AcceptFinding", "RefreshInventory", "Manage", "Sync"]) },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "INVALID_ARGUMENT" as const;
-  readonly remediation = "Select retained Skills or Collections and preview again.";
-  get message() {
-    return this.detail;
-  }
+}
+/** A request to enable or disable that cannot be planned, and why. Front ends write the words. */
+export class SetEnabledInvalid
+  extends Schema.TaggedError<SetEnabledInvalid, { readonly brand: unique symbol }>()(
+    "Library.SetEnabledInvalid",
+    {
+      reason: Schema.Literals([
+        "invocation-when-disabling",
+        "subject-absent",
+        "all-with-skill",
+        "all-with-selected-skills",
+        "selected-skills-with-skill",
+        "selection-required",
+        "selected-skill-absent",
+        "nothing-selected",
+      ]),
+    },
+  )
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "INVALID_ARGUMENT" as const;
 }
 export const calculateEnabled = Effect.fn("SetEnabled.calculate")(function* (
   state: LibraryState,
   options: Request,
 ) {
   if (options.invocation !== undefined && !options.enabled)
-    return yield* new InvalidIntent({
-      detail: "--invocation applies only when enabling a skill",
-    });
+    return yield* new SetEnabledInvalid({ reason: "invocation-when-disabling" });
   const collection =
     options.subject._tag === "Collection"
       ? state.collections.find((item) => item.collection_id === options.subject.id)
@@ -74,37 +97,26 @@ export const calculateEnabled = Effect.fn("SetEnabled.calculate")(function* (
     options.subject._tag === "Skill"
       ? state.skills.find((item) => item.skill_id === options.subject.id)
       : undefined;
-  if (!collection && !skill)
-    return yield* new InvalidIntent({ detail: "Selected subject is absent from this Library" });
+  if (!collection && !skill) return yield* new SetEnabledInvalid({ reason: "subject-absent" });
   const members = skill
     ? [skill]
     : state.skills.filter((item) => item.collection_id === collection?.collection_id);
   const subjectId = options.subject.id;
   if (options.all && collection === undefined)
-    return yield* new InvalidIntent({
-      detail: "--all requires a Collection, not one contained Skill",
-    });
+    return yield* new SetEnabledInvalid({ reason: "all-with-skill" });
   if (options.all && options.selectedSkills !== undefined)
-    return yield* new InvalidIntent({
-      detail: "Choose either --all or selected Skills",
-    });
+    return yield* new SetEnabledInvalid({ reason: "all-with-selected-skills" });
   if (options.selectedSkills !== undefined && collection === undefined)
-    return yield* new InvalidIntent({
-      detail: "Selected Skills require a Collection",
-    });
+    return yield* new SetEnabledInvalid({ reason: "selected-skills-with-skill" });
   if (
     !options.all &&
     options.selectedSkills === undefined &&
     collection !== undefined &&
     members.length !== 1
   )
-    return yield* new InvalidIntent({
-      detail: "Select a contained Skill or use --all for this Collection",
-    });
+    return yield* new SetEnabledInvalid({ reason: "selection-required" });
   if (options.selectedSkills?.some((name) => !members.some((member) => member.name === name)))
-    return yield* new InvalidIntent({
-      detail: "Selected Skill is absent from this Collection",
-    });
+    return yield* new SetEnabledInvalid({ reason: "selected-skill-absent" });
   const skills = [
     ...new Set(
       options.selectedSkills ??
@@ -260,7 +272,7 @@ export const expandIntent = Effect.fn("Library.expandIntent")(function* (
   const ids =
     intent.members === undefined || intent.members === "whole" ? undefined : intent.members;
   if (ids?.some((id) => !skills.some((skill) => skill.skill_id === id)))
-    return yield* new InvalidIntent({ detail: "Selected Skill is absent from this Collection" });
+    return yield* new SetEnabledInvalid({ reason: "selected-skill-absent" });
   const scopes = uniqueInstallScopes(
     intent.where === "where-enabled"
       ? enabledCollections(state)

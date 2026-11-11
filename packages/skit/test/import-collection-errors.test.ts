@@ -5,8 +5,18 @@ import { makeMachineId } from "../src/library/entity-ids.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 for (const [name, paths, expected] of [
-  ["duplicate names", ["a", "b"], 'duplicate Skill name "same" at "a" and "b"'],
-  ["overlapping paths", ["a", "a/b"], 'overlapping Skill paths "a" ("first") and "a/b" ("second")'],
+  ["duplicate names", ["a", "b"], { _tag: "DuplicateSkillName", name: "same", paths: ["a", "b"] }],
+  [
+    "overlapping paths",
+    ["a", "a/b"],
+    {
+      _tag: "OverlappingSkillPaths",
+      skills: [
+        { name: "first", path: "a" },
+        { name: "second", path: "a/b" },
+      ],
+    },
+  ],
 ] as const) {
   it.effect(`reports ${name} with the affected paths`, () =>
     Effect.gen(function* () {
@@ -30,7 +40,7 @@ for (const [name, paths, expected] of [
         .pipe(Effect.flip);
       assert.strictEqual(error._tag, "Library.ImportRequestInvalid");
       if (error._tag === "Library.ImportRequestInvalid") {
-        assert.strictEqual(error.message, `Cannot import Collection: ${expected}`);
+        assert.deepStrictEqual(error.reason, expected);
         assert.strictEqual(error.code, "VALIDATION_FAILED");
       }
     }).pipe(Effect.provide(skitLayer), Effect.scoped),

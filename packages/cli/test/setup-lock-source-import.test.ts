@@ -30,6 +30,100 @@ const skillDocument = (body: string) =>
 const projectHash = (text: string) =>
   createHash("sha256").update("SKILL.md").update(text).digest("hex");
 
+it.effect("imports duplicate copies with equivalent GitHub lock spellings", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.realPath(yield* scratch("skit-equivalent-lock-sources-"));
+    const repository = join(root, "project");
+    const text = skillDocument("Same installed bytes");
+    const skills = Object.fromEntries(
+      [
+        ["a-review", "https://github.com/Acme/Skills.git"],
+        ["review", "acme/skills"],
+      ].map(([name, source]) => [
+        name,
+        {
+          source,
+          sourceType: "github",
+          ref: "main",
+          skillPath: "skills/review/SKILL.md",
+          computedHash: projectHash(text),
+        },
+      ]),
+    );
+    for (const name of Object.keys(skills)) {
+      const path = join(repository, ".agents", "skills", name);
+      yield* fs.makeDirectory(path, { recursive: true });
+      yield* fs.writeFileString(join(path, "SKILL.md"), text);
+    }
+    expect(
+      yield* (yield* ChildProcessSpawner.ChildProcessSpawner).exitCode(
+        ChildProcess.make("git", ["init", "-q"], { cwd: repository }),
+      ),
+    ).toBe(0);
+    yield* fs.writeFileString(
+      join(repository, "skills-lock.json"),
+      JSON.stringify({ version: 1, skills }),
+    );
+    const home = yield* libraryHome({ home: join(root, "home"), inventoryHome: root });
+    const setup = {
+      libraryHome: home.home,
+      repositoryRoots: [root],
+      persistRoots: false,
+      probePath: "",
+      skillsStateHome: join(root, "state"),
+      inventory: home.inventory,
+    };
+    const machineId = yield* MachineSettings.ensureIdentity(home.home);
+    const preview = yield* home.owned(runSetup(setup));
+    const candidate = preview.onboarding.candidates.find(
+      (item) => item.name === "review" && item.action === "import-observed-collection",
+    );
+    expect(candidate).toMatchObject({
+      action: "import-observed-collection",
+      paths: [
+        join(repository, ".agents", "skills", "a-review"),
+        join(repository, ".agents", "skills", "review"),
+      ],
+    });
+    if (!candidate || candidate.action !== "import-observed-collection") return;
+    const requests = yield* setupImportRequests(
+      preview,
+      [{ name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey }],
+      machineId,
+      "2026-11-11T00:00:00.000Z",
+    );
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.source).toEqual({
+      type: "github",
+      owner: "acme",
+      repository: "skills",
+      ref: "main",
+      skillDirectories: ["skills/review"],
+    });
+    expect(requests[0]?.lockFileEntries?.map((entry) => entry.source).sort()).toEqual([
+      "acme/skills",
+      "https://github.com/Acme/Skills.git",
+    ]);
+    yield* home.owned(
+      writingTo(
+        home.home,
+        applySetupSelections(setup, preview, home.installOptions, {
+          imports: [{ name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey }],
+        }),
+      ),
+    );
+    const saved = yield* home.owned(Effect.flatMap(Library.Service, (library) => library.read));
+    expect(saved._tag).toBe("Present");
+    if (saved._tag !== "Present") return;
+    expect(saved.state.skills.map((skill) => skill.name)).toEqual(["review"]);
+    expect(saved.state.imports[0]?.lock_file_entries.map((entry) => entry.source).sort()).toEqual([
+      "acme/skills",
+      "https://github.com/Acme/Skills.git",
+    ]);
+  }).pipe(Effect.provide(skitLayer)),
+);
+
 it.effect("skips repository discovery unless --work-dir supplies a directory", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;

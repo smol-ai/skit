@@ -59,7 +59,7 @@ From the repository root:
 ```sh
 pnpm cli:image --list
 pnpm cli:image add/added --command 'skit add ~/Work/skills/review' --output .tmp/cli-images/added.png
-pnpm cli:image failure/projection-conflict --output .tmp/cli-images/failure.png
+pnpm cli:image failure/installed-skill-conflict --output .tmp/cli-images/failure.png
 pnpm cli:image journey/preview-enable-portable-collection --frames
 pnpm cli:image journey/preview-enable-portable-collection --frame 1 --command 'skit enable' --output .tmp/cli-images/prompt.png
 ```
@@ -81,3 +81,4 @@ uncoloured errors. Some journey frames contain temporary paths or
 fixture-generated identifiers; those need normalization before use as
 reproducible documentation assets. The exporter does not upload images or
 update Markdown automatically.
+

@@ -1,3 +1,4 @@
+import { installedSkillConflicts } from "../installed-skills/conflict.js";
 import { basename, join } from "node:path";
 import { Effect, Schema, type Scope } from "effect";
 import * as InstalledSkills from "./installed-skills.js";
@@ -81,7 +82,7 @@ const decide = Effect.fn("Library.decide")(function* (
     folder.entry.facts === null &&
     folder.entry.kind !== "SymbolicLink"
   )
-    return yield* new InstalledSkillInvalid({ detail: `Not a skill folder: ${path}` });
+    return yield* new InstalledSkillInvalid({ reason: { _tag: "NotSkillFolder", path } });
   if (folder.entry._tag === "Absent" || folder.entry.facts === null) {
     // A folder the user deleted stays deleted unless they asked to restore it, or a backup shows
     // SKIT moved it aside. An installed folder that is gone was deleted too.
@@ -97,11 +98,20 @@ const decide = Effect.fn("Library.decide")(function* (
   const directory = folder.entry.kind === "Directory";
   if (facts.protection !== null) return { ...install, _tag: "Protected", reason: facts.protection };
   if (typeof facts.hash !== "string")
-    return { ...install, _tag: "Unreadable", reason: `${facts.hash.reason}: ${path}` };
+    return {
+      ...install,
+      _tag: "Unreadable",
+      reason: { _tag: "InvalidTree", reason: facts.hash.reason },
+    };
   // Decided against the hash an installed folder is verified with.
   const current = facts.hash;
   const { hash } = yield* files.build(install, rules.next, rules.originalsPath);
   const marker = facts.marker.kind === "valid" ? facts.marker.marker : null;
+  const conflicts = installedSkillConflicts(
+    { ...recorded, skill_id: install.skillId },
+    facts.marker,
+    current,
+  );
   const [accepted] = rules.approvals.flatMap((approval) =>
     approval._tag === "AcceptEdit" && approval.installedSkillId === recorded?.installed_skill_id
       ? [approval]
@@ -135,9 +145,13 @@ const decide = Effect.fn("Library.decide")(function* (
       const manage = yield* approvedForManage(rules.approvals, path);
       if (manage !== undefined) {
         if (current !== manage.currentHash)
-          return yield* new InstalledSkillInvalid({ detail: `ManageTargetChanged: ${path}` });
+          return yield* new InstalledSkillInvalid({
+            reason: { _tag: "ManageTargetChanged", path },
+          });
         if (current !== hash)
-          return yield* new InstalledSkillInvalid({ detail: `ManageContentMismatch: ${path}` });
+          return yield* new InstalledSkillInvalid({
+            reason: { _tag: "ManageContentMismatch", path },
+          });
         return { ...install, _tag: "Manage", hash, verification: "manage" };
       }
       // Unasked managing only takes a folder that is nothing more than SKIT's bytes: the hash
@@ -157,6 +171,7 @@ const decide = Effect.fn("Library.decide")(function* (
       _tag: "Conflict",
       hash,
       currentHash: current,
+      conflicts,
       expectedHash: hash,
       edited: false,
     };
@@ -177,6 +192,7 @@ const decide = Effect.fn("Library.decide")(function* (
       _tag: "Conflict",
       hash,
       currentHash: current,
+      conflicts,
       expectedHash: recorded?.expected_hash ?? marker.expected_hash,
       edited: true,
     };
@@ -188,6 +204,7 @@ const decide = Effect.fn("Library.decide")(function* (
       _tag: "Conflict",
       hash,
       currentHash: current,
+      conflicts,
       expectedHash: recorded.expected_hash,
       edited: false,
     };
@@ -335,7 +352,7 @@ export const planChanges = Effect.fn("Library.planChanges")(function* (
           versionBacking(next, skill, version) === undefined
         )
           return yield* new InstalledSkillInvalid({
-            detail: "An enabled Skill has no selected stored Version",
+            reason: { _tag: "VersionMissing", kind: "enabled" },
           });
         const path = join(target.root, yield* installedSkillName(skill.name));
         const recorded = base.installed_skills.find(
@@ -434,9 +451,13 @@ export const planChanges = Effect.fn("Library.planChanges")(function* (
         return {
           _tag: "Refuse",
           recorded,
-          detail: `Refusing to remove modified Skill at ${recorded.path}`,
         };
-      return { _tag: "Conflict", recorded, currentHash: current };
+      return {
+        _tag: "Conflict",
+        recorded,
+        currentHash: current,
+        conflicts: installedSkillConflicts(recorded, facts.marker, current),
+      };
     });
     uninstalling.push({ change, folder });
   }

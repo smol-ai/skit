@@ -1,6 +1,8 @@
 import { normalizeLibraryManifest } from "../src/library/manifest.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
+import { SchemaFailure } from "../src/shared/schema-issue.js";
+import { SyncConflicted } from "../src/library/internal/sync/conflict.js";
 import { CURRENT_LIBRARY_STATE_VERSION, LibraryState } from "../src/library/library-state.js";
 import {
   currentCollectionSkills,
@@ -145,6 +147,79 @@ const manifest = (enabled: unknown[] = []) => ({
   snapshot_digests: [hash, hashB, hashC],
   enabled,
 });
+
+it.effect(
+  "a merge preserves the native failure when valid sides create overlapping skill paths",
+  () =>
+    Effect.gen(function* () {
+      const base = yield* decode({
+        ...manifest(),
+        skills: [],
+        imports: [],
+        collection_versions: [],
+        snapshot_digests: [],
+      });
+      const local = yield* decode({
+        ...base,
+        skills: [
+          {
+            skill_id: makeSkillId(),
+            collection_id: collectionId,
+            path: "review",
+            name: "review",
+            versions: [],
+          },
+        ],
+      });
+      const remote = yield* decode({
+        ...base,
+        skills: [
+          {
+            skill_id: makeSkillId(),
+            collection_id: collectionId,
+            path: "review/child",
+            name: "child",
+            versions: [],
+          },
+        ],
+      });
+      const raw = mergeLibraryManifests(base, local, remote);
+      assert.deepEqual(raw.conflicts, ["manifest:invariants"]);
+      const merged = yield* prepareLibraryMerge({ base, local, remote });
+      assert.strictEqual(merged._tag, "Conflicted");
+      if (merged._tag !== "Conflicted") return;
+      assert.strictEqual(merged.conflicts.length, 1);
+      const conflict = merged.conflicts[0]!;
+      assert.strictEqual(conflict._tag, "LibraryInvalid");
+      if (conflict._tag !== "LibraryInvalid") return;
+      assert.isTrue(Schema.isSchemaError(conflict.failure));
+      assert.isFalse("issue" in conflict);
+      assert.strictEqual(conflict.resolution, "local");
+      const wire = yield* Schema.encodeEffect(Schema.toCodecJson(SyncConflicted))(
+        new SyncConflicted({ conflicts: merged.conflicts }),
+      );
+      const stored = yield* Schema.decodeUnknownEffect(SyncConflicted)(
+        JSON.parse(JSON.stringify(wire)),
+      );
+      assert.deepEqual(
+        yield* Schema.encodeEffect(Schema.toCodecJson(SchemaFailure))(conflict.failure),
+        stored.conflicts[0]!._tag === "LibraryInvalid"
+          ? yield* Schema.encodeEffect(Schema.toCodecJson(SchemaFailure))(
+              stored.conflicts[0]!.failure,
+            )
+          : undefined,
+      );
+      assert.include(JSON.stringify(wire), '"OverlappingSkillPaths"');
+      assert.include(JSON.stringify(wire), '"review/child"');
+      const rejected = yield* prepareLibraryMerge({
+        base,
+        local,
+        remote,
+        takeRemote: ["manifest:invariants"],
+      });
+      assert.strictEqual(rejected._tag, "InvalidResolution");
+    }),
+);
 
 it.effect(
   "independent Collection membership differences conflict even when shared content matches",

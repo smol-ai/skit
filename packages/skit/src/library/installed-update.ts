@@ -1,13 +1,17 @@
 import { snapshotOf } from "./snapshot.js";
-import { Effect, Schema } from "effect";
-import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
+import { Effect } from "effect";
+import { ReviewedChangeDiffers } from "./update-failures.js";
+export { ReviewedChangeDiffers } from "./update-failures.js";
 import { canonicalJson } from "../shared/json.js";
 import type { OperationScope } from "./internal/operations/operations.js";
 import type { InstalledSkillId, SkillId, SkillVersionId } from "./entity-ids.js";
 import type { Hash } from "../shared/hash.js";
 import type { InstallDestination } from "../installed-skills/destination.js";
 import { importEdit } from "./import-collection.js";
-import { reviewInstalledSkillChanges } from "./installed-skill-review.js";
+import {
+  reviewInstalledSkillChanges,
+  type InstalledSkillChangeReason,
+} from "./installed-skill-review.js";
 import type { Approval } from "./library-plan.js";
 import { planIntent } from "./plan-changes.js";
 import { loadLibrary, inspectLocalLibraryState } from "./store/library-store.js";
@@ -34,7 +38,7 @@ export interface ReviewedChange {
     | "uninstall"
     | "install";
   readonly metadataChanged: boolean;
-  readonly reason?: string;
+  readonly reason?: InstalledSkillChangeReason;
 }
 
 /** Which Version a competing Skill keeps: the retained one, or the copy at `path`. */
@@ -60,23 +64,6 @@ export interface UpdatedCopy {
 }
 
 /** An update would write something other than the change reviewed at `path`. */
-export class ReviewedChangeDiffers
-  extends Schema.TaggedError<ReviewedChangeDiffers, { readonly brand: unique symbol }>()(
-    "Library.ReviewedChangeDiffers",
-    {
-      path: Schema.String,
-    },
-  )
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly remediation = "Preview the change again.";
-  get message() {
-    return `The installed skill at ${this.path} changed after it was reviewed`;
-  }
-}
-
 /** Whether applying would write a copy or a record: what setup asks before touching any. */
 export const changeWrites = (fact: Pick<ReviewedChange, "status" | "metadataChanged">) =>
   fact.status === "incoming-update" ||
@@ -173,7 +160,7 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
 
   // Outside the chosen Skills, each copy is as reviewed, or (after an earlier run) already the
   // update it was reviewed for; nothing writes that was not reviewed.
-  // A change's reason is text the review derives from its status; a setup record does not keep it.
+  // The review supplies reasons alongside its status; setup's recorded approval omits them.
   const withoutReason = (change: ReviewedChange | undefined) =>
     change === undefined ? null : { ...change, reason: undefined };
   for (const fact of facts) {

@@ -18,7 +18,7 @@ interface CommandManifest {
 
 /**
  * Removing a stable command is a breaking change; name each retired contract here on purpose.
- * An entry can go once the base branch no longer has the contract.
+ * An entry can go once the published release used for comparison no longer has the contract.
  */
 const retiredContractIds: ReadonlySet<string> = new Set([
   // `skit pin` only selected Versions of pre-release Registry Sources.
@@ -156,7 +156,7 @@ export function checkContractCompatibility(
     }
 
     if (stable && retiredContractIds.has(id)) {
-      warnings.push(`${id} was retired`);
+      warnings.push(`${id} was removed`);
       continue;
     }
     const versioned = versionedFamily(id);

@@ -26,7 +26,6 @@ import {
   COLLECTION_CONTROL_DIRECTORY,
 } from "../artifact/control-files.js";
 import { AuthorIgnoreRepository } from "../artifact/plain-author-ignore.js";
-import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 import * as History from "../history/history.js";
 import { LinkStat } from "../platform/link-stat.js";
 import { type SkitContractError } from "../api/contracts.js";
@@ -47,80 +46,39 @@ import {
 import { AuthorVisibility, AuthorRemoteHome, normalizeRemote } from "./remote.js";
 
 import { writeWorkspaceTree } from "./write-tree.js";
-import type { PreparedWrite } from "./history.js";
+import type { WriteCheckpoint } from "./history.js";
 import {
   WorkspaceId,
   Identity,
   readAuthorIdentity,
   readAuthorRemote,
 } from "./workspace-metadata.js";
-export { WorkspaceId, Identity } from "./workspace-metadata.js";
+export { WorkspaceId, Identity } from "./workspace-contracts.js";
+import {
+  WorkspaceRoot,
+  Workspace,
+  SyncKey,
+  Connecting,
+  type Connected,
+  Connection,
+  type Leftover,
+  AuthorSyncStateInvalid,
+  AuthorWorkspaceConflict,
+  AuthorWorkspaceRootInvalid,
+  AuthorWorkspaceUnsafe,
+  AuthorWorkspaceBusy,
+  AuthorWorkspaceInvariantFailed,
+} from "./workspace-contracts.js";
+export {
+  WorkspaceRoot,
+  SyncKey,
+  Connecting,
+  AuthorSyncStateInvalid,
+  AuthorWorkspaceConflict,
+  AuthorWorkspaceRootInvalid,
+} from "./workspace-contracts.js";
 
 // ── Vocabulary ─────────────────────────────────────────────────────────────────────────────────
-
-/** realPath(resolve(input)) of an existing directory. Minted only by AuthorWorkspace.resolveRoot. */
-const WorkspaceRoot = Schema.String.pipe(Schema.brand("WorkspaceRoot"));
-export type WorkspaceRoot = typeof WorkspaceRoot.Type;
-
-/** Saved recovery state must be readable before sync may change files or the Registry. */
-export class AuthorSyncStateInvalid
-  extends Schema.TaggedError<AuthorSyncStateInvalid, { readonly brand: unique symbol }>()(
-    "AuthorSyncStateInvalid",
-    {
-      path: Schema.String,
-      reason: Schema.String,
-    },
-  )
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  get message() {
-    return `Author sync state at ${this.path} is invalid: ${this.reason}`;
-  }
-  readonly remediation = "Keep the sync state file and repair or restore it before syncing again.";
-}
-
-/** The first-connection checkpoint in .skit/connection.json; its request id is replayed on create. */
-export const Connecting = Schema.TaggedStruct("Connecting", {
-  remote: AuthorRemoteHome,
-  visibility: AuthorVisibility,
-  requestId: Schema.String.check(Schema.isMinLength(1)),
-});
-export type Connecting = typeof Connecting.Type;
-
-/**
- * A connection.json still present beside a valid skit.remote.json (A4). The portable
- * skit.remote.json is the authority, so only a leftover naming the same remote is safe to delete.
- */
-const Leftover = Schema.Union([
-  Schema.TaggedStruct("None", {}),
-  Schema.TaggedStruct("Matching", { checkpoint: Connecting }),
-  Schema.TaggedStruct("Mismatched", { checkpoint: Connecting }),
-  Schema.TaggedStruct("Invalid", { error: AuthorSyncStateInvalid }),
-]);
-type Leftover = typeof Leftover.Type;
-
-/** One logical state over two files: a valid skit.remote.json is Connected whatever else is there. */
-const Connection = Schema.Union([
-  Schema.TaggedStruct("Unconnected", {}),
-  Connecting,
-  Schema.TaggedStruct("Connected", { remote: AuthorRemoteHome, leftover: Leftover }),
-]);
-type Connection = typeof Connection.Type;
-type Connected = Extract<Connection, { _tag: "Connected" }>;
-
-/** One read of all four files. */
-const Workspace = Schema.Struct({
-  root: WorkspaceRoot,
-  identity: Schema.Option(Identity),
-  connection: Connection,
-});
-type Workspace = typeof Workspace.Type;
-
-/** Which sync checkpoint: workspace identity plus SKIT locator (A5). */
-export const SyncKey = Schema.Struct({ workspaceId: WorkspaceId, locator: Schema.String });
-export type SyncKey = typeof SyncKey.Type;
 
 /** What the create call proved: this request id created this destination. */
 export interface CreateReceipt {
@@ -154,117 +112,6 @@ type ConnectionTransition =
 
 // ── Errors ─────────────────────────────────────────────────────────────────────────────────────
 
-/** What a transition or register planned from is no longer what is on disk. */
-export class AuthorWorkspaceConflict
-  extends Schema.TaggedError<AuthorWorkspaceConflict, { readonly brand: unique symbol }>()(
-    "AuthorWorkspaceConflict",
-    {
-      root: WorkspaceRoot,
-      found: Workspace,
-    },
-  )
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  get message() {
-    return `The author workspace at ${this.root} changed while this command was running`;
-  }
-  readonly remediation = "Run the command again; it plans from what is there now.";
-}
-
-/** The input is not an existing directory (A1). */
-export class AuthorWorkspaceRootInvalid
-  extends Schema.TaggedError<AuthorWorkspaceRootInvalid, { readonly brand: unique symbol }>()(
-    "AuthorWorkspaceRootInvalid",
-    {
-      input: Schema.String,
-    },
-  )
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "INVALID_ARGUMENT" as const;
-  get message() {
-    return `${this.input} is not an existing directory`;
-  }
-  readonly remediation = "Name the author workspace's folder.";
-}
-
-/**
- * The lease could not be taken safely: the root no longer realPaths to itself, .skit is not a
- * real directory, or the lock is a symlink, not a regular file, or not a lock SQLite can take.
- */
-class AuthorWorkspaceUnsafe
-  extends Schema.TaggedError<AuthorWorkspaceUnsafe, { readonly brand: unique symbol }>()(
-    "AuthorWorkspaceUnsafe",
-    {
-      path: Schema.String,
-      reason: Schema.String,
-    },
-  )
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  get message() {
-    return `The author workspace cannot be locked safely at ${this.path}: ${this.reason}`;
-  }
-  readonly remediation =
-    "Inspect that path, move anything unexpected aside, then run the command again.";
-}
-
-/** Another process (or this one) holds the workspace lease. */
-class AuthorWorkspaceBusy
-  extends Schema.TaggedError<AuthorWorkspaceBusy, { readonly brand: unique symbol }>()(
-    "AuthorWorkspaceBusy",
-    { root: WorkspaceRoot },
-  )
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly retryable = true;
-  get message() {
-    return `Another SKIT command is changing the author workspace at ${this.root}`;
-  }
-  readonly remediation = "Wait for it to finish, then run the command again.";
-}
-
-/** writeTree's trees are not the ones a current, unused PreparedWrite names (A13). */
-class AuthorWriteNotPrepared
-  extends Schema.TaggedError<AuthorWriteNotPrepared, { readonly brand: unique symbol }>()(
-    "AuthorWriteNotPrepared",
-    { key: SyncKey },
-  )
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  get message() {
-    return `Sync tried to write ${this.key.locator} without a current saved checkpoint for that write`;
-  }
-  readonly remediation = "Sync again; it saves a new checkpoint before writing.";
-}
-
-/** A lease handle used after its scope closed. */
-export class AuthorLeaseNotHeld
-  extends Schema.TaggedError<AuthorLeaseNotHeld, { readonly brand: unique symbol }>()(
-    "AuthorLeaseNotHeld",
-    {
-      root: WorkspaceRoot,
-    },
-  )
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  get message() {
-    return `The author workspace lease for ${this.root} is closed`;
-  }
-  readonly remediation = "Run the command again.";
-}
-
 export type WorkspaceReadError =
   | AuthorWorkspaceMetadataInvalid
   | AuthorRemoteMetadataInvalid
@@ -272,7 +119,8 @@ export type WorkspaceReadError =
   | PlatformError.PlatformError;
 
 type WriteTreeError =
-  | AuthorWriteNotPrepared
+  | AuthorWorkspaceConflict
+  | WorkspaceReadError
   | LocalFilesChangedDuringSync
   | SkitContractError
   | AuthorLocalPathUnchecked
@@ -293,9 +141,9 @@ export interface WorkspaceLease {
   /** A fresh random id per hold of the lease. */
   readonly ownerId: string;
   /** Changes on every checkpoint step (advance). */
-  readonly revision: Effect.Effect<number, AuthorLeaseNotHeld>;
+  readonly revision: Effect.Effect<number>;
   /** For AuthorHistory only: record a checkpoint step under this hold; returns the new revision. */
-  readonly advance: Effect.Effect<number, AuthorLeaseNotHeld>;
+  readonly advance: Effect.Effect<number>;
   /**
    * Give an unidentified workspace its identity, adopting the id of a Collection the Library
    * already imported from this root when there is one (A3). Fails AuthorWorkspaceConflict if an
@@ -303,20 +151,20 @@ export interface WorkspaceLease {
    */
   readonly register: (
     adopt: Option.Option<WorkspaceId>,
-  ) => Effect.Effect<Identity, AuthorWorkspaceConflict | AuthorLeaseNotHeld | WorkspaceReadError>;
+  ) => Effect.Effect<Identity, AuthorWorkspaceConflict | WorkspaceReadError>;
   /** The connection lifecycle. Every write is flushed before returning. Returns the new state. */
   readonly transition: (
     change: ConnectionTransition,
-  ) => Effect.Effect<Connection, AuthorWorkspaceConflict | AuthorLeaseNotHeld | WorkspaceReadError>;
+  ) => Effect.Effect<Connection, AuthorWorkspaceConflict | WorkspaceReadError>;
   /**
-   * Make the files `to` if they are still `from`, given the PreparedWrite for exactly these trees.
-   * Any attempt uses the PreparedWrite up. Files only; it records no history.
+   * History-only write boundary. Its private checkpoint proves the saved tree pair.
+   * Any attempt consumes the checkpoint. Public preparation returns a bound apply operation.
    */
   readonly writeTree: (change: {
-    readonly prepared: PreparedWrite;
+    readonly prepared: WriteCheckpoint;
     readonly from: History.Tree;
     readonly to: History.Tree;
-  }) => Effect.Effect<void, WriteTreeError | AuthorLeaseNotHeld>;
+  }) => Effect.Effect<void, WriteTreeError>;
 }
 
 export interface AuthorWorkspaceShape {
@@ -408,13 +256,28 @@ const make = Effect.gen(function* () {
     const checkpoint = yield* Schema.decodeEffect(Schema.fromJsonString(Connecting), {
       onExcessProperty: "error",
     })(text).pipe(
-      Effect.mapError((error) => new AuthorSyncStateInvalid({ path: file, reason: String(error) })),
+      Effect.mapError(
+        (error) =>
+          new AuthorSyncStateInvalid({
+            path: file,
+            reason: { _tag: "InvalidData", failure: error },
+          }),
+      ),
     );
     const normalized = yield* normalizeRemote(checkpoint.remote).pipe(
-      Effect.mapError((error) => new AuthorSyncStateInvalid({ path: file, reason: String(error) })),
+      Effect.mapError(
+        (error) =>
+          new AuthorSyncStateInvalid({
+            path: file,
+            reason: { _tag: "RemoteInvalid", failure: error },
+          }),
+      ),
     );
     if (!sameRemote(normalized, checkpoint.remote))
-      return yield* new AuthorSyncStateInvalid({ path: file, reason: "Noncanonical destination" });
+      return yield* new AuthorSyncStateInvalid({
+        path: file,
+        reason: { _tag: "NoncanonicalDestination" },
+      });
     return checkpoint;
   });
 
@@ -459,7 +322,7 @@ const make = Effect.gen(function* () {
     if ((yield* fs.realPath(root)) !== root)
       return yield* new AuthorWorkspaceUnsafe({
         path: root,
-        reason: "the folder no longer resolves to itself",
+        reason: { _tag: "RootChanged" },
       });
     const directory = control(root);
     if (Option.isNone(yield* lstat(directory))) {
@@ -471,7 +334,7 @@ const make = Effect.gen(function* () {
     if (!Option.exists(yield* lstat(directory), (info) => info.type === "Directory"))
       return yield* new AuthorWorkspaceUnsafe({
         path: directory,
-        reason: ".skit is not a real directory",
+        reason: { _tag: "ControlNotDirectory" },
       });
     const ignore = path.join(directory, ".gitignore");
     if (Option.isNone(yield* lstat(ignore))) {
@@ -485,7 +348,7 @@ const make = Effect.gen(function* () {
     if (Option.exists(yield* lstat(lockPath), (info) => info.type !== "File"))
       return yield* new AuthorWorkspaceUnsafe({
         path: lockPath,
-        reason: "the lock is not a regular file",
+        reason: { _tag: "LockNotFile" },
       });
     const lock = yield* Scope.make();
     yield* lockFile(lockPath).pipe(
@@ -493,7 +356,12 @@ const make = Effect.gen(function* () {
       Effect.catchTags({
         FileLockBusy: () => Effect.fail(new AuthorWorkspaceBusy({ root })),
         FileLockFailed: (error) =>
-          Effect.fail(new AuthorWorkspaceUnsafe({ path: lockPath, reason: String(error.cause) })),
+          Effect.fail(
+            new AuthorWorkspaceUnsafe({
+              path: lockPath,
+              reason: { _tag: "LockFailed", cause: error.cause },
+            }),
+          ),
       }),
       Effect.onError(() => Scope.close(lock, Exit.void)),
     );
@@ -501,13 +369,17 @@ const make = Effect.gen(function* () {
   });
 
   const acquire = Effect.fn("AuthorWorkspace.acquire")(function* (root: WorkspaceRoot) {
+    // Closing the lease waits for any method already holding this permit.
+    const permit = yield* Semaphore.make(1);
     const hold = yield* Effect.acquireRelease(
       take(root).pipe(Effect.flatMap((lock) => Ref.make<Hold>({ state: "held", lock }))),
       // Scope close releases only what is still held.
       (ref) =>
-        Ref.getAndSet(ref, { state: "closed" }).pipe(
-          Effect.flatMap((last) =>
-            last.state === "held" ? Scope.close(last.lock, Exit.void) : Effect.void,
+        permit.withPermit(
+          Ref.getAndSet(ref, { state: "closed" }).pipe(
+            Effect.flatMap((last) =>
+              last.state === "held" ? Scope.close(last.lock, Exit.void) : Effect.void,
+            ),
           ),
         ),
     );
@@ -518,13 +390,13 @@ const make = Effect.gen(function* () {
         yield* fs.remove(path.join(directory, name), { recursive: true });
     const ownerId = yield* random.uuidV4();
     const revision = yield* Ref.make(0);
-    // The revision whose PreparedWrite was last presented: each is good for one attempt.
+    // The revision whose write checkpoint was last presented: each is good for one attempt.
     const presented = yield* Ref.make(-1);
-    // Each method runs whole, so a release waits for it rather than cutting it short.
-    const permit = yield* Semaphore.make(1);
+    const invalid = (reason: AuthorWorkspaceInvariantFailed["reason"]) =>
+      Effect.die(new AuthorWorkspaceInvariantFailed({ root, reason }));
     const held = Ref.get(hold).pipe(
       Effect.flatMap((current) =>
-        current.state === "held" ? Effect.void : Effect.fail(new AuthorLeaseNotHeld({ root })),
+        current.state === "held" ? Effect.void : invalid({ _tag: "LeaseClosed" }),
       ),
     );
 
@@ -606,27 +478,29 @@ const make = Effect.gen(function* () {
     });
 
     const writeTree = Effect.fn("AuthorWorkspace.writeTree")(function* (change: {
-      readonly prepared: PreparedWrite;
+      readonly prepared: WriteCheckpoint;
       readonly from: History.Tree;
       readonly to: History.Tree;
     }) {
       yield* held;
       const { prepared } = change;
-      const notPrepared = new AuthorWriteNotPrepared({ key: prepared.key });
       const current = yield* Ref.get(revision);
-      if (prepared.ownerId !== ownerId || prepared.revision !== current) return yield* notPrepared;
-      // This is the current hold's PreparedWrite: any attempt, failed or partial, uses it up.
-      if ((yield* Ref.getAndSet(presented, current)) === current) return yield* notPrepared;
-      const identity = yield* readIdentity(root).pipe(
-        Effect.catchTag("AuthorWorkspaceMetadataInvalid", () => Effect.fail(notPrepared)),
-      );
+      if (prepared.ownerId !== ownerId)
+        return yield* invalid({ _tag: "WriteNotOwned", key: prepared.key });
+      if (prepared.revision !== current)
+        return yield* invalid({ _tag: "CheckpointChanged", key: prepared.key });
+      // This is the current hold's write checkpoint: any attempt, failed or partial, uses it up.
+      if ((yield* Ref.getAndSet(presented, current)) === current)
+        return yield* invalid({ _tag: "WriteAlreadyUsed", key: prepared.key });
+      const identity = yield* readIdentity(root);
       if (!Option.exists(identity, (value) => value.workspaceId === prepared.key.workspaceId))
-        return yield* notPrepared;
+        return yield* new AuthorWorkspaceConflict({ root, found: yield* read(root) });
       const hashes = yield* Effect.all([
         History.treeHash(change.from),
         History.treeHash(change.to),
       ]);
-      if (hashes[0] !== prepared.from || hashes[1] !== prepared.to) return yield* notPrepared;
+      if (hashes[0] !== prepared.from || hashes[1] !== prepared.to)
+        return yield* invalid({ _tag: "TreesDiffer", key: prepared.key });
       yield* writeWorkspaceTree(root, change.from, change.to);
     });
 
@@ -660,4 +534,4 @@ export class AuthorWorkspace extends Context.Service<AuthorWorkspace, AuthorWork
 }
 
 export { AuthorWorkspaceUnsafe };
-export type { AuthorWorkspaceBusy, AuthorWriteNotPrepared };
+export type { AuthorWorkspaceBusy };

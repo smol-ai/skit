@@ -6,7 +6,7 @@ import { HomeBusy } from "../../platform/lock-failures.js";
 const LegacyLibraryBusy = Schema.TaggedStruct("LibraryBusy", { path: Schema.String }).pipe(
   Schema.decodeTo(HomeBusy, {
     decode: SchemaGetter.transform(({ path }) => new HomeBusy({ path })),
-    encode: SchemaGetter.forbidden(() => "LibraryBusy operation failures are decode-only"),
+    encode: SchemaGetter.forbiddenEncoding,
   }),
 );
 

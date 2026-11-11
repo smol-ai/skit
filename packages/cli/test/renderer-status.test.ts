@@ -1,3 +1,4 @@
+import { Block } from "../src/terminal/blocks.js";
 import { it } from "@effect/vitest";
 import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
@@ -33,7 +34,10 @@ it.effect("resumes changing status after printing a plan and clears it on failur
       .withStatus(
         "Planning",
         Effect.gen(function* () {
-          yield* renderer.note("One Collection to add", "Library sync plan");
+          yield* renderer.note(
+            [Block.Note({ text: ["One Collection to add"] })],
+            "Library sync plan",
+          );
           yield* renderer.updateStatus("Downloading Skill copies | 1/2");
           yield* Deferred.succeed(ready, undefined);
           yield* Deferred.await(finish);
@@ -155,5 +159,24 @@ it.effect("persists an incomplete timed step when interrupted", () =>
     yield* TestClock.adjust(1500);
     yield* Fiber.interrupt(fiber);
     expect(writes).toEqual(["✖ Fetching example/skills | Incomplete | 1.5s\n"]);
+  }),
+);
+
+it.effect("prints semantic login instructions on stderr while suppressing JSON-mode notes", () =>
+  Effect.gen(function* () {
+    const writes = capture(false);
+    const renderer = consoleRenderer(true);
+    yield* renderer.note([Block.Note({ text: ["Not machine output"] })], "Progress");
+    expect(writes).toEqual([]);
+    yield* renderer.instruction(
+      [
+        Block.Note({
+          text: ["Open ", { code: "https://registry.example/activate" }, " and approve login."],
+        }),
+      ],
+      "Approve login",
+    );
+    expect(writes.join("")).toContain("https://registry.example/activate");
+    expect(writes.join("")).toContain("Approve login");
   }),
 );

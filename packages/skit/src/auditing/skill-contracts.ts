@@ -27,7 +27,6 @@ export const SkillAuditFinding = Schema.Struct({
     column: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
     excerpt: Schema.String,
   }),
-  message: Schema.String,
 });
 export type SkillAuditFinding = typeof SkillAuditFinding.Type;
 

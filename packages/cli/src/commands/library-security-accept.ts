@@ -1,3 +1,4 @@
+import { defineCommand } from "./definition.js";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 
@@ -9,7 +10,9 @@ import { securityAcceptCommand } from "../library/security/accept.js";
 import { Renderer } from "../terminal/renderer.js";
 import { encodeResult as result } from "./encode-result.js";
 
-const skill = Argument.String("skill");
+const skill = Argument.String("skill").pipe(
+  Argument.withDescription("Skill Reference whose security findings to accept."),
+);
 
 const finding = Flag.String("finding").pipe(
   Flag.withDescription("Accept this exact finding fingerprint."),
@@ -28,7 +31,7 @@ const expiresAt = Flag.String("expires-at").pipe(
   Flag.optional,
 );
 
-export const securityAcceptCliCommand = Command.make(
+export const securityAcceptCliCommand = defineCommand(
   "accept",
   { skill, finding, principal, rationale, expiresAt },
   ({ skill, finding, principal, rationale, expiresAt }) =>
@@ -62,7 +65,6 @@ export const securityAcceptCliCommand = Command.make(
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read", "filesystem.write"] },
     outputSchemas: [securityOutputContracts.securityAccept],
-    exitCodes: [0, 11, 12, 64, 65],
     interactive: false,
   }),
 );

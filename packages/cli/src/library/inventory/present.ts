@@ -1,41 +1,61 @@
 import type { LibraryInventory } from "@smolai/skit-core/library/inventory";
-import { createColors } from "picocolors";
 import { metadataDate } from "../presentation/skill-metadata.js";
+import { harnessOrigin } from "../presentation/harness-origin.js";
 import { basename, dirname, sep } from "node:path";
-import { compactHomePath } from "../../terminal/home-path.js";
-import { installDestinationHarnesses, type HarnessName } from "@smolai/skit-core/harnesses";
 import { harnessLabel } from "@smolai/skit-core/harnesses";
-import { conditionHeadline, installedSkillStatusLabel } from "../presentation/language.js";
+import { conditionHeadline } from "../presentation/language.js";
+import { Block, type Field } from "../../terminal/blocks.js";
 import type { MachineInventoryResult } from "./output.js";
+import { errorMessage } from "@smolai/skit-core/shared";
+import { treeFailure } from "../../platform/tree-failure.js";
 
 type MachineInstance = MachineInventoryResult["machine"]["instances"][number];
 
-const ownerLines = (owner: MachineInstance["owner"]): readonly string[] => {
+/** A label/value fact as plain text, so identical facts compare equal. */
+type Fact = { readonly label: string; readonly value: string };
+
+const ownerFacts = (owner: MachineInstance["owner"]): readonly Fact[] => {
   switch (owner.kind) {
     case "pnpm":
-      return ["Managed by: pnpm | left in place", `Package: ${owner.package}@${owner.version}`];
+      return [
+        { label: "Managed by", value: "pnpm, left in place" },
+        { label: "Package", value: `${owner.package}@${owner.version}` },
+      ];
     case "skills-sh":
-      return ["Installed by: skills.sh", `Source: ${owner.source}`];
+      return [
+        { label: "Installed by", value: "skills.sh" },
+        { label: "Source", value: owner.source },
+      ];
     case "skit":
       return owner.membership.kind === "in-library"
         ? [
-            `Collection: ${owner.membership.displayName}`,
-            ...(owner.membership.source ? [`Source: ${owner.membership.source}`] : []),
+            { label: "Collection", value: owner.membership.displayName },
+            ...(owner.membership.source
+              ? [{ label: "Source", value: owner.membership.source }]
+              : []),
           ]
-        : [`Collection: not in this Library (${owner.membership.collectionId})`];
+        : [
+            {
+              label: "Collection",
+              value: `not in this Library (${owner.membership.collectionId})`,
+            },
+          ];
     case "harness":
       return [
-        `Installed by: ${harnessLabel(owner.harness)}${owner.bundled ? " (bundled)" : ""}`,
-        `Source: ${owner.source}`,
+        {
+          label: "Installed by",
+          value: `${harnessLabel(owner.harness)}${owner.origin === "system" || owner.origin === "bundled-plugin" ? " (bundled)" : ""}`,
+        },
+        { label: "Source", value: harnessOrigin(owner) },
       ];
     case "repository":
-      return ["Installed by: repository"];
+      return [{ label: "Installed by", value: "repository" }];
     case "authored":
-      return [`Authored Collection: ${owner.skitLocator}`];
+      return [{ label: "Authored Collection", value: owner.skitLocator }];
     case "invalid-marker":
-      return ["Installed by: invalid SKIT ownership marker"];
+      return [{ label: "Installed by", value: "invalid SKIT ownership marker" }];
     case "unknown":
-      return ["Installed by: unknown"];
+      return [{ label: "Installed by", value: "unknown" }];
   }
 };
 
@@ -80,40 +100,47 @@ const gitLabel = (
 };
 
 const libraryRelationshipLabel = (identity: MachineInstance["contentIdentity"]): string => {
-  if (identity.status === "unhashable") return "Library bytes: could not compare";
-  if (identity.libraryMatches.length === 0) return "Library bytes: no match";
-  return `Library bytes: ${identity.status === "ambiguous" ? "ambiguous match" : "exact match"}`;
+  if (identity.status === "failed") return "could not compare";
+  if (identity.libraryMatches.length === 0) return "no match";
+  return identity.libraryMatches.length > 1 ? "ambiguous match" : "exact match";
 };
 
 const displayPath = (path: string, repository?: string): string =>
   repository !== undefined && path.startsWith(`${repository}${sep}`)
     ? path.slice(repository.length + 1)
-    : compactHomePath(path);
+    : path;
 
 const instancePaths = (instance: MachineInstance, repository?: string): readonly string[] =>
   [...new Set([instance.path, ...instance.aliases])]
     .map((path) => displayPath(path, repository))
     .sort();
 
-const instanceFacts = (instance: MachineInstance, repository?: string): readonly string[] => {
-  const locks = instance.locks
-    .map((lock) => {
-      const path =
-        repository !== undefined && lock.lockPath.startsWith(`${repository}${sep}`)
-          ? lock.lockPath.slice(repository.length + 1)
-          : compactHomePath(lock.lockPath);
-      return `Lock: ${path} | ${lock.content}`;
-    })
-    .sort();
-  return [
-    ...ownerLines(instance.owner),
-    `Git: ${gitLabel(instance.git.status)}`,
-    ...(instance.owner.kind === "skit" && instance.contentIdentity.status === "exact"
-      ? []
-      : [libraryRelationshipLabel(instance.contentIdentity)]),
-    ...locks,
-  ];
-};
+const instanceFacts = (instance: MachineInstance, repository?: string): readonly Fact[] => [
+  ...ownerFacts(instance.owner),
+  { label: "Git", value: gitLabel(instance.git.status) },
+  ...(instance.contentIdentity.status === "failed"
+    ? [
+        {
+          label: "Check failed",
+          value:
+            instance.contentIdentity.failure._tag === "TreeError"
+              ? treeFailure(instance.contentIdentity.failure.reason)
+              : errorMessage(instance.contentIdentity.failure),
+        },
+      ]
+    : []),
+  ...(instance.owner.kind === "skit" &&
+  instance.contentIdentity.status === "hashed" &&
+  instance.contentIdentity.libraryMatches.length === 1
+    ? []
+    : [{ label: "Library bytes", value: libraryRelationshipLabel(instance.contentIdentity) }]),
+  ...instance.locks
+    .map((lock) => ({
+      label: "Lock",
+      value: `${displayPath(lock.lockPath, repository)} (${lock.content})`,
+    }))
+    .sort((left, right) => left.value.localeCompare(right.value)),
+];
 
 const skillCountLabel = (count: number): string => `${count} Skill${count === 1 ? "" : "s"}`;
 
@@ -136,61 +163,45 @@ const explicitCollectionKey = (instance: MachineInstance): string | undefined =>
 const pathPattern = (path: string, skillName: string): string =>
   basename(path) === skillName ? `${dirname(path)}${sep}<skill>` : path;
 
-export function renderMachineSkills(
-  machine: MachineInventoryResult["machine"],
-  color = createColors(false),
-): string {
+const count = (value: number, word: string) => `${value} ${word}${value === 1 ? "" : "s"}`;
+
+/** Only the Skill count when each Skill has one instance, else both counts. */
+const counts = (skills: number, instances: number) =>
+  `${count(skills, "Skill")}${instances === skills ? "" : `, ${count(instances, "instance")}`}`;
+
+export function renderMachineSkills(machine: MachineInventoryResult["machine"]): Block[] {
   const names = new Set(machine.instances.map((instance) => instance.name));
-  const lines = [
-    `Inventory | ${names.size} Skill${names.size === 1 ? "" : "s"} | ${machine.instances.length} instance${machine.instances.length === 1 ? "" : "s"}`,
-  ];
   const locations = new Map<string, typeof machine.instances>();
   for (const instance of machine.instances) {
     const location = instance.git.repository ?? "Global and standalone";
     locations.set(location, [...(locations.get(location) ?? []), instance]);
   }
-  for (const [location, instances] of locations) {
+  const groups = [...locations].map(([location, instances]) => {
     const repository = location === "Global and standalone" ? undefined : location;
-    const locationNames = new Set(instances.map((instance) => instance.name));
     const scopes = new Set(instances.map((instance) => instance.scope));
     const locationLabel =
       location !== "Global and standalone"
-        ? compactHomePath(location)
+        ? location
         : scopes.size === 1 && scopes.has("global")
           ? "Global"
           : scopes.size === 1 && scopes.has("standalone")
             ? "Standalone"
             : location;
-    lines.push(
-      "",
-      `${color.cyan(color.bold(locationLabel))} | ${locationNames.size} Skill${locationNames.size === 1 ? "" : "s"}${instances.length === locationNames.size ? "" : ` | ${instances.length} instances`}`,
-    );
     const ownershipGroups = new Map<string, typeof instances>();
     for (const instance of instances) {
       const ownership = ownerLabel(instance.owner);
       ownershipGroups.set(ownership, [...(ownershipGroups.get(ownership) ?? []), instance]);
     }
-    for (const [ownership, ownershipInstances] of ownershipGroups) {
+    const ownerships = [...ownershipGroups].map(([ownership, ownershipInstances]) => {
       const bySkill = new Map<string, { name: string; instances: typeof ownershipInstances }>();
       for (const instance of ownershipInstances) {
         const key = `${explicitCollectionKey(instance) ?? "standalone"}\0${instance.name}`;
         const skill = bySkill.get(key) ?? { name: instance.name, instances: [] };
         bySkill.set(key, { ...skill, instances: [...skill.instances, instance] });
       }
-      const instanceCount = ownershipInstances.length;
-      const skillCount = bySkill.size;
-      lines.push(
-        "",
-        `  ${ownership} | ${skillCount} Skill${skillCount === 1 ? "" : "s"}${instanceCount === skillCount ? "" : ` | ${instanceCount} instances`}`,
-      );
       const cohorts = new Map<
         string,
-        {
-          names: string[];
-          facts: readonly string[];
-          patterns: readonly string[];
-          instances: MachineInstance[];
-        }
+        { names: string[]; facts: readonly Fact[]; instances: MachineInstance[] }
       >();
       for (const { name, instances: skillInstances } of bySkill.values()) {
         const collectionKeys = [
@@ -200,9 +211,16 @@ export function renderMachineSkills(
               .filter((reference): reference is string => reference !== undefined),
           ),
         ];
+        // Instances that say the same thing share one list of facts.
         const facts = [
-          ...new Set(skillInstances.flatMap((instance) => instanceFacts(instance, repository))),
-        ].sort();
+          ...new Map(
+            skillInstances
+              .flatMap((instance) => instanceFacts(instance, repository))
+              .map((fact): [string, Fact] => [`${fact.label}: ${fact.value}`, fact]),
+          ),
+        ]
+          .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+          .map(([, fact]) => fact);
         const patterns = [
           ...new Set(
             skillInstances.flatMap((instance) =>
@@ -212,157 +230,177 @@ export function renderMachineSkills(
         ].sort();
         const collectionKey = collectionKeys.length === 1 ? collectionKeys[0] : `skill:${name}`;
         const key = JSON.stringify([collectionKey, facts, patterns]);
-        const cohort = cohorts.get(key) ?? { names: [], facts, patterns, instances: [] };
+        const cohort = cohorts.get(key) ?? { names: [], facts, instances: [] };
         cohort.names.push(name);
         cohort.instances.push(...skillInstances);
         cohorts.set(key, cohort);
       }
-      for (const cohort of [...cohorts.values()].sort((left, right) =>
-        left.names[0]!.localeCompare(right.names[0]!),
-      )) {
-        cohort.names.sort();
-        lines.push("", `    ${skillCountLabel(cohort.names.length)}`);
-        lines.push(...cohort.facts.map((fact) => `      ${color.dim(fact)}`));
-        for (const name of cohort.names) {
-          lines.push("", `      ${color.bold(name)}`);
-          for (const instance of cohort.instances.filter((instance) => instance.name === name))
-            for (const path of instancePaths(instance, repository))
-              lines.push(
-                `        ${path}${path === displayPath(instance.path, repository) ? "" : " (alias)"} ${color.dim(`| SKILL.md modified ${metadataDate(instance.skill_md_modified_at)}`)}`,
-              );
-        }
-      }
-    }
-  }
-  if (!machine.instances.length) lines.push("", "  No Skill instances observed.");
-  return lines.join("\n");
+      return Block.Group({
+        title: `${ownership} (${counts(bySkill.size, ownershipInstances.length)})`,
+        children: [...cohorts.values()]
+          .sort((left, right) => left.names[0]!.localeCompare(right.names[0]!))
+          .map((cohort) =>
+            Block.Group({
+              title: skillCountLabel(cohort.names.length),
+              children: [
+                Block.Fields({
+                  rows: cohort.facts.map(({ label, value }): Field => ({ label, value: [value] })),
+                }),
+                Block.Table({
+                  columns: [{ title: "Skill" }, { title: "Path" }, { title: "SKILL.md modified" }],
+                  rows: cohort.names.sort().flatMap((name) =>
+                    cohort.instances
+                      .filter((instance) => instance.name === name)
+                      .flatMap((instance) =>
+                        instancePaths(instance, repository).map((path) => ({ instance, path })),
+                      )
+                      .map(({ instance, path }, index) => [
+                        index === 0 ? [{ emph: name }] : [],
+                        [
+                          path,
+                          ...(path === displayPath(instance.path, repository)
+                            ? []
+                            : [{ dim: " (alias)" }]),
+                        ],
+                        [metadataDate(instance.skill_md_modified_at)],
+                      ]),
+                  ),
+                }),
+              ],
+            }),
+          ),
+      });
+    });
+    return Block.Group({
+      title: `${locationLabel} (${counts(new Set(instances.map((instance) => instance.name)).size, instances.length)})`,
+      children: ownerships,
+    });
+  });
+  return [
+    Block.Heading({ text: "Inventory" }),
+    Block.Fields({
+      rows: [
+        { label: "Skills", value: [String(names.size)] },
+        { label: "Instances", value: [String(machine.instances.length)] },
+      ],
+    }),
+    ...(machine.instances.length ? groups : [Block.Note({ text: ["No Skill instances found."] })]),
+  ];
 }
 
-const renderScanScope = (machine: MachineInventoryResult["machine"]): string => {
-  const lines = [
-    "Scan scope",
-    `  Status: ${machine.scan.complete ? "complete" : "incomplete"}`,
-    `  Directories examined: ${machine.scan.directoriesExamined}`,
-    `  Repository depth: ${machine.scan.repositorySearchDepth}`,
-    "  Repository roots:",
-    ...(machine.repositoryRoots.length
-      ? machine.repositoryRoots.map((root) => `    ${compactHomePath(root)}`)
-      : ["    none configured"]),
-  ];
-  const ignoredRepositories = machine.repositoryDecisions.filter(
+const scanScope = (machine: MachineInventoryResult["machine"]): Block => {
+  const ignored = machine.repositoryDecisions.filter(
     (repository) => repository.status === "ignored",
   );
-  if (ignoredRepositories.length)
-    lines.push(
-      "  Ignored repositories:",
-      ...ignoredRepositories.map((repository) => `    ${compactHomePath(repository.path)}`),
-    );
-  if (machine.scan.missingRepositories?.length)
-    lines.push(
-      "  Missing watched repositories:",
-      ...machine.scan.missingRepositories.map((path) => `    ${compactHomePath(path)}`),
-    );
-  return lines.join("\n");
+  return Block.Group({
+    title: "Scan scope",
+    children: [
+      Block.Fields({
+        rows: [
+          { label: "Status", value: [machine.scan.complete ? "complete" : "incomplete"] },
+          { label: "Directories examined", value: [String(machine.scan.directoriesExamined)] },
+          { label: "Repository depth", value: [String(machine.scan.repositorySearchDepth)] },
+          {
+            label: "Repository roots",
+            value: machine.repositoryRoots.length
+              ? [machine.repositoryRoots.join("\n")]
+              : [{ dim: "none configured" }],
+          },
+          ...(ignored.length
+            ? [
+                {
+                  label: "Ignored repositories",
+                  value: [ignored.map((repository) => repository.path).join("\n")],
+                },
+              ]
+            : []),
+          ...(machine.scan.missingRepositories?.length
+            ? [
+                {
+                  label: "Missing watched repositories",
+                  value: [machine.scan.missingRepositories.join("\n")],
+                },
+              ]
+            : []),
+        ],
+      }),
+    ],
+  });
 };
 
-const inventoryFindings = (state: LibraryInventory): string[] => {
-  const lines: string[] = [];
-  if (state.ownershipIssues?.length) {
-    lines.push(`Ownership issues | ${state.ownershipIssues.length}`);
-    for (const issue of state.ownershipIssues)
-      lines.push(
-        `  ${conditionHeadline(issue.code, "Local ownership issue")}`,
-        `    Path: ${compactHomePath(issue.path)}`,
-      );
-    lines.push("  Run skit doctor for details.");
-  }
-  if (state.scanIssues?.length) {
-    if (lines.length) lines.push("");
-    lines.push(`Scan issues | ${state.scanIssues.length}`);
-    for (const issue of state.scanIssues) {
-      if (issue.code === "DANGLING_SYMLINK") {
-        lines.push(
-          "",
-          "  Dangling link",
-          `    Harness: ${harnessLabel(issue.harness)}`,
-          `    Link: ${compactHomePath(issue.path)}`,
-          `    Missing target: ${compactHomePath(issue.target)}`,
-        );
-        continue;
-      }
-      lines.push(
-        "",
-        `  ${issue.code === "MISSING_ROOT" ? "Missing root" : "Unreadable root"}`,
-        `    Harness: ${harnessLabel(issue.harness)}`,
-        `    Path: ${compactHomePath(issue.path)}`,
-      );
-    }
-  }
-  return lines;
-};
+const inventoryFindings = (state: LibraryInventory): Block[] => [
+  ...(state.ownershipIssues?.length
+    ? [
+        Block.Group({
+          title: `Ownership issues (${state.ownershipIssues.length})`,
+          children: [
+            Block.List({
+              items: state.ownershipIssues.map((issue) => ({
+                text: [conditionHeadline(issue.code, "Local ownership issue")],
+                detail: [{ dim: issue.path }],
+              })),
+            }),
+            Block.Note({ text: ["Run ", { code: "skit doctor" }, " for details."] }),
+          ],
+        }),
+      ]
+    : []),
+  ...(state.scanIssues?.length
+    ? [
+        Block.Group({
+          title: `Scan issues (${state.scanIssues.length})`,
+          children: state.scanIssues.map((issue) =>
+            issue.code === "DANGLING_SYMLINK"
+              ? Block.Group({
+                  title: "Dangling link",
+                  children: [
+                    Block.Fields({
+                      rows: [
+                        { label: "Harness", value: [harnessLabel(issue.harness)] },
+                        { label: "Link", value: [issue.path] },
+                        { label: "Missing target", value: [issue.target] },
+                      ],
+                    }),
+                  ],
+                })
+              : Block.Group({
+                  title: issue.code === "MISSING_ROOT" ? "Missing root" : "Unreadable root",
+                  children: [
+                    Block.Fields({
+                      rows: [
+                        { label: "Harness", value: [harnessLabel(issue.harness)] },
+                        { label: "Path", value: [issue.path] },
+                      ],
+                    }),
+                  ],
+                }),
+          ),
+        }),
+      ]
+    : []),
+];
 
-export function renderInventory(
-  state: LibraryInventory,
-  machine?: MachineInventoryResult["machine"],
-  color = createColors(false),
-): string {
-  // One group per skills directory, headed by every Harness known to read it.
-  const groups = new Map<string, { harnesses: Set<HarnessName>; rows: string[] }>();
-  const add = (harnesses: readonly HarnessName[], path: string, row: string) => {
-    const group = groups.get(dirname(path)) ?? { harnesses: new Set<HarnessName>(), rows: [] };
-    for (const harness of harnesses) group.harnesses.add(harness);
-    group.rows.push(row);
-    groups.set(dirname(path), group);
-  };
-  const managed = new Map<
-    string,
-    { name: string; statuses: Set<string>; harnesses: Set<HarnessName> }
-  >();
-  for (const installedSkill of state.installed_skills) {
-    const path = installedSkill.path;
-    const skill = state.skills.find((candidate) => candidate.skill_id === installedSkill.skill_id);
-    if (skill === undefined) continue;
-    const row = managed.get(path) ?? {
-      name: skill.name,
-      statuses: new Set<string>(),
-      harnesses: new Set<HarnessName>(),
-    };
-    for (const harness of installDestinationHarnesses[installedSkill.destination])
-      row.harnesses.add(harness);
-    row.statuses.add(installedSkill.status);
-    managed.set(path, row);
-  }
-  for (const [path, row] of managed)
-    add(
-      [...row.harnesses],
-      path,
-      `  ${row.name} | managed | ${[...row.statuses].sort().map(installedSkillStatusLabel).join(", ")}\n    ${path}`,
-    );
-  for (const item of state.unmanaged) {
-    const paths = item.paths ?? [item.path];
-    add(
-      item.harnesses ?? [item.harness],
-      item.path,
-      `  ${basename(item.path)} | unmanaged\n${paths.map((path) => `    ${path}`).join("\n")}${paths.length > 1 ? "\n    Shared physical copy" : ""}`,
-    );
-  }
-  const lines: string[] = [];
-  for (const [root, group] of groups)
-    lines.push(
-      `${[...group.harnesses].sort().map(harnessLabel).join(", ") || "Former skills directory"} | ${root}`,
-      ...group.rows,
-      "",
-    );
-  if (!groups.size) lines.push("No skill copies observed.", "");
-  const findings = inventoryFindings(state);
-  if (findings.length) lines.push("", ...findings);
-  const library = lines.join("\n").trimEnd();
-  if (!machine) return library;
-  const summary = `Installed skills |${managed.size} managed | ${state.unmanaged.length} unmanaged`;
+export function renderInventory(state: MachineInventoryResult): Block[] {
+  // Installed copies SKIT manages, counted once per path.
+  const managed = new Set(
+    state.installed_skills
+      .filter((installed) => state.skills.some((skill) => skill.skill_id === installed.skill_id))
+      .map((installed) => installed.path),
+  );
   return [
-    renderMachineSkills(machine, color),
-    summary,
-    ...(findings.length ? [findings.join("\n")] : []),
-    renderScanScope(machine),
-  ].join("\n\n");
+    ...renderMachineSkills(state.machine),
+    Block.Group({
+      title: "Installed skills",
+      children: [
+        Block.Fields({
+          rows: [
+            { label: "Managed", value: [String(managed.size)] },
+            { label: "Unmanaged", value: [String(state.unmanaged.length)] },
+          ],
+        }),
+      ],
+    }),
+    ...inventoryFindings(state),
+    scanScope(state.machine),
+  ];
 }

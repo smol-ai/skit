@@ -17,6 +17,8 @@ it.effect("verifies real retained bytes and rejects a changed archive", () =>
     yield* fs.makeDirectory(join(root, "empty"));
     yield* fs.makeDirectory(join(root, ".git"));
     yield* fs.writeFileString(join(root, ".git", "config"), "excluded");
+    for (const name of ["z.md", "A.md", "_note.md", "é.md"])
+      yield* fs.writeFileString(join(root, name), name);
     yield* fs.writeFile(join(root, "skills", "review", "SKILL.md"), Uint8Array.from([0, 1, 255]), {
       mode: 0o755,
     });
@@ -29,8 +31,15 @@ it.effect("verifies real retained bytes and rejects a changed archive", () =>
     );
     const verified = yield* verifySnapshotArchive(archive);
     assert.deepStrictEqual(
-      verified.files.get("skills/review/SKILL.md"),
-      Uint8Array.from([0, 1, 255]),
+      verified.entries.find(
+        (entry) => entry.kind === "file" && entry.path === "skills/review/SKILL.md",
+      ),
+      {
+        kind: "file",
+        path: "skills/review/SKILL.md",
+        mode: 0o755,
+        bytes: Uint8Array.from([0, 1, 255]),
+      },
     );
     const restored = yield* writeVerifiedSnapshot(verified);
     assert.strictEqual(yield* originalTreeHash(restored), archive.digest);
@@ -57,5 +66,21 @@ it.effect("verifies real retained bytes and rejects a changed archive", () =>
     };
     const traversal = yield* verifySnapshotArchive(unsafe).pipe(Effect.result);
     assert.strictEqual(Result.isFailure(traversal), true);
+    const changedBeforeWrite = {
+      ...verified,
+      entries: verified.entries.map((entry) =>
+        entry.kind === "file" && entry.path === "skills/review/SKILL.md"
+          ? { ...entry, bytes: Uint8Array.from([7, 8, 9]) }
+          : entry,
+      ),
+    };
+    const refused = yield* Effect.flip(writeVerifiedSnapshot(changedBeforeWrite));
+    if (refused._tag !== "Library.SnapshotArchiveInvalid")
+      return yield* Effect.die("Expected the written archive hash to be checked");
+    assert.include(refused.reason, {
+      _tag: "HashMismatch",
+      kind: "materialized",
+      expected: archive.digest,
+    });
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

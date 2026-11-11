@@ -1,7 +1,7 @@
-import { Data, Effect, Schema, Stream } from "effect";
+import { Effect, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { resolve } from "node:path";
-import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
+import { HarnessDiscoveryFailed } from "../discovery-failures.js";
 
 const NativeSkill = Schema.Struct({
   name: Schema.String,
@@ -32,15 +32,6 @@ const Envelope = Schema.Struct({
   result: Schema.optionalKey(Schema.Unknown),
   error: Schema.optionalKey(Schema.Struct({ message: Schema.String })),
 });
-
-class CodexDoctorFailure
-  extends Data.TaggedError("CodexDoctorFailure")<{ message: string }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Check that Codex runs (`codex app-server`), then retry.";
-}
 
 /** Native discovery only: no thread, model turn, or skill invocation. The scope kills the server. */
 export const readCodexSkills = Effect.fn("Doctor.readCodexSkills")(function* (
@@ -84,7 +75,16 @@ export const readCodexSkills = Effect.fn("Doctor.readCodexSkills")(function* (
           size += chunk.length;
           return size > 4_000_000
             ? Effect.fail(
-                new CodexDoctorFailure({ message: "Codex skill discovery exceeded 4 MB" }),
+                new HarnessDiscoveryFailed({
+                  harness: "codex",
+                  cwd,
+                  reason: {
+                    _tag: "OutputLimitExceeded",
+                    phase: "inventory",
+                    limitBytes: 4_000_000,
+                    actualBytes: size,
+                  },
+                }),
               )
             : Effect.succeed(chunk);
         }),
@@ -92,35 +92,64 @@ export const readCodexSkills = Effect.fn("Doctor.readCodexSkills")(function* (
         Stream.splitLines,
         Stream.filter((line) => line.trim().length > 0),
         Stream.mapEffect((line) => Schema.decodeEffect(Schema.fromJsonString(Envelope))(line)),
-        Stream.mapEffect((message) =>
-          message.error && !(includeConfig && message.id === 3)
-            ? Effect.fail(new CodexDoctorFailure({ message: message.error.message }))
-            : Effect.succeed(message),
-        ),
+        Stream.mapEffect((message) => {
+          const request = requests.find((request) => "id" in request && request.id === message.id);
+          return message.error && !(includeConfig && message.id === 3)
+            ? Effect.fail(
+                new HarnessDiscoveryFailed({
+                  harness: "codex",
+                  cwd,
+                  reason: {
+                    _tag: "RemoteError",
+                    ...(request === undefined ? {} : { method: request.method }),
+                    ...(message.id === undefined ? {} : { requestId: message.id }),
+                    diagnostic: message.error.message,
+                  },
+                }),
+              )
+            : Effect.succeed(message);
+        }),
         Stream.filter((message) => message.id === 2 || (includeConfig && message.id === 3)),
         Stream.take(includeConfig ? 2 : 1),
         Stream.runCollect,
       );
       const skillsResponse = response.find((message) => message.id === 2);
       if (!skillsResponse)
-        return yield* new CodexDoctorFailure({
-          message: "Codex exited without a skills/list response",
+        return yield* new HarnessDiscoveryFailed({
+          harness: "codex",
+          cwd,
+          reason: { _tag: "ResponseMissing", method: "skills/list" },
         });
       const decoded = yield* Schema.decodeUnknownEffect(SkillsResponse)(skillsResponse.result);
       const entry = decoded.data.find((item) => resolve(item.cwd) === resolve(cwd));
       if (!entry)
-        return yield* new CodexDoctorFailure({
-          message: "Codex omitted the requested working directory",
+        return yield* new HarnessDiscoveryFailed({
+          harness: "codex",
+          cwd,
+          reason: { _tag: "DirectoryOmitted", returned: decoded.data.map((item) => item.cwd) },
         });
       const config = response.find((message) => message.id === 3)?.result;
-      const configError = response.find((message) => message.id === 3)?.error?.message;
+      const configDiagnostic = response.find((message) => message.id === 3)?.error?.message;
       return {
         ...entry,
         ...(includeConfig
           ? {
               config,
               ...(config === undefined
-                ? { configError: configError ?? "Codex exited without a config/read response" }
+                ? {
+                    configFailure: new HarnessDiscoveryFailed({
+                      harness: "codex",
+                      cwd,
+                      reason:
+                        configDiagnostic === undefined
+                          ? { _tag: "ResponseMissing", method: "config/read" }
+                          : {
+                              _tag: "RemoteError",
+                              method: "config/read",
+                              diagnostic: configDiagnostic,
+                            },
+                    }),
+                  }
                 : {}),
             }
           : {}),
@@ -131,7 +160,11 @@ export const readCodexSkills = Effect.fn("Doctor.readCodexSkills")(function* (
       duration: 10_000,
       orElse: () =>
         Effect.fail(
-          new CodexDoctorFailure({ message: "Codex skill discovery timed out after 10 seconds" }),
+          new HarnessDiscoveryFailed({
+            harness: "codex",
+            cwd,
+            reason: { _tag: "TimedOut", timeoutMs: 10_000 },
+          }),
         ),
     }),
   );

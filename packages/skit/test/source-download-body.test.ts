@@ -153,7 +153,7 @@ describe("the source download body", () => {
 
       const exit = yield* Effect.exit(resolve(URL_ARCHIVE, client));
       assert.strictEqual(failureTag(exit), "SourcePolicyViolation");
-      assert.strictEqual(sourcePolicyReasonTag(exit), "Transport");
+      assert.strictEqual(sourcePolicyReasonTag(exit), "TransportFailure");
     }),
   );
 });

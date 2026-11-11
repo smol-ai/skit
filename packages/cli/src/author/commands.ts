@@ -1,3 +1,4 @@
+import { defineCommand } from "../commands/definition.js";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
@@ -29,7 +30,7 @@ const dryRun = Flag.Boolean("dry-run").pipe(
   Flag.withDefault(false),
 );
 
-const init = Command.make("init", { directory, json: jsonFlag }, ({ directory }) =>
+const init = defineCommand("init", { directory, json: jsonFlag }, ({ directory }) =>
   Effect.gen(function* () {
     const renderer = yield* Renderer;
     const { initialized } = yield* authorInitCommand(directory);
@@ -47,29 +48,24 @@ const init = Command.make("init", { directory, json: jsonFlag }, ({ directory })
       subprocesses: workspaceSubprocesses,
     },
     outputSchemas: [outputContracts.init],
-    exitCodes: [0, 11, 12, 64, 65],
     interactive: false,
   }),
   Command.provide(authorLayer),
 );
 
-const validate = Command.make("validate", { directory, json: jsonFlag }, ({ directory }) =>
+const validate = defineCommand("validate", { directory, json: jsonFlag }, ({ directory }) =>
   Effect.gen(function* () {
     const renderer = yield* Renderer;
     const { value, status } = yield* validateCommand(directory, "author");
     yield* renderer.result(
-      result(
-        "validate",
-        {
-          valid: status === "valid" || status === "valid-with-warnings",
-          status,
-          identity: value.identity,
-          diagnostics: value.diagnostics,
-          audits: value.audits,
-          assessments: value.assessments,
-        },
-        status === "invalid" ? 65 : status === "policy-blocked" ? 77 : 0,
-      ),
+      result("validate", {
+        valid: status === "valid" || status === "valid-with-warnings",
+        status,
+        identity: value.identity,
+        diagnostics: value.diagnostics,
+        audits: value.audits,
+        assessments: value.assessments,
+      }),
     );
   }),
 ).pipe(
@@ -82,12 +78,11 @@ const validate = Command.make("validate", { directory, json: jsonFlag }, ({ dire
       subprocesses: workspaceSubprocesses,
     },
     outputSchemas: [outputContracts.validate],
-    exitCodes: [0, 11, 12, 64, 65, 77],
     interactive: false,
   }),
 );
 
-const sync = Command.make(
+const sync = defineCommand(
   "sync",
   {
     directory,
@@ -112,7 +107,7 @@ const sync = Command.make(
       const renderer = yield* Renderer;
       const home = (yield* SkitConfiguration).skitHome;
       const value = yield* authorSyncCommand({ ...input, root: input.directory, home });
-      yield* renderer.result(result("sync", value, value.status === "blocked" ? 12 : 0));
+      yield* renderer.result(result("sync", value));
     }),
 ).pipe(
   Command.withDescription(
@@ -135,13 +130,12 @@ const sync = Command.make(
       subprocesses: [...credentialStoreReadSubprocesses, ...workspaceSubprocesses],
     },
     outputSchemas: [outputContracts.sync],
-    exitCodes: [0, 11, 12, 13, 64, 65],
     interactive: false,
   }),
   Command.provide(authorLayer),
 );
 
-const watch = Command.make("watch", { directory, json: jsonFlag }, ({ directory }) =>
+const watch = defineCommand("watch", { directory, json: jsonFlag }, ({ directory }) =>
   Effect.gen(function* () {
     const home = (yield* SkitConfiguration).skitHome;
     const renderer = yield* Renderer;
@@ -167,13 +161,12 @@ const watch = Command.make("watch", { directory, json: jsonFlag }, ({ directory 
       subprocesses: [...credentialStoreReadSubprocesses, ...workspaceSubprocesses],
     },
     outputSchemas: [outputContracts.authorWatch],
-    exitCodes: [0, 11, 12, 13, 64, 65],
     interactive: false,
   }),
   Command.provide(authorLayer),
 );
 
-const publish = Command.make(
+const publish = defineCommand(
   "publish",
   {
     directory,
@@ -208,13 +201,12 @@ const publish = Command.make(
       subprocesses: [...credentialStoreReadSubprocesses, ...workspaceSubprocesses],
     },
     outputSchemas: [outputContracts.publish],
-    exitCodes: [0, 11, 12, 13, 64, 65],
     interactive: false,
   }),
   Command.provide(authorWorkspaceLayer),
 );
 
-const list = Command.make(
+const list = defineCommand(
   "list",
   {
     json: jsonFlag,
@@ -237,12 +229,11 @@ const list = Command.make(
       subprocesses: credentialStoreReadSubprocesses,
     },
     outputSchemas: [outputContracts.authorList],
-    exitCodes: [0, 11, 12, 13, 64, 65],
     interactive: false,
   }),
 );
 
-const remove = Command.make(
+const remove = defineCommand(
   "delete",
   {
     destination: Argument.String("destination").pipe(
@@ -273,12 +264,11 @@ const remove = Command.make(
       subprocesses: credentialStoreReadSubprocesses,
     },
     outputSchemas: [outputContracts.authorDelete],
-    exitCodes: [0, 11, 12, 13, 64, 65],
     interactive: false,
   }),
 );
 
-const invocation = Command.make("invocation", { directory, json: jsonFlag, dryRun }, (input) =>
+const invocation = defineCommand("invocation", { directory, json: jsonFlag, dryRun }, (input) =>
   Effect.gen(function* () {
     const renderer = yield* Renderer;
     const value = yield* authorInvocationCommand(input.directory, input.dryRun);
@@ -299,7 +289,6 @@ const invocation = Command.make("invocation", { directory, json: jsonFlag, dryRu
     stability: "experimental",
     effects: { capabilities: ["filesystem.read", "filesystem.write"] },
     outputSchemas: [outputContracts.authorInvocation],
-    exitCodes: [0, 11, 12, 64, 65],
     interactive: false,
   }),
   Command.provide(authorWorkspaceLayer),

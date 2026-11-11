@@ -27,12 +27,23 @@ export const metadataRevision = (revision: string | null): string =>
         ? revision.slice(0, 12)
         : revision;
 
-export const skillMetadataLines = (metadata: SkillMetadata): readonly string[] => [
-  ...(metadata.source === null ? [] : [`Source: ${metadataSource(metadata.source)}`]),
-  ...(metadata.revision === null ? [] : [`Revision: ${metadataRevision(metadata.revision)}`]),
-  ...(metadata.saved_at === undefined ? [] : [`Saved: ${metadataDate(metadata.saved_at)}`]),
+export const skillMetadataFields = (metadata: SkillMetadata) => [
+  ...(metadata.source === null
+    ? []
+    : [{ label: "Source", value: [metadataSource(metadata.source)] }]),
+  ...(metadata.revision === null
+    ? []
+    : [{ label: "Revision", value: [metadataRevision(metadata.revision)] }]),
+  ...(metadata.saved_at === undefined
+    ? []
+    : [{ label: "Saved", value: [metadataDate(metadata.saved_at)] }]),
   ...(metadata.source_updated_at === null
     ? []
-    : [`Source updated: ${metadataDate(metadata.source_updated_at)}`]),
-  ...(metadata.imported_at === null ? [] : [`Imported: ${metadataDate(metadata.imported_at)}`]),
+    : [{ label: "Source updated", value: [metadataDate(metadata.source_updated_at)] }]),
+  ...(metadata.imported_at === null
+    ? []
+    : [{ label: "Imported", value: [metadataDate(metadata.imported_at)] }]),
 ];
+
+export const skillMetadataLines = (metadata: SkillMetadata): readonly string[] =>
+  skillMetadataFields(metadata).map(({ label, value }) => `${label}: ${value.join("")}`);

@@ -1,12 +1,9 @@
+import { harnessProfile } from "../harnesses/catalog.js";
 import { basename, dirname, join } from "node:path";
 import { auditSkill } from "./skill-audit.js";
 import { evaluateSkillFrontmatter } from "../harnesses/frontmatter.js";
 import { harnessDrivers } from "../harnesses/drivers.js";
-import {
-  HarnessName,
-  type SkillsDirectory,
-  type SkillsDirectoryRole,
-} from "../harnesses/contracts.js";
+import { HarnessName, type SkillsDirectoryRole } from "../harnesses/contracts.js";
 import { physicalPath } from "../platform/path-identity.js";
 import { resolveSkillsDirectory } from "../harnesses/catalog.js";
 
@@ -16,26 +13,6 @@ import { canonical, read, walk } from "./io.js";
 import { fileProvenance } from "./provenance.js";
 import { makePnpmSkillCheck } from "../installed-skills/pnpm-skills.js";
 import type { AuditFinding, AuditEntry } from "./schema.js";
-
-function frontmatterProblem(
-  issue: ReturnType<typeof evaluateSkillFrontmatter>["issues"][number],
-): string {
-  const field = issue.field ? ` ${issue.field}` : " a field";
-  switch (issue.code) {
-    case "frontmatter-invalid":
-      return "Skill frontmatter is not valid YAML metadata";
-    case "frontmatter-missing":
-      return "Skill frontmatter is missing";
-    case "field-unknown":
-      return `Skill frontmatter${field} is not recognized by this Harness`;
-    case "field-missing":
-      return `Skill frontmatter is missing${field} required by this Harness`;
-    case "field-type":
-      return `Skill frontmatter${field} has the wrong value type`;
-    case "field-constraint":
-      return `Skill frontmatter${field} does not meet this Harness's requirements`;
-  }
-}
 
 export interface SkillCandidate {
   path: string;
@@ -56,7 +33,7 @@ const inspectSkill = Effect.fn("Audit.inspectSkill")(function* (input: InspectSk
   const body = (yield* read(input.path)) ?? "";
   const directoryName = basename(dirname(input.path));
   const compatibility = input.harnesses.map((harness) =>
-    evaluateSkillFrontmatter(body, harness, { directoryName }),
+    evaluateSkillFrontmatter(body, harnessProfile(harness).frontmatter.default, { directoryName }),
   );
   return {
     observation: {
@@ -77,7 +54,7 @@ const inspectSkill = Effect.fn("Audit.inspectSkill")(function* (input: InspectSk
         severity: issue.severity === "error" ? ("error" as const) : ("warning" as const),
         code: `skill-${issue.code}`,
         subject: input.path,
-        problem: frontmatterProblem(issue),
+        reason: { _tag: "FrontmatterCompatibility" as const, harness: result.harness, issue },
         locations: [input.path],
         details: {
           harness: result.harness,
@@ -108,8 +85,8 @@ export const auditSkills = Effect.fn("Audit.skills")(function* (
   const roots = new Map<string, AuditedRoot>();
   const context = { home, configHome: join(home, ".config"), repository: cwd };
   for (const profile of profiles)
-    for (const root of profile.roots.filter((candidate) => candidate.readable)) {
-      const path = resolveSkillsDirectory(root as SkillsDirectory, context);
+    for (const root of Object.values(profile.roots).filter((candidate) => candidate.readable)) {
+      const path = resolveSkillsDirectory({ ...root, ...context });
       const scope = root.scope === "global" ? "user" : "project";
       const key = `${scope}\0${(yield* physicalPath(path)).key}`;
       const entry = roots.get(key) ?? { harnesses: new Set(), roles: new Set(), scope, path };
@@ -149,7 +126,7 @@ export const auditSkills = Effect.fn("Audit.skills")(function* (
 
   const observations: AuditEntry[] = [];
   const findings: AuditFinding[] = [];
-  const observePnpm = yield* makePnpmSkillCheck();
+  const checkPnpm = yield* makePnpmSkillCheck();
   for (const skill of candidates) {
     const baseName = basename(dirname(skill.path));
     const occurrences = lockTargets.get(baseName)?.size ?? 1;
@@ -158,10 +135,10 @@ export const auditSkills = Effect.fn("Audit.skills")(function* (
       lockEligiblePaths.has(skill.canonicalPath) ? lock : {},
       baseName,
       occurrences,
-      observePnpm,
+      checkPnpm,
     );
     const provenance =
-      file.source === "SKIT projection" || file.source === "Skills CLI / skills.sh"
+      file.origin._tag === "SkitManaged" || file.origin._tag === "SkillsSh"
         ? file
         : (skill.provenance ?? file);
     const inspected = yield* inspectSkill({
@@ -183,7 +160,7 @@ export const auditSkills = Effect.fn("Audit.skills")(function* (
         severity: "warning",
         code: "ambiguous-lockfile-attribution",
         subject: name,
-        problem: `Skill “${name}” has ambiguous lockfile attribution`,
+        reason: { _tag: "AmbiguousLockfileAttribution", skill: name },
         locations: [...targets],
         details: { skill: name, occurrences: targets.size },
       });

@@ -1,433 +1,563 @@
-// Named failures for talking to a Registry: credentials, Registry selection, author
-// destinations, and SKIT sync.
-//
-// These were seventeen SkitError sites across four codes. The conditions are genuinely distinct —
-// an expired race against the server is not a malformed destination — and callers that want to
-// retry, re-authenticate or re-resolve need to tell them apart.
+import {
+  SignInFailed,
+  SignOutRejected,
+  SignInRejected,
+  TooManyAuthAttempts,
+  CredentialsUnusable,
+  authFailure,
+} from "./auth-failures.js";
+export {
+  SignInFailed,
+  SignOutRejected,
+  SignInRejected,
+  TooManyAuthAttempts,
+  CredentialsUnusable,
+} from "./auth-failures.js";
+import { RegistryResponseFailure, registryResponseDetails } from "./response-failure.js";
+// Registry failures carry the facts; the exhaustive formatter below owns their presentation.
+// Error.message delegates to that formatter for native-error consumers such as watcher storage.
+// The getters contain no separate wording or command policy.
+import { FailureTypeId, type SkitFailure, errorMessage } from "@smolai/skit-core/shared";
+import { Match, Schema } from "effect";
+import { Block } from "../terminal/blocks.js";
+import { describeFailure } from "../terminal/failure.js";
 
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
-import { Data } from "effect";
-
-/** The Registry could not be reached at all; nothing it would have said is known. */
 export class RegistryUnreachable
-  extends Data.TaggedError("RegistryUnreachable")<{
-    origin: string;
-    cause: Error;
-  }>
+  extends Schema.TaggedError<RegistryUnreachable, { readonly brand: unique symbol }>()(
+    "RegistryUnreachable",
+    {
+      origin: Schema.String,
+      cause: Schema.ErrorInstance(),
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Check the network connection and the Registry origin, then retry.";
-  get message(): string {
-    return `Unable to reach Registry ${this.origin}: ${this.cause.message}`;
+  override get message(): string {
+    return registryFailure(this).message;
   }
 }
 
-// -- Credentials --------------------------------------------------------------------------------
-
 export class RegistryOriginInvalid
-  extends Data.TaggedError("RegistryOriginInvalid")<{
-    origin: string;
-  }>
+  extends Schema.TaggedError<RegistryOriginInvalid, { readonly brand: unique symbol }>()(
+    "RegistryOriginInvalid",
+    {
+      origin: Schema.String,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Pass the Registry as a full URL, such as https://registry.example.com.";
-  get message(): string {
-    return `Invalid Registry URL: ${this.origin}`;
+  override get message(): string {
+    return registryFailure(this).message;
   }
 }
 
 export class NoStoredCredentials
-  extends Data.TaggedError("NoStoredCredentials")<{}>
+  extends Schema.TaggedError<NoStoredCredentials, { readonly brand: unique symbol }>()(
+    "NoStoredCredentials",
+    {},
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "NOT_FOUND" as const;
-  readonly remediation = "Run `skit auth status` to see which Registries hold a stored credential.";
-  get message(): string {
-    return "No stored SKIT authentication to revoke";
+  override get message(): string {
+    return registryFailure(this).message;
   }
 }
 
 export class RegistrySelectionAmbiguous
-  extends Data.TaggedError("RegistrySelectionAmbiguous")<{
-    origins: readonly string[];
-    command: string;
-  }>
+  extends Schema.TaggedError<RegistrySelectionAmbiguous, { readonly brand: unique symbol }>()(
+    "RegistrySelectionAmbiguous",
+    {
+      origins: Schema.Array(Schema.String),
+      command: Schema.String,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  get remediation(): string {
-    return `Run \`${this.command}\` to choose one Registry.`;
-  }
-  get message(): string {
-    return `Registry selection is ambiguous (${this.origins.join(", ")}); run \`${this.command}\``;
+  override get message(): string {
+    return registryFailure(this).message;
   }
 }
-
-export class TooManyAuthAttempts
-  extends Data.TaggedError("TooManyAuthAttempts")<{}>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly remediation = "Wait one minute, then retry.";
-  get message(): string {
-    return "Too many authentication attempts; wait one minute and retry";
-  }
-}
-
-/**
- * Sign-in got far enough to say something specific, and the sentence is the value.
- *
- * These were bare `throw new Error(...)` before the conversion, so they classify as
- * OPERATION_FAILED exactly as they did.
- */
-export class SignInFailed
-  extends Data.TaggedError("SignInFailed")<{ message: string }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation =
-    "Check the Registry origin and requested scopes, then run `skit auth login` again.";
-}
-
-export class SignOutRejected
-  extends Data.TaggedError("SignOutRejected")<{ message: string }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation =
-    "Run `skit auth logout` again; if it keeps failing, revoke the credential at the Registry.";
-}
-
-// -- Registry selection ---------------------------------------------------------------------------
 
 export class RegistryAliasInvalid
-  extends Data.TaggedError("RegistryAliasInvalid")<{
-    alias: string;
-  }>
+  extends Schema.TaggedError<RegistryAliasInvalid, { readonly brand: unique symbol }>()(
+    "RegistryAliasInvalid",
+    {
+      alias: Schema.String,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "INVALID_ARGUMENT" as const;
-  readonly remediation =
-    "Use a name of lowercase letters, digits and hyphens that starts with a letter.";
-  get message() {
-    return `Invalid Registry name: ${this.alias}`;
+  override get message(): string {
+    return registryFailure(this).message;
   }
 }
 
 export class RegistryAliasConflict
-  extends Data.TaggedError("RegistryAliasConflict")<{
-    alias: string;
-  }>
+  extends Schema.TaggedError<RegistryAliasConflict, { readonly brand: unique symbol }>()(
+    "RegistryAliasConflict",
+    {
+      alias: Schema.String,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  get remediation(): string {
-    return `Choose another name, or run \`skit registry remove ${this.alias}\` first.`;
-  }
-  get message() {
-    return `Registry name already exists: ${this.alias}`;
+  override get message(): string {
+    return registryFailure(this).message;
   }
 }
 
 export class RegistryAliasNotFound
-  extends Data.TaggedError("RegistryAliasNotFound")<{
-    alias: string;
-  }>
+  extends Schema.TaggedError<RegistryAliasNotFound, { readonly brand: unique symbol }>()(
+    "RegistryAliasNotFound",
+    {
+      alias: Schema.String,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "NOT_FOUND" as const;
-  readonly remediation = "Run `skit registry list` to see the configured Registry names.";
-  get message() {
-    return `Unknown Registry name: ${this.alias}`;
+  override get message(): string {
+    return registryFailure(this).message;
   }
 }
 
 export class RegistrySelectionConflict
-  extends Data.TaggedError("RegistrySelectionConflict")<{
-    locator: string;
-  }>
+  extends Schema.TaggedError<RegistrySelectionConflict, { readonly brand: unique symbol }>()(
+    "RegistrySelectionConflict",
+    {
+      locator: Schema.String,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "INVALID_ARGUMENT" as const;
-  readonly remediation = "Pass either the concrete Registry locator or --registry, not both.";
-  get message(): string {
-    return `A concrete Registry locator cannot be combined with --registry: ${this.locator}`;
+  override get message(): string {
+    return registryFailure(this).message;
   }
 }
 
 export class RegistrySelectionRequiresRegistrySource
-  extends Data.TaggedError("RegistrySelectionRequiresRegistrySource")<{ source: string }>
+  extends Schema.TaggedError<
+    RegistrySelectionRequiresRegistrySource,
+    { readonly brand: unique symbol }
+  >()("RegistrySelectionRequiresRegistrySource", {
+    source: Schema.String,
+  })
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "INVALID_ARGUMENT" as const;
-  readonly remediation = "Use --registry only with a Registry source such as namespace/skit.";
-  get message(): string {
-    return `--registry requires a Registry source: ${this.source}`;
+  override get message(): string {
+    return registryFailure(this).message;
   }
 }
 
-// -- Author destinations ------------------------------------------------------------------------
-
-// -- SKIT synchronization ----------------------------------------------------------------------
-
 export class RemoteSkitUnavailable
-  extends Data.TaggedError("RemoteSkitUnavailable")<{
-    identity: string;
-  }>
+  extends Schema.TaggedError<RemoteSkitUnavailable, { readonly brand: unique symbol }>()(
+    "RemoteSkitUnavailable",
+    {
+      identity: Schema.String,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "NOT_FOUND" as const;
-  readonly remediation =
-    "Check that the SKIT still exists and that the active credential can read it, then retry.";
-  get message(): string {
-    return `Remote SKIT ${this.identity} is unavailable`;
+  override get message(): string {
+    return registryFailure(this).message;
   }
 }
 
-/** Someone edited the working tree while a sync was in flight. */
-
-/** Incoming bytes cannot replace a local path that was excluded from the captured inventory. */
-
-/** A canonical transport key cannot bless a distinct native filesystem entry. */
-/** Two local names normalize to the path sync would write, so receiving it would pick one. */
-
-/** A local path is spelled other than NFC, and this filesystem cannot reach it by its NFC name. */
-
-/** The Library moved underneath a synchronization that had already planned against it. */
 export class LibraryChangedOnServer
-  extends Data.TaggedError("LibraryChangedOnServer")<{}>
+  extends Schema.TaggedError<LibraryChangedOnServer, { readonly brand: unique symbol }>()(
+    "LibraryChangedOnServer",
+    {},
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  readonly remediation = "Run `skit sync` again.";
-  get message(): string {
-    return "Library changed on the server; synchronize again";
+  override get message(): string {
+    return registryFailure(this).message;
   }
 }
 
-// -- Credentials and scopes ----------------------------------------------------------------------
-//
-// Fourteen sites across six modules said one of three things: sign in, sign in with more scopes,
-// or you are not the right Principal. They differed only in which origin and scopes to name, so
-// those are fields.
-
 export class AuthenticationRequired
-  extends Data.TaggedError("AuthenticationRequired")<{
-    origin?: string;
-    scopes?: string;
-  }>
+  extends Schema.TaggedError<AuthenticationRequired, { readonly brand: unique symbol }>()(
+    "AuthenticationRequired",
+    {
+      origin: Schema.optionalKey(Schema.String),
+      scopes: Schema.optionalKey(Schema.String),
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "AUTHENTICATION_REQUIRED" as const;
-  get remediation(): string {
-    const scopes = this.scopes ? ` --scopes ${this.scopes}` : "";
-    return `Run \`skit auth login${this.origin ? ` ${this.origin}` : ""}${scopes}\`, then retry.`;
-  }
-  get message(): string {
-    const scopes = this.scopes ? ` --scopes ${this.scopes}` : "";
-    return `Authentication is required; run \`skit auth login${this.origin ? ` ${this.origin}` : ""}${scopes}\``;
+  override get message(): string {
+    return registryFailure(this).message;
   }
 }
 
 export class CredentialLacksScope
-  extends Data.TaggedError("CredentialLacksScope")<{
-    scope: string;
-    origin?: string;
-    scopes?: string;
-  }>
+  extends Schema.TaggedError<CredentialLacksScope, { readonly brand: unique symbol }>()(
+    "CredentialLacksScope",
+    {
+      scope: Schema.String,
+      origin: Schema.optionalKey(Schema.String),
+      scopes: Schema.optionalKey(Schema.String),
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "AUTHENTICATION_REQUIRED" as const;
-  get remediation(): string {
-    return `Run \`skit auth login${this.origin ? ` ${this.origin}` : ""} --scopes ${this.scopes ?? this.scope}\`, then retry.`;
-  }
-  get message(): string {
-    return `The active credential lacks ${this.scope}; run \`skit auth login${this.origin ? ` ${this.origin}` : ""} --scopes ${this.scopes ?? this.scope}\``;
+  override get message(): string {
+    return registryFailure(this).message;
   }
 }
 
 export class PrincipalNotAuthorized
-  extends Data.TaggedError("PrincipalNotAuthorized")<{
-    action: string;
-  }>
+  extends Schema.TaggedError<PrincipalNotAuthorized, { readonly brand: unique symbol }>()(
+    "PrincipalNotAuthorized",
+    {
+      action: Schema.String,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "INVALID_ARGUMENT" as const;
-  readonly remediation =
-    "Sign in as a Principal with access, or ask an owner of the Namespace to grant it.";
-  get message(): string {
-    return `The active Principal is not authorized to ${this.action}`;
-  }
-}
-
-export class CredentialsUnusable
-  extends Data.TaggedError("CredentialsUnusable")<{
-    path: string;
-    reason: "unreadable" | "invalid";
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  get remediation(): string {
-    return this.reason === "unreadable"
-      ? `Fix the permissions on ${this.path}, then retry.`
-      : `Move ${this.path} aside, then run \`skit auth login\` again.`;
-  }
-  get message(): string {
-    return this.reason === "unreadable"
-      ? `Cannot read SKIT authentication configuration at ${this.path}; fix its permissions`
-      : `SKIT authentication configuration at ${this.path} is invalid; move it aside and log in again`;
-  }
-}
-
-export class SignInRejected
-  extends Data.TaggedError("SignInRejected")<{ context: string }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "INVALID_ARGUMENT" as const;
-  get remediation(): string {
-    // The Registry does not say why, so as not to reveal which accounts exist or how they sign in.
-    return this.context === "Sign in"
-      ? "Check the email and password, then retry. An account created with GitHub sign-in has no password, so it cannot sign in from the CLI yet."
-      : "Run `skit auth login` again.";
-  }
-  get message(): string {
-    return this.context === "Sign in"
-      ? "Email or password is incorrect"
-      : `${this.context} was unauthorized; run \`skit auth login\` again`;
+  override get message(): string {
+    return registryFailure(this).message;
   }
 }
 
 export class InteractiveLoginUnavailable
-  extends Data.TaggedError("InteractiveLoginUnavailable")<{}>
+  extends Schema.TaggedError<InteractiveLoginUnavailable, { readonly brand: unique symbol }>()(
+    "InteractiveLoginUnavailable",
+    {},
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "INVALID_ARGUMENT" as const;
-  readonly remediation = "Run `skit auth login` in a terminal, or set SKIT_TOKEN.";
-  get message(): string {
-    return "Login needs a person to sign in; set SKIT_TOKEN to use an existing credential";
+  override get message(): string {
+    return registryFailure(this).message;
   }
 }
 
-/** The Registry predates browser approval, so only email and password sign-in remain. */
 export class DeviceLoginUnavailable
-  extends Data.TaggedError("DeviceLoginUnavailable")<{ origin: string }>
+  extends Schema.TaggedError<DeviceLoginUnavailable, { readonly brand: unique symbol }>()(
+    "DeviceLoginUnavailable",
+    {
+      origin: Schema.String,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "INVALID_ARGUMENT" as const;
-  readonly remediation = "Run `skit auth login` in a terminal to sign in with email and password.";
-  get message(): string {
-    return `${this.origin} does not offer browser approval for CLI login`;
+  override get message(): string {
+    return registryFailure(this).message;
   }
 }
 
 export class DeviceLoginEnded
-  extends Data.TaggedError("DeviceLoginEnded")<{ reason: "denied" | "expired" | "invalid" }>
+  extends Schema.TaggedError<DeviceLoginEnded, { readonly brand: unique symbol }>()(
+    "DeviceLoginEnded",
+    {
+      reason: Schema.Literals(["denied", "expired", "invalid"]),
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  readonly remediation = "Run `skit auth login` again for a new code.";
-  get message(): string {
-    return this.reason === "denied"
-      ? "The login was denied in the browser"
-      : this.reason === "invalid"
-        ? "The login code is invalid or was already used"
-        : "The login code expired before it was approved";
+  override get message(): string {
+    return registryFailure(this).message;
   }
 }
 
 export class ScopesInvalid
-  extends Data.TaggedError("ScopesInvalid")<{
-    allowed: readonly string[];
-  }>
+  extends Schema.TaggedError<ScopesInvalid, { readonly brand: unique symbol }>()("ScopesInvalid", {
+    allowed: Schema.Array(Schema.String),
+  })
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "INVALID_ARGUMENT" as const;
-  get remediation(): string {
-    return `Pass --scopes with only ${this.allowed.join(", ")}.`;
-  }
-  get message(): string {
-    return `--scopes must contain only: ${this.allowed.join(", ")}`;
+  override get message(): string {
+    return registryFailure(this).message;
   }
 }
-
-// -- Publication ------------------------------------------------------------------------------------
-
-export { PublicationBlocked } from "@smolai/skit-core/author";
 
 export class AuthorSyncRequired
-  extends Data.TaggedError("AuthorSyncRequired")<{ root: string }>
+  extends Schema.TaggedError<AuthorSyncRequired, { readonly brand: unique symbol }>()(
+    "AuthorSyncRequired",
+    {
+      root: Schema.String,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  /** The workspace root as the user typed it, quoted only when the shell would need it. */
-  private get commandPath(): string {
-    return /^[A-Za-z0-9_./-]+$/.test(this.root)
-      ? this.root
-      : `'${this.root.replaceAll("'", `'\\''`)}'`;
-  }
-  get remediation(): string {
-    return `Run \`skit author sync ${this.commandPath} --apply\`, then publish again.`;
-  }
-  get message(): string {
-    return `Local files do not match the current Registry revision; run \`skit author sync ${this.commandPath} --apply\` before publishing`;
+  override get message(): string {
+    return registryFailure(this).message;
   }
 }
 
-/** The Registry refused the write, with whatever it said. */
 export class RegistryRejectedWrite
-  extends Data.TaggedError("RegistryRejectedWrite")<{
-    detail: string;
-  }>
+  extends Schema.TaggedError<RegistryRejectedWrite, { readonly brand: unique symbol }>()(
+    "RegistryRejectedWrite",
+    RegistryResponseFailure.fields,
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  readonly remediation = "Address the Registry's reason, then retry.";
-  get message(): string {
-    return this.detail;
+  override get message(): string {
+    return registryFailure(this).message;
   }
 }
 
 export class DeleteRequiresPrivate
-  extends Data.TaggedError("DeleteRequiresPrivate")<{}>
+  extends Schema.TaggedError<DeleteRequiresPrivate, { readonly brand: unique symbol }>()(
+    "DeleteRequiresPrivate",
+    {},
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  readonly remediation =
-    "Delete only a fully private SKIT; public and unlisted SKITs stay published.";
-  get message(): string {
-    return "Only a fully private SKIT can be deleted; public or unlisted SKITs require a separate lifecycle operation";
+  override get message(): string {
+    return registryFailure(this).message;
   }
 }
 
-// -- SKIT destinations ------------------------------------------------------------------------------
+export const RegistryFailure = Schema.Union([
+  RegistryUnreachable,
+  RegistryOriginInvalid,
+  NoStoredCredentials,
+  RegistrySelectionAmbiguous,
+  TooManyAuthAttempts,
+  SignInFailed,
+  SignOutRejected,
+  RegistryAliasInvalid,
+  RegistryAliasConflict,
+  RegistryAliasNotFound,
+  RegistrySelectionConflict,
+  RegistrySelectionRequiresRegistrySource,
+  RemoteSkitUnavailable,
+  LibraryChangedOnServer,
+  AuthenticationRequired,
+  CredentialLacksScope,
+  PrincipalNotAuthorized,
+  CredentialsUnusable,
+  SignInRejected,
+  InteractiveLoginUnavailable,
+  DeviceLoginUnavailable,
+  DeviceLoginEnded,
+  ScopesInvalid,
+  AuthorSyncRequired,
+  RegistryRejectedWrite,
+  DeleteRequiresPrivate,
+]);
+export type RegistryFailure = typeof RegistryFailure.Type;
 
-export { DestinationExistsWithoutHistory } from "@smolai/skit-core/author";
+/** Keep a suggested shell argument intact, including spaces, quotes and metacharacters. */
+const commandArgument = (value: string) =>
+  /^[A-Za-z0-9_./-]+$/.test(value) ? value : `'${value.replaceAll("'", `'\\''`)}'`;
+
+const loginCommand = (origin?: string, scopes?: string) =>
+  `skit auth login${origin ? ` ${commandArgument(origin)}` : ""}${scopes ? ` --scopes ${commandArgument(scopes)}` : ""}`;
+
+export const registryFailure = (failure: RegistryFailure) =>
+  Match.value(failure).pipe(
+    Match.tagsExhaustive({
+      RegistryUnreachable: ({ origin, cause }) =>
+        describeFailure({
+          summary: ["Unable to reach Registry ", { code: origin }],
+          details: [Block.Note({ text: [errorMessage(cause)] })],
+          next: ["Check the network connection and the Registry origin, then retry."],
+        }),
+      RegistryOriginInvalid: ({ origin }) =>
+        describeFailure({
+          summary: ["Invalid Registry URL: ", { code: origin }],
+          next: [
+            "Pass the Registry as a full URL, such as ",
+            { code: "https://registry.example.com" },
+            ".",
+          ],
+        }),
+      NoStoredCredentials: () =>
+        describeFailure({
+          summary: ["No stored SKIT authentication to revoke"],
+          next: [
+            "Run ",
+            { code: "skit auth status" },
+            " to see which Registries hold a stored credential.",
+          ],
+        }),
+      RegistrySelectionAmbiguous: ({ origins, command }) =>
+        describeFailure({
+          summary: ["Registry selection is ambiguous"],
+          details: [Block.List({ items: origins.map((origin) => ({ text: [{ code: origin }] })) })],
+          next: ["Run ", { code: command }, " to choose one Registry."],
+        }),
+      TooManyAuthAttempts: authFailure,
+      SignInFailed: authFailure,
+      SignOutRejected: authFailure,
+      RegistryAliasInvalid: ({ alias }) =>
+        describeFailure({
+          summary: ["Invalid Registry name: ", { code: alias }],
+          next: ["Use a name of lowercase letters, digits and hyphens that starts with a letter."],
+        }),
+      RegistryAliasConflict: ({ alias }) =>
+        describeFailure({
+          summary: ["Registry name already exists: ", { code: alias }],
+          next: [
+            "Choose another name, or run ",
+            { code: `skit registry remove ${commandArgument(alias)}` },
+            " first.",
+          ],
+        }),
+      RegistryAliasNotFound: ({ alias }) =>
+        describeFailure({
+          summary: ["Unknown Registry name: ", { code: alias }],
+          next: ["Run ", { code: "skit registry list" }, " to see the configured Registry names."],
+        }),
+      RegistrySelectionConflict: ({ locator }) =>
+        describeFailure({
+          summary: [
+            "A concrete Registry locator cannot be combined with ",
+            { code: "--registry" },
+            ": ",
+            { code: locator },
+          ],
+          next: [
+            "Pass either the concrete Registry locator or ",
+            { code: "--registry" },
+            ", not both.",
+          ],
+        }),
+      RegistrySelectionRequiresRegistrySource: ({ source }) =>
+        describeFailure({
+          summary: [{ code: "--registry" }, " requires a Registry source: ", { code: source }],
+          next: [
+            "Use ",
+            { code: "--registry" },
+            " only with a Registry source such as ",
+            { code: "namespace/skit" },
+            ".",
+          ],
+        }),
+      RemoteSkitUnavailable: ({ identity }) =>
+        describeFailure({
+          summary: ["Remote SKIT ", { code: identity }, " is unavailable"],
+          next: [
+            "Check that the SKIT still exists and that the active credential can read it, then retry.",
+          ],
+        }),
+      LibraryChangedOnServer: () =>
+        describeFailure({
+          summary: ["Library changed on the server"],
+          next: ["Run ", { code: "skit sync" }, " again."],
+        }),
+      AuthenticationRequired: ({ origin, scopes }) =>
+        describeFailure({
+          summary: ["Authentication is required"],
+          next: ["Run ", { code: loginCommand(origin, scopes) }, ", then retry."],
+        }),
+      CredentialLacksScope: ({ scope, origin, scopes }) =>
+        describeFailure({
+          summary: ["The active credential lacks ", { code: scope }],
+          next: ["Run ", { code: loginCommand(origin, scopes ?? scope) }, ", then retry."],
+        }),
+      PrincipalNotAuthorized: ({ action }) =>
+        describeFailure({
+          summary: [`The active Principal is not authorized to ${action}`],
+          next: [
+            "Sign in as a Principal with access, or ask an owner of the Namespace to grant it.",
+          ],
+        }),
+      CredentialsUnusable: authFailure,
+      SignInRejected: authFailure,
+      InteractiveLoginUnavailable: () =>
+        describeFailure({
+          summary: ["Login needs a person to sign in"],
+          next: [
+            "Run ",
+            { code: "skit auth login" },
+            " in a terminal, or set ",
+            { code: "SKIT_TOKEN" },
+            " to use an existing credential.",
+          ],
+        }),
+      DeviceLoginUnavailable: ({ origin }) =>
+        describeFailure({
+          summary: [{ code: origin }, " does not offer browser approval for CLI login"],
+          next: [
+            "Run ",
+            { code: "skit auth login" },
+            " in a terminal to sign in with email and password.",
+          ],
+        }),
+      DeviceLoginEnded: ({ reason }) =>
+        describeFailure({
+          summary: [
+            reason === "denied"
+              ? "The login was denied in the browser"
+              : reason === "invalid"
+                ? "The login code is invalid or was already used"
+                : "The login code expired before it was approved",
+          ],
+          next: ["Run ", { code: "skit auth login" }, " again for a new code."],
+        }),
+      ScopesInvalid: ({ allowed }) =>
+        describeFailure({
+          summary: [{ code: "--scopes" }, " must contain only the allowed scopes"],
+          details: [Block.List({ items: allowed.map((scope) => ({ text: [{ code: scope }] })) })],
+          next: ["Pass ", { code: "--scopes" }, " using only the allowed scopes."],
+        }),
+      AuthorSyncRequired: ({ root }) =>
+        describeFailure({
+          summary: ["Local files do not match the current Registry revision"],
+          next: [
+            "Run ",
+            { code: `skit author sync ${commandArgument(root)} --apply` },
+            ", then publish again.",
+          ],
+        }),
+      RegistryRejectedWrite: (failure) =>
+        describeFailure({
+          summary: ["The Registry rejected the publication write"],
+          details: registryResponseDetails(failure),
+          next: ["Address the Registry's reason, then retry."],
+        }),
+      DeleteRequiresPrivate: () =>
+        describeFailure({
+          summary: [
+            "Only a fully private SKIT can be deleted; public or unlisted SKITs require a separate lifecycle operation",
+          ],
+          next: ["Delete only a fully private SKIT; public and unlisted SKITs stay published."],
+        }),
+    }),
+  );
+
+export { PublicationBlocked, DestinationExistsWithoutHistory } from "@smolai/skit-core/author";

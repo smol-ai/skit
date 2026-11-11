@@ -1,10 +1,7 @@
 import { resolveDeclaredInvocation } from "../src/invocation/conformance.js";
 import { describe, expect, test } from "vitest";
 import { Result } from "effect";
-import {
-  invocationPolicyChoices,
-  invocationReadModel,
-} from "../src/library/internal/session/invocation.js";
+import { invocationReadModel } from "../src/library/internal/session/invocation.js";
 import type { InvocationOption } from "../src/library/internal/session/invocation-option.js";
 
 const CLAUDE = "skills/review/SKILL.md";
@@ -50,10 +47,10 @@ describe("invocation read model", () => {
     expect(resolved.agents["claude-code"].policySource).toBe("local-override");
   });
 
-  test("an explicit policy warns that OpenCode V1 cannot enforce it", () => {
+  test("an explicit policy remains visible in the OpenCode policy facts", () => {
     const resolved = model({ storedIntent: "explicit" });
 
-    expect(resolved.effectiveSummary).toContain("OpenCode V1 ignores this setting");
+    expect(resolved.agents.opencode.effectivePolicy).toBe("explicit");
   });
 
   test("an unspecified author policy defers visibly to each agent", () => {
@@ -83,16 +80,9 @@ describe("invocation read model", () => {
       files: { [CLAUDE]: "---\nname: review\ndisable-model-invocation: false\n---\n" },
     });
 
-    expect(resolved.defect).toBeDefined();
     expect(resolved.agents["claude-code"].conformance.state).toBe("non-conforming");
     // The declaration still governs; the contradiction is reported, never offered as a choice.
     expect(resolved.agents["claude-code"].effectivePolicy).toBe("explicit");
-    expect(invocationPolicyChoices(resolved).map((choice) => choice.value)).toEqual([
-      "declared",
-      "implicit",
-      "explicit",
-      "host-policy",
-    ]);
   });
 
   test("legacy authored metadata carries an unverified conformance defect", () => {
@@ -106,17 +96,12 @@ describe("invocation read model", () => {
       path: CLAUDE,
       field: "disable-model-invocation",
     });
-    expect(resolved.defect).toBeDefined();
   });
 
   test("the stored intents themselves are untouched by presentation", () => {
-    // Presentation renames what the operator reads; the persisted enum stays the persisted enum.
-    expect(invocationPolicyChoices(model({})).map((choice) => choice.value)).toEqual([
-      "declared",
-      "implicit",
-      "explicit",
-      "host-policy",
-    ]);
+    const resolved = model({});
+    for (const field of ["question", "authorSummary", "effectiveSummary", "defect"])
+      expect(resolved).not.toHaveProperty(field);
     expect(model({ storedIntent: "explicit" }).storedIntent).toBe("explicit");
   });
 });

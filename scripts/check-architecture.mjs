@@ -83,9 +83,12 @@ export function check(root, base) {
   for (const { file, shrinking } of [
     { file: "architecture/boundaries.mjs", shrinking: ["debt", "serviceDebt"] },
     { file: "architecture/layout.mjs", shrinking: ["layoutDebt", "importDebt"] },
+    { file: "architecture/terms.mjs", shrinking: ["termDebt"] },
   ]) {
     const current = after(file);
     if (current === undefined) failures.push(`${file}: policy removed`);
+    // A policy the base did not have is a new rule with its first baseline; review it separately.
+    else if (!tracked.has(file)) failures.push(`${file}: policy added; review separately`);
     else
       failures.push(
         ...comparePolicy(policy(parse, before(file)), policy(parse, current), shrinking).map(

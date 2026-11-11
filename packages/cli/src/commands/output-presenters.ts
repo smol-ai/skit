@@ -1,3 +1,8 @@
+import { authCleanupDetails } from "../registry/auth-failures.js";
+import { harnessProbeFailure } from "../platform/probe-failures.js";
+import { classifyFailure } from "./failure-classification.js";
+import { authoredSkillIssueLines } from "../library/authored-skill-issues.js";
+import { validationDiagnostic } from "../platform/validation-diagnostic.js";
 import { metadataSource, metadataRevision } from "../library/presentation/skill-metadata.js";
 import { renderSecurityReview } from "../library/security/present.js";
 import { renderRepositoryPolicy } from "../library/repository/present.js";
@@ -5,17 +10,16 @@ import type { ContractData, ContractDataForId, ContractKey } from "./output-cont
 import type { CommandResult } from "./types.js";
 import type { RenderContext } from "../terminal/contracts.js";
 import { terminalData } from "../terminal/text.js";
+import { Block, renderBlocks } from "../terminal/blocks.js";
 import { harnessLabel } from "@smolai/skit-core/harnesses";
-import { createColors } from "picocolors";
 import { renderUsage } from "../library/usage/present.js";
 import { renderInventory } from "../library/inventory/present.js";
 import { renderSetEnabled } from "../library/enable.js";
 import { renderRemove, renderRemovePlan } from "../library/remove/present.js";
 import { renderCheck } from "../library/check/present.js";
-import { renderLibrarySync } from "../library/sync.js";
+import { presentLibrarySync } from "../library/sync.js";
 import { renderLibraryList } from "../library/list.js";
-import { renderAuditV1Alpha4 } from "../audit/presentation/report.js";
-import { severityHeadline } from "../audit/presentation/language.js";
+import { presentAuditV1Alpha4 } from "../audit/presentation/report.js";
 import { renderAdd, renderAddPreview } from "../library/add/present.js";
 import { renderUpdate, renderUpdatePlan } from "../library/update/present.js";
 import { renderDoctor } from "../library/doctor/present.js";
@@ -29,7 +33,7 @@ import {
 } from "../library/setup.js";
 import { renderRecoveryList, renderRecovery } from "../library/recovery/present.js";
 import { renderLibraryHistory } from "../library/history/present.js";
-import { renderEditImport, renderEditImportPlan } from "../library/update/retention.js";
+import { renderEditImport, renderEditImportPlan } from "../library/update/installed-edit.js";
 import {
   collectionTitle,
   workspaceEnableCommand,
@@ -37,57 +41,114 @@ import {
 } from "../library/presentation/collection-source.js";
 
 type ContractPresenters = {
-  [K in ContractKey]: (data: ContractData<K>, context: RenderContext) => string;
+  [K in ContractKey]: (data: ContractData<K>, context: RenderContext) => readonly Block[];
 };
 
-function renderValidation(data: ContractDataForId<"skit.validate.v3">): string {
+const diagnosticTones = { info: "info", warning: "warn", error: "error" } as const;
+
+function presentValidation(data: ContractDataForId<"skit.validate.v3">): Block[] {
   const headline = {
-    valid: "SKIT is valid",
-    "valid-with-warnings": "SKIT is valid with warnings",
-    "policy-blocked": "SKIT is structurally valid but blocked by security policy",
-    invalid: "SKIT validation failed",
-  }[data.status];
-  if (!data.diagnostics.length) return headline;
-
+    valid: { tone: "ok", text: "SKIT is valid" },
+    "valid-with-warnings": { tone: "warn", text: "SKIT is valid with warnings" },
+    "policy-blocked": {
+      tone: "error",
+      text: "SKIT is structurally valid but blocked by security policy",
+    },
+    invalid: { tone: "error", text: "SKIT validation failed" },
+  } as const;
   return [
-    headline,
-    "",
-    ...data.diagnostics.flatMap((diagnostic) => [
-      `${severityHeadline(diagnostic.severity)}${diagnostic.path ? ` | ${diagnostic.path}` : ""}`,
-      `  ${diagnostic.message}`,
-    ]),
-  ].join("\n");
+    Block.Status({ tone: headline[data.status].tone, text: [headline[data.status].text] }),
+    ...data.diagnostics.map((diagnostic) =>
+      Block.Status({
+        tone: diagnosticTones[diagnostic.severity],
+        text: [
+          validationDiagnostic(diagnostic),
+          ...(diagnostic.path ? [" ", { dim: `(${diagnostic.path})` }] : []),
+        ],
+      }),
+    ),
+  ];
 }
 
-function renderAuthorInit(data: ContractDataForId<"skit.init.v1">): string {
-  const lines = [`Initialized SKIT at ${data.path}`];
-  if (data.library_registration === "removed")
-    lines.push("Library Entry remains removed; run `skit author init --register` to restore it");
-  if (data.discovered?.skillEntries.length) {
-    lines.push("", "Discovered Skills:");
-    for (const skill of data.discovered.skillEntries) lines.push(`  ${skill.name} | ${skill.path}`);
-  }
-  return lines.join("\n");
+function presentAuthorInit(data: ContractDataForId<"skit.init.v1">): Block[] {
+  return [
+    Block.Status({ tone: "ok", text: ["Initialized SKIT at ", { dim: data.path }] }),
+    ...(data.library_registration === "removed"
+      ? [
+          Block.Status({ tone: "warn", text: ["Library Entry remains removed."] }),
+          Block.Note({
+            text: ["Run ", { code: "skit author init --register" }, " to restore it."],
+          }),
+        ]
+      : []),
+    ...(data.discovered?.skillEntries.length
+      ? [
+          Block.Group({
+            title: "Discovered Skills",
+            children: [
+              Block.List({
+                items: data.discovered.skillEntries.map((skill) => ({
+                  text: [skill.name],
+                  detail: [{ dim: skill.path }],
+                })),
+              }),
+            ],
+          }),
+        ]
+      : []),
+  ];
 }
 
-function renderAuthorInvocation(data: ContractDataForId<"skit.author.invocation.v1">): string {
+function presentAuthorInvocation(data: ContractDataForId<"skit.author.invocation.v1">): Block[] {
   const changed = data.generated.filter((item) => item.changed);
   if (!changed.length)
-    return "Every declared invocation policy is already written into its Harness metadata";
+    return [
+      Block.Status({
+        tone: "ok",
+        text: ["Every declared invocation policy is already written into its Harness metadata"],
+      }),
+    ];
   return [
     data.dryRun
-      ? "These files do not yet express their declared invocation policy:"
-      : "Wrote the declared invocation policy into:",
-    ...changed.map((item) => `  ${item.path} (${item.skill}, ${item.harness}, ${item.policy})`),
-  ].join("\n");
+      ? Block.Status({
+          tone: "warn",
+          text: ["These files do not yet express their declared invocation policy"],
+        })
+      : Block.Status({ tone: "ok", text: ["Wrote the declared invocation policy into"] }),
+    Block.Table({
+      columns: [{ title: "File" }, { title: "Skill" }, { title: "Harness" }, { title: "Policy" }],
+      rows: changed.map((item) => [
+        [{ dim: item.path }],
+        [item.skill],
+        [item.harness],
+        [item.policy],
+      ]),
+    }),
+  ];
 }
 
-function renderAuthorDelete(data: ContractDataForId<"skit.author.delete.v2">): string {
-  const releases = data.release_versions.join(", ") || "none";
-  if (data.status === "delete_ready")
-    return `Would delete ${data.skit_id}: ${data.revisions} revision(s), Releases: ${releases}`;
-  if (data.status === "absent") return `${data.skit_id} is already absent`;
-  return `Deleted ${data.skit_id}: ${data.revisions} revision(s), Releases: ${releases}${data.archive_cleanup === "deferred" ? "; archive cleanup deferred" : ""}`;
+function presentAuthorDelete(data: ContractDataForId<"skit.author.delete.v2">): Block[] {
+  if (data.status === "absent")
+    return [Block.Status({ tone: "ok", text: [`${data.skit_id} is already absent`] })];
+  return [
+    data.status === "delete_ready"
+      ? Block.Status({ tone: "info", text: [`Would delete ${data.skit_id}`] })
+      : Block.Status({ tone: "ok", text: [`Deleted ${data.skit_id}`] }),
+    Block.Fields({
+      rows: [
+        { label: "Revisions", value: [String(data.revisions)] },
+        {
+          label: "Releases",
+          value: data.release_versions.length
+            ? [data.release_versions.join(", ")]
+            : [{ dim: "none" }],
+        },
+        ...(data.status === "deleted" && data.archive_cleanup === "deferred"
+          ? [{ label: "Archive cleanup", value: ["deferred"] }]
+          : []),
+      ],
+    }),
+  ];
 }
 
 function registryLabel(registry: string): string {
@@ -106,47 +167,56 @@ function authoredSkitLabel(identity: string): string {
   }
 }
 
-function renderAuthorList(data: ContractDataForId<"skit.author.list.v2">): string {
-  const registry = registryLabel(data.registry);
-  if (!data.skits.length) return `No authored SKITs | ${registry}`;
-  const rows = data.skits.map((skit) => [
-    authoredSkitLabel(skit.identity),
-    skit.visibility,
-    skit.current_revision_published ? "published" : "unpublished",
-    skit.most_recent_release_version ?? "—",
-  ]);
-  const headings = ["SKIT", "ACCESS", "CURRENT", "LATEST"];
-  const widths = headings.map((heading, column) =>
-    Math.max(heading.length, ...rows.map((row) => row[column].length)),
-  );
-  const format = (row: string[]) =>
-    row
-      .map((cell, column) => cell.padEnd(widths[column]))
-      .join("  ")
-      .trimEnd();
+function presentAuthorList(data: ContractDataForId<"skit.author.list.v2">): Block[] {
+  const registry = Block.Fields({
+    rows: [{ label: "Registry", value: [registryLabel(data.registry)] }],
+  });
+  if (!data.skits.length)
+    return [Block.Status({ tone: "info", text: ["No authored SKITs"] }), registry];
   return [
-    `${data.skits.length} authored ${data.skits.length === 1 ? "SKIT" : "SKITs"} | ${registry}`,
-    "",
-    format(headings),
-    ...rows.map(format),
-  ].join("\n");
+    Block.Heading({
+      text: `${data.skits.length} authored ${data.skits.length === 1 ? "SKIT" : "SKITs"}`,
+    }),
+    registry,
+    Block.Table({
+      columns: [{ title: "SKIT" }, { title: "Access" }, { title: "Current" }, { title: "Latest" }],
+      rows: data.skits.map((skit) => [
+        [authoredSkitLabel(skit.identity)],
+        [skit.visibility],
+        [skit.current_revision_published ? "published" : "unpublished"],
+        [skit.most_recent_release_version ?? { dim: "—" }],
+      ]),
+    }),
+  ];
 }
 
-function renderRegistryChange(data: ContractDataForId<"skit.registry.remote.v1">): string {
-  if (data.action === "removed") return `Removed Registry ${data.name}`;
-  if (data.action === "defaulted") return `Default Registry: ${data.name}  ${data.origin}`;
-  return `${data.name}  ${data.origin}`;
+function presentRegistryChange(data: ContractDataForId<"skit.registry.remote.v1">): Block[] {
+  switch (data.action) {
+    case "removed":
+      return [Block.Status({ tone: "ok", text: [`Removed Registry ${data.name}`] })];
+    case "defaulted":
+      return [
+        Block.Fields({
+          rows: [{ label: "Default Registry", value: [data.name, " ", { dim: data.origin }] }],
+        }),
+      ];
+    case "added":
+      return [Block.Fields({ rows: [{ label: data.name, value: [{ dim: data.origin }] }] })];
+  }
 }
 
-function renderRegistryList(data: ContractDataForId<"skit.registry.list.v1">): string {
-  return data.registries.length
-    ? data.registries
-        .map(
-          (registry) =>
-            `${registry.name}${registry.isDefault ? " (default)" : ""}  ${registry.origin}`,
-        )
-        .join("\n")
-    : "No Registries configured";
+function presentRegistryList(data: ContractDataForId<"skit.registry.list.v1">): Block[] {
+  if (!data.registries.length)
+    return [Block.Status({ tone: "info", text: ["No Registries configured"] })];
+  return [
+    Block.Table({
+      columns: [{ title: "Registry" }, { title: "Origin" }],
+      rows: data.registries.map((registry) => [
+        [registry.name, ...(registry.isDefault ? [" ", { dim: "(default)" }] : [])],
+        [registry.origin],
+      ]),
+    }),
+  ];
 }
 
 const authScopeLabels: Readonly<Record<string, string>> = {
@@ -155,12 +225,12 @@ const authScopeLabels: Readonly<Record<string, string>> = {
   "publication:write": "publication",
 };
 
-function renderAuthAccess(scopes: ReadonlyArray<string>): string {
+function authAccess(scopes: ReadonlyArray<string>): string {
   if (!scopes.length) return "Unknown";
   return scopes.map((scope) => authScopeLabels[scope] ?? scope).join(", ");
 }
 
-function renderAuthExpiry(expiresAt: string | undefined): string {
+function authExpiry(expiresAt: string | undefined): string {
   if (!expiresAt) return "Unknown";
   const expiry = new Date(expiresAt);
   if (Number.isNaN(expiry.getTime())) return expiresAt;
@@ -174,209 +244,483 @@ function renderAuthExpiry(expiresAt: string | undefined): string {
   }).format(expiry);
 }
 
-function renderAuthStatus(
+function presentAuthStatus(
   data: ContractDataForId<"skit.auth.status.v3">,
   context: RenderContext,
-): string {
-  if (!data.credentials.length) return "No credentials configured; run `skit auth login`";
-  return data.credentials
-    .map((credential) => {
-      const name = credential.aliases.join(", ") || credential.origin;
-      const flags = [
-        credential.isDefault ? "default" : undefined,
-        credential.source === "environment" ? "environment" : undefined,
-      ].filter(Boolean);
-      return [
-        `Credential configured for ${name}${flags.length ? ` (${flags.join(", ")})` : ""}`,
-        ...(credential.aliases.length ? [`Registry: ${credential.origin}`] : []),
-        `Access: ${renderAuthAccess(credential.scopes)}`,
-        `Expires: ${renderAuthExpiry(credential.expiresAt)}${credential.expired ? " (expired)" : ""}`,
-        `Stored in: ${
-          {
-            keychain: "macOS Keychain",
-            "secret-service": "the system secret store",
-            file: "the credential file (no system secret store was available)",
-            environment: "SKIT_TOKEN",
-          }[credential.storage]
-        }`,
-        ...(context.detail === "full" ? [`Credential: ${credential.tokenPrefix}`] : []),
-      ].join("\n");
-    })
-    .join("\n\n");
+): Block[] {
+  if (!data.credentials.length)
+    return [
+      Block.Status({ tone: "info", text: ["No credentials configured."] }),
+      Block.Note({ text: ["Run ", { code: "skit auth login" }, "."] }),
+    ];
+  return data.credentials.map((credential) => {
+    const name = credential.aliases.join(", ") || credential.origin;
+    const flags = [
+      credential.isDefault ? "default" : undefined,
+      credential.source === "environment" ? "environment" : undefined,
+    ].filter(Boolean);
+    return Block.Group({
+      title: `Credential configured for ${name}${flags.length ? ` (${flags.join(", ")})` : ""}`,
+      children: [
+        Block.Fields({
+          rows: [
+            ...(credential.aliases.length
+              ? [{ label: "Registry", value: [credential.origin] }]
+              : []),
+            { label: "Access", value: [authAccess(credential.scopes)] },
+            {
+              label: "Expires",
+              value: [
+                authExpiry(credential.expiresAt),
+                ...(credential.expired ? [" ", { emph: "(expired)" }] : []),
+              ],
+            },
+            {
+              label: "Stored in",
+              value: [
+                {
+                  keychain: "macOS Keychain",
+                  "secret-service": "the system secret store",
+                  file: "the credential file (no system secret store was available)",
+                  environment: "SKIT_TOKEN",
+                }[credential.storage],
+              ],
+            },
+            ...(context.detail === "full"
+              ? [{ label: "Credential", value: [credential.tokenPrefix] }]
+              : []),
+          ],
+        }),
+      ],
+    });
+  });
 }
 
-function renderAuthLogin(
-  data: ContractDataForId<"skit.auth.login.v2">,
+function presentAuthLogin(
+  data: ContractDataForId<"skit.auth.login.v3">,
   context: RenderContext,
-): string {
+): Block[] {
   const name = data.alias ?? data.origin;
   return [
-    `${data.alreadyAuthenticated ? "Already authenticated" : "Authenticated"} to ${name}${data.defaultRegistry && data.defaultRegistry === data.alias ? " (default)" : ""}`,
-    ...(data.alias ? [`Registry: ${data.origin}`] : []),
-    `Access: ${renderAuthAccess(data.scopes)}`,
-    `Expires: ${renderAuthExpiry(data.expiresAt)}`,
-    ...(data.credentialPath ? [`Saved credential: ${data.credentialPath}`] : []),
-    "Next: skit sync to preview; skit sync --apply to apply. No login needed for future commands.",
-    ...(context.detail === "full" ? [`Credential: ${data.tokenPrefix}`] : []),
-    ...(data.warning ? [`Warning: ${data.warning}`] : []),
-  ].join("\n");
+    Block.Status({
+      tone: "ok",
+      text: [
+        `${data.alreadyAuthenticated ? "Already authenticated" : "Authenticated"} to ${name}${data.defaultRegistry && data.defaultRegistry === data.alias ? " (default)" : ""}`,
+      ],
+    }),
+    Block.Fields({
+      rows: [
+        ...(data.alias ? [{ label: "Registry", value: [data.origin] }] : []),
+        { label: "Access", value: [authAccess(data.scopes)] },
+        { label: "Expires", value: [authExpiry(data.expiresAt)] },
+        ...(data.credentialPath
+          ? [{ label: "Saved credential", value: [{ dim: data.credentialPath }] }]
+          : []),
+        ...(context.detail === "full" ? [{ label: "Credential", value: [data.tokenPrefix] }] : []),
+      ],
+    }),
+    Block.Note({
+      text: [
+        "Next, run ",
+        { code: "skit sync" },
+        " to preview and ",
+        { code: "skit sync --apply" },
+        " to apply. No login needed for future commands.",
+      ],
+    }),
+    ...(data.warning
+      ? [
+          Block.Status({
+            tone: "warn",
+            text: [
+              "The new credential is active. Previous credential ",
+              { code: data.warning.tokenId },
+              " (",
+              { code: data.warning.tokenPrefix },
+              ") could not be revoked and may still be live.",
+            ],
+          }),
+          ...authCleanupDetails(data.warning.cleanup),
+          Block.Fields({
+            rows: [{ label: "Next", value: ["Revoke the previous credential at the Registry."] }],
+          }),
+        ]
+      : []),
+  ];
 }
 
-function renderHarnessProbe(
+function presentHarnessProbe(
   data: ContractDataForId<"skit.experimental.harness-probe.v1alpha1">,
-): string {
-  return data.probes
-    .map((probe) =>
-      [
-        harnessLabel(probe.harnessId),
-        `  Status: ${{ installed: "Installed", missing: "Not installed", failed: "Probe failed" }[probe.status]}`,
-        `  executable: ${probe.executablePath ?? "not found"}`,
-        `  resolved: ${probe.resolvedPath ?? "n/a"}`,
-        `  version: ${probe.version ?? "unknown"}`,
-        ...(probe.error ? [`  error: ${probe.error}`] : []),
-      ].join("\n"),
-    )
-    .join("\n\n");
+): Block[] {
+  return data.probes.map((probe) =>
+    Block.Group({
+      title: harnessLabel(probe.harnessId),
+      children: [
+        Block.Fields({
+          rows: [
+            {
+              label: "Status",
+              value: [
+                { installed: "Installed", missing: "Not installed", failed: "Probe failed" }[
+                  probe.status
+                ],
+              ],
+            },
+            { label: "Executable", value: [probe.executablePath ?? { dim: "not found" }] },
+            { label: "Resolved", value: [probe.resolvedPath ?? { dim: "n/a" }] },
+            { label: "Version", value: [probe.version ?? { dim: "unknown" }] },
+            ...(probe.failure
+              ? [{ label: "Error", value: [harnessProbeFailure(probe.failure)] }]
+              : []),
+          ],
+        }),
+      ],
+    }),
+  );
 }
 
-function renderAuthorSync(data: ContractDataForId<"skit.author.sync.v5">): string {
+/** Which version a merge kept for each path both sides changed. */
+const mergeChoices = (
+  choices: ReadonlyArray<{ readonly path: string; readonly kept: string; readonly kind: string }>,
+): Block[] =>
+  choices.length
+    ? [
+        Block.List({
+          items: choices.map((choice) => ({
+            text: [choice.path],
+            detail: [`kept the ${choice.kept} version (${choice.kind})`],
+          })),
+        }),
+      ]
+    : [];
+
+const rerunWithApply = Block.Note({ text: ["Rerun with ", { code: "--apply" }, "."] });
+
+function presentAuthorSync(data: ContractDataForId<"skit.author.sync.v5">): Block[] {
   switch (data.status) {
     case "first_sync_ready":
-      return `Sync ready for ${data.identity.locator} (${data.visibility}); no Release will be published; rerun with --apply`;
+      return [
+        Block.Status({
+          tone: "info",
+          text: [`Sync ready for ${data.identity.locator} (${data.visibility})`],
+        }),
+        Block.Note({ text: ["No Release will be published."] }),
+        rerunWithApply,
+      ];
     case "ready":
-      return `Ready to ${data.action}; rerun with --apply`;
+      return [Block.Status({ tone: "info", text: [`Ready to ${data.action}`] }), rerunWithApply];
     case "blocked":
-      return `Sync paused: ${data.deleting} of ${data.of} files removed. Remote files are unchanged. To send these deletions, rerun with --apply --allow-large-deletion.`;
+      return [
+        Block.Status({
+          tone: "warn",
+          text: [`Sync paused: ${data.deleting} of ${data.of} files removed.`],
+        }),
+        Block.Note({
+          text: [
+            "Remote files are unchanged. To send these deletions, rerun with ",
+            { code: "--apply --allow-large-deletion" },
+            ".",
+          ],
+        }),
+      ];
     case "waiting_for_removal":
-      return `Waiting for stable removal of ${data.deleting} file(s) before synchronizing.`;
+      return [
+        Block.Status({
+          tone: "info",
+          text: [`Waiting for stable removal of ${data.deleting} file(s) before synchronizing.`],
+        }),
+      ];
     case "created":
-      return `Connected ${data.identity.locator}; saved revision ${data.revision_id}`;
+      return [
+        Block.Status({ tone: "ok", text: [`Connected ${data.identity.locator}`] }),
+        Block.Fields({
+          rows: [{ label: "Saved revision", value: [metadataRevision(data.revision_id)] }],
+        }),
+      ];
     case "up_to_date":
-      return `Workspace is already synchronized (${data.revision_id})`;
+      return [
+        Block.Status({
+          tone: "ok",
+          text: [`Workspace is already synchronized (${metadataRevision(data.revision_id)})`],
+        }),
+      ];
     case "pulled":
-      return `Updated ${data.paths.length} file(s) from the Registry (${data.revision_id})`;
+      return [
+        Block.Status({
+          tone: "ok",
+          text: [
+            `Updated ${data.paths.length} file(s) from the Registry (${metadataRevision(data.revision_id)})`,
+          ],
+        }),
+      ];
     case "pushed":
-      return `Synced local changes to the Registry (${data.revision_id})`;
+      return [
+        Block.Status({
+          tone: "ok",
+          text: [`Synced local changes to the Registry (${metadataRevision(data.revision_id)})`],
+        }),
+      ];
     case "merged":
       return [
-        `Merged local and remote changes (${data.revision_id})`,
-        ...data.choices.map(
-          (choice) => `  ${choice.path}: kept the ${choice.kept} version (${choice.kind})`,
+        Block.Status({
+          tone: "ok",
+          text: [`Merged local and remote changes (${metadataRevision(data.revision_id)})`],
+        }),
+        ...mergeChoices(data.choices),
+      ];
+  }
+}
+
+function presentAuthorWatch(data: ContractDataForId<"skit.author.watch.v1">): Block[] {
+  switch (data.event) {
+    case "watching":
+      return [
+        Block.Status({
+          tone: "info",
+          text: ["Watching ", { dim: metadataSource(data.path) }, ". Press Ctrl-C to stop."],
+        }),
+      ];
+    case "saved_locally":
+      return [
+        Block.Status({
+          tone: "info",
+          text: [
+            `Workspace changed (${data.trigger === "filesystem" ? "filesystem event" : "rescan"})`,
+          ],
+        }),
+        Block.List({ items: data.paths.map((path) => ({ text: [{ dim: path }] })) }),
+        Block.Status({
+          tone: "ok",
+          text: [`Saved revision ${metadataRevision(data.revision_id)}.`],
+        }),
+      ];
+    case "sync": {
+      const sync = data.result;
+      switch (sync.status) {
+        case "pushed":
+          return [
+            Block.Status({
+              tone: "ok",
+              text: [`Registry upload: ${metadataRevision(sync.revision_id)}.`],
+            }),
+          ];
+        case "pulled":
+          return [
+            Block.Status({
+              tone: "ok",
+              text: [`Registry download (${metadataRevision(sync.revision_id)})`],
+            }),
+            Block.List({ items: sync.paths.map((path) => ({ text: [{ dim: path }] })) }),
+          ];
+        case "merged":
+          return [
+            Block.Status({
+              tone: "ok",
+              text: [`Merged Registry changes (${metadataRevision(sync.revision_id)})`],
+            }),
+            Block.List({ items: sync.paths.map((path) => ({ text: [{ dim: path }] })) }),
+            ...mergeChoices(sync.choices),
+          ];
+        default:
+          return presentAuthorSync(sync);
+      }
+    }
+    case "installation": {
+      if (data.status === "unregistered")
+        return [
+          Block.Status({
+            tone: "warn",
+            text: ["Workspace removed from the Library; installed copies unchanged."],
+          }),
+          Block.Note({
+            text: ["To register, run ", { code: workspaceInitCommand(data.path) }, "."],
+          }),
+        ];
+      const context =
+        data.reason === "startup" || data.reason === "configuration-changed"
+          ? data.context
+          : undefined;
+      return [
+        ...(context === undefined
+          ? []
+          : [
+              Block.Group({
+                title: data.reason === "startup" ? "Startup" : "Library configuration changed",
+                children: [
+                  Block.Fields({
+                    rows: [
+                      {
+                        label: "Collection",
+                        value: [collectionTitle(context.collection_label, context.source)],
+                      },
+                      {
+                        label: "Enabled",
+                        value: [
+                          `${context.total - context.disabled_skills.length}/${context.total} skills`,
+                        ],
+                      },
+                      ...(context.disabled_skills.length &&
+                      context.disabled_skills.length !== context.total
+                        ? [{ label: "Disabled", value: [context.disabled_skills.join(", ")] }]
+                        : []),
+                    ],
+                  }),
+                  ...(context.disabled_skills.length
+                    ? [
+                        ...(context.disabled_skills.length === context.total
+                          ? [Block.Note({ text: ["Workspace skills are saved but disabled."] })]
+                          : []),
+                        Block.Note({
+                          text: [
+                            "To enable, run ",
+                            { code: workspaceEnableCommand(data.path) },
+                            ".",
+                          ],
+                        }),
+                      ]
+                    : []),
+                ],
+              }),
+            ]),
+        ...data.installed_copies.map((copy) =>
+          Block.Status({
+            tone: "ok",
+            text: [
+              `Updated ${copy.skill} at `,
+              { dim: metadataSource(copy.path) },
+              ...(data.revision_id
+                ? [` (workspace revision ${metadataRevision(data.revision_id)})`]
+                : []),
+              ".",
+            ],
+          }),
         ),
-      ].join("\n");
+        ...(context?.other_sources.map((copy) =>
+          Block.Status({
+            tone: "warn",
+            text: [
+              `${copy.skill} at `,
+              { dim: metadataSource(copy.path) },
+              ` follows ${collectionTitle(copy.collection_label, copy.source)}.`,
+            ],
+          }),
+        ) ?? []),
+        ...(context?.other_sources.length && data.reason === "startup"
+          ? [
+              Block.Note({
+                text: [
+                  "Use ",
+                  { code: "skit list" },
+                  " to choose which source to disable before enabling this workspace.",
+                ],
+              }),
+            ]
+          : []),
+        ...(data.status === "held"
+          ? [
+              Block.Status({
+                tone: "warn",
+                text: ["Invalid workspace inputs; keeping the last valid installed copies."],
+              }),
+            ]
+          : []),
+        ...authoredSkillIssueLines(data.issues).map((issue) =>
+          Block.Status({ tone: "warn", text: [issue] }),
+        ),
+        ...(data.reason === "issues-changed" && data.issues.length === 0 && data.status !== "held"
+          ? [
+              Block.Status({
+                tone: "ok",
+                text: ["Installation checks clear; no copies needed updating."],
+              }),
+            ]
+          : []),
+      ];
+    }
+    case "retrying": {
+      const failure = classifyFailure(data.failure);
+      return [
+        Block.Status({
+          tone: "warn",
+          text: [`${data.operation}: retrying`],
+        }),
+        Block.Group({ title: "Reason", children: failure.explanation }),
+        ...(failure.next.length
+          ? [Block.Fields({ rows: [{ label: "Next", value: failure.next }] })]
+          : []),
+        Block.Note({ text: ["Retrying automatically; repeated failures stay quiet."] }),
+      ];
+    }
+    case "recovered":
+      return [Block.Status({ tone: "ok", text: [`${data.operation}: recovered.`] })];
   }
 }
 
 const contractPresenters: ContractPresenters = {
-  versionReport: (data) =>
-    [
-      `${data.version} (${data.build.kind})`,
-      ...(data.build.commit ? [`Commit: ${data.build.commit}`] : []),
-      data.update.status === "update-available"
-        ? `Update available: ${data.update.available}\n${data.update.upgrade}`
-        : data.update.status === "check-unavailable"
-          ? "Update check unavailable."
-          : data.update.status === "development-build"
-            ? "Development build; release versions are not compared."
-            : data.update.status === "channel-unavailable"
-              ? `No usable release on ${data.update.channel}.`
-              : data.update.status === "ahead"
-                ? `Ahead of ${data.update.channel} (${data.update.available}).`
-                : `Up to date on ${data.update.channel}.`,
-    ].join("\n"),
-  version: (data) => data.version,
-  completions: (data) => data.script,
-  init: renderAuthorInit,
-  authorInvocation: renderAuthorInvocation,
-  authorWatch: (data) => {
-    switch (data.event) {
-      case "watching":
-        return `Watching ${metadataSource(data.path)}. Press Ctrl-C to stop.`;
-      case "saved_locally":
-        return `Workspace changed (${data.trigger === "filesystem" ? "filesystem event" : "rescan"}): ${data.paths.join(", ")}\nSaved revision ${metadataRevision(data.revision_id)}.`;
-      case "sync": {
-        const sync = data.result;
-        switch (sync.status) {
-          case "pushed":
-            return `Registry upload: ${metadataRevision(sync.revision_id)}.`;
-          case "pulled":
-            return `Registry download: ${sync.paths.join(", ")} (${metadataRevision(sync.revision_id)}).`;
-          case "merged":
-            return [
-              `Merged Registry changes: ${sync.paths.join(", ")} (${metadataRevision(sync.revision_id)}).`,
-              ...sync.choices.map(
-                (choice) => `  ${choice.path}: kept the ${choice.kept} version (${choice.kind})`,
-              ),
-            ].join("\n");
-          default:
-            return renderAuthorSync(sync);
-        }
-      }
-      case "installation":
-        return data.status === "unregistered"
-          ? `Workspace removed from the Library; installed copies unchanged. To register: ${workspaceInitCommand(data.path)}`
-          : [
-              ...((data.reason === "startup" || data.reason === "configuration-changed") &&
-              data.context !== undefined
-                ? [
-                    `${data.reason === "startup" ? "Startup" : "Library configuration changed"}: ${collectionTitle(data.context.collection_label, data.context.source)}; ${data.context.total - data.context.disabled_skills.length}/${data.context.total} skills enabled.`,
-                  ]
-                : []),
-              ...(data.context?.disabled_skills.length &&
-              (data.reason === "startup" || data.reason === "configuration-changed")
-                ? [
-                    data.context.disabled_skills.length === data.context.total
-                      ? "Workspace skills are saved but disabled."
-                      : `Disabled: ${data.context.disabled_skills.join(", ")}.`,
-                    `To enable: ${workspaceEnableCommand(data.path)}`,
-                  ]
-                : []),
-              ...data.installed_copies.map(
-                (copy) =>
-                  `Updated ${copy.skill} at ${metadataSource(copy.path)}${data.revision_id ? ` (workspace revision ${metadataRevision(data.revision_id)})` : ""}.`,
-              ),
-              ...(data.reason === "startup" || data.reason === "configuration-changed"
-                ? (data.context?.other_sources.map(
-                    (copy) =>
-                      `${copy.skill} at ${metadataSource(copy.path)} follows ${collectionTitle(copy.collection_label, copy.source)}.`,
-                  ) ?? [])
-                : []),
-              ...(data.context?.other_sources.length && data.reason === "startup"
-                ? [
-                    "Use skit list to choose which source to disable before enabling this workspace.",
-                  ]
-                : []),
-              ...(data.status === "held"
-                ? ["Invalid workspace inputs; keeping the last valid installed copies."]
-                : []),
-              ...data.messages,
-              ...(data.reason === "issues-changed" &&
-              data.messages.length === 0 &&
-              data.status !== "held"
-                ? ["Installation checks clear; no copies needed updating."]
-                : []),
-            ].join("\n");
-      case "retrying":
-        return `${data.operation}: ${data.message} Retrying automatically; repeated failures stay quiet.`;
-      case "recovered":
-        return `${data.operation}: recovered.`;
-    }
-  },
-  authorDelete: renderAuthorDelete,
-  publish: (data) =>
-    `Published ${data.release.version}${data.release.revision_id ? ` from ${data.release.revision_id}` : ""}`,
-  sync: renderAuthorSync,
-  librarySync: (data, context) => renderLibrarySync(data, createColors(context.color)),
+  versionReport: (data) => [
+    Block.Heading({ text: `${data.version} (${data.build.kind})` }),
+    ...(data.build.commit
+      ? [Block.Fields({ rows: [{ label: "Commit", value: [data.build.commit] }] })]
+      : []),
+    ...(data.update.status === "update-available"
+      ? [
+          Block.Status({ tone: "info", text: [`Update available: ${data.update.available}`] }),
+          ...(data.update.upgrade ? [Block.Note({ text: [{ code: data.update.upgrade }] })] : []),
+        ]
+      : data.update.status === "check-unavailable"
+        ? [Block.Status({ tone: "warn", text: ["Update check unavailable."] })]
+        : data.update.status === "development-build"
+          ? [
+              Block.Status({
+                tone: "info",
+                text: ["Development build; release versions are not compared."],
+              }),
+            ]
+          : data.update.status === "channel-unavailable"
+            ? [
+                Block.Status({
+                  tone: "warn",
+                  text: [`No usable release on ${data.update.channel}.`],
+                }),
+              ]
+            : data.update.status === "ahead"
+              ? [
+                  Block.Status({
+                    tone: "info",
+                    text: [`Ahead of ${data.update.channel} (${data.update.available}).`],
+                  }),
+                ]
+              : [Block.Status({ tone: "ok", text: [`Up to date on ${data.update.channel}.`] })]),
+  ],
+  version: (data) => [Block.Note({ text: [data.version] })],
+  completions: (data) => [Block.Verbatim({ text: data.script })],
+  init: presentAuthorInit,
+  authorInvocation: presentAuthorInvocation,
+  authorWatch: presentAuthorWatch,
+  authorDelete: presentAuthorDelete,
+  publish: (data) => [
+    Block.Status({
+      tone: "ok",
+      text: [
+        `Published ${data.release.version}`,
+        ...(data.release.revision_id
+          ? [` from ${metadataRevision(data.release.revision_id)}`]
+          : []),
+      ],
+    }),
+  ],
+  sync: presentAuthorSync,
+  librarySync: presentLibrarySync,
   libraryHistory: renderLibraryHistory,
-  list: (data, context) => renderLibraryList(data, createColors(context.color)),
-  experimentalAuditV1Alpha4: renderAuditV1Alpha4,
-  authorList: renderAuthorList,
+  list: renderLibraryList,
+  experimentalAuditV1Alpha4: presentAuditV1Alpha4,
+  authorList: presentAuthorList,
   add: renderAdd,
   addPreview: renderAddPreview,
   update: renderUpdate,
   updatePlan: renderUpdatePlan,
-  projectionRetentionPlan: renderEditImportPlan,
-  projectionRetention: renderEditImport,
+  installedEditPlan: renderEditImportPlan,
+  installedEdit: renderEditImport,
   remove: renderRemove,
   removePlan: renderRemovePlan,
   enable: (data) => renderSetEnabled(data, true),
@@ -385,7 +729,7 @@ const contractPresenters: ContractPresenters = {
   disablePlan: (data) => renderSetEnabled(data, false),
   doctor: renderDoctor,
   usage: (data) => renderUsage(data),
-  inventory: (data, context) => renderInventory(data, data.machine, createColors(context.color)),
+  inventory: renderInventory,
   setupUndo: renderSetupUndo,
   recoveryList: renderRecoveryList,
   recovery: renderRecovery,
@@ -395,40 +739,72 @@ const contractPresenters: ContractPresenters = {
   setup: renderSetup,
   setupApplied: renderSetupApplied,
   repositoryPolicy: renderRepositoryPolicy,
-  authLogout: (data) => `Logged out from ${data.origin}`,
+  authLogout: (data) => [Block.Status({ tone: "ok", text: [`Logged out from ${data.origin}`] })],
   feedbackSend: (data) => {
     const from = [
       ...(data.signedIn ? ["signed in"] : []),
       ...(data.email === undefined ? [] : [`with contact ${data.email}`]),
     ];
-    return `Sent feedback to ${data.recipient} (${data.id})${from.length === 0 ? ", anonymously" : `, ${from.join(" ")}`}. Thank you.`;
+    return [
+      Block.Status({
+        tone: "ok",
+        text: [
+          `Sent feedback to ${data.recipient} (${data.id})${from.length === 0 ? ", anonymously" : `, ${from.join(" ")}`}. Thank you.`,
+        ],
+      }),
+    ];
   },
-  authStatus: renderAuthStatus,
-  authLogin: renderAuthLogin,
-  authLoginPending: (data) =>
-    [
-      `Open ${data.verificationUri} and enter the code ${data.userCode} to approve this login.`,
-      `The code expires at ${data.expiresAt}.`,
-      `Next: ${data.next} once it is approved.`,
-    ].join("\n"),
-  registryRemote: renderRegistryChange,
-  registryList: renderRegistryList,
-  serverBootstrap: (data) =>
-    `${
-      data.status === "already_complete"
-        ? `Server setup was already complete at ${data.origin}`
-        : `Server setup complete at ${data.origin}`
-    }\nIf email verification is enabled, follow the browser result. If delivery failed, use Resend on the sign-in page.\nNext: skit auth login ${data.origin}`,
+  authStatus: presentAuthStatus,
+  authLogin: presentAuthLogin,
+  authLoginPending: (data) => [
+    Block.Note({
+      text: [
+        "Open ",
+        { emph: data.verificationUri },
+        " and enter the code ",
+        { emph: data.userCode },
+        " to approve this login.",
+      ],
+    }),
+    Block.Note({ text: [`The code expires at ${data.expiresAt}.`] }),
+    Block.Note({ text: ["Next, run ", { code: data.next }, " once it is approved."] }),
+  ],
+  registryRemote: presentRegistryChange,
+  registryList: presentRegistryList,
+  serverBootstrap: (data) => [
+    Block.Status({
+      tone: "ok",
+      text: [
+        data.status === "already_complete"
+          ? `Server setup was already complete at ${data.origin}`
+          : `Server setup complete at ${data.origin}`,
+      ],
+    }),
+    Block.Note({
+      text: [
+        "If email verification is enabled, follow the browser result. If delivery failed, use Resend on the sign-in page.",
+      ],
+    }),
+    Block.Note({ text: ["Next, run ", { code: `skit auth login ${data.origin}` }, "."] }),
+  ],
   check: renderCheck,
-  experimentalHarnessProbe: renderHarnessProbe,
-  validate: renderValidation,
+  experimentalHarnessProbe: presentHarnessProbe,
+  validate: presentValidation,
   securityReview: renderSecurityReview,
   securityAccept: renderSecurityReview,
 };
+
+/** What a result's presenter says. */
+export function presentContract<K extends ContractKey>(
+  result: CommandResult<K>,
+  context: RenderContext,
+): readonly Block[] {
+  return contractPresenters[result.contract](terminalData(result.data), context);
+}
 
 export function renderContract<K extends ContractKey>(
   result: CommandResult<K>,
   context: RenderContext,
 ): string {
-  return contractPresenters[result.contract](terminalData(result.data), context);
+  return renderBlocks(presentContract(result, context), context);
 }

@@ -1,6 +1,7 @@
 import type { PlatformError } from "effect/PlatformError";
 import type { AuthoredSkillsUpdate, updateAuthoredSkills } from "./update-authored-skills.js";
-import type { RecoveryInvalid, RecoveryInspection } from "./recovery-facts.js";
+import type { RecoveryInvalid } from "./store/operation-failures.js";
+import type { RecoveryInspection } from "./recovery-facts.js";
 import type { LibraryChanged } from "./failures.js";
 import type {
   RestoreIntent,
@@ -113,9 +114,7 @@ export type {
   LinkEvidence,
   ManageExistingSelection,
   ManageNewSelection,
-  ReviewedInstalledSkillChange,
   SetupStep,
-  SetupStopReason,
 } from "./store/state-schema.js";
 /** History reports steps and evidence, without private installed-change checkpoints. */
 type ReportedOperation<O> = {
@@ -356,12 +355,12 @@ export interface Interface {
   /** Remove a Collection, or the sole Skill's Collection, and uninstall the Skills it installed. */
   readonly remove: (options: RemoveOptions) => ReturnType<typeof removeCollection>;
   /** Update retained Sources from their origins and install their members on this device. */
-  readonly update: <E, R, F extends { readonly remediation: string }>(
+  readonly update: <E, R>(
     query: string | undefined,
-    adapters: SourceUpdateAdapters<E, R, F>,
+    adapters: SourceUpdateAdapters<E, R>,
   ) => Effect.Effect<
-    Effect.Success<ReturnType<typeof updateSources<E, R, F>>>,
-    Effect.Error<ReturnType<typeof updateSources<E, R, F>>>,
+    Effect.Success<ReturnType<typeof updateSources<E, R>>>,
+    Effect.Error<ReturnType<typeof updateSources<E, R>>>,
     R
   >;
   /** Update an existing Author Workspace Collection from already preserved input bytes. */
@@ -371,10 +370,10 @@ export interface Interface {
     Effect.Success<ReturnType<typeof updateAuthoredSkills>>,
     Effect.Error<ReturnType<typeof updateAuthoredSkills>>
   >;
-  /** Review an edited installed copy as a new Version; `apply` retains it as previewed. */
+  /** Review edits at an installed skill folder path; `apply` imports them as previewed. */
   readonly edit: (
     query: string,
-    selector: string,
+    path: string,
   ) => Effect.Effect<
     Effect.Success<ReturnType<typeof openEditImport>>,
     Effect.Error<ReturnType<typeof openEditImport>>

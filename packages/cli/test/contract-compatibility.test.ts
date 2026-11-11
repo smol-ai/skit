@@ -84,6 +84,17 @@ describe("contract compatibility", () => {
     expect(result).toEqual({ errors: [], warnings: [] });
   });
 
+  test("unreleased successor shapes may evolve against the same published baseline", () => {
+    for (const shape of ["first development shape", "later development shape"])
+      expect(
+        checkContractCompatibility({
+          baseArtifacts: { "skit.list.v2.json": artifact("skit.list.v2", "released") },
+          headArtifacts: { "skit.list.v3.json": artifact("skit.list.v3", shape) },
+          baseManifest: manifest("stable", ["skit.list.v2"]),
+        }),
+      ).toEqual({ errors: [], warnings: [] });
+  });
+
   test("rejects skipped stable versions", () => {
     const result = checkContractCompatibility({
       baseArtifacts: { "skit.setup.v3.json": artifact("skit.setup.v3", "before") },
@@ -108,7 +119,7 @@ describe("contract compatibility", () => {
     });
     expect(result).toEqual({
       errors: ["skit.example.v1 was removed without a one-version successor"],
-      warnings: ["skit.pin.v5 was retired", "skit.pull.v6 was retired"],
+      warnings: ["skit.pin.v5 was removed", "skit.pull.v6 was removed"],
     });
   });
 

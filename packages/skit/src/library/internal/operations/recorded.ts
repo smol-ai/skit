@@ -3,12 +3,18 @@ import * as InstalledSkills from "../../installed-skills.js";
 import * as Status from "../../installed-skill-status.js";
 import { makeInstalledSkillId, type OperationId } from "../../entity-ids.js";
 import { reviewApply } from "./review.js";
-import { InvalidIntent } from "../../enabled-plan.js";
+import type { InstalledSkillInvalidReason } from "../../installation/install-enabled.js";
+import { InvalidLibraryState } from "../../failures.js";
 import { StalePlan, type Plan } from "../../library-plan.js";
 import { libraryStateRevision, type LibraryState } from "../../library-state.js";
 import { type InstalledSkill } from "../../device-state.js";
 import { OperationStatus } from "../../store/state-schema.js";
-import { LibraryWriter, loadLibrary, libraryOriginalsPath } from "../../store/library-store.js";
+import {
+  LibraryWriter,
+  loadLibrary,
+  libraryOriginalsPath,
+  libraryStatePath,
+} from "../../store/library-store.js";
 
 import type { StepRouting } from "../../store/state-schema.js";
 import { compileApply, finalRows, type ApplyStep } from "./program.js";
@@ -24,7 +30,9 @@ export const prepareApply = Effect.fn("Library.prepareRecordedApply")(function* 
   const files = yield* InstalledSkills.Service;
   const installedAt = DateTime.formatIso(yield* DateTime.now);
   const rows = new Map<string, InstalledSkill>();
-  let invalidSource: { readonly path: string; readonly reason: string } | undefined;
+  let invalidSource:
+    | { readonly path: string; readonly reason: InstalledSkillInvalidReason }
+    | undefined;
   for (const change of again.changes) {
     if (
       !("skillVersionId" in change) ||
@@ -60,14 +68,14 @@ export const prepareApply = Effect.fn("Library.prepareRecordedApply")(function* 
       );
       if (built._tag === "Failure") {
         if (built.failure._tag !== "Library.InstalledSkillInvalid") return yield* built.failure;
-        invalidSource = { path: change.path, reason: built.failure.detail };
+        invalidSource = { path: change.path, reason: built.failure.reason };
         break;
       }
       hash = built.success.hash;
     } else hash = change.hash;
     if (change._tag !== "Install" && hash !== change.hash)
       return yield* new StalePlan({
-        message: `Reviewed installed bytes changed at ${change.path}`,
+        reason: { _tag: "InstalledBytesChanged", kind: "reviewed", path: change.path },
       });
     const pending: InstalledSkill = {
       installed_skill_id: change.recorded?.installed_skill_id ?? makeInstalledSkillId(),
@@ -83,7 +91,7 @@ export const prepareApply = Effect.fn("Library.prepareRecordedApply")(function* 
     rows.set(
       change.path,
       change._tag === "Conflict"
-        ? Status.conflicted(pending, change.currentHash, change.expectedHash)
+        ? Status.conflicted(pending, change.currentHash, change.conflicts, change.expectedHash)
         : Status.installed(pending),
     );
   }
@@ -100,6 +108,7 @@ export const prepareApply = Effect.fn("Library.prepareRecordedApply")(function* 
     base,
     rows,
     routing,
+    home,
   );
   const { installed_skills: _rows, operations: _operations, ...unchanged } = base;
   const step: ApplyStep = invalidSource
@@ -136,12 +145,19 @@ export const saveStep = Effect.fn("Library.saveApplyStep")(function* (
   const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
     state.operations,
   ).pipe(
-    Effect.mapError(() => new InvalidIntent({ detail: "Invalid recorded Library operation" })),
+    Effect.mapError(
+      () =>
+        new InvalidLibraryState({
+          path: libraryStatePath(writer.home),
+          reason: { _tag: "InvalidData" },
+        }),
+    ),
   );
   const operation = operations.find((item) => item.operationId === operationId);
   if (operation?._tag !== "Pending" || !operation.steps[index])
-    return yield* new InvalidIntent({
-      detail: "Installed changes require their Pending operation",
+    return yield* new InvalidLibraryState({
+      path: libraryStatePath(writer.home),
+      reason: { _tag: "MissingRecord", record: "pending-operation" },
     });
   const encoded = yield* Schema.encodeEffect(OperationStatus)({
     ...operation,
@@ -158,7 +174,15 @@ export const saveStep = Effect.fn("Library.saveApplyStep")(function* (
               ],
             },
     ),
-  }).pipe(Effect.mapError(() => new InvalidIntent({ detail: "Invalid installed-change record" })));
+  }).pipe(
+    Effect.mapError(
+      () =>
+        new InvalidLibraryState({
+          path: libraryStatePath(writer.home),
+          reason: { _tag: "InvalidData" },
+        }),
+    ),
+  );
   yield* writer.save(
     {
       ...state,

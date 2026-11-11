@@ -9,7 +9,7 @@ import { AuthorLocalPathUnchecked, LocalFilesChangedDuringSync } from "./failure
 import { scanWorkspaceWrite } from "./local-tree.js";
 
 /**
- * The file half of WorkspaceLease.writeTree, after the lease has checked its PreparedWrite: make
+ * The file half of WorkspaceLease.writeTree, after the lease has checked its private checkpoint: make
  * the workspace's files `to`, if they are still `from`. Only files are written: a directory or
  * symlink in a SKIT is refused rather than dropped.
  *
@@ -24,7 +24,11 @@ export const writeWorkspaceTree = Effect.fn("AuthorWorkspace.writeTree")(functio
   to: History.Tree,
 ) {
   const issue = History.treePathIssue(to);
-  if (issue) return yield* new SkitContractError({ contract: "Author sync tree", issues: [issue] });
+  if (issue)
+    return yield* new SkitContractError({
+      contract: "Author sync tree",
+      reason: { _tag: "InvalidTree", issue },
+    });
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const links = yield* LinkStat;
@@ -39,12 +43,7 @@ export const writeWorkspaceTree = Effect.fn("AuthorWorkspace.writeTree")(functio
   if (unsupported !== undefined)
     return yield* new SkitContractError({
       contract: "Author sync tree",
-      issues: [
-        {
-          path: unsupported.path,
-          message: `Author sync writes files only; the SKIT holds a ${unsupported.kind} here`,
-        },
-      ],
+      reason: { _tag: "UnsupportedTreeEntry", path: unsupported.path, kind: unsupported.kind },
     });
   const changed = files.filter((entry) => {
     const was = before.get(entry.path);

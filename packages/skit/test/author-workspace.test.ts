@@ -1,7 +1,8 @@
+import { WorkspaceFailure } from "../src/author/workspace-contracts.js";
 import { AuthorWorkspace, type WorkspaceLease } from "../src/author/workspace.js";
 import { AuthorHistory } from "../src/author/history.js";
 import { expect, it } from "@effect/vitest";
-import { Effect, Exit, FileSystem, Option, Scope } from "effect";
+import { Deferred, Effect, Exit, Fiber, FileSystem, Layer, Option, Scope, Schema } from "effect";
 import { join } from "node:path";
 import * as History from "../src/history/history.js";
 import * as Sync from "../src/sync/sync.js";
@@ -103,8 +104,66 @@ it.effect("a lease handle used after its scope closed is refused", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
     const lease = yield* Effect.scoped(f.workspaces.acquire(f.root));
-    expect(yield* Effect.flip(lease.advance)).toMatchObject({ _tag: "AuthorLeaseNotHeld" });
+    expect(yield* Effect.exit(lease.advance)).toMatchObject({
+      _tag: "Failure",
+      cause: {
+        reasons: [
+          {
+            _tag: "Die",
+            defect: {
+              _tag: "AuthorWorkspaceInvariantFailed",
+              reason: { _tag: "LeaseClosed" },
+            },
+          },
+        ],
+      },
+    });
   }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.effect("closing a lease waits for its in-flight identity write", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const entered = yield* Deferred.make<void>();
+    const resume = yield* Deferred.make<void>();
+    const order: string[] = [];
+    yield* Effect.gen(function* () {
+      const workspaces = yield* AuthorWorkspace;
+      const scope = yield* Effect.acquireRelease(Scope.make(), (scope) =>
+        Scope.close(scope, Exit.void),
+      );
+      const lease = yield* workspaces.acquire(f.root).pipe(Scope.provide(scope));
+      const writing = yield* lease.register(Option.none()).pipe(Effect.forkScoped);
+      yield* Deferred.await(entered);
+      const closing = yield* Scope.close(scope, Exit.void).pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            order.push("closed");
+          }),
+        ),
+        Effect.forkScoped,
+      );
+      yield* Effect.yieldNow;
+      yield* Deferred.succeed(resume, undefined);
+      yield* Fiber.join(writing);
+      yield* Fiber.join(closing);
+    }).pipe(
+      Effect.provide(Layer.fresh(AuthorWorkspace.layer)),
+      Effect.provideService(FileSystem.FileSystem, {
+        ...f.fs,
+        link: (from, to) =>
+          Effect.gen(function* () {
+            if (to === join(f.root, ".skit/workspace.json")) {
+              yield* Deferred.succeed(entered, undefined);
+              yield* Deferred.await(resume);
+            }
+            yield* f.fs.link(from, to);
+            if (to === join(f.root, ".skit/workspace.json")) order.push("published");
+          }),
+      }),
+    );
+    expect(order).toEqual(["published", "closed"]);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("the first connection: checkpoint, a receipt that must match, then the remote", () =>
@@ -195,7 +254,7 @@ const trees = (root: string) =>
 
 const identified = (lease: WorkspaceLease) => lease.register(Option.none());
 
-it.effect("writeTree writes only with a current, unused PreparedWrite for exactly its trees", () =>
+it.effect("preparation returns a write bound to its lease and private saved trees", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
     const home = yield* f.fs.makeTempDirectoryScoped({ prefix: "skit-author-home-" });
@@ -215,56 +274,168 @@ it.effect("writeTree writes only with a current, unused PreparedWrite for exactl
         next: Sync.Sending.make({ base: null, revision: History.RevisionId.make(toHash) }),
         merged: false,
       });
-      const notPrepared = { _tag: "AuthorWriteNotPrepared" };
-
-      // A later checkpoint step makes an outstanding PreparedWrite stale.
       const stale = yield* history.syncState.prepareWrite(lease, key, { from: idle, to: writing });
       yield* lease.advance;
-      expect(yield* Effect.flip(lease.writeTree({ prepared: stale, from, to }))).toMatchObject(
-        notPrepared,
-      );
-
-      // One for other trees is refused, and the attempt uses it up.
-      const prepared = yield* history.syncState.prepareWrite(lease, key, {
-        from: writing,
-        to: writing,
+      expect(yield* Effect.exit(stale.apply())).toMatchObject({
+        _tag: "Failure",
+        cause: {
+          reasons: [
+            {
+              _tag: "Die",
+              defect: {
+                _tag: "AuthorWorkspaceInvariantFailed",
+                reason: { _tag: "CheckpointChanged" },
+              },
+            },
+          ],
+        },
       });
-      expect(yield* Effect.flip(lease.writeTree({ prepared, from, to: from }))).toMatchObject(
-        notPrepared,
-      );
-      expect(yield* Effect.flip(lease.writeTree({ prepared, from, to }))).toMatchObject(
-        notPrepared,
-      );
-
-      // One for another workspace is refused.
-      const foreign = yield* history.syncState.prepareWrite(
-        lease,
-        { ...key, workspaceId: (yield* identified(yield* otherLease)).workspaceId },
-        { from: idle, to: writing },
-      );
-      expect(yield* Effect.flip(lease.writeTree({ prepared: foreign, from, to }))).toMatchObject(
-        notPrepared,
-      );
-      expect(yield* f.fs.readFileString(join(f.root, "notes.txt"))).toBe("before\n");
-
+      const other = yield* otherLease;
+      const foreignKey = { ...key, workspaceId: (yield* identified(other)).workspaceId };
+      const checkpoint = yield* f.fs.readFileString(join(home, "author-sync.json"));
+      expect(
+        yield* Effect.flip(
+          history.syncState.prepareWrite(lease, foreignKey, {
+            from: idle,
+            to: writing,
+          }),
+        ),
+      ).toMatchObject({ _tag: "AuthorWorkspaceConflict" });
+      expect(yield* f.fs.readFileString(join(home, "author-sync.json"))).toBe(checkpoint);
       const current = yield* history.syncState.prepareWrite(lease, key, {
         from: writing,
-        to: writing,
+        trees: { from: fromHash, to: toHash },
       });
-      yield* lease.writeTree({ prepared: current, from, to });
+      // Neither caller-owned tree data nor another lease can redirect the bound write.
+      for (const tree of [from, to])
+        for (const entry of tree) if (entry.kind === "file") entry.bytes.fill(33);
+      const attempts = yield* Effect.all(
+        [Effect.exit(current.apply()), Effect.exit(current.apply())],
+        { concurrency: "unbounded" },
+      );
+      expect(attempts.map((exit) => exit._tag).sort()).toEqual(["Failure", "Success"]);
+      expect(yield* history.syncState.read(key)).toEqual(writing.next);
       expect(yield* f.fs.readFileString(join(f.root, "notes.txt"))).toBe("after\n");
-      // The write's own stage folder is gone with it.
+      expect(yield* f.fs.exists(join(other.root, "notes.txt"))).toBe(false);
       expect(
         (yield* f.fs.readDirectory(join(f.root, ".skit"))).filter((name) =>
           name.startsWith("stage-"),
         ),
       ).toEqual([]);
-      // Used once, it is used up.
-      expect(
-        yield* Effect.flip(lease.writeTree({ prepared: current, from: to, to: from })),
-      ).toMatchObject(notPrepared);
+      expect(attempts.find((exit) => exit._tag === "Failure")).toMatchObject({
+        _tag: "Failure",
+        cause: {
+          reasons: [
+            {
+              _tag: "Die",
+              defect: {
+                _tag: "AuthorWorkspaceInvariantFailed",
+                reason: { _tag: "WriteAlreadyUsed" },
+              },
+            },
+          ],
+        },
+      });
     }).pipe(Effect.provide(authorLayer(home)));
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect("a prepared operation cannot write after its lease scope closes", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const home = yield* f.fs.makeTempDirectoryScoped({ prefix: "skit-closed-write-" });
+    const prepared = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const history = yield* AuthorHistory;
+        const lease = yield* f.workspaces.acquire(f.root);
+        const { workspaceId } = yield* identified(lease);
+        const { from, to, fromHash, toHash } = yield* trees(f.root);
+        yield* history.saveTree(from);
+        yield* history.saveTree(to);
+        return yield* history.syncState.prepareWrite(
+          lease,
+          { workspaceId, locator: "skit://registry.example/swyx/tools" },
+          {
+            from: Sync.Idle.make({ base: null }),
+            to: Sync.Writing.make({
+              base: null,
+              from: fromHash,
+              to: toHash,
+              next: Sync.Sending.make({ base: null, revision: History.RevisionId.make(toHash) }),
+              merged: false,
+            }),
+          },
+        );
+      }).pipe(Effect.provide(authorLayer(home))),
+    );
+    expect(yield* Effect.exit(prepared.apply())).toMatchObject({
+      _tag: "Failure",
+      cause: {
+        reasons: [
+          {
+            _tag: "Die",
+            defect: {
+              _tag: "AuthorWorkspaceInvariantFailed",
+              reason: { _tag: "LeaseClosed" },
+            },
+          },
+        ],
+      },
+    });
+    expect(yield* f.fs.readFileString(join(f.root, "notes.txt"))).toBe("before\n");
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect.each(["missing", "changed", "malformed", "edited"] as const)(
+  "a prepared write reports %s workspace data as a recoverable failure without writing",
+  (damage) =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      const home = yield* f.fs.makeTempDirectoryScoped({ prefix: "skit-changed-write-" });
+      yield* Effect.gen(function* () {
+        const history = yield* AuthorHistory;
+        const lease = yield* f.workspaces.acquire(f.root);
+        const { workspaceId } = yield* identified(lease);
+        const key = { workspaceId, locator: "skit://registry.example/swyx/tools" };
+        const { from, to, fromHash, toHash } = yield* trees(f.root);
+        yield* history.saveTree(from);
+        yield* history.saveTree(to);
+        const prepared = yield* history.syncState.prepareWrite(lease, key, {
+          from: Sync.Idle.make({ base: null }),
+          to: Sync.Writing.make({
+            base: null,
+            from: fromHash,
+            to: toHash,
+            next: Sync.Sending.make({ base: null, revision: History.RevisionId.make(toHash) }),
+            merged: false,
+          }),
+        });
+        const identity = join(f.root, ".skit/workspace.json");
+        if (damage === "missing") yield* f.fs.remove(identity);
+        if (damage === "changed")
+          yield* f.fs.writeFileString(
+            identity,
+            JSON.stringify({
+              schema: "skit.author-workspace.v1",
+              workspace_id: `workspace_${"a".repeat(32)}`,
+            }),
+          );
+        if (damage === "malformed") yield* f.fs.writeFileString(identity, "broken identity");
+        if (damage === "edited")
+          yield* f.fs.writeFileString(join(f.root, "notes.txt"), "external edit\n");
+        const failure = yield* Effect.flip(prepared.apply());
+        expect(failure._tag).toBe(
+          damage === "malformed"
+            ? "AuthorWorkspaceMetadataInvalid"
+            : damage === "edited"
+              ? "LocalFilesChangedDuringSync"
+              : "AuthorWorkspaceConflict",
+        );
+        expect(yield* f.fs.readFileString(join(f.root, "notes.txt"))).toBe(
+          damage === "edited" ? "external edit\n" : "before\n",
+        );
+      }).pipe(Effect.provide(authorLayer(home)));
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 /** A lease on a second, empty workspace. */
@@ -312,10 +483,39 @@ it.effect("prepareWrite refuses an impossible namespace without saving a checkpo
         ),
       ).toMatchObject({
         _tag: "AuthorHistoryInvalid",
-        reason: expect.stringContaining("cannot contain descendants"),
+        reason: { _tag: "InvalidTree", issue: { _tag: "ParentNotDirectory" } },
       });
       expect(yield* f.fs.exists(join(home, "author-sync.json"))).toBe(false);
       expect(yield* f.fs.readFileString(join(f.root, "notes.txt"))).toBe("before\n");
     }).pipe(Effect.provide(authorLayer(home)));
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect("a malformed checkpoint retains schema paths and cannot be changed by a read", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const file = join(f.root, ".skit/connection.json");
+    yield* f.fs.makeDirectory(join(f.root, ".skit"));
+    const text = JSON.stringify({
+      _tag: "Connecting",
+      remote,
+      visibility: "private",
+      requestId: 42,
+    });
+    yield* f.fs.writeFileString(file, text);
+    const failure = yield* f.workspaces.read(f.root).pipe(Effect.flip);
+    expect(failure).toMatchObject({
+      _tag: "AuthorSyncStateInvalid",
+      path: file,
+      reason: {
+        _tag: "InvalidData",
+        failure: expect.objectContaining({ _tag: "SchemaError" }),
+      },
+    });
+    const wire = Schema.encodeUnknownSync(WorkspaceFailure)(failure);
+    const decoded = Schema.decodeUnknownSync(WorkspaceFailure)(JSON.parse(JSON.stringify(wire)));
+    expect(decoded).toMatchObject({ _tag: "AuthorSyncStateInvalid", code: "OPERATION_FAILED" });
+    expect(wire).not.toHaveProperty("message");
+    expect(yield* f.fs.readFileString(file)).toBe(text);
+  }).pipe(Effect.provide(testPlatformLayer)),
 );

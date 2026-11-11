@@ -14,6 +14,10 @@ import { libraryView, openLibraryView } from "../src/library/internal/session/li
 import { resolveSkitSource } from "../src/sources/resolve.js";
 import type { SkitSource } from "../src/library/library-contracts.js";
 import { inspectResolvedSource } from "../src/library/source-inspection.js";
+import { collectionVersionPath } from "../src/library/collection-version.js";
+import { SourceProcess } from "../src/platform/source-process.js";
+import { systemError } from "effect/PlatformError";
+import { inspectSkillsShCompatibleHash } from "../src/library/setup/skills-sh/compatible-hash.js";
 import { testRoots } from "./helpers/library-store.js";
 
 const inspectSource = Effect.fn("Test.inspectSource")(function* (source: SkitSource) {
@@ -94,7 +98,7 @@ it.effect("checks skills.sh status against real Git history without saving Libra
       expect(candidate?.action).toBe("import-observed-collection");
       if (!candidate || candidate.action !== "import-observed-collection") return;
       yield* applySetupPlan(
-        { manage: { installOptions: inventory }, withStatus: (_message, stage) => stage },
+        { manage: { installOptions: inventory }, withStage: (_progress, stage) => stage },
         {
           setup,
           planId: preview.onboarding.planId,
@@ -103,7 +107,6 @@ it.effect("checks skills.sh status against real Git history without saving Libra
           bindings: [],
           ownership: [],
           removals: { entries: [], folders: [] },
-          changes: [],
         },
       );
       const saved = yield* Effect.flatMap(Library.Service, (library) => library.read);
@@ -201,6 +204,133 @@ it.effect("checks skills.sh status against real Git history without saving Libra
           })
           .pipe(Effect.map((rows) => rows[0]?.skills_sh));
       };
+      const process = yield* SourceProcess;
+      const inspectionFailure = systemError({
+        _tag: "PermissionDenied",
+        module: "ChildProcess",
+        method: "spawn",
+      });
+      for (const operation of ["ls-tree", "log"]) {
+        const unavailable = (yield* checkLockEntry().pipe(
+          Effect.provideService(SourceProcess, {
+            ...process,
+            output: (command, args, options) =>
+              args.includes(operation)
+                ? Effect.fail(inspectionFailure)
+                : process.output(command, args, options),
+          }),
+        ))?.members[0];
+        expect(unavailable).toMatchObject({
+          status: "unverifiable",
+          reason: {
+            _tag: "GitEvidenceUnavailable",
+            failure: {
+              _tag: "SkillsSh.GitInspectionFailed",
+              operation,
+              reason: { _tag: "ProcessFailed", failure: inspectionFailure },
+            },
+          },
+        });
+        if (
+          unavailable?.reason?._tag === "GitEvidenceUnavailable" &&
+          unavailable.reason.failure.reason._tag === "ProcessFailed"
+        )
+          expect(unavailable.reason.failure.reason.failure).toBe(inspectionFailure);
+      }
+      const nonzero = (yield* checkLockEntry().pipe(
+        Effect.provideService(SourceProcess, {
+          ...process,
+          output: (command, args, options) =>
+            args.includes("ls-tree")
+              ? Effect.succeed({
+                  exitCode: 128,
+                  stdout: new Uint8Array(),
+                  stderr: "fatal: corrupt tree",
+                })
+              : process.output(command, args, options),
+        }),
+      ))?.members[0];
+      expect(nonzero).toMatchObject({
+        status: "unverifiable",
+        reason: {
+          _tag: "GitEvidenceUnavailable",
+          failure: {
+            operation: "ls-tree",
+            reason: {
+              _tag: "ExitCode",
+              exitCode: 128,
+              stderr: "fatal: corrupt tree",
+            },
+          },
+        },
+      });
+      const retainedFolder = join(
+        collectionVersionPath(join(home, "originals"), collectionVersion.hash),
+        "skills",
+        "review",
+      );
+      const readFailure = systemError({
+        _tag: "PermissionDenied",
+        module: "FileSystem",
+        method: "readDirectory",
+        pathOrDescriptor: retainedFolder,
+      });
+      // Simulate read access disappearing after Library's initial integrity check.
+      let failRetainedReads = false;
+      const unreadable = (yield* checkLockEntry().pipe(
+        Effect.provideService(SourceProcess, {
+          ...process,
+          output: (command, args, options) => {
+            if (args.includes("ls-tree")) failRetainedReads = true;
+            return process.output(command, args, options);
+          },
+        }),
+        Effect.provideService(FileSystem.FileSystem, {
+          ...fs,
+          readDirectory: (path) =>
+            failRetainedReads && path === retainedFolder
+              ? Effect.fail(readFailure)
+              : fs.readDirectory(path),
+        }),
+      ))?.members[0];
+      expect(unreadable?.reason?._tag).toBe("OriginalBytesUnavailable");
+      if (unreadable?.reason?._tag === "OriginalBytesUnavailable")
+        expect(unreadable.reason.failures[0]).toBe(readFailure);
+      expect(
+        (yield* checkLockEntry({ source_url: undefined, source_type: "well-known" }))?.members[0],
+      ).toMatchObject({
+        status: "not-applicable",
+        reason: { _tag: "WellKnownSource" },
+      });
+      expect((yield* checkLockEntry({ source_url: undefined }))?.members[0]).toMatchObject({
+        status: "unverifiable",
+        reason: { _tag: "GitSourceMissing" },
+      });
+      const storageFailure = systemError({
+        _tag: "PermissionDenied",
+        module: "FileSystem",
+        method: "makeDirectory",
+      });
+      const mirrorUnavailable = (yield* checkLockEntry().pipe(
+        Effect.provideService(FileSystem.FileSystem, {
+          ...fs,
+          makeDirectory: () => Effect.fail(storageFailure),
+        }),
+      ))?.members[0];
+      expect(mirrorUnavailable?.reason?._tag).toBe("MirrorUnavailable");
+      if (mirrorUnavailable?.reason?._tag === "MirrorUnavailable")
+        expect(mirrorUnavailable.reason.failure).toBe(storageFailure);
+      expect((yield* checkLockEntry({ skill_path: undefined }))?.members[0]?.reason).toEqual({
+        _tag: "LockIncomplete",
+        missing: ["skill-path"],
+      });
+      expect(
+        (yield* checkLockEntry({ computed_hash: undefined, skill_folder_hash: undefined }))
+          ?.members[0]?.reason,
+      ).toEqual({
+        _tag: "LockIncomplete",
+        missing: ["hash"],
+      });
       const originalCommit = checked[0]!.skills_sh!.members[0]!.baseline_commit!;
       const originalTree = checked[0]!.skills_sh!.members[0]!.baseline_tree!;
       expect((yield* checkLockEntry({ ref: originalCommit }))?.members[0]).toMatchObject({
@@ -217,7 +347,7 @@ it.effect("checks skills.sh status against real Git history without saving Libra
         hash_kind: "skillFolderHash",
         baseline_commit: originalCommit,
         baseline_verification: "lock-only",
-        reason: "Git tree hash cannot verify retained filesystem bytes",
+        reason: { _tag: "TreeHashCannotVerifyOriginalBytes" },
       });
       expect((yield* checkLockEntry({ computed_hash: "unknown" }))?.members[0]).toMatchObject({
         status: "differs-from-lock-and-upstream",
@@ -240,20 +370,36 @@ it.effect("checks skills.sh status against real Git history without saving Libra
       });
       expect((yield* checkLockEntry({ computed_hash: "unknown" }))?.members[0]).toMatchObject({
         status: "unverifiable",
-        reason: "lock hash not found in searched ref history",
+        reason: { _tag: "BaselineNotFound", hashKind: "computedHash", ref: "main" },
       });
       expect((yield* checkLockEntry({ ref: "missing-ref" }))?.members[0]).toMatchObject({
         status: "unverifiable",
-        reason: "could not resolve ref missing-ref",
+        reason: {
+          _tag: "RefUnavailable",
+          ref: "missing-ref",
+          failure: {
+            _tag: "SkillsSh.GitInspectionFailed",
+            operation: "rev-parse",
+            reason: { _tag: "ExitCode" },
+          },
+        },
       });
       expect(
         (yield* checkLockEntry({ source_url: join(root, "missing-source") }))?.members[0],
       ).toMatchObject({
         status: "unverifiable",
-        reason: "could not reach Git source",
+        reason: {
+          _tag: "MirrorUnavailable",
+          failure: {
+            _tag: "SkillsSh.GitInspectionFailed",
+            operation: "clone",
+            reason: { _tag: "ExitCode" },
+          },
+        },
       });
       // Checking only reports: the Library it read is left exactly as it was.
       expect(yield* fs.readFileString(join(home, "state.json"))).toBe(beforeState);
+      expect(yield* fs.readFileString(join(installed, "SKILL.md"))).toBe(original);
     }).pipe(
       Effect.provide(
         Library.layer({ home, roots: testRoots(home) }).pipe(
@@ -262,4 +408,27 @@ it.effect("checks skills.sh status against real Git history without saving Libra
       ),
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("hash evidence retains native read failures instead of manufacturing a mismatch", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const failure = systemError({
+      _tag: "PermissionDenied",
+      module: "FileSystem",
+      method: "readDirectory",
+      pathOrDescriptor: "/retained/review",
+    });
+    const inspected = yield* inspectSkillsShCompatibleHash(
+      "/retained/review",
+      "/retained/review",
+    ).pipe(
+      Effect.provideService(FileSystem.FileSystem, {
+        ...fs,
+        readDirectory: () => Effect.fail(failure),
+      }),
+    );
+    expect(inspected._tag).toBe("Failure");
+    if (inspected._tag === "Failure") expect(inspected.failure[0]).toBe(failure);
+  }).pipe(Effect.provide(skitLayer)),
 );

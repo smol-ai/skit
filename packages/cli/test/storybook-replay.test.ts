@@ -1,5 +1,6 @@
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { expect } from "vitest";
 import { journeyStories } from "../src/storybook/journey-stories.js";
 import { recordJourney } from "../src/storybook/journey-runner.js";
@@ -34,7 +35,7 @@ it.effect("replays a real fresh-device sync from a single captured run", () =>
     expect(json).toHaveLength(2);
     expect(JSON.parse(json[1]!.output).data.status).toBe("pulled");
     expect(json.every((frame) => frame.status === undefined)).toBe(true);
-  }),
+  }).pipe(Effect.provide(skitLayer)),
 );
 
 it.effect("a failed-download preview clears status and shows the command failure", () =>
@@ -45,7 +46,33 @@ it.effect("a failed-download preview clears status and shows the command failure
     expect(frames.some((frame) => frame.status?.startsWith("Downloading"))).toBe(true);
     expect(frames.at(-1)?.label).toBe("Failed");
     expect(frames.at(-1)?.status).toBeUndefined();
-    expect(frames.at(-1)?.output).toContain("Error:");
     expect(frames.at(-1)?.output).not.toContain("Library synced.");
-  }),
+  }).pipe(Effect.provide(skitLayer)),
+);
+
+it.effect("a result screen names the contract state it reports", () =>
+  Effect.gen(function* () {
+    const story = journeyStories.find((story) => story.name === "library-sync/fresh-device");
+    if (!story) return;
+    const frames = journeyFrames(yield* recordJourney(story), defaultTerminalEnvironment);
+    expect(frames.at(-1)?.outcome).toEqual({ contract: "librarySync", state: "pulled" });
+    expect(frames.slice(0, -1).every((frame) => frame.outcome === undefined)).toBe(true);
+  }).pipe(Effect.provide(skitLayer)),
+);
+
+it.effect("an answered prompt keeps the choices it offered beside the ones taken", () =>
+  Effect.gen(function* () {
+    const story = journeyStories.find((story) => story.name === "setup/guided-existing-skills");
+    if (!story) return;
+    const answers = journeyFrames(yield* recordJourney(story), defaultTerminalEnvironment).flatMap(
+      (frame) => (frame.answer ? [frame.answer] : []),
+    );
+    expect(answers).toHaveLength(2);
+    const [copies, confirm] = answers;
+    expect(copies?.kind).toBe("multiselect");
+    expect(copies?.chosen).toHaveLength(4);
+    expect(copies?.offered.length).toBeGreaterThan(4);
+    expect(copies?.chosen.every((label) => copies.offered.includes(label))).toBe(true);
+    expect(confirm).toEqual({ kind: "confirm", offered: ["yes", "no"], chosen: ["yes"] });
+  }).pipe(Effect.provide(skitLayer)),
 );

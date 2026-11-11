@@ -13,6 +13,20 @@ import { setupCommand } from "../src/library/setup.js";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { setupStepTitles } from "../src/library/setup/steps.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
+import { Block } from "../src/terminal/blocks.js";
+/** The rows of the confirm step's table under `title`, each cell as its text. */
+const planRows = (body: readonly Block[] | undefined, title: string) =>
+  body === undefined
+    ? []
+    : body
+        .filter(Block.$is("Group"))
+        .filter((group) => group.title === title)
+        .flatMap((group) => group.children.filter(Block.$is("Table")))
+        .flatMap((table) =>
+          table.rows.map((row) =>
+            row.map((cell) => cell.filter((part) => typeof part === "string").join("")),
+          ),
+        );
 
 const skillDocument = (name: string, body: string) =>
   `---\nname: ${name}\ndescription: ${body}\n---\n\n# ${body}\n`;
@@ -72,7 +86,7 @@ it.effect("adds selected skills and takes ownership only of eligible global copi
     expect(prompts.map((prompt) => prompt.kind)).toEqual(["multiselect", "multiselect", "confirm"]);
     expect(prompts[1]?.choices.map((choice) => choice.value)).toEqual(["repo-only", "review"]);
     expect(prompts[1]?.choices.find((choice) => choice.value === "repo-only")).toMatchObject({
-      group: "Repository | ~/repository",
+      group: `Repository | ${repository}`,
       selected: false,
     });
     expect(yield* interaction.remaining).toBe(0);
@@ -266,8 +280,11 @@ it.effect("keeps every conflicting Claude copy visible and manages only the chos
       skillDocument("shared", "Shared source"),
     );
     expect(
-      (yield* interaction.steps).find((step) => step.title === setupStepTitles.confirm)?.body,
-    ).toContain(`Authoritative copy: ${names[0]} | ${chosenPath}`);
+      planRows(
+        (yield* interaction.steps).find((step) => step.title === setupStepTitles.confirm)?.body,
+        "Authoritative copies",
+      ),
+    ).toContainEqual([names[0], chosenPath]);
   }).pipe(Effect.provide(skitLayer)),
 );
 

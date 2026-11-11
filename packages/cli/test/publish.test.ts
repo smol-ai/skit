@@ -11,6 +11,7 @@ import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 import { registryCredentialLayer } from "./helpers/registry-credential.js";
 import { copySkitFixtureEffect, scratch } from "./helpers/library-home.js";
+import { classifyFailure } from "../src/commands/failure-classification.js";
 
 /**
  * Run the native publication with an injected Registry transport.
@@ -313,21 +314,23 @@ it.effect("publish rejects unbaked invocation policy before any archive exists",
     );
     let requests = 0;
 
-    expect(
-      yield* failure(
-        runPublish(root, "1.2.3", revision, {
-          credentialOrigin: "https://registry.test",
-          transport: () =>
-            Effect.sync(() => {
-              requests++;
-              return Response.json({});
-            }),
-        }),
-      ),
-    ).toMatchObject({
+    const blocked = yield* failure(
+      runPublish(root, "1.2.3", revision, {
+        credentialOrigin: "https://registry.test",
+        transport: () =>
+          Effect.sync(() => {
+            requests++;
+            return Response.json({});
+          }),
+      }),
+    );
+    expect(blocked).toMatchObject({
       code: "VALIDATION_FAILED",
-      message: expect.stringContaining("skit author invocation"),
+      diagnostics: expect.arrayContaining([
+        expect.objectContaining({ code: "INVOCATION_METADATA_MISMATCH", severity: "error" }),
+      ]),
     });
+    expect(classifyFailure(blocked).message).toContain("skit author invocation");
     expect(requests).toBe(0);
     expect(yield* listDir(root)).not.toContain("release.zip");
   }).pipe(Effect.provide(skitLayer)),
@@ -397,7 +400,13 @@ it.effect("publish reports the diagnostics that block publication", () =>
       _tag: "PublicationBlocked",
       code: "VALIDATION_FAILED",
       reason: "assessment",
-      message: expect.not.stringContaining("this warning must not be presented as a blocker"),
+      diagnostics: [
+        {
+          severity: "error",
+          code: "SECURITY_POLICY_BLOCKED",
+          message: "review contains undeclared executable behavior",
+        },
+      ],
     });
   }).pipe(Effect.provide(skitLayer)),
 );
@@ -407,19 +416,21 @@ it.effect("publish tells the author to sync when local files do not match the SK
     const root = yield* scratch("skit-unsynced-publish-test-");
     yield* writeRemote(root);
     yield* copySkitFixtureEffect("authored", root);
-    expect(
-      yield* failure(
-        runPublish(root, "1.0.0", undefined, {
-          credentialOrigin: "https://registry.test",
-          transport: (input) =>
-            Effect.succeed(
-              input.url.includes(".well-known")
-                ? new Response(null, { status: 404 })
-                : Response.json({ error: "ARCHIVE_MANIFEST_MISMATCH" }, { status: 400 }),
-            ),
-        }),
-      ),
-    ).toMatchObject({ message: expect.stringContaining(`skit author sync ${root} --apply`) });
+    const error = yield* failure(
+      runPublish(root, "1.0.0", undefined, {
+        credentialOrigin: "https://registry.test",
+        transport: (input) =>
+          Effect.succeed(
+            input.url.includes(".well-known")
+              ? new Response(null, { status: 404 })
+              : Response.json({ error: "ARCHIVE_MANIFEST_MISMATCH" }, { status: 400 }),
+          ),
+      }),
+    );
+    expect(error).toMatchObject({ _tag: "AuthorSyncRequired", root });
+    expect(classifyFailure(error).next).toContainEqual({
+      code: `skit author sync ${root} --apply`,
+    });
   }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -430,19 +441,21 @@ it.effect("publish uses the authored path in sync remediation", () =>
     yield* makeDir(root);
     yield* writeRemote(root);
     yield* copySkitFixtureEffect("authored", root);
-    expect(
-      yield* failure(
-        runPublish(root, "1.0.0", undefined, {
-          credentialOrigin: "https://registry.test",
-          transport: (input) =>
-            Effect.succeed(
-              input.url.includes(".well-known")
-                ? new Response(null, { status: 404 })
-                : Response.json({ error: "ARCHIVE_MANIFEST_MISMATCH" }, { status: 400 }),
-            ),
-        }),
-      ),
-    ).toMatchObject({ message: expect.stringContaining(`skit author sync '${root}' --apply`) });
+    const error = yield* failure(
+      runPublish(root, "1.0.0", undefined, {
+        credentialOrigin: "https://registry.test",
+        transport: (input) =>
+          Effect.succeed(
+            input.url.includes(".well-known")
+              ? new Response(null, { status: 404 })
+              : Response.json({ error: "ARCHIVE_MANIFEST_MISMATCH" }, { status: 400 }),
+          ),
+      }),
+    );
+    expect(error).toMatchObject({ _tag: "AuthorSyncRequired", root });
+    expect(classifyFailure(error).next).toContainEqual({
+      code: `skit author sync '${root}' --apply`,
+    });
   }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -492,7 +505,9 @@ it.effect("publish preserves non-JSON Registry error bodies", () =>
             ),
         }),
       ),
-    ).toMatchObject({ message: expect.stringMatching(/upstream unavailable/) });
+    ).toMatchObject({
+      reason: { _tag: "ResponseFailure", status: 502, body: "upstream unavailable" },
+    });
   }).pipe(Effect.provide(skitLayer)),
 );
 

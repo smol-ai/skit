@@ -1,7 +1,7 @@
 import { NodeRuntime } from "@effect/platform-node";
 import { Console, Effect, FileSystem, Schema, Stream } from "effect";
 import { dirname, join } from "node:path";
-import { authorLayer, refreshWorkspace } from "../helpers/author-history.js";
+import { authorLayer, refreshWorkspace } from "../../src/platform/author-sync-fixture/history.js";
 import { testPlatformLayer } from "../helpers/platform.js";
 
 const Arguments = Schema.Struct({

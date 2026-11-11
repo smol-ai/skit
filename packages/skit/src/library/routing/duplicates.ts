@@ -27,17 +27,21 @@ export function readableSkillsDirectories(
 ) {
   return harnesses.flatMap((harness) => {
     const driver = harnessDrivers[harness];
-    const own = driver.profile.roots
-      .filter(
-        (root) => root.readable && root.scope === (scope.kind === "global" ? "global" : "project"),
-      )
-      .map((root) =>
-        resolveSkillsDirectory(root, {
-          home: options.home,
-          configHome: options.configHome,
-          ...(scope.kind === "repository" ? { repository: scope.root } : {}),
-        }),
-      );
+    const directories = Object.values(driver.profile.roots).filter((root) => root.readable);
+    const own =
+      scope.kind === "global"
+        ? directories
+            .filter((root) => root.scope === "global")
+            .map((root) =>
+              resolveSkillsDirectory({
+                ...root,
+                home: options.home,
+                configHome: options.configHome,
+              }),
+            )
+        : directories
+            .filter((root) => root.scope === "project")
+            .map((root) => resolveSkillsDirectory({ ...root, repository: scope.root }));
     const override = scope.kind === "global" ? options.overrides[harness] : undefined;
     const roots =
       override === undefined

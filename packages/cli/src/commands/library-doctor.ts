@@ -1,20 +1,17 @@
+import { defineCommand } from "./definition.js";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Effect } from "effect";
 import { Command, Flag } from "effect/cli";
-import { presentDoctorCleanup } from "../library/doctor/cleanup.js";
+import { runDoctor } from "../library/doctor/run.js";
 import { doctorOutputContracts } from "../library/doctor/output.js";
-import * as Library from "@smolai/skit-core/library";
-import { libraryDoctorReport, inspectNativeDiscovery } from "@smolai/skit-core/library/inventory";
-import { Renderer } from "../terminal/renderer.js";
 
 import { CommandMetadata } from "./metadata.js";
 
 import { enableOutputContracts } from "../library/enable.js";
 import { inventoryRootOptions, localFlags } from "./parameters.js";
-import { encodeResult as result } from "./encode-result.js";
 import { promptsAllowed } from "../terminal/interactivity.js";
 
-export const doctorCliCommand = Command.make(
+export const doctorCliCommand = defineCommand(
   "doctor",
   {
     ...localFlags,
@@ -38,39 +35,12 @@ export const doctorCliCommand = Command.make(
   (input) =>
     Effect.gen(function* () {
       const paths = yield* SkitConfiguration;
-      const options = inventoryRootOptions(input, paths);
-      const renderer = yield* Renderer;
-      const library = yield* Library.Service;
-      /** Diagnose the freshly saved inventory; the report itself is pure. */
-      const doctor = Effect.gen(function* () {
-        const inventory = yield* renderer.withStatus(
-          "Scanning harness installations",
-          library.inventory.refresh,
-        );
-        const native = yield* renderer.withStatus(
-          "Checking native harness skill discovery",
-          inspectNativeDiscovery(inventory, { ...options, cwd: process.cwd() }),
-        );
-        return { ...libraryDoctorReport(inventory), ...native };
+      yield* runDoctor({
+        options: { ...inventoryRootOptions(input, paths), cwd: process.cwd() },
+        days: input.days,
+        dryRun: input.dryRun,
+        interactive: !input.reportOnly && promptsAllowed({ json: input.json }),
       });
-      const value = yield* doctor;
-      yield* renderer.result(
-        result("doctor", doctorOutputContracts.doctor, value, value.ok ? undefined : 12),
-      );
-      if (!input.reportOnly && promptsAllowed({ json: input.json })) {
-        const changed = yield* presentDoctorCleanup(
-          value.listing_budgets,
-          options,
-          input.days,
-          input.dryRun,
-        ).pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(false)));
-        if (changed) {
-          const checked = yield* doctor;
-          yield* renderer.result(
-            result("doctor", doctorOutputContracts.doctor, checked, checked.ok ? 0 : 12),
-          );
-        }
-      }
     }),
 ).pipe(
   Command.withDescription(
@@ -98,6 +68,5 @@ export const doctorCliCommand = Command.make(
       enableOutputContracts.disablePlan,
       enableOutputContracts.disable,
     ],
-    exitCodes: [0, 11, 12, 64, 65],
   }),
 );

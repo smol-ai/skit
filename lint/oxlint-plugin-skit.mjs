@@ -6,6 +6,7 @@ import { layout, undecided } from "../architecture/layout.mjs";
 import { libraryRules } from "./library-rules.mjs";
 import { effectHygieneRules } from "./effect-hygiene-rules.mjs";
 import { frontendRules } from "./frontend-rules.mjs";
+import { termRules } from "./term-rules.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 const applicationDirectories = ["cli", "tui", "storybook", "skit-server-effect", "devtools"];
@@ -857,6 +858,7 @@ export default {
     ...effectHygieneRules,
     ...libraryRules,
     ...frontendRules,
+    ...termRules,
     "no-direct-cli-output": {
       meta: {
         type: "problem",

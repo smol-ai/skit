@@ -1,6 +1,7 @@
-import { readOwnershipMarker } from "./marker-inspection.js";
+import { inspectOwnershipMarker, readOwnershipMarker } from "./marker-inspection.js";
+import { installedSkillConflicts, type InstalledSkillConflict } from "./conflict.js";
 import { copyLocalTree } from "../platform/copy-tree.js";
-import { Data, Effect, FileSystem, Result, Schema } from "effect";
+import { Effect, FileSystem, Schema } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { dirname, join, relative, resolve } from "node:path";
 import { OwnershipMarker } from "./ownership-marker.js";
@@ -13,11 +14,8 @@ import { deterministicTreeHash, hashTree } from "../artifact/skit.js";
 import { Digest } from "effect/crypto";
 import type { HarnessInvocationWriteFailure } from "../harnesses/write-invocation.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
-import type { TreeError } from "../shared/tree-error.js";
+import { TreeErrorReason, type TreeError } from "../shared/tree-error.js";
 import {
-  ManageContentMismatch,
-  ManageTargetChanged,
-  NoSkillsDirectory,
   OwnershipMarkerDisagrees,
   UninstallConflict,
   SkillsDirectoryNotWritable,
@@ -38,16 +36,32 @@ export interface SkillSource {
   readonly invocationIntent: InvocationIntent;
 }
 
+export const InstalledSkillFailureReason = Schema.TaggedUnion({
+  InvalidTree: { reason: TreeErrorReason },
+  SharedPathOutsideSkill: { path: Schema.String },
+  DestinationAppeared: { path: Schema.String },
+  IdentityChanged: { path: Schema.String },
+  HashChanged: { path: Schema.String, skillId: Schema.String, verification: Schema.String },
+  EvidenceChanged: { path: Schema.String },
+  VersionMissing: { kind: Schema.Literals(["former", "enabled"]) },
+  BackingMissing: { skillName: Schema.String },
+  DescriptorInvalid: {},
+  DescriptorSkillMissing: { skillName: Schema.String },
+  ContentChanged: { skillName: Schema.String },
+  InputsChanged: { skillName: Schema.String },
+}).annotate({ identifier: "InstalledSkillFailureReason" });
+export type InstalledSkillFailureReason = typeof InstalledSkillFailureReason.Type;
+
 /** An installed skill could not be written or verified. */
 export class InstalledSkillFailure
-  extends Data.TaggedError("InstalledSkillFailure")<{
-    message: string;
-  }>
+  extends Schema.TaggedError<InstalledSkillFailure, { readonly brand: unique symbol }>()(
+    "InstalledSkillFailure",
+    { reason: InstalledSkillFailureReason },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Inspect the installed skill, then retry.";
 }
 
 function exists(path: string): Effect.Effect<boolean, PlatformError, FileSystem.FileSystem> {
@@ -61,7 +75,9 @@ function exists(path: string): Effect.Effect<boolean, PlatformError, FileSystem.
 const copyInstalledSkillTree = Effect.fn("Install.copyTree")((from: string, to: string) =>
   copyLocalTree(from, to, undefined, false).pipe(
     Effect.catchTag("TreeError", (error) =>
-      Effect.fail(new InstalledSkillFailure({ message: error.message })),
+      Effect.fail(
+        new InstalledSkillFailure({ reason: { _tag: "InvalidTree", reason: error.reason } }),
+      ),
     ),
   ),
 );
@@ -80,7 +96,7 @@ export const copySkill = Effect.fn("Install.copySkill")(function* (
     const target = resolve(request.destination, mapping.to);
     if (relative(request.destination, target).startsWith(".."))
       return yield* new InstalledSkillFailure({
-        message: `Shared mapping target escaped child: ${mapping.to}`,
+        reason: { _tag: "SharedPathOutsideSkill", path: mapping.to },
       });
     yield* fs.makeDirectory(dirname(target), { recursive: true }).pipe(Effect.uninterruptible);
     yield* copyInstalledSkillTree(join(request.libraryPath, mapping.from), target);
@@ -93,28 +109,11 @@ export const copySkill = Effect.fn("Install.copySkill")(function* (
   );
 });
 
-const markerExpectedHash = (marker: OwnershipMarker): Hash => marker.expected_hash;
-
 const sameMarker = (left: OwnershipMarker, right: OwnershipMarker) =>
   left.installed_skill_id === right.installed_skill_id &&
   left.skill_id === right.skill_id &&
   left.skill_version_id === right.skill_version_id &&
   left.expected_hash === right.expected_hash;
-
-/** Pure hash policy: disagreement is data, not a thrown domain exception. */
-export function expectedInstalledSkillHashResult(
-  installedSkill: InstalledSkill,
-  marker: OwnershipMarker | null,
-): Result.Result<Hash, OwnershipMarkerDisagrees> {
-  if (marker && installedSkill.expected_hash !== markerExpectedHash(marker))
-    return Result.fail(
-      new OwnershipMarkerDisagrees({
-        skillId: installedSkill.skill_id,
-        target: installedSkill.destination,
-      }),
-    );
-  return Result.succeed(installedSkill.expected_hash);
-}
 
 /** Built bytes in staging on the root's own device, so installing them is a rename. */
 export interface StagedInstalledSkill {
@@ -184,7 +183,7 @@ export const commitInstalledSkill = Effect.fn("Install.commit")(function* (
     if (options.mode !== "install") yield* options.backUp;
     else if (yield* fs.exists(destination))
       return yield* new InstalledSkillFailure({
-        message: `Installed skill appeared before installing: ${destination}`,
+        reason: { _tag: "DestinationAppeared", path: destination },
       });
     yield* fs.rename(staged.path, destination).pipe(Effect.uninterruptible);
   }
@@ -197,12 +196,17 @@ export const commitInstalledSkill = Effect.fn("Install.commit")(function* (
     !sameMarker(verifiedMarker, marker)
   )
     return yield* new InstalledSkillFailure({
-      message: `Installed skill identity or marker changed during commit: ${destination}`,
+      reason: { _tag: "IdentityChanged", path: destination },
     });
   const hash = yield* hashTree(destination);
   if (hash !== staged.hash)
     return yield* new InstalledSkillFailure({
-      message: `Post-${options.verification} hash verification failed for ${marker.skill_id} at ${destination}`,
+      reason: {
+        _tag: "HashChanged",
+        verification: options.verification,
+        skillId: marker.skill_id,
+        path: destination,
+      },
     });
   return { hash, identity: verifiedIdentity };
 });
@@ -248,22 +252,18 @@ export const inspectInstalledSkill = Effect.fn("Install.inspectInstalledSkill")(
 ): Effect.fn.Return<
   | { kind: "absent" }
   | { kind: "intact"; currentHash: Hash; marker: OwnershipMarker }
-  | { kind: "conflicted"; currentHash: Hash },
+  | { kind: "conflicted"; currentHash: Hash; conflicts: readonly InstalledSkillConflict[] },
   OwnershipMarkerDisagrees | TreeError | PlatformError,
   TreeRequirements | Digest.Digest
 > {
   const destination = installedSkill.path;
   if (!(yield* exists(destination))) return { kind: "absent" as const };
-  const marker = yield* readOwnershipMarker(destination);
+  const inspection = yield* inspectOwnershipMarker(destination);
   const currentHash = yield* hashTree(destination);
-  if (
-    !marker ||
-    marker.skill_id !== installedSkill.skill_id ||
-    marker.installed_skill_id !== installedSkill.installed_skill_id ||
-    currentHash !== markerExpectedHash(marker)
-  )
-    return { kind: "conflicted" as const, currentHash };
-  return { kind: "intact" as const, currentHash, marker };
+  const conflicts = installedSkillConflicts(installedSkill, inspection, currentHash);
+  if (inspection.kind !== "valid" || conflicts.length)
+    return { kind: "conflicted" as const, currentHash, conflicts };
+  return { kind: "intact" as const, currentHash, marker: inspection.marker };
 });
 
 /**
@@ -297,10 +297,7 @@ export const ManageApproval = Schema.Struct({
 export type ManageApproval = typeof ManageApproval.Type;
 
 export type InstalledSkillMutationError =
-  | ManageContentMismatch
-  | ManageTargetChanged
   | InstalledSkillFailure
-  | NoSkillsDirectory
   | SkillsDirectoryNotWritable
   | UnsafeInstalledSkillName
   | OwnershipMarkerDisagrees

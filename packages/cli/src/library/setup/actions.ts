@@ -1,24 +1,18 @@
+import { CommandError } from "../../commands/error-output.js";
 import { basename, dirname, resolve } from "node:path";
 import { Schema } from "effect";
 import { Hash } from "@smolai/skit-core/shared";
-import { SkillId } from "@smolai/skit-core/universal/consumer";
-import {
-  SetupApplied,
-  SetupResult,
-  InstalledSkillChange,
-  SetupVersionChoice,
-} from "@smolai/skit-core/library/setup";
+import { SetupApplied, SetupResult } from "@smolai/skit-core/library/setup";
 import { SetupDuplicateAction, type SetupExplicitSelection } from "@smolai/skit-core/library/setup";
 import type { SetupReview, SetupReviewSummary } from "@smolai/skit-core/library/setup";
 import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { CommandAction } from "../../commands/command-actions.js";
 
 const Choice = Schema.Struct({
-  kind: Schema.Literals(["copy", "source", "removal", "existing", "version"]),
+  kind: Schema.Literals(["copy", "source", "removal"]),
   label: Schema.String,
   path: Schema.optionalKey(Schema.String),
   sourceId: Schema.optionalKey(Hash),
-  skillId: Schema.optionalKey(SkillId),
   duplicateActions: Schema.Array(SetupDuplicateAction),
   actions: Schema.Array(CommandAction),
 });
@@ -35,11 +29,9 @@ export const SetupReviewOutput = Schema.Struct({
   planId: Hash,
   reviewId: Hash,
   hasChanges: Schema.Boolean,
-  canApply: Schema.Boolean,
+  canApply: Schema.Literal(true),
   summary: Schema.Struct({
     sourceUpdateMayNeedReview: Schema.Boolean,
-    changes: Schema.Array(InstalledSkillChange),
-    versionChoices: Schema.Array(SetupVersionChoice),
     savesMachineSettings: Schema.Boolean,
     createsMachineIdentity: Schema.Boolean,
     sources: Schema.Array(
@@ -78,9 +70,7 @@ export const SetupComparisonOutput = Schema.Struct({
   actions: Schema.Array(CommandAction),
 });
 export const SetupFailureOutput = Schema.Struct({
-  code: Schema.String,
-  message: Schema.String,
-  remediation: Schema.String,
+  ...CommandError.fields,
   actions: Schema.Array(CommandAction),
 });
 
@@ -112,9 +102,6 @@ const selectionArgv = (input: SetupCommandSelection) => [
   ...(input.selection
     ? [
         "--only-selected",
-        ...(input.selection.useRetainedSkillIds ?? []).flatMap((id) => ["--use-retained", id]),
-        ...(input.selection.useCopyPaths ?? []).flatMap((path) => ["--use-copy", path]),
-        ...(input.selection.reconcileSkillIds ?? []).flatMap((id) => ["--reconcile-skill", id]),
         ...input.selection.sourceIds.flatMap((id) => ["--select-source", id]),
         ...input.selection.copyPaths.flatMap((path) => ["--select-path", path]),
         ...input.selection.removePaths.flatMap((path) => ["--remove-path", path]),
@@ -230,55 +217,22 @@ export const setupDiscoveryOutput = (
             },
           ]
         : []),
+      ...[
+        ...new Map(
+          (scan.changes ?? [])
+            .filter((fact) => fact.status !== "unchanged" || fact.metadataChanged)
+            .map((fact) => [fact.skillId, fact]),
+        ).values(),
+      ].map((fact): CommandAction => ({
+        rel: "update",
+        effect: "write",
+        argv: ["skit", "update", fact.skillId, ...contextArgv({ ...context, workDir: undefined })],
+      })),
       ...variants(undefined, review.recommendedChoices),
       setupRecoveryListAction(context.home),
       ...scan.suggestedRepositoryRoots.map((workDir) => setupScanAction({ ...context, workDir })),
     ],
     choices: [
-      ...review.versionAlternatives.map((choice) => ({
-        kind: "version" as const,
-        label:
-          choice.version === "retained"
-            ? `Use retained version of ${scan.changes?.find((fact) => fact.skillId === choice.skillId)?.name}`
-            : `Use current copy at ${choice.path}`,
-        skillId: choice.skillId,
-        ...(choice.version === "retained" ? {} : { path: choice.path }),
-        duplicateActions: [],
-        actions: [
-          ...(choice.version === "local"
-            ? [
-                {
-                  rel: "compare",
-                  effect: "read" as const,
-                  argv: [
-                    "skit",
-                    "setup",
-                    "--compare",
-                    planId,
-                    "--select-path",
-                    choice.path,
-                    ...contextArgv(context),
-                  ],
-                },
-              ]
-            : []),
-          ...variants(
-            choice.version === "retained"
-              ? { ...empty, useRetainedSkillIds: [choice.skillId] }
-              : { ...empty, useCopyPaths: [choice.path] },
-            [],
-          ),
-        ],
-      })),
-      ...[...new Map((scan.changes ?? []).map((fact) => [fact.skillId, fact])).values()].map(
-        (fact) => ({
-          kind: "existing" as const,
-          label: fact.name,
-          skillId: fact.skillId,
-          duplicateActions: [],
-          actions: variants({ ...empty, reconcileSkillIds: [fact.skillId] }, []),
-        }),
-      ),
       ...review.sources.map((source) => ({
         kind: "source" as const,
         label: source.label,
@@ -332,8 +286,6 @@ export const setupDiscoveryOutput = (
 export function setupReviewSummary(summary: SetupReviewSummary) {
   return {
     sourceUpdateMayNeedReview: summary.sourceUpdateMayNeedReview,
-    changes: summary.changes,
-    versionChoices: summary.versionChoices,
     savesMachineSettings: summary.persistRoots,
     createsMachineIdentity: summary.createsMachineIdentity,
     sources: summary.sources.map(({ source, names }) => ({ source, names })),

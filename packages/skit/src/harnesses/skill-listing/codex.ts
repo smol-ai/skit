@@ -1,3 +1,5 @@
+import { HarnessMetadataInvalid } from "../metadata-failures.js";
+import { HarnessDiscoveryFailed } from "../discovery-failures.js";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { modelContextWindow } from "../model-context-windows.js";
@@ -5,7 +7,7 @@ import type { LibraryInventory } from "../../library/library-state.js";
 import type { SkillsDirectoryOverrides } from "../contracts.js";
 import { invocationMetadataAdapters } from "../invocation-metadata.js";
 import { estimateCodexListing, type CodexListingSkill } from "./codex-allocation.js";
-import type { ListingBudget } from "./contracts.js";
+import type { ListingBudget, ListingUnavailableReason } from "./contracts.js";
 import { readCodexSkills } from "./codex-discovery.js";
 
 export interface CodexListingOptions {
@@ -47,19 +49,20 @@ export const readCodexListingBudget = Effect.fn("Library.codexListingBudget")(fu
   executable?: string,
   suppliedDiscovery?: Effect.Success<ReturnType<typeof readCodexSkills>>,
 ) {
-  const unavailable = (detail: string): ListingBudget => ({
+  const unavailable = (reason: ListingUnavailableReason): ListingBudget => ({
     _tag: "Unavailable",
     harness: "codex",
     cwd: options.cwd,
-    detail,
+    reason,
   });
   if (options.overrides?.codex !== undefined)
-    return unavailable("A custom Codex root does not describe native discovery.");
+    return unavailable({ _tag: "CustomRoot", roots: options.overrides.codex });
   return yield* Effect.gen(function* () {
     const command = executable ?? "codex";
     const discovery =
       suppliedDiscovery ?? (yield* readCodexSkills(command, options.cwd, undefined, true));
-    if (discovery.configError !== undefined) return unavailable(discovery.configError);
+    if (discovery.configFailure !== undefined)
+      return unavailable({ _tag: "DiscoveryFailed", failure: discovery.configFailure });
     const configuration = yield* Schema.decodeUnknownEffect(Configuration)(discovery.config);
     const fs = yield* FileSystem.FileSystem;
     const model = configuration.config.model ?? null;
@@ -86,7 +89,7 @@ export const readCodexListingBudget = Effect.fn("Library.codexListingBudget")(fu
       seen.add(canonical);
       if (!(yield* implicitInvocationAllowed(skill.path))) continue;
       if (skill.description === undefined)
-        return unavailable("This Codex version does not provide skill descriptions.");
+        return unavailable({ _tag: "DescriptionMissing", name: skill.name, path: skill.path });
       const collectionId = collectionsByPath.get(canonical);
       skills.push({
         name: skill.name,
@@ -103,7 +106,19 @@ export const readCodexListingBudget = Effect.fn("Library.codexListingBudget")(fu
       contextWindow,
       ...(maxContextTokens === null ? {} : { maxContextTokens }),
       skills,
-      warnings: discovery.errors.map((error) => `Skipped skill ${error.path}: ${error.message}`),
+      diagnostics: discovery.errors.map(({ path, message }) => ({ path, diagnostic: message })),
     });
-  }).pipe(Effect.catch((error) => Effect.succeed(unavailable(String(error)))));
+  }).pipe(
+    Effect.catch((error) =>
+      Effect.succeed(
+        unavailable(
+          Schema.is(HarnessDiscoveryFailed)(error)
+            ? { _tag: "DiscoveryFailed", failure: error }
+            : Schema.is(HarnessMetadataInvalid)(error)
+              ? { _tag: "MetadataInvalid", failure: error }
+              : { _tag: "NativeReadFailed", failure: error },
+        ),
+      ),
+    ),
+  );
 });

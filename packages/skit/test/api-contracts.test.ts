@@ -1,3 +1,4 @@
+import { SchemaFailure } from "../src/shared/schema-issue.js";
 import { it } from "@effect/vitest";
 import { Effect, JsonSchema, Schema } from "effect";
 import { expect } from "vitest";
@@ -23,7 +24,12 @@ it.effect("preserves every Effect Schema issue path", () =>
   Effect.gen(function* () {
     const error = yield* Effect.flip(parseContract("example", ExampleContract, invalidExample));
 
-    expect(error.issues.map((issue) => issue.path)).toEqual(["name", "nested.count"]);
+    expect(error.reason._tag).toBe("InvalidData");
+    if (error.reason._tag !== "InvalidData") return;
+    expect(Schema.isSchemaError(error.reason.failure)).toBe(true);
+    expect(
+      Schema.encodeSync(SchemaFailure)(error.reason.failure).issues.map((issue) => issue.path),
+    ).toEqual([["name"], ["nested", "count"]]);
   }),
 );
 

@@ -1,20 +1,8 @@
-import { Data, Effect, FileSystem } from "effect";
+import { SharedMappingInvalid } from "./failures.js";
+import { Effect, FileSystem } from "effect";
 import { dirname, join, relative, resolve } from "node:path";
 import { deterministicTreeHash } from "../artifact/skit.js";
 import { copyLocalTree } from "../platform/copy-tree.js";
-import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
-
-class SkillMaterializationInvalid
-  extends Data.TaggedError("Library.SkillMaterializationInvalid")<{ detail: string }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Correct the Skill's shared mappings in the source, then retry.";
-  get message(): string {
-    return this.detail;
-  }
-}
 
 /** Build the self-contained Skill artifact whose digest defines a Skill Version. */
 export const installedSkillHash = Effect.fn("Library.installedSkillHash")(function* (input: {
@@ -33,14 +21,11 @@ export const installedSkillHash = Effect.fn("Library.installedSkillHash")(functi
   for (const mapping of input.shared ?? []) {
     const target = resolve(artifact, mapping.to);
     if (relative(artifact, target).startsWith(".."))
-      return yield* new SkillMaterializationInvalid({
-        detail: `Shared mapping target escaped Skill: ${mapping.to}`,
+      return yield* new SharedMappingInvalid({
+        target: mapping.to,
       });
     yield* fs.makeDirectory(dirname(target), { recursive: true, mode: 0o700 });
     yield* copyLocalTree(join(input.collectionVersionPath, mapping.from), target, undefined, false);
   }
   return yield* deterministicTreeHash(artifact);
 });
-
-// Required by the public declaration-only error vocabulary.
-export type { SkillMaterializationInvalid };

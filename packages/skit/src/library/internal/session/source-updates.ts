@@ -1,5 +1,6 @@
-import { Data, Effect } from "effect";
-import { FailureTypeId, type SkitFailure } from "../../../shared/failure.js";
+import type { AuthoredSkillIssue } from "../../authored-skill-issues.js";
+import { Effect } from "effect";
+import { CollectionNotUpdatable } from "../../update-failures.js";
 import { enabledByScope } from "../../enabled.js";
 import { enabledSkillIds, type SkitSource } from "../../library-contracts.js";
 import type { LibraryState } from "../../library-state.js";
@@ -11,7 +12,7 @@ import {
 import { sourceFromUpstream } from "./upstream-source.js";
 import type { inspectResolvedSource } from "../../source-inspection.js";
 export type SourceInspection = Effect.Success<ReturnType<typeof inspectResolvedSource>> & {
-  readonly messages?: readonly string[];
+  readonly issues?: readonly AuthoredSkillIssue[];
 };
 import { inspectAuthoredSkills } from "../../update-authored-skills.js";
 import type * as InstalledSkills from "../../installed-skills.js";
@@ -35,26 +36,6 @@ export interface LibraryProgressReporter {
     operation: Effect.Effect<A, E, R>,
     completed: (value: A) => LibraryProgressCompletion,
   ) => Effect.Effect<A, E, R>;
-}
-
-class CollectionNotUpdatable
-  extends Data.TaggedError("Library.CollectionNotUpdatable")<{
-    subject_id: string;
-    label: string;
-    source?: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  get message(): string {
-    return `${this.label} has no upstream source`;
-  }
-  get remediation(): string {
-    return this.source === undefined
-      ? "Add its source again to update it."
-      : `Run \`skit add ${this.source}\` to update it.`;
-  }
 }
 
 const subjectSource = Effect.fn("Library.updateSource")(function* (
@@ -169,7 +150,13 @@ const previewCollectionUpdate = Effect.fn("Library.previewCollectionUpdate")(fun
   const isAuthored = sourceImport.source_identity.kind === "authored-workspace";
   const inspected =
     isAuthored && authored !== undefined
-      ? yield* inspectAuthoredSkills(authored.home, state, sourceImport, yield* authored.active)
+      ? yield* inspectAuthoredSkills(
+          authored.home,
+          state,
+          { ...sourceImport, source_identity: sourceImport.source_identity },
+          tree,
+          yield* authored.active,
+        )
       : yield* inspectSource(
           input,
           tree.members.map((member) => member.source_path),
@@ -182,7 +169,7 @@ const previewCollectionUpdate = Effect.fn("Library.previewCollectionUpdate")(fun
     ...(isAuthored ? {} : { available_snapshot_digest: inspected.snapshot_digest }),
     changed: tree.hash !== inspected.snapshot_digest,
     label: subject.label,
-    ...(inspected.messages === undefined ? {} : { messages: inspected.messages }),
+    ...(inspected.issues === undefined ? {} : { issues: inspected.issues }),
     ...("diagnostics" in inspected && inspected.diagnostics?.length
       ? { diagnostics: inspected.diagnostics }
       : {}),

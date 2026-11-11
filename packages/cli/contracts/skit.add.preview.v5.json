@@ -1,0 +1,658 @@
+{
+  "$id": "skit.add.preview.v5",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": [
+        "plain",
+        "authored"
+      ]
+    },
+    "skills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "verbatim_path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "verbatim_path"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "plugin-manifest-invalid"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "reason": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "RelativePathInvalid"
+                        ]
+                      },
+                      "requested": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "requested"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "SourceEscape"
+                        ]
+                      },
+                      "root": {
+                        "type": "string"
+                      },
+                      "selected": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "root",
+                      "selected"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "LinkEscape"
+                        ]
+                      },
+                      "root": {
+                        "type": "string"
+                      },
+                      "target": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "root",
+                      "target"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "DeclaredPathMissing"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "_tag"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "ManifestNotFile"
+                        ]
+                      },
+                      "kind": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "kind"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "ManifestTooLarge"
+                        ]
+                      },
+                      "actual": {
+                        "type": "number"
+                      },
+                      "limit": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "actual",
+                      "limit"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "InvalidJson"
+                        ]
+                      },
+                      "failure": {
+                        "$ref": "#/definitions/SchemaFailureEncoded"
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "failure"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "SkillPathsInvalid"
+                        ]
+                      },
+                      "value": {}
+                    },
+                    "required": [
+                      "_tag",
+                      "value"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "SkillPathEscape"
+                        ]
+                      },
+                      "root": {
+                        "type": "string"
+                      },
+                      "requested": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "root",
+                      "requested"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "SkillDirectoryRequired"
+                        ]
+                      },
+                      "kind": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "kind"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "StrictInvalid"
+                        ]
+                      },
+                      "value": {}
+                    },
+                    "required": [
+                      "_tag",
+                      "value"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "MarketplaceComponentsConflict"
+                        ]
+                      },
+                      "fields": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "fields"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "NameInvalid"
+                        ]
+                      },
+                      "value": {}
+                    },
+                    "required": [
+                      "_tag",
+                      "value"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "PluginsArrayRequired"
+                        ]
+                      },
+                      "value": {}
+                    },
+                    "required": [
+                      "_tag"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "MarketplaceTooLarge"
+                        ]
+                      },
+                      "actual": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "limit": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "actual",
+                      "limit"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "PluginEntryInvalid"
+                        ]
+                      },
+                      "value": {}
+                    },
+                    "required": [
+                      "_tag",
+                      "value"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "PluginRootInvalid"
+                        ]
+                      },
+                      "value": {}
+                    },
+                    "required": [
+                      "_tag",
+                      "value"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "LocalPathInvalid"
+                        ]
+                      },
+                      "value": {}
+                    },
+                    "required": [
+                      "_tag"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "PluginSourceMissing"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "_tag"
+                    ],
+                    "additionalProperties": true
+                  }
+                ]
+              }
+            },
+            "required": [
+              "code",
+              "path",
+              "reason"
+            ],
+            "additionalProperties": true
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "plugin-member-held"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "skillName": {
+                "type": "string"
+              },
+              "retainedPath": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "path",
+              "skillName",
+              "retainedPath"
+            ],
+            "additionalProperties": true
+          }
+        ]
+      }
+    }
+  },
+  "required": [
+    "kind",
+    "skills"
+  ],
+  "additionalProperties": true,
+  "definitions": {
+    "SchemaIssueFact": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          }
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "MissingKey"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "UnexpectedKey"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "InvalidType"
+                  ]
+                },
+                "expected": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "Declaration",
+                          "Null",
+                          "Undefined",
+                          "Void",
+                          "Never",
+                          "Unknown",
+                          "Any",
+                          "String",
+                          "Number",
+                          "Boolean",
+                          "BigInt",
+                          "Symbol",
+                          "Literal",
+                          "UniqueSymbol",
+                          "ObjectKeyword",
+                          "Enum",
+                          "TemplateLiteral",
+                          "Arrays",
+                          "Objects",
+                          "Union",
+                          "Suspend"
+                        ]
+                      },
+                      "values": {
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": true
+                  }
+                }
+              },
+              "required": [
+                "_tag",
+                "expected"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "InvalidValue"
+                  ]
+                },
+                "check": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "payload": {}
+                  },
+                  "required": [
+                    "id",
+                    "payload"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "Forbidden"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "OneOf"
+                  ]
+                },
+                "matches": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "_tag",
+                "matches"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "SchemaFailureEncoded": {
+      "type": "object",
+      "properties": {
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SchemaIssueFact"
+          }
+        }
+      },
+      "required": [
+        "issues"
+      ],
+      "additionalProperties": true
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

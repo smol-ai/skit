@@ -1,6 +1,17 @@
+import {
+  CommandFailed,
+  SourcePolicyViolation,
+  type SourcePolicyViolationReason,
+  type SourceLimitResource,
+} from "./fetch-failures.js";
+export {
+  CommandFailed,
+  SourcePolicyViolation,
+  SourcePolicyViolationReason,
+} from "./fetch-failures.js";
 import type { DescriptorFailure } from "../artifact/failures.js";
 import { semver } from "../api/consumer-contracts.js";
-import { Data, Effect, FileSystem, Path, Predicate, Schema, Scope, Stream } from "effect";
+import { Effect, FileSystem, Path, Predicate, Schema, Scope, Stream } from "effect";
 import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/http";
 import type { PlatformError } from "effect/PlatformError";
 import { createHash } from "node:crypto";
@@ -9,6 +20,7 @@ import { parseSkillFrontmatter } from "../harnesses/frontmatter.js";
 import { SkitSource, type SourceRevision } from "../library/library-contracts.js";
 import {
   ArchiveEntryLimitExceeded,
+  RegistryNotConfigured,
   DirectSkillDocumentInvalid,
   InsecureSourceUrl,
   NoSkitDescriptorFound,
@@ -19,7 +31,6 @@ import {
   UnsafeGitSubpath,
   UnsafeSourceUrl,
 } from "./failures.js";
-import { RegistryNotConfigured } from "../shared/input-failures.js";
 import { LinkStat } from "../platform/link-stat.js";
 import { copyLocalTree } from "../platform/copy-tree.js";
 import { TreeError } from "../shared/tree-error.js";
@@ -33,7 +44,6 @@ import { PluginSkillConflict, selectPluginMembers } from "./plugin-membership.js
 export { PluginSkillConflict } from "./plugin-membership.js";
 export { SourceDiscoveryDiagnostic } from "./source-diagnostics.js";
 import type { SourceDiscoveryDiagnostic } from "./source-diagnostics.js";
-import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 const ownerRepository = /^([a-z0-9][a-z0-9._-]*)\/([a-z0-9][a-z0-9._-]*)$/;
 const MAX_ARCHIVE_FILES = 1_000;
@@ -440,83 +450,14 @@ export function sourceLocator(source: SkitSource): string {
   }
 }
 
-/** A source subprocess exited non-zero. Carries the command and its captured stderr. */
-export class CommandFailed
-  extends Data.TaggedError("CommandFailed")<{
-    command: string;
-    exitCode: number;
-    stderr: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Check the command's output above, then retry.";
-  get message(): string {
-    return `${this.command} failed (${this.exitCode}): ${this.stderr}`;
-  }
-}
-
-/**
- * Acquired content violated an archive or discovery limit. Untrusted input, refused.
- *
- * `status` is present only for a rejected HTTP download. It carries the response status so a
- * caller can classify the refusal (authentication, access, missing release) from the failure
- * itself rather than by matching the message text.
- */
-export const SourcePolicyViolationReason = Schema.Union([
-  Schema.TaggedStruct("Transport", {
-    detail: Schema.String,
-    status: Schema.optionalKey(Schema.Int),
-  }),
-  Schema.TaggedStruct("LimitExceeded", { detail: Schema.String }),
-  Schema.TaggedStruct("PinMismatch", { detail: Schema.String }),
-  Schema.TaggedStruct("VersionDisagreement", { detail: Schema.String }),
-  Schema.TaggedStruct("InvalidSource", { detail: Schema.String }),
-]);
-export type SourcePolicyViolationReason = typeof SourcePolicyViolationReason.Type;
-
-export class SourcePolicyViolation
-  extends Data.TaggedError("SourcePolicyViolation")<{
-    reason: SourcePolicyViolationReason;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  get remediation(): string {
-    return this.reason._tag === "Transport"
-      ? "Check that the source is reachable and that you can access it, then retry."
-      : "Choose a source that stays within SKIT's acquisition limits and pins, then retry.";
-  }
-  get message() {
-    return this.reason.detail;
-  }
-
-  get status() {
-    return this.reason._tag === "Transport" ? this.reason.status : undefined;
-  }
-}
-
-const invalidSource = (detail: string) =>
-  new SourcePolicyViolation({ reason: { _tag: "InvalidSource", detail } });
-const sourceLimitExceeded = (detail: string) =>
-  new SourcePolicyViolation({ reason: { _tag: "LimitExceeded", detail } });
-const sourceTransportRejected = (detail: string, status?: number) =>
-  new SourcePolicyViolation({
-    reason: { _tag: "Transport", detail, ...(status === undefined ? {} : { status }) },
-  });
-const sourcePinMismatch = (detail: string) =>
-  new SourcePolicyViolation({ reason: { _tag: "PinMismatch", detail } });
-const sourceVersionDisagreement = (detail: string) =>
-  new SourcePolicyViolation({ reason: { _tag: "VersionDisagreement", detail } });
-
+const sourceFailure = (reason: SourcePolicyViolationReason) =>
+  new SourcePolicyViolation({ reason });
 const sourceProcessFailure = (
   error: SourceProcessFailure,
 ): PlatformError | SourcePolicyViolation =>
   Predicate.isTagged(error, "SourceProcess.OutputTooLarge") ||
   Predicate.isTagged(error, "SourceProcess.TimedOut")
-    ? sourceTransportRejected(error.message)
+    ? sourceFailure({ _tag: "ProcessFailed", failure: error })
     : error;
 
 function runEffect(
@@ -569,16 +510,26 @@ export function auditExtractedSource(
         // lstat, never stat: a symlink must be rejected, not followed.
         const info = yield* probe.identity.lstat(path);
         if (info.type !== "Directory" && info.type !== "File")
-          return yield* invalidSource(`Archive contains unsupported entry: ${name}`);
+          return yield* sourceFailure({ _tag: "ArchiveEntryUnsupported", path, kind: info.type });
         if (info.type === "Directory") queue.push(path);
         else {
           files++;
           bytes += info.size;
         }
         if (files > MAX_ARCHIVE_FILES)
-          return yield* sourceLimitExceeded("Archive contains too many files");
+          return yield* sourceFailure({
+            _tag: "LimitExceeded",
+            resource: "archive-files",
+            limit: MAX_ARCHIVE_FILES,
+            actual: files,
+          });
         if (bytes > MAX_EXTRACTED_BYTES)
-          return yield* sourceLimitExceeded("Archive exceeds 25 MiB extracted size limit");
+          return yield* sourceFailure({
+            _tag: "LimitExceeded",
+            resource: "archive-bytes",
+            limit: MAX_EXTRACTED_BYTES,
+            actual: bytes,
+          });
       }
     }
   });
@@ -625,7 +576,8 @@ const extractArchive = Effect.fn("Source.extractArchive")(function* (
     zip ? "unzip" : "tar",
     zip ? ["-Z", "-l", archive] : [gzip ? "-tvzf" : "-tvf", archive],
   );
-  if (/^[lh][rwxstST-]{9}\s/m.test(modes)) return yield* invalidSource("Archive contains a link");
+  if (/^[lh][rwxstST-]{9}\s/m.test(modes))
+    return yield* sourceFailure({ _tag: "ArchiveLink", format });
   yield* runEffect(
     zip ? "unzip" : "tar",
     zip
@@ -646,9 +598,9 @@ const lockedSkillDirectory = Effect.fn("Source.lockedSkillDirectory")(function* 
     path.split("/").includes("..") ||
     /^[A-Za-z]:/.test(path)
   )
-    return yield* invalidSource(`Locked Skill path must be safe and relative: ${path}`);
+    return yield* sourceFailure({ _tag: "LockedPathInvalid", path, rule: "relative" });
   if (basename(path) !== "SKILL.md")
-    return yield* invalidSource(`Locked Skill path must end in SKILL.md: ${path}`);
+    return yield* sourceFailure({ _tag: "LockedPathInvalid", path, rule: "skill-document" });
   return join(root, dirname(path));
 });
 
@@ -661,9 +613,12 @@ const checkoutPath = Effect.fn("Source.checkoutPath")(function* (
   const real = yield* fs.realPath(selectedPath);
   const path = relative(checkoutRoot, real);
   if (isAbsolute(path) || path === ".." || path.startsWith(`..${sep}`))
-    return yield* invalidSource(
-      `Selected Git path resolves outside the checkout: ${relative(checkoutRoot, selectedPath)}`,
-    );
+    return yield* sourceFailure({
+      _tag: "GitPathOutsideCheckout",
+      path: relative(checkoutRoot, selectedPath),
+      resolved: real,
+      checkout: checkoutRoot,
+    });
   return real;
 });
 
@@ -695,14 +650,12 @@ function discoverRoot(
         const skillDirectory = selectedDirectories?.get(path) ?? requestedDirectory;
         const info = yield* Effect.option(probe.identity.stat(join(skillDirectory, "SKILL.md")));
         if (info._tag === "None" || info.value.type !== "File")
-          return yield* invalidSource(
-            `Locked Skill path is missing from the acquired Source: ${path}`,
-          );
+          return yield* sourceFailure({ _tag: "LockedPathMissing", path });
         yield* containedPluginPath(containmentRoot, skillDirectory, "SKILL.md");
         selectedSkills.push(relative(extracted, requestedDirectory) || ".");
       }
       if (!selectedSkills.length)
-        return yield* invalidSource("None of the locked Skill paths exist in the acquired Source");
+        return yield* sourceFailure({ _tag: "LockedPathsAbsent", paths: agentSkillPaths });
       return {
         descriptorKind: "observed" as const,
         foundSkillPaths: selectedSkills,
@@ -721,7 +674,12 @@ function discoverRoot(
       directories.push(directory);
       examined++;
       if (examined > 5_000)
-        return yield* sourceLimitExceeded("Source discovery exceeded directory limit");
+        return yield* sourceFailure({
+          _tag: "LimitExceeded",
+          resource: "discovery-directories",
+          limit: 5_000,
+          actual: examined,
+        });
       if (yield* fs.exists(join(directory, "skit.json"))) {
         yield* containedPluginPath(containmentRoot, directory, "skit.json");
         yield* readSkitDescriptor(directory);
@@ -774,16 +732,19 @@ function discoverRoot(
 const readBodyWithin = Effect.fnUntraced(function* (
   response: HttpClientResponse.HttpClientResponse,
   limit: number,
-  message: string,
+  resource: SourceLimitResource,
 ) {
   const chunks: Uint8Array[] = [];
   let size = 0;
   yield* response.stream.pipe(
-    Stream.mapError((error) => sourceTransportRejected(error.message)),
+    Stream.mapError((error) => sourceFailure({ _tag: "TransportFailure", failure: error })),
     Stream.runForEach((chunk: Uint8Array) =>
       Effect.suspend(() => {
         size += chunk.byteLength;
-        if (size > limit) return Effect.fail(sourceLimitExceeded(message));
+        if (size > limit)
+          return Effect.fail(
+            sourceFailure({ _tag: "LimitExceeded", resource, limit, actual: size }),
+          );
         chunks.push(chunk);
         return Effect.void;
       }),
@@ -805,14 +766,11 @@ const readDiscoveryResponse = Effect.fn("Discovery.readResponse")(function* (
   const client = HttpClient.followRedirects(HttpClient.withScope(yield* HttpClient.HttpClient));
   const response = yield* client
     .execute(HttpClientRequest.get(url))
-    .pipe(Effect.mapError((error) => sourceTransportRejected(error.message)));
+    .pipe(Effect.mapError((error) => sourceFailure({ _tag: "TransportFailure", failure: error })));
   if (response.status === 404) return undefined;
   if (response.status < 200 || response.status >= 300)
-    return yield* sourceTransportRejected(
-      `Discovery download failed: ${response.status}`,
-      response.status,
-    );
-  return yield* readBodyWithin(response, limit, "Discovery response exceeds size limit");
+    return yield* sourceFailure({ _tag: "HttpStatus", url, status: response.status });
+  return yield* readBodyWithin(response, limit, "http-response-bytes");
 });
 
 const fetchDiscovery = Effect.fn("Discovery.fetch")(function* (
@@ -830,9 +788,10 @@ const fetchDiscovery = Effect.fn("Discovery.fetch")(function* (
     parsedBase.hash ||
     parsedBase.search
   )
-    return yield* invalidSource("Discovery Source requires a safe HTTPS base URL");
-  if (source.skillNames?.some((name) => !discoveryName.test(name)))
-    return yield* invalidSource("Discovery member selection contains an invalid Skill name");
+    return yield* sourceFailure({ _tag: "DiscoveryBaseInvalid", origin: source.origin });
+  const invalidNames = source.skillNames?.filter((name) => !discoveryName.test(name)) ?? [];
+  if (invalidNames.length)
+    return yield* sourceFailure({ _tag: "DiscoverySelectionInvalid", names: invalidNames });
   const candidates = [".well-known/agent-skills", ".well-known/skills"];
   let selected: { indexUrl: string; path: string; document: unknown } | undefined;
   for (const path of candidates) {
@@ -840,7 +799,9 @@ const fetchDiscovery = Effect.fn("Discovery.fetch")(function* (
     const body = yield* readDiscoveryResponse(indexUrl, 2 * 1024 * 1024);
     if (!body) continue;
     const document = yield* Schema.decodeEffect(discoveryJson)(new TextDecoder().decode(body)).pipe(
-      Effect.mapError((error) => invalidSource(`Invalid discovery index: ${error.message}`)),
+      Effect.mapError((error) =>
+        sourceFailure({ _tag: "DiscoveryIndexInvalid", url: indexUrl, failure: error }),
+      ),
     );
     selected = { indexUrl, path, document };
     break;
@@ -848,33 +809,46 @@ const fetchDiscovery = Effect.fn("Discovery.fetch")(function* (
   if (!selected)
     return yield* new SourceNotFound({ source: `${baseUrl}/.well-known/agent-skills/index.json` });
   const marker = yield* Schema.decodeUnknownEffect(discoverySchemaMarker)(selected.document).pipe(
-    Effect.mapError(() => invalidSource("Discovery index must be an object")),
+    Effect.mapError((failure) =>
+      sourceFailure({ _tag: "DiscoveryIndexInvalid", url: selected.indexUrl, failure }),
+    ),
   );
   const isV2 = marker.$schema !== undefined;
   if (isV2 && marker.$schema !== DISCOVERY_SCHEMA_V2)
-    return yield* invalidSource("Unsupported discovery schema");
+    return yield* sourceFailure({
+      _tag: "DiscoverySchemaUnsupported",
+      schema: marker.$schema ?? "",
+    });
   let entries:
     | readonly { version: "0.2.0"; entry: typeof discoveryV2Entry.Type }[]
     | readonly { version: "0.1.0"; entry: typeof discoveryV1Entry.Type }[];
   if (isV2) {
     const decoded = yield* Schema.decodeUnknownEffect(discoveryV2Index)(selected.document).pipe(
-      Effect.mapError((error) => invalidSource(`Invalid discovery index: ${error.message}`)),
+      Effect.mapError((error) =>
+        sourceFailure({ _tag: "DiscoveryIndexInvalid", url: selected.indexUrl, failure: error }),
+      ),
     );
     entries = decoded.skills.map((entry) => ({ version: "0.2.0" as const, entry }));
   } else {
     const decoded = yield* Schema.decodeUnknownEffect(discoveryV1Index)(selected.document).pipe(
-      Effect.mapError((error) => invalidSource(`Invalid discovery index: ${error.message}`)),
+      Effect.mapError((error) =>
+        sourceFailure({ _tag: "DiscoveryIndexInvalid", url: selected.indexUrl, failure: error }),
+      ),
     );
     entries = decoded.skills.map((entry) => ({ version: "0.1.0" as const, entry }));
   }
   if (!entries.length || entries.length > MAX_ARCHIVE_FILES)
-    return yield* sourceLimitExceeded("Discovery index has no Skills or exceeds Skill limit");
+    return yield* sourceFailure({
+      _tag: "DiscoverySkillCountInvalid",
+      actual: entries.length,
+      minimum: 1,
+      maximum: MAX_ARCHIVE_FILES,
+    });
   const selectedMembers = source.skillNames ? new Set(source.skillNames) : undefined;
   if (selectedMembers) {
     const found = new Set(entries.map((item) => item.entry.name));
     for (const name of selectedMembers)
-      if (!found.has(name))
-        return yield* invalidSource(`Selected discovery Skill is absent upstream: ${name}`);
+      if (!found.has(name)) return yield* sourceFailure({ _tag: "DiscoverySkillMissing", name });
   }
   const seen = new Set<string>();
   const importedDirectories: string[] = [];
@@ -884,8 +858,10 @@ const fetchDiscovery = Effect.fn("Discovery.fetch")(function* (
   yield* fs.makeDirectory(originalRoot);
   for (const item of entries) {
     const entry = item.entry;
-    if (!discoveryName.test(entry.name) || entry.name.length > 64 || seen.has(entry.name))
-      return yield* invalidSource(`Invalid or duplicate discovery Skill name: ${entry.name}`);
+    if (!discoveryName.test(entry.name) || entry.name.length > 64)
+      return yield* sourceFailure({ _tag: "DiscoveryNameInvalid", name: entry.name });
+    if (seen.has(entry.name))
+      return yield* sourceFailure({ _tag: "DiscoveryNameDuplicate", name: entry.name });
     seen.add(entry.name);
     if (selectedMembers && !selectedMembers.has(entry.name)) continue;
     const directory = join(originalRoot, entry.name);
@@ -894,7 +870,11 @@ const fetchDiscovery = Effect.fn("Discovery.fetch")(function* (
     if (item.version === "0.2.0") {
       const artifact = item.entry;
       if (!discoveryHash.test(artifact.digest))
-        return yield* invalidSource(`Invalid discovery digest for ${entry.name}`);
+        return yield* sourceFailure({
+          _tag: "DiscoveryHashInvalid",
+          name: entry.name,
+          digest: artifact.digest,
+        });
       const artifactUrl = URL.parse(artifact.url, selected.indexUrl);
       if (
         !artifactUrl ||
@@ -902,7 +882,11 @@ const fetchDiscovery = Effect.fn("Discovery.fetch")(function* (
         artifactUrl.username ||
         artifactUrl.password
       )
-        return yield* invalidSource(`Unsafe discovery artifact URL for ${entry.name}`);
+        return yield* sourceFailure({
+          _tag: "DiscoveryUrlUnsafe",
+          name: entry.name,
+          url: artifact.url,
+        });
       const bytes = yield* readDiscoveryResponse(
         artifactUrl.toString(),
         artifact.type === "skill-md" ? 2 * 1024 * 1024 : 25 * 1024 * 1024,
@@ -910,14 +894,29 @@ const fetchDiscovery = Effect.fn("Discovery.fetch")(function* (
       if (!bytes) return yield* new SourceNotFound({ source: artifactUrl.toString() });
       downloadedBytes += bytes.byteLength;
       if (downloadedBytes > 256 * 1024 * 1024)
-        return yield* sourceLimitExceeded("Discovery downloads exceed 256 MiB limit");
+        return yield* sourceFailure({
+          _tag: "LimitExceeded",
+          resource: "discovery-download-bytes",
+          limit: 256 * 1024 * 1024,
+          actual: downloadedBytes,
+        });
       const hash = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
       if (hash !== artifact.digest)
-        return yield* sourcePinMismatch(`Discovery artifact digest disagrees for ${entry.name}`);
+        return yield* sourceFailure({
+          _tag: "DiscoveryHashMismatch",
+          name: entry.name,
+          expected: artifact.digest,
+          actual: hash,
+        });
       if (artifact.type === "skill-md") {
         regularBytes += bytes.byteLength;
         if (regularBytes > MAX_EXTRACTED_BYTES)
-          return yield* sourceLimitExceeded("Discovery files exceed 25 MiB limit");
+          return yield* sourceFailure({
+            _tag: "LimitExceeded",
+            resource: "discovery-file-bytes",
+            limit: MAX_EXTRACTED_BYTES,
+            actual: regularBytes,
+          });
         const text = new TextDecoder().decode(bytes);
         yield* assertDirectSkillDocument(text, "text/plain");
         yield* fs.writeFileString(join(directory, "SKILL.md"), text);
@@ -925,22 +924,30 @@ const fetchDiscovery = Effect.fn("Discovery.fetch")(function* (
         const zip = bytes[0] === 0x50 && bytes[1] === 0x4b;
         const gzip = bytes[0] === 0x1f && bytes[1] === 0x8b;
         if (!zip && !gzip)
-          return yield* invalidSource(`Unsupported discovery archive for ${entry.name}`);
+          return yield* sourceFailure({ _tag: "DiscoveryArchiveUnsupported", name: entry.name });
         const extracted = join(workspace, `extracted-${entry.name}`);
         yield* extractArchive(bytes, zip ? "zip" : "tar.gz", extracted);
         if (!(yield* fs.exists(join(extracted, "SKILL.md"))))
-          return yield* invalidSource(`Discovery archive missing root SKILL.md for ${entry.name}`);
+          return yield* sourceFailure({ _tag: "DiscoverySkillDocumentMissing", name: entry.name });
         for (const name of yield* fs.readDirectory(extracted))
           yield* copyLocalTree(join(extracted, name), join(directory, name), undefined, true);
         yield* auditExtractedSource(originalRoot);
       }
     } else {
       const legacy = item.entry;
-      if (
-        !legacy.files.some((file) => file.toLowerCase() === "skill.md") ||
-        legacy.files.length > MAX_ARCHIVE_FILES
-      )
-        return yield* invalidSource(`Legacy discovery Skill ${entry.name} must list SKILL.md`);
+      if (legacy.files.length > MAX_ARCHIVE_FILES)
+        return yield* sourceFailure({
+          _tag: "LimitExceeded",
+          resource: "archive-files",
+          limit: MAX_ARCHIVE_FILES,
+          actual: legacy.files.length,
+        });
+      if (!legacy.files.some((file) => file.toLowerCase() === "skill.md"))
+        return yield* sourceFailure({
+          _tag: "DiscoverySkillDocumentUnlisted",
+          files: legacy.files,
+          name: entry.name,
+        });
       const listed = new Set<string>();
       for (const file of legacy.files) {
         const segments = file.split("/");
@@ -951,18 +958,30 @@ const fetchDiscovery = Effect.fn("Discovery.fetch")(function* (
           segments.some((segment) => !segment || segment === "." || segment === "..") ||
           file.includes("\0")
         )
-          return yield* invalidSource(`Unsafe legacy discovery file path: ${file}`);
+          return yield* sourceFailure({ _tag: "DiscoveryFilePathUnsafe", path: file });
         const relative = file.toLowerCase() === "skill.md" ? "SKILL.md" : file;
         if (listed.has(relative))
-          return yield* invalidSource(`Duplicate legacy discovery file path: ${file}`);
+          return yield* sourceFailure({ _tag: "DiscoveryFilePathDuplicate", path: file });
         listed.add(relative);
         const url = `${baseUrl}/${selected.path}/${entry.name}/${segments.map(encodeURIComponent).join("/")}`;
         const bytes = yield* readDiscoveryResponse(url, 2 * 1024 * 1024);
         if (!bytes) return yield* new SourceNotFound({ source: url });
         downloadedBytes += bytes.byteLength;
         regularBytes += bytes.byteLength;
-        if (downloadedBytes > 256 * 1024 * 1024 || regularBytes > MAX_EXTRACTED_BYTES)
-          return yield* sourceLimitExceeded("Discovery files exceed size limit");
+        if (downloadedBytes > 256 * 1024 * 1024)
+          return yield* sourceFailure({
+            _tag: "LimitExceeded",
+            resource: "discovery-download-bytes",
+            limit: 256 * 1024 * 1024,
+            actual: downloadedBytes,
+          });
+        if (regularBytes > MAX_EXTRACTED_BYTES)
+          return yield* sourceFailure({
+            _tag: "LimitExceeded",
+            resource: "discovery-file-bytes",
+            limit: MAX_EXTRACTED_BYTES,
+            actual: regularBytes,
+          });
         const destination = join(directory, relative);
         yield* fs.makeDirectory(dirname(destination), { recursive: true });
         yield* fs.writeFile(destination, bytes);
@@ -1031,11 +1050,14 @@ const fetchGitSource = Effect.fn("Source.fetchGit")(function* (
     join(directory, "SKILL.md"),
   );
   const checkout = join(workspace, "checkout");
-  if (
-    pin &&
-    (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(pin.commit) || pin.tracking_ref !== (ref ?? null))
-  )
-    return yield* sourcePinMismatch("Invalid Git commit or tracking ref disagrees with locator");
+  if (pin && !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(pin.commit))
+    return yield* sourceFailure({ _tag: "GitPinInvalid", commit: pin.commit });
+  if (pin && pin.tracking_ref !== (ref ?? null))
+    return yield* sourceFailure({
+      _tag: "GitTrackingRefMismatch",
+      expected: ref ?? null,
+      actual: pin.tracking_ref,
+    });
   // Fetch a commit explicitly: clone --branch cannot acquire an object ID.
   // No depth limit: normalization preserves each Skill's committed modification time.
   const revision = pin?.commit ?? ref ?? "HEAD";
@@ -1057,10 +1079,11 @@ const fetchGitSource = Effect.fn("Source.fetchGit")(function* (
   }).pipe(
     Effect.catchTag("CommandFailed", (error) =>
       Effect.fail(
-        new CommandFailed({
-          command: error.command,
-          exitCode: error.exitCode,
-          stderr: `Cannot acquire Git revision ${revision} from ${cloneUrl}. Restore access to that revision or explicitly run skit update on the retaining device and sync again. No newer revision was substituted. ${error.stderr}`,
+        sourceFailure({
+          _tag: "GitRevisionUnavailable",
+          revision,
+          remote: cloneUrl,
+          failure: error,
         }),
       ),
     ),
@@ -1072,9 +1095,11 @@ const fetchGitSource = Effect.fn("Source.fetchGit")(function* (
     checkout,
   )).trim();
   if (pin && sourceRevision !== pin.commit)
-    return yield* sourcePinMismatch(
-      `Git returned ${sourceRevision} instead of pinned commit ${pin.commit}`,
-    );
+    return yield* sourceFailure({
+      _tag: "GitCommitMismatch",
+      expected: pin.commit,
+      actual: sourceRevision,
+    });
   const checkoutRoot = yield* fs.realPath(checkout);
   const root = yield* checkoutPath(
     checkoutRoot,
@@ -1083,9 +1108,7 @@ const fetchGitSource = Effect.fn("Source.fetchGit")(function* (
     Effect.catchTag("PlatformError", (error) =>
       Effect.fail(
         error.reason._tag === "NotFound"
-          ? invalidSource(
-              `Selected Git path is missing or its symlink target is unavailable: ${subpath ?? "."}. Verify the directory and link target, then retry.`,
-            )
+          ? sourceFailure({ _tag: "GitPathMissing", path: subpath ?? "." })
           : error,
       ),
     ),
@@ -1114,9 +1137,7 @@ const fetchGitSource = Effect.fn("Source.fetchGit")(function* (
     for (const path of [...new Set(selectedPaths)].sort()) {
       const selectedDirectory = selectedDirectories.get(path);
       if (selectedDirectory === undefined)
-        return yield* invalidSource(
-          `Locked Skill path is missing from the acquired Source: ${path}`,
-        );
+        return yield* sourceFailure({ _tag: "LockedPathMissing", path });
       const destination = join(originalRoot, dirname(path));
       yield* fs.makeDirectory(dirname(destination), { recursive: true });
       yield* copyLocalTree(selectedDirectory, destination, undefined, true);
@@ -1137,13 +1158,10 @@ const getWithin = Effect.fn("Source.getWithin")(function* (
   const client = HttpClient.followRedirects(HttpClient.withScope(yield* HttpClient.HttpClient));
   const response = yield* client
     .execute(request)
-    .pipe(Effect.mapError((error) => sourceTransportRejected(error.message)));
+    .pipe(Effect.mapError((error) => sourceFailure({ _tag: "TransportFailure", failure: error })));
   if (response.status === 404) return yield* new SourceNotFound({ source: request.url });
   if (response.status < 200 || response.status >= 300)
-    return yield* sourceTransportRejected(
-      `SKIT download failed: ${response.status}`,
-      response.status,
-    );
+    return yield* sourceFailure({ _tag: "HttpStatus", url: request.url, status: response.status });
   return response;
 });
 
@@ -1152,11 +1170,16 @@ const readDownloadBody = Effect.fn("Source.readDownloadBody")(function* (
   direct: boolean,
 ) {
   if (Number(response.headers["content-length"] ?? "0") > 256 * 1024 * 1024)
-    return yield* sourceLimitExceeded("SKIT source exceeds 256 MiB limit");
+    return yield* sourceFailure({
+      _tag: "LimitExceeded",
+      resource: "source-download-bytes",
+      limit: 256 * 1024 * 1024,
+      actual: Number(response.headers["content-length"]),
+    });
   return yield* readBodyWithin(
     response,
     direct ? 2 * 1024 * 1024 : 256 * 1024 * 1024,
-    direct ? "Direct SKILL.md exceeds 2 MiB limit" : "SKIT source exceeds 256 MiB limit",
+    direct ? "direct-skill-bytes" : "source-download-bytes",
   );
 });
 
@@ -1235,16 +1258,20 @@ const fetchRegistrySource = Effect.fn("Source.fetchRegistry")(function* (
   const releaseVersion =
     reportedVersion ?? (selectedVersion === "latest" ? undefined : selectedVersion);
   if (!releaseVersion || !Schema.is(semver)(releaseVersion))
-    return yield* sourceVersionDisagreement(
-      "Registry download did not identify an immutable Release version. Upgrade the Registry or select an explicit version.",
-    );
+    return yield* sourceFailure({
+      _tag: "RegistryVersionInvalid",
+      requested: selectedVersion,
+      ...(reportedVersion === undefined ? {} : { reported: reportedVersion }),
+    });
   if (selectedVersion !== "latest" && selectedVersion !== releaseVersion)
-    return yield* sourceVersionDisagreement(
-      `Registry served Release ${releaseVersion} when ${selectedVersion} was requested.`,
-    );
+    return yield* sourceFailure({
+      _tag: "RegistryVersionMismatch",
+      requested: selectedVersion,
+      actual: releaseVersion,
+    });
   const bytes = yield* readDownloadBody(response, false);
   if (bytes[0] !== 0x50 || bytes[1] !== 0x4b)
-    return yield* invalidSource("Registry download must be a ZIP archive");
+    return yield* sourceFailure({ _tag: "RegistryArchiveRequired" });
   return {
     source: importedSource,
     ...(yield* readDownloadedSource(
@@ -1290,11 +1317,9 @@ export function resolveSkitSource(
     const source = typeof input === "string" ? yield* parseSkitSource(input, options.cwd) : input;
     const gitSource = source.type === "git" || source.type === "github";
     if (options.git && !gitSource)
-      return yield* invalidSource("Git revision requires a Git locator");
+      return yield* sourceFailure({ _tag: "GitLocatorRequired", kind: source.type });
     if (gitSource && options.requireGitRevision && !options.git)
-      return yield* sourcePinMismatch(
-        `Git Entry ${sourceLocator(source)} has no recorded commit. Run skit update on the retaining device and sync it before acquiring on another device.`,
-      );
+      return yield* sourceFailure({ _tag: "GitCommitMissing", locator: sourceLocator(source) });
     const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-source-" });
 
     const resolved = yield* Effect.gen(function* () {

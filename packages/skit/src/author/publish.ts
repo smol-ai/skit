@@ -29,7 +29,7 @@ export const publishAuthorWorkspace = Effect.fn("Author.publish")(function* <E, 
   if (blocking.length)
     return yield* new PublicationBlocked({
       reason: "content",
-      detail: blocking.map((item) => `  ${item.message}`).join("\n"),
+      diagnostics: blocking,
     });
   const fs = yield* FileSystem.FileSystem;
   // Cleanup failure is a defect, visible to the command boundary, never silently ignored.

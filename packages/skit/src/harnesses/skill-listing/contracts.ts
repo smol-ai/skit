@@ -1,19 +1,44 @@
-import { Data, Schema } from "effect";
+import { HarnessMetadataInvalid } from "../metadata-failures.js";
+import { Schema } from "effect";
 import { HarnessName } from "../contracts.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 
+import { HarnessDiscoveryFailed } from "../discovery-failures.js";
+import { HarnessProbeFailure } from "../probe-failures.js";
+import { PlatformErrorSchema } from "../../platform/error-schema.js";
+import { SchemaFailure } from "../../shared/schema-issue.js";
+
+const NativeListingFailure = Schema.Union([PlatformErrorSchema, SchemaFailure, Schema.Defect()]);
+export const ListingReadReason = Schema.TaggedUnion({
+  ReadFailed: { path: Schema.String, failure: NativeListingFailure },
+  DirectoryLimitExceeded: { path: Schema.String, limit: Schema.Int, actual: Schema.Int },
+  InvalidFrontmatter: { path: Schema.String },
+});
+export type ListingReadReason = typeof ListingReadReason.Type;
 export class ListingReadFailure
-  extends Data.TaggedError("ListingReadFailure")<{ detail: string }>
+  extends Schema.TaggedError<ListingReadFailure, { readonly brand: unique symbol }>()(
+    "ListingReadFailure",
+    { reason: ListingReadReason },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "OPERATION_FAILED" as const;
-  readonly remediation =
-    "Check that the Harness's skill directories and settings are readable, then retry.";
-  get message(): string {
-    return this.detail;
-  }
 }
+
+export const ListingUnavailableReason = Schema.TaggedUnion({
+  CustomRoot: { roots: Schema.Array(Schema.String) },
+  DescriptionMissing: { name: Schema.String, path: Schema.String },
+  DiscoveryFailed: { failure: HarnessDiscoveryFailed },
+  ListingReadFailed: { failure: ListingReadFailure },
+  MetadataInvalid: { failure: HarnessMetadataInvalid },
+  NativeReadFailed: { failure: NativeListingFailure },
+  NativeDiscoveryUnavailable: {
+    status: Schema.Literals(["checked", "missing", "failed", "skipped"]),
+    probeFailure: Schema.optionalKey(HarnessProbeFailure),
+  },
+});
+export type ListingUnavailableReason = typeof ListingUnavailableReason.Type;
 
 export const ListingEntry = Schema.Struct({
   name: Schema.String,
@@ -25,6 +50,49 @@ export type ListingEntry = typeof ListingEntry.Type;
 /** The Harnesses whose skill listing SKIT can estimate; each one's driver carries the estimator. */
 export const ListingHarness = HarnessName.pick(["codex", "claude-code"]);
 export type ListingHarness = typeof ListingHarness.Type;
+export const ClaudeModelSource = Schema.TaggedUnion({
+  Environment: { name: Schema.String },
+  SettingsFile: { path: Schema.String },
+  Unconfigured: {},
+});
+export type ClaudeModelSource = typeof ClaudeModelSource.Type;
+export const ClaudeLimitSource = Schema.TaggedUnion({
+  Environment: { name: Schema.Literal("SLASH_COMMAND_TOOL_CHAR_BUDGET"), value: Schema.Finite },
+  ContextConversion: {
+    contextWindow: Schema.Finite,
+    source: Schema.Literals(["catalog", "fallback"]),
+    charactersPerToken: Schema.Finite,
+    fraction: Schema.Finite,
+    clientVersion: Schema.String,
+  },
+  Unavailable: {},
+});
+export type ClaudeLimitSource = typeof ClaudeLimitSource.Type;
+export const ListingProvenance = Schema.TaggedUnion({
+  CodexAllocation: {
+    contextWindow: Schema.NullOr(Schema.Finite),
+    maxContextTokens: Schema.optionalKey(Schema.Finite),
+    fraction: Schema.Finite,
+    fallbackCharacters: Schema.Finite,
+    tokenCap: Schema.Finite,
+  },
+  ClaudeFilesystem: {
+    modelSource: ClaudeModelSource,
+    limitSource: ClaudeLimitSource,
+    descriptionCap: Schema.Int,
+    overrideSources: Schema.Int,
+    configuredFraction: Schema.optionalKey(
+      Schema.Struct({ value: Schema.Finite, path: Schema.optionalKey(Schema.String) }),
+    ),
+  },
+});
+export type ListingProvenance = typeof ListingProvenance.Type;
+export const NativeListingDiagnostic = Schema.Struct({
+  path: Schema.String,
+  diagnostic: Schema.String,
+});
+export type NativeListingDiagnostic = typeof NativeListingDiagnostic.Type;
+
 const fields = {
   harness: ListingHarness,
   cwd: Schema.String,
@@ -39,15 +107,15 @@ const fields = {
       demand: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     }),
   ),
-  basis: Schema.String,
-  coverage: Schema.Array(Schema.String),
-  warnings: Schema.optionalKey(Schema.Array(Schema.String)),
+  provenance: ListingProvenance,
+  skippedPaths: Schema.Array(Schema.String),
+  diagnostics: Schema.Array(NativeListingDiagnostic),
 };
 export const ListingBudget = Schema.Union([
   Schema.TaggedStruct("Unavailable", {
     harness: fields.harness,
     cwd: Schema.String,
-    detail: Schema.String,
+    reason: ListingUnavailableReason,
   }),
   Schema.TaggedStruct("DemandOnly", fields),
   Schema.TaggedStruct("Estimated", {

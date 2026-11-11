@@ -2,6 +2,7 @@ import { Schema } from "effect";
 import { HarnessName } from "../harnesses/contracts.js";
 import { Hash } from "../shared/hash.js";
 import { CollectionId, SkillId, InstalledSkillId } from "../library/entity-ids.js";
+import { OwnershipMarkerInvalidReason } from "./marker-failures.js";
 export const HarnessInstallStatus = Schema.Literals([
   "pending",
   "installed",
@@ -18,7 +19,7 @@ export const OwnershipIssue = Schema.Struct({
   canonicalPath: Schema.String,
   harnesses: Schema.mutable(Schema.Array(HarnessName)),
   currentHash: Hash,
-  detail: Schema.optional(Schema.String),
+  markerReason: Schema.optionalKey(OwnershipMarkerInvalidReason),
   collectionId: Schema.optional(CollectionId),
   skillId: Schema.optional(SkillId),
   installedSkillId: Schema.optional(InstalledSkillId),

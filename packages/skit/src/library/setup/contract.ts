@@ -1,3 +1,5 @@
+import { SetupWarning } from "../setup-warning.js";
+import { InstalledSkillChangeReason } from "../installed-skill-review.js";
 import { DuplicateCopy } from "../duplicates.js";
 import {
   CollectionId,
@@ -10,13 +12,8 @@ import { Hash } from "../../shared/hash.js";
 import { HarnessName } from "../../harnesses/contracts.js";
 import { Schema } from "effect";
 import { PnpmSkillOwner } from "../../installed-skills/pnpm-skills.js";
-
-export const SetupVersionChoice = Schema.Struct({
-  skillId: SkillId,
-  version: Schema.Literals(["retained", "local"]),
-  path: Schema.optionalKey(Schema.String),
-});
-export type SetupVersionChoice = typeof SetupVersionChoice.Type;
+import { TreeError } from "../../shared/tree-error.js";
+import { PlatformErrorSchema } from "../../platform/error-schema.js";
 
 const SetupProbe = Schema.Struct({
   harness: HarnessName,
@@ -75,18 +72,24 @@ export const SetupLockMatch = Schema.Struct({
 });
 export type SetupLockMatch = typeof SetupLockMatch.Type;
 
-const SetupContentIdentity = Schema.Struct({
-  status: Schema.Literals(["exact", "ambiguous", "none", "unhashable"]),
-  currentHash: Schema.optionalKey(Hash),
-  libraryMatches: Schema.Array(
-    Schema.Struct({
-      subjectId: Schema.String,
-      skillId: SkillId,
-      skillVersionId: SkillVersionId,
-      name: Schema.String,
-    }),
-  ),
+const SetupLibraryMatch = Schema.Struct({
+  subjectId: Schema.String,
+  skillId: SkillId,
+  skillVersionId: SkillVersionId,
+  name: Schema.String,
 });
+
+const SetupContentIdentity = Schema.Union([
+  Schema.Struct({
+    status: Schema.tag("hashed"),
+    currentHash: Hash,
+    libraryMatches: Schema.Array(SetupLibraryMatch),
+  }),
+  Schema.Struct({
+    status: Schema.tag("failed"),
+    failure: Schema.Union([TreeError, PlatformErrorSchema]),
+  }),
+]).annotate({ identifier: "SetupContentIdentity" });
 
 const SetupManagedMembership = Schema.Union([
   Schema.Struct({
@@ -107,6 +110,14 @@ const SetupManagedMembership = Schema.Union([
   }),
 ]);
 
+export const HarnessSkillOrigin = Schema.Literals([
+  "system",
+  "bundled-plugin",
+  "runtime-plugin",
+  "curated-plugin",
+]);
+export type HarnessSkillOrigin = typeof HarnessSkillOrigin.Type;
+
 const SetupInstanceOwner = Schema.Union([
   PnpmSkillOwner,
   Schema.Struct({ kind: Schema.tag("skit"), membership: SetupManagedMembership }),
@@ -120,8 +131,7 @@ const SetupInstanceOwner = Schema.Union([
   Schema.Struct({
     kind: Schema.tag("harness"),
     harness: HarnessName,
-    source: Schema.String,
-    bundled: Schema.Boolean,
+    origin: HarnessSkillOrigin,
   }),
   Schema.Struct({ kind: Schema.tag("repository"), repository: Schema.String }),
   Schema.Struct({ kind: Schema.tag("unknown") }),
@@ -229,26 +239,9 @@ export const InstalledSkillChange = Schema.Struct({
     "install",
   ]),
   metadataChanged: Schema.Boolean,
-  reason: Schema.optionalKey(Schema.String),
+  reason: Schema.optionalKey(InstalledSkillChangeReason),
 });
 export type InstalledSkillChange = typeof InstalledSkillChange.Type;
-export const InstalledSkillChangeResult = Schema.Struct({
-  reason: Schema.optionalKey(Schema.String),
-  installedSkillId: Schema.optionalKey(InstalledSkillId),
-  name: Schema.String,
-  path: Schema.String,
-  status: Schema.Literals([
-    "installed",
-    "updated",
-    "unchanged",
-    "local-kept",
-    "native-delete",
-    "pending",
-    "uninstalled",
-  ]),
-});
-export type InstalledSkillChangeResult = typeof InstalledSkillChangeResult.Type;
-
 const SetupOnboardingBase = {
   duplicates: Schema.optionalKey(Schema.Array(DuplicateCopy)),
   /** Links at SKIT's own destinations that enabling this skill would replace with copies. */
@@ -257,6 +250,15 @@ const SetupOnboardingBase = {
   paths: Schema.Array(Schema.String),
   owner: SetupInstanceOwner,
 } as const;
+
+const SetupBlockedReason = Schema.Literals([
+  "invalid-ownership-marker",
+  "content-unhashable",
+  "ambiguous-library-match",
+  "library-skill-name-mismatch",
+  "divergent-copies",
+  "contested-lock-claim",
+]);
 
 export const SetupOnboardingCandidate = Schema.Union([
   Schema.Struct({
@@ -297,14 +299,7 @@ export const SetupOnboardingCandidate = Schema.Union([
   Schema.Struct({
     ...SetupOnboardingBase,
     action: Schema.tag("blocked"),
-    reason: Schema.Literals([
-      "invalid-ownership-marker",
-      "content-unhashable",
-      "ambiguous-library-match",
-      "library-skill-name-mismatch",
-      "divergent-copies",
-      "contested-lock-claim",
-    ]),
+    reason: SetupBlockedReason,
   }),
   Schema.Struct({
     ...SetupOnboardingBase,
@@ -384,8 +379,13 @@ export const SetupResult = Schema.Struct({
   onboarding: Schema.Struct({
     planId: Hash,
     candidates: Schema.Array(SetupOnboardingCandidate),
-    /** The command that applies the recommendation, with absolute paths; absent when empty. */
-    applyCommand: Schema.optionalKey(Schema.String),
+    /** Inputs for applying the recommendation; absent when the plan needs a review first. */
+    apply: Schema.optionalKey(
+      Schema.Struct({
+        repositoryRoots: Schema.Array(Schema.String),
+        needsDuplicateDecision: Schema.Boolean,
+      }),
+    ),
     /** Exactly what `skit setup --apply <planId>` imports and starts managing. */
     recommended: Schema.Struct({
       sources: Schema.Array(
@@ -406,10 +406,20 @@ export const SetupResult = Schema.Struct({
 });
 export type SetupResult = typeof SetupResult.Type;
 
+export const SetupLeftAloneReason = Schema.Literals([
+  "import-observed-collection",
+  "bind-existing-entry",
+  "manage-locally",
+  "harness-owned",
+  "repository-owned",
+  "leave-alone",
+  ...SetupBlockedReason.literals,
+]);
+export type SetupLeftAloneReason = typeof SetupLeftAloneReason.Type;
+
 /** What `skit setup --apply` did: what it brought under SKIT, the copies that resulted, and why
  * every other observed skill was left alone. */
 export const SetupApplied = Schema.Struct({
-  changes: Schema.optionalKey(Schema.Array(InstalledSkillChangeResult)),
   operationId: Schema.optionalKey(Schema.String),
   removed: Schema.optionalKey(
     Schema.Array(Schema.Struct({ name: Schema.String, path: Schema.String })),
@@ -433,7 +443,7 @@ export const SetupApplied = Schema.Struct({
     Schema.Struct({
       name: Schema.String,
       paths: Schema.Array(Schema.String),
-      reason: Schema.String,
+      reason: SetupLeftAloneReason,
     }),
   ),
   /**
@@ -441,11 +451,7 @@ export const SetupApplied = Schema.Struct({
    * were saved, and any symlink kept because it could not be retired safely.
    */
   aliasRecoveryDirectories: Schema.optionalKey(Schema.Array(Schema.String)),
-  backupWarnings: Schema.optionalKey(
-    Schema.Array(Schema.Struct({ name: Schema.String, message: Schema.String })),
-  ),
-  aliasesKept: Schema.optionalKey(
-    Schema.Array(Schema.Struct({ name: Schema.String, message: Schema.String })),
-  ),
+  backupWarnings: Schema.optionalKey(Schema.Array(SetupWarning)),
+  aliasesKept: Schema.optionalKey(Schema.Array(SetupWarning)),
 });
 export type SetupApplied = typeof SetupApplied.Type;

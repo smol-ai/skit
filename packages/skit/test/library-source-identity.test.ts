@@ -86,6 +86,7 @@ it.effect(
         const updated = initial.replace("Original release", "Workspace edit");
         yield* fs.writeFileString(join(roots[0]!, "skills/review/SKILL.md"), updated);
         const observed = yield* updateAuthoredSkills(roots[0]!);
+        if (!("context" in observed)) return assert.fail("Expected registered installation");
         assert.deepStrictEqual(observed.context?.disabled_skills, ["review"]);
         assert.strictEqual(observed.context?.other_sources[0]?.source?.kind, "registry");
         assert.strictEqual(yield* fs.readFileString(join(agents, "review/SKILL.md")), initial);

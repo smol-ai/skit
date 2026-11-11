@@ -1,3 +1,4 @@
+import { setupStage } from "./setup/progress.js";
 import { readSkillPreviews } from "@smolai/skit-core/library/queries";
 import * as Library from "@smolai/skit-core/library";
 import { Effect } from "effect";
@@ -5,7 +6,6 @@ import { Effect } from "effect";
 import { resolve } from "node:path";
 
 import { Prompter } from "../terminal/prompter.js";
-import { compactHomePath } from "../terminal/home-path.js";
 import { Renderer } from "../terminal/renderer.js";
 import {
   setupOverviewTitle,
@@ -22,13 +22,8 @@ import {
 import { inspectLibrarySource } from "./source.js";
 import { renderCheck } from "./check/present.js";
 import { setupReviewSkillChoices } from "./setup/skills.js";
-import { renderChangeResult } from "./presentation/installed-skill-changes.js";
-import {
-  chooseSetupCopyDecisions,
-  chooseSetupVersions,
-  setupPlanLines,
-  renderSetupAliasRecovery,
-} from "./setup/choices.js";
+import { Block } from "../terminal/blocks.js";
+import { chooseSetupCopyDecisions, setupPlan, renderSetupAliasRecovery } from "./setup/choices.js";
 
 export { setupApplyCommand } from "./setup/apply.js";
 
@@ -52,7 +47,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   if (guided) yield* renderer.note(steps.overview, setupOverviewTitle);
   // One owner call opens the review on its own scan; prompts refresh it, never re-scan themselves.
   let review = yield* renderer.withStatus(
-    "Observing local skills",
+    "Scanning local skills",
     openSetupReview(
       { ...setupOptions, persistRoots },
       input.manageOptions ?? { installOptions: setupOptions.inventory },
@@ -64,9 +59,8 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
       sources: [],
       copies: [],
       decisions: [],
-      reconcileExisting: false,
     });
-    const applied = yield* plan.apply(renderer.withStatus);
+    const applied = yield* plan.apply(setupStage(renderer));
     return {
       ...applied.scan,
       machineConfig: { ...applied.scan.machineConfig, persisted: true },
@@ -75,15 +69,17 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   }
   if (!guided || !input.manageOptions) return review.scan;
   const discoveredRepositories = review.scan.repositories;
-  const displayPath = (path: string) => compactHomePath(path, input.options.inventory.home);
-  const displayRoots = roots.map(displayPath).join(", ");
+  const displayRoots = roots.join(", ");
   if (roots.length)
-    yield* renderer.step(
-      steps.step("repositories"),
-      discoveredRepositories.length
-        ? `Found ${discoveredRepositories.length} ${discoveredRepositories.length === 1 ? "repository" : "repositories"} with skills under ${displayRoots}. SKIT ignores the ones you leave unselected.`
-        : `No repositories with skills were found under ${displayRoots}.`,
-    );
+    yield* renderer.step(steps.step("repositories"), [
+      Block.Note({
+        text: [
+          discoveredRepositories.length
+            ? `Found ${discoveredRepositories.length} ${discoveredRepositories.length === 1 ? "repository" : "repositories"} with skills under ${displayRoots}. SKIT ignores the ones you leave unselected.`
+            : `No repositories with skills were found under ${displayRoots}.`,
+        ],
+      }),
+    ]);
   let repositoryDecisions: ReadonlyArray<{
     path: string;
     status: "watched" | "ignored";
@@ -94,7 +90,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
       setupPrompts.repositories,
       discoveredRepositories.map((repository) => ({
         value: repository.path,
-        label: displayPath(repository.path),
+        label: repository.path,
         hint: `${repository.skills.length} skill${repository.skills.length === 1 ? "" : "s"}`,
         selected: repository.status !== "ignored",
       })),
@@ -105,58 +101,79 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
       status: watchedPaths.has(repository.path) ? ("watched" as const) : ("ignored" as const),
     }));
     review = yield* renderer.withStatus(
-      "Observing local skills",
+      "Scanning local skills",
       review.refresh({ repositoryDecisions, scanDecidedRepositories: true }),
     );
   }
   const scan = review.scan;
+  if (scan.changes?.some((change) => change.status !== "unchanged" || change.metadataChanged))
+    yield* renderer.note(
+      [
+        Block.Note({
+          text: [
+            "Existing managed skills have changes. Setup leaves those copies unchanged; use skit update to handle them.",
+          ],
+        }),
+      ],
+      "Managed skills left unchanged",
+    );
   const sources = yield* chooseKnownSources(steps, review);
   const copies = yield* chooseDiscoveredSkills(steps, review, input.options.inventory.home);
-  const decisions = yield* chooseSetupCopyDecisions(
-    yield* review.selectedCopies(copies),
-    displayPath,
-  );
-  const versionChoices = yield* chooseSetupVersions(
-    review.versionAlternatives,
-    scan.changes ?? [],
-    displayPath,
-  );
-  const plan = yield* review.prepare({ sources, copies, decisions, versionChoices });
-  if (!plan.canApply) return yield* plan.apply(renderer.withStatus).pipe(Effect.as(scan));
+  const decisions = yield* chooseSetupCopyDecisions(yield* review.selectedCopies(copies));
+  const plan = yield* review.prepare({ sources, copies, decisions });
   if (!plan.hasChanges) {
-    yield* renderer.step(
-      steps.step("confirm"),
-      "Nothing was selected and the repository roots are unchanged, so there is nothing to apply.",
-    );
+    yield* renderer.step(steps.step("confirm"), [
+      Block.Note({
+        text: [
+          "Nothing was selected and the repository roots are unchanged, so there is nothing to apply.",
+        ],
+      }),
+    ]);
     yield* offerSkillsShUpdateCheck();
     return scan;
   }
   yield* renderer.step(
     steps.step("confirm"),
-    setupPlanLines({
+    setupPlan({
       summary: plan.summary,
       displayRoots,
-      displayPath,
-    }).join("\n"),
+    }),
   );
   const prompter = yield* Prompter;
   if (!(yield* prompter.confirm(setupPrompts.confirm))) {
-    yield* renderer.note("No changes were applied.", "Setup cancelled");
+    yield* renderer.note([Block.Note({ text: ["No changes were applied."] })], "Setup cancelled");
     return scan;
   }
-  const applied = yield* plan.apply(renderer.withStatus);
+  const applied = yield* plan.apply(setupStage(renderer));
   yield* renderSetupAliasRecovery(applied);
   if (applied.removalDirectory !== undefined)
     yield* renderer.note(
-      `Removed installed locations are saved at ${applied.removalDirectory}. Inspect them with skit library recovery list --home ${JSON.stringify(input.options.libraryHome)}. File recovery does not undo setup bindings or settings.`,
+      [
+        Block.Note({
+          text: [
+            "Removed installed locations are saved at ",
+            { dim: applied.removalDirectory },
+            ". Inspect them with ",
+            {
+              code: `skit library recovery list --home ${JSON.stringify(input.options.libraryHome)}`,
+            },
+            ". File recovery does not undo what setup enabled or its settings.",
+          ],
+        }),
+      ],
       "Removed copies saved",
     );
   yield* renderer.note(
     [
-      "Selected setup changes were applied.",
-      ...applied.changes.map((outcome) => renderChangeResult(outcome)),
-      `Setup operation: ${applied.operationId}. Preview full undo with skit library undo ${applied.operationId} using the same --home.`,
-    ].join("\n"),
+      Block.Status({ tone: "ok", text: ["Selected setup changes were applied."] }),
+      Block.Note({
+        text: [
+          "To preview undoing this setup, run ",
+          { code: `skit library undo ${applied.operationId}` },
+          ".",
+        ],
+      }),
+    ],
     "Setup complete",
   );
   yield* offerSkillsShUpdateCheck();
@@ -170,13 +187,13 @@ const offerSkillsShUpdateCheck = Effect.fn("CLI.setup.offerSkillsShUpdateCheck")
   const prompter = yield* Prompter;
   if (
     !(yield* prompter.confirm(
-      `Check ${collectionIds.length} retained skills.sh Source${collectionIds.length === 1 ? "" : "s"} for updates now?`,
+      `Check ${collectionIds.length} skills.sh Source${collectionIds.length === 1 ? "" : "s"} for updates now?`,
     ))
   )
     return;
   const renderer = yield* Renderer;
   const checks = yield* renderer.withStatus(
-    "Checking retained skills.sh Sources",
+    "Checking skills.sh Sources",
     Effect.map(
       Effect.forEach(collectionIds, (collectionId) =>
         library.check(collectionId, { inspectSource: inspectLibrarySource }),
@@ -194,13 +211,18 @@ const chooseKnownSources = Effect.fn("CLI.setup.chooseKnownSources")(function* (
   const sources = review.sources;
   const renderer = yield* Renderer;
   if (!sources.length) {
-    yield* renderer.step(steps.step("collections"), "No skills.sh collections to add.");
+    yield* renderer.step(steps.step("collections"), [
+      Block.Note({ text: ["No skills.sh collections to add."] }),
+    ]);
     return [];
   }
-  yield* renderer.step(
-    steps.step("collections"),
-    `Found ${sources.length} installed skills.sh collection${sources.length === 1 ? "" : "s"} not yet in the SKIT Library.`,
-  );
+  yield* renderer.step(steps.step("collections"), [
+    Block.Note({
+      text: [
+        `Found ${sources.length} installed skills.sh collection${sources.length === 1 ? "" : "s"} not yet in the SKIT Library.`,
+      ],
+    }),
+  ]);
   const prompter = yield* Prompter;
   const selectedSources = yield* prompter
     .multiselect(
@@ -253,12 +275,15 @@ const chooseDiscoveredSkills = Effect.fn("CLI.setup.chooseDiscoveredSkills")(fun
   });
   const skillNames = new Set(rows.map((row) => row.instance.name)).size;
   const renderer = yield* Renderer;
-  yield* renderer.step(
-    steps.step("skills"),
-    choices.length
-      ? `Found ${skillNames} other installed skill${skillNames === 1 ? "" : "s"} in ${rows.length} location${rows.length === 1 ? "" : "s"}.`
-      : "No other installed skills to review.",
-  );
+  yield* renderer.step(steps.step("skills"), [
+    Block.Note({
+      text: [
+        choices.length
+          ? `Found ${skillNames} other installed skill${skillNames === 1 ? "" : "s"} in ${rows.length} location${rows.length === 1 ? "" : "s"}.`
+          : "No other installed skills to review.",
+      ],
+    }),
+  ]);
   const selectedValues = choices.length
     ? yield* prompter
         .multiselect(setupPrompts.skills, choices)

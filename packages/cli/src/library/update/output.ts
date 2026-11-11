@@ -1,7 +1,11 @@
+import type * as Library from "@smolai/skit-core/library";
+import { CommandError } from "../../commands/error-output.js";
+import { commandError } from "../../commands/failure-classification.js";
+import { AuthoredSkillIssue } from "@smolai/skit-core/library/update";
 import { EditImportPlan, EditImportResult } from "@smolai/skit-core/library/edit";
 import { Hash } from "@smolai/skit-core/shared";
 import { SourceDiscoveryDiagnostic } from "@smolai/skit-core/library/source";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 
 /** What a refresh means for the Skills this device enables. */
 const SkillChanges = {
@@ -27,12 +31,7 @@ const UpdateFailure = Schema.Struct({
   source: Schema.String,
   phase: Schema.Literals(["source", "install"]),
   source_imported: Schema.Boolean,
-  error: Schema.Struct({
-    code: Schema.String,
-    exitCode: Schema.Int,
-    message: Schema.String,
-    remediation: Schema.String,
-  }),
+  error: CommandError,
 });
 
 export const UpdateResult = Schema.Array(
@@ -46,9 +45,10 @@ export const UpdateResult = Schema.Array(
       snapshot_digest: Hash,
       changed: Schema.Boolean,
       installed: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-      messages: Schema.optionalKey(Schema.Array(Schema.String)),
+      issues: Schema.optionalKey(Schema.Array(AuthoredSkillIssue)),
       sync_status: Schema.optionalKey(Schema.String),
       sync_error: Schema.optionalKey(UpdateFailure.fields.error),
+      installation_error: Schema.optionalKey(UpdateFailure.fields.error),
       ...SkillChanges,
     }),
   ]),
@@ -62,7 +62,7 @@ export const UpdatePlan = Schema.Array(
     current_snapshot_digest: Hash,
     // Authored previews do not invent the identity of a future saved revision/composition.
     available_snapshot_digest: Schema.optionalKey(Hash),
-    messages: Schema.optionalKey(Schema.Array(Schema.String)),
+    issues: Schema.optionalKey(Schema.Array(AuthoredSkillIssue)),
     changed: Schema.Boolean,
     ...SkillChanges,
   }),
@@ -72,9 +72,26 @@ export type UpdatePlan = typeof UpdatePlan.Type;
 export const updateOutputContracts = {
   update: { id: "skit.update.v9", schema: UpdateResult },
   updatePlan: { id: "skit.update.plan.v7", schema: UpdatePlan },
-  projectionRetention: { id: "skit.update.projection-retention.v3", schema: EditImportResult },
-  projectionRetentionPlan: {
+  // Preserve the released wire-name families; internal names describe installed edits.
+  installedEdit: { id: "skit.update.projection-retention.v3", schema: EditImportResult },
+  installedEditPlan: {
     id: "skit.update.projection-retention.plan.v3",
     schema: EditImportPlan,
   },
 } as const;
+
+/** Project the owner's native failure causes at the CLI result boundary. */
+export const sourceUpdateOutput = (
+  outcomes: Effect.Success<ReturnType<Library.Interface["update"]>>,
+): UpdateResult =>
+  outcomes.map((item) => {
+    if ("status" in item) return { ...item, error: commandError(item.error) };
+    const { sync_error, installation_error, ...rest } = item;
+    return {
+      ...rest,
+      ...(installation_error === undefined
+        ? {}
+        : { installation_error: commandError(installation_error) }),
+      ...(sync_error === undefined ? {} : { sync_error: commandError(sync_error) }),
+    };
+  });

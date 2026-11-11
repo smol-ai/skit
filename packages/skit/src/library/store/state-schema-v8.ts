@@ -9,6 +9,6 @@ export const LibraryStateFromV8 = Schema.Unknown.pipe(
   Schema.refine(Schema.is(LibraryStateV8)),
   Schema.decodeTo(LibraryStateFromV9, {
     decode: SchemaGetter.transform((state) => ({ ...state, schemaVersion: 9 as const })),
-    encode: SchemaGetter.forbidden(() => "v8 Library state is decode-only"),
+    encode: SchemaGetter.forbiddenEncoding,
   }),
 );

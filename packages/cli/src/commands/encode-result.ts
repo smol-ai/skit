@@ -11,9 +11,8 @@ export function encodeResult<K extends ContractKey>(
   contract: K & SingleContractKey<K>,
   definition: (typeof outputContracts)[NoInfer<K>],
   data: ContractData<NoInfer<K>>,
-  exitCode?: number,
 ): CommandResult<K> {
   const { id, schema } = definition;
   const encodedData = Schema.encodeUnknownSync(schema)(data);
-  return { contract, schema: id, data, encodedData, exitCode };
+  return { contract, schema: id, data, encodedData };
 }

@@ -2,9 +2,13 @@ import { expect, it } from "@effect/vitest";
 import { Clock, Effect, Stream, FileSystem, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
-import { readAuthorAncestors } from "./helpers/author-history.js";
-import { authorLayer, refreshWorkspace, storedTreesAt } from "./helpers/author-history.js";
-import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
+import { readAuthorAncestors } from "../src/platform/author-sync-fixture/history.js";
+import {
+  authorLayer,
+  refreshWorkspace,
+  storedTreesAt,
+} from "../src/platform/author-sync-fixture/history.js";
+import { makeAuthorSyncWorld } from "../src/platform/author-sync-fixture/world.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
 const worker = join(process.cwd(), "dist/test/fixtures/author-history-worker.js");

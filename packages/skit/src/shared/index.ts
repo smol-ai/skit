@@ -3,14 +3,18 @@ export { BuildInfo } from "./build-info.js";
 export { Hash } from "./hash.js";
 export { canonicalJson } from "./json.js";
 export { isErrno } from "./errno.js";
-export type { TreeError } from "./tree-error.js";
-export { OptionCombinationInvalid } from "./input-failures.js";
+export { TreeError, TreeErrorReason, GitInspectionIssue } from "./tree-error.js";
 export {
   errorMessage,
   FailureTypeId,
   isSkitFailure,
-  type FailureCode,
+  FailureCode,
   type SkitFailure,
 } from "./failure.js";
 
-export { MissingRequirement } from "./input-failures.js";
+export {
+  SchemaIssueFact,
+  SchemaIssueReason,
+  ExpectedSchemaType,
+  SchemaFailure,
+} from "./schema-issue.js";

@@ -42,7 +42,7 @@ export const librarySyncHandlers = HttpApiBuilder.group(
                 Effect.catchTags({
                   "Library.LibraryRevisionInvalid": () => Effect.fail(storageFailureResponse),
                   "Library.LibraryRevisionConflict": () => Effect.fail(revisionConflictResponse),
-                  "Library.LibrarySnapshotMissing": () => Effect.fail(invalidRequestResponse),
+                  "Library.CollectionVersionMissing": () => Effect.fail(invalidRequestResponse),
                   "Cloudflare.DatabaseError": (error) =>
                     Effect.logError("portable Library write failed", error).pipe(
                       Effect.andThen(Effect.fail(storageFailureResponse)),

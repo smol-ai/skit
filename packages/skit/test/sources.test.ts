@@ -161,7 +161,7 @@ describe("source contracts", () => {
             ...selection.source,
           }).pipe(Effect.flip);
           assert.strictEqual(error._tag, "SourcePolicyViolation");
-          assert.include(error.message, "outside the checkout");
+          expect(error).toMatchObject({ reason: { _tag: "GitPathOutsideCheckout" } });
         }
       }
     }).pipe(provide),
@@ -172,12 +172,14 @@ describe("source contracts", () => {
       const source = { type: "git" as const, remote: fixture.remote };
       const subpathError = yield* resolve({ ...source, subpath: "dangling" }).pipe(Effect.flip);
       assert.strictEqual(subpathError._tag, "SourcePolicyViolation");
-      assert.include(subpathError.message, "symlink target is unavailable: dangling");
+      expect(subpathError).toMatchObject({ reason: { _tag: "GitPathMissing", path: "dangling" } });
       const memberError = yield* resolve({ ...source, skillDirectories: ["dangling"] }).pipe(
         Effect.flip,
       );
       assert.strictEqual(memberError._tag, "SourcePolicyViolation");
-      assert.include(memberError.message, "Locked Skill path is missing");
+      expect(memberError).toMatchObject({
+        reason: { _tag: "LockedPathMissing", path: "dangling/SKILL.md" },
+      });
     }).pipe(provide),
   );
   it.effect("accepts confined Git targets when the workspace has a symlinked parent", () =>
@@ -565,7 +567,7 @@ describe("source contracts", () => {
       );
       expect(failure._tag).toBe("SourcePolicyViolation");
       if (failure._tag === "SourcePolicyViolation")
-        expect(failure.reason).toMatchObject({ _tag: "PinMismatch" });
+        expect(failure.reason).toMatchObject({ _tag: "DiscoveryHashMismatch" });
     }).pipe(provide),
   );
 
@@ -735,8 +737,7 @@ describe("source contracts", () => {
       );
       expect(failure._tag).toBe("SourcePolicyViolation");
       if (failure._tag === "SourcePolicyViolation")
-        expect(failure.reason).toMatchObject({ _tag: "InvalidSource" });
-      expect(failure.message).toContain("contains a link");
+        expect(failure.reason).toMatchObject({ _tag: "ArchiveLink" });
     }).pipe(provide),
   );
 
@@ -762,7 +763,8 @@ describe("source contracts", () => {
         Effect.flip,
       );
       expect(failure._tag).toBe("SourcePolicyViolation");
-      if (failure._tag === "SourcePolicyViolation") expect(failure.reason._tag).toBe("Transport");
+      if (failure._tag === "SourcePolicyViolation")
+        expect(failure.reason._tag).toBe("TransportFailure");
     }).pipe(provide),
   );
 
@@ -837,7 +839,13 @@ describe("source contracts", () => {
       yield* writeText(join(root, "SKILL.md"), "# Skill\n");
       yield* fs.symlink("SKILL.md", join(root, "linked.md"));
       const failure = yield* Effect.flip(auditExtractedSource(root));
-      assert.match(failure.message, /unsupported entry/);
+      expect(failure).toMatchObject({
+        reason: {
+          _tag: "ArchiveEntryUnsupported",
+          path: join(root, "linked.md"),
+          kind: "SymbolicLink",
+        },
+      });
     }).pipe(provide),
   );
 
@@ -887,7 +895,9 @@ describe("source contracts", () => {
         { concurrency: 16, discard: true },
       );
       const failure = yield* Effect.flip(auditExtractedSource(root));
-      assert.match(failure.message, /too many files/);
+      expect(failure).toMatchObject({
+        reason: { _tag: "LimitExceeded", resource: "archive-files", actual: 1001, limit: 1000 },
+      });
     }).pipe(provide),
   );
 
@@ -899,7 +909,14 @@ describe("source contracts", () => {
       yield* writeText(path, "");
       yield* fs.truncate(path, 25 * 1024 * 1024 + 1);
       const failure = yield* Effect.flip(auditExtractedSource(root));
-      assert.match(failure.message, /extracted size limit/);
+      expect(failure).toMatchObject({
+        reason: {
+          _tag: "LimitExceeded",
+          resource: "archive-bytes",
+          actual: 25 * 1024 * 1024 + 1,
+          limit: 25 * 1024 * 1024,
+        },
+      });
     }).pipe(provide),
   );
 

@@ -228,7 +228,7 @@ export function mountStorybook(
         ? " ↑↓/wheel browse | type search | tab preview | ctrl+f format | ctrl+d detail | ctrl+l colour | esc clear | ctrl+c quit"
         : !playback
           ? " tab search | ctrl+f format | ctrl+d detail | ctrl+l colour | ↑↓ scroll JSON"
-          : ` ← prev | →/enter next | space ${playback?.playing ? "pause" : "play"} | home restart | t ${transcript ? "preview" : "transcript"} | ctrl+l colour | tab search\n ${playback?.frame?.label ?? selectedItem()?.key ?? ""} | ${recorded?.initialState ?? ""}${playback && playback.index === playback.frames.length - 1 ? ` | ${recorded?.finalState ?? ""}` : ""}`;
+          : ` ← prev | →/enter next | space ${playback?.playing ? "pause" : "play"} | home restart | t ${transcript ? "preview" : "transcript"} | ctrl+l colour | tab search\n ${playback?.frame?.label ?? selectedItem()?.key ?? ""} | ${recorded?._tag === "Journey" ? recorded.initialState : ""}${playback && playback.index === playback.frames.length - 1 ? ` | ${recorded?._tag === "Journey" ? recorded.finalState : ""}` : ""}`;
     previewBox.borderColor = focus === "preview" ? colors.accent : colors.border;
   }
 

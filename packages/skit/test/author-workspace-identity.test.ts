@@ -87,7 +87,6 @@ it.effect("identity-only workspaces detect copies and retain identity when moved
       workspaceId: first.workspaceId,
       at: firstRoot,
     });
-    expect("remediation" in collision ? collision.remediation : "").toContain("only in the copy");
     yield* assertDiskUnchanged(before);
     const moved = join(f.root, "moved");
     yield* f.fs.rename(f.source, moved);

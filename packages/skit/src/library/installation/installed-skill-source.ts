@@ -18,7 +18,10 @@ export const installedSkillSource = Effect.fn("Library.installedSkillSource")(fu
 ) {
   const backing = versionBacking(state, skill, version);
   if (backing === undefined)
-    return { kind: "invalid" as const, detail: `retained Skill ${skill.name} has no backing` };
+    return {
+      kind: "invalid" as const,
+      reason: { _tag: "BackingMissing" as const, skillName: skill.name },
+    };
   const retainedPath = collectionVersionPath(originalsPath, backing.copy.hash);
   const root = yield* readCollectionVersion(originalsPath, backing.copy.hash);
   const authored = version.materialization_profile === "declared-skit-skill/v1";
@@ -30,23 +33,32 @@ export const installedSkillSource = Effect.fn("Library.installedSkillSource")(fu
       })
     : undefined;
   if (validated?.diagnostics.some((diagnostic) => diagnostic.severity === "error"))
-    return { kind: "invalid" as const, detail: "retained authored descriptor is invalid" };
+    return { kind: "invalid" as const, reason: { _tag: "DescriptorInvalid" as const } };
   const descriptorSkill = validated?.descriptor.skills.find(
     (candidate) => candidate.name === skill.name,
   );
   if (authored && descriptorSkill === undefined)
-    return { kind: "invalid" as const, detail: `authored descriptor lacks ${skill.name}` };
+    return {
+      kind: "invalid" as const,
+      reason: { _tag: "DescriptorSkillMissing" as const, skillName: skill.name },
+    };
   const importedPath =
     backing.member.source_path === "." ? root : join(root, backing.member.source_path);
   if ((yield* originalTreeHash(importedPath)) !== version.source_hash)
-    return { kind: "invalid" as const, detail: `retained Skill ${skill.name} changed` };
+    return {
+      kind: "invalid" as const,
+      reason: { _tag: "ContentChanged" as const, skillName: skill.name },
+    };
   // The primary directory hash excludes shared inputs. The validated Skill identity covers
   // the complete projected artifact, including current shared mappings and their file bytes.
   const validatedSkill = validated?.identity.skills.find(
     (candidate) => candidate.name === skill.name,
   );
   if (authored && validatedSkill?.contentHash !== version.validation_identity_hash)
-    return { kind: "invalid" as const, detail: `retained Skill ${skill.name} inputs changed` };
+    return {
+      kind: "invalid" as const,
+      reason: { _tag: "InputsChanged" as const, skillName: skill.name },
+    };
   return {
     kind: "source" as const,
     libraryPath: root,

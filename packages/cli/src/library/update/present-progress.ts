@@ -14,7 +14,7 @@ const completedMessage = (stage: LibraryProgressStage, result: LibraryProgressCo
   const message =
     result.kind === "source-inspected"
       ? result.changed
-        ? "New snapshot retained"
+        ? "New Collection Version imported"
         : "Source is current"
       : result.installed
         ? `${result.installed} installed skill${result.installed === 1 ? "" : "s"} updated`

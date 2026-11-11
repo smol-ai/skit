@@ -1,12 +1,11 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, expectTypeOf, test } from "vitest";
 import { defaultSkillsRoot } from "../src/harnesses/default-roots.js";
 import { evaluateSkillFrontmatter } from "../src/harnesses/frontmatter.js";
 import {
   harnessProfile,
-  harnessProfileIds,
-  skillsDirectory,
+  harnessProfiles,
   installSkillsDirectory,
   resolveSkillsDirectory,
 } from "../src/harnesses/catalog.js";
@@ -15,11 +14,8 @@ import {
   type HarnessName,
   type HarnessProfile,
   type SkillsDirectory,
+  type SkillsDirectoryContext,
 } from "../src/harnesses/contracts.js";
-
-const harnessProfiles = Object.fromEntries(
-  harnessProfileIds().map((id) => [id, harnessProfile(id)]),
-);
 
 function assertVerifiedDate(value: string, label: string): void {
   const parsed = new Date(`${value}T00:00:00.000Z`);
@@ -53,10 +49,11 @@ function assertHarnessCatalog(profiles: Readonly<Record<string, HarnessProfile>>
         }
       }
     }
-    if (profile.frontmatter.filter((candidate) => candidate.default).length !== 1)
-      throw new Error(`Exactly one default frontmatter contract is required for ${profile.id}`);
     const contractIds = new Set<string>();
-    for (const contract of profile.frontmatter) {
+    for (const contract of [
+      profile.frontmatter.default,
+      ...Object.values(profile.frontmatter.variants),
+    ]) {
       if (contractIds.has(contract.id))
         throw new Error(`Duplicate frontmatter contract for ${profile.id}: ${contract.id}`);
       contractIds.add(contract.id);
@@ -120,14 +117,9 @@ function assertHarnessCatalog(profiles: Readonly<Record<string, HarnessProfile>>
     }
     const rootIds = new Set<string>();
     const pathClaims = new Map<string, Pick<SkillsDirectory, "role" | "evidence">>();
-    for (const root of profile.roots) {
+    for (const root of Object.values(profile.roots)) {
       if (rootIds.has(root.id)) throw new Error(`Duplicate root id for ${profile.id}: ${root.id}`);
       rootIds.add(root.id);
-      if (
-        (root.scope === "project" && root.base !== "repository") ||
-        (root.scope === "global" && root.base === "repository")
-      )
-        throw new Error(`Root base does not match scope for ${profile.id}: ${root.id}`);
       const pathKey = `${root.base}:${root.scope}:${root.path}`;
       const claim = pathClaims.get(pathKey);
       if (claim && (claim.role !== root.role || claim.evidence !== root.evidence))
@@ -138,8 +130,7 @@ function assertHarnessCatalog(profiles: Readonly<Record<string, HarnessProfile>>
       ["global", profile.installedSkill.globalTarget],
       ["project", profile.installedSkill.projectTarget],
     ] as const) {
-      if (!target) continue;
-      const root = skillsDirectory(profile, target);
+      const root = target;
       if (!root.writable) throw new Error(`Install destination is not writable: ${target}`);
       if (root.scope !== scope) throw new Error(`Install destination has wrong scope: ${target}`);
     }
@@ -190,25 +181,25 @@ describe("Harness Profile catalog", () => {
         profile.installedSkill.globalTarget,
         profile.installedSkill.projectTarget,
       ])
-        if (target) expect(skillsDirectory(profile, target).writable).toBe(true);
+        expect(target.writable).toBe(true);
   });
 
   test("preserves the existing Codex compatibility install destination", () => {
     const profile = harnessProfile("codex");
-    const target = skillsDirectory(profile, profile.installedSkill.globalTarget!);
+    const target = profile.installedSkill.globalTarget;
     expect(target).toEqual(
       expect.objectContaining({ role: "compatibility", path: ".agents/skills", writable: true }),
     );
     expect(defaultSkillsRoot("codex")).toBe(join(homedir(), ".agents", "skills"));
-    expect(profile.roots.find((root) => root.id === "codex-global-native")).toEqual(
+    expect(Object.values(profile.roots).find((root) => root.id === "codex-global-native")).toEqual(
       expect.objectContaining({ path: ".codex/skills", role: "native" }),
     );
-    expect(skillsDirectory(profile, "codex-project-agents")).toMatchObject({
+    expect(profile.roots["codex-project-agents"]).toMatchObject({
       role: "compatibility",
       evidence: "observed",
       writable: true,
     });
-    expect(skillsDirectory(profile, "codex-project-codex")).toMatchObject({
+    expect(profile.roots["codex-project-codex"]).toMatchObject({
       role: "native",
       evidence: "documented",
       writable: false,
@@ -217,19 +208,19 @@ describe("Harness Profile catalog", () => {
 
   test("preserves the existing OpenCode skills directory when XDG_CONFIG_HOME differs", () => {
     const context = { home: "/users/test", configHome: "/xdg/config" };
-    expect(installSkillsDirectory("opencode", "global", context)).toBe(
+    expect(installSkillsDirectory("opencode", { scope: "global", ...context })).toBe(
       resolve("/users/test/.config/opencode/skills"),
     );
     expect(
-      resolveSkillsDirectory(
-        skillsDirectory(harnessProfile("opencode"), "opencode-global-native"),
-        context,
-      ),
+      resolveSkillsDirectory({
+        ...harnessProfile("opencode").roots["opencode-global-native"],
+        ...context,
+      }),
     ).toBe(resolve("/xdg/config/opencode/skills"));
   });
 
   test("does not invent a global Claude .agents compatibility root", () => {
-    const roots = harnessProfile("claude-code").roots;
+    const roots: readonly SkillsDirectory[] = Object.values(harnessProfile("claude-code").roots);
     expect(
       roots.some(
         (root) =>
@@ -256,21 +247,23 @@ describe("Harness Profile catalog", () => {
       repository: "/work/project",
     };
 
-    expect(installSkillsDirectory("devin", "global", context)).toBe(
+    expect(installSkillsDirectory("devin", { scope: "global", ...context })).toBe(
       resolve("/xdg/config/devin/skills"),
     );
-    expect(installSkillsDirectory("devin", "project", context)).toBe(
-      resolve("/work/project/.devin/skills"),
-    );
-    expect(skillsDirectory(profile, "devin-global-cognition")).toMatchObject({
+    expect(
+      installSkillsDirectory("devin", { scope: "project", repository: context.repository }),
+    ).toBe(resolve("/work/project/.devin/skills"));
+    expect(profile.roots["devin-global-cognition"]).toMatchObject({
       path: "cognition/skills",
       readable: true,
       writable: false,
     });
     expect(
-      profile.roots.find((root) => root.scope === "project" && root.path === ".cognition/skills"),
+      Object.values(profile.roots).find(
+        (root) => root.scope === "project" && root.path === ".cognition/skills",
+      ),
     ).toMatchObject({ readable: true, writable: false });
-    expect(skillsDirectory(profile, "devin-global-agents")).toMatchObject({
+    expect(profile.roots["devin-global-agents"]).toMatchObject({
       path: ".agents/skills",
       readable: true,
       writable: false,
@@ -295,9 +288,12 @@ describe("Harness Profile catalog", () => {
   });
 
   test("links every frontmatter claim to registered evidence", () => {
-    for (const profile of Object.values(harnessProfiles)) {
-      const sources = new Set(profile.documentation.map((source) => source.id));
-      for (const contract of profile.frontmatter)
+    for (const profile of Object.values<HarnessProfile>(harnessProfiles)) {
+      const sources = new Set<string>(profile.documentation.map((source) => source.id));
+      for (const contract of [
+        profile.frontmatter.default,
+        ...Object.values(profile.frontmatter.variants),
+      ])
         for (const field of contract.fields)
           expect(field.sourceIds.every((sourceId) => sources.has(sourceId))).toBe(true);
       for (const contract of profile.skillMetadata ?? [])
@@ -306,38 +302,43 @@ describe("Harness Profile catalog", () => {
     }
   });
 
-  test("rejects duplicate directory ids and install destinations with the wrong scope", () => {
-    const profiles = structuredClone(harnessProfiles) as unknown as Record<string, HarnessProfile>;
-    profiles.codex.roots[1].id = profiles.codex.roots[0].id;
+  test("keeps directory identities unique", () => {
+    const profiles = structuredClone(harnessProfiles);
+    Reflect.set(
+      profiles.codex.roots["codex-global-native"],
+      "id",
+      profiles.codex.roots["codex-global-shared"].id,
+    );
     expect(() => assertHarnessCatalog(profiles)).toThrow("Duplicate root id");
-
-    const wrongScope = structuredClone(harnessProfiles) as unknown as Record<
-      string,
-      HarnessProfile
-    >;
-    wrongScope.codex.installedSkill.globalTarget = "codex-project-agents";
-    expect(() => assertHarnessCatalog(wrongScope)).toThrow("Install destination has wrong scope");
   });
 
-  test("validates profile-level invariants even when frontmatter is empty", () => {
-    const profiles = structuredClone(harnessProfiles) as unknown as Record<string, HarnessProfile>;
-    profiles.codex.frontmatter = [];
-    expect(() => assertHarnessCatalog(profiles)).toThrow(
-      "Exactly one default frontmatter contract",
+  test("requires real catalog choices and the context each directory needs", () => {
+    expectTypeOf<typeof harnessProfiles.codex.roots>().not.toHaveProperty("absent");
+    expectTypeOf<typeof harnessProfiles.opencode.frontmatter.variants>().not.toHaveProperty(
+      "absent",
     );
+    expectTypeOf<[]>().not.toExtend<HarnessProfile["frontmatter"]>();
+    expectTypeOf<HarnessProfile["installedSkill"]["projectTarget"]>().not.toExtend<
+      HarnessProfile["installedSkill"]["globalTarget"]
+    >();
+    expectTypeOf<{ scope: "project" }>().not.toExtend<SkillsDirectoryContext>();
+    expectTypeOf<Parameters<typeof evaluateSkillFrontmatter>[1]>().toHaveProperty("harness");
+    expectTypeOf<Parameters<typeof resolveSkillsDirectory>[0]>()
+      .extract<{ scope: "project" }>()
+      .toHaveProperty("repository");
   });
 
   test("evaluates executable field constraints without rendering CLI prose", () => {
     const valid = evaluateSkillFrontmatter(
       "---\nname: code-review\ndescription: Review code.\n---\n",
-      "opencode",
+      harnessProfile("opencode").frontmatter.default,
       { directoryName: "code-review" },
     );
     expect(valid).toMatchObject({ status: "valid", harness: "opencode", issues: [] });
 
     const invalid = evaluateSkillFrontmatter(
       "---\nname: Wrong--Name\ndescription: ''\n---\n",
-      "opencode",
+      harnessProfile("opencode").frontmatter.default,
       { directoryName: "code-review" },
     );
     expect(invalid.status).toBe("invalid");
@@ -349,14 +350,18 @@ describe("Harness Profile catalog", () => {
 
   test("does not turn portability rules into undocumented Codex enforcement", () => {
     expect(
-      evaluateSkillFrontmatter("---\nname: My_Skill\ndescription: Review.\n---\n", "codex", {
-        directoryName: "different",
-      }),
+      evaluateSkillFrontmatter(
+        "---\nname: My_Skill\ndescription: Review.\n---\n",
+        harnessProfile("codex").frontmatter.default,
+        {
+          directoryName: "different",
+        },
+      ),
     ).toMatchObject({ status: "valid", issues: [] });
     expect(
       evaluateSkillFrontmatter(
         '---\nname: openai-docs\ndescription: Official docs.\nmetadata:\n  short-description: "Codex and API documentation"\n---\n',
-        "codex",
+        harnessProfile("codex").frontmatter.default,
       ),
     ).toMatchObject({ status: "valid", issues: [] });
   });
@@ -379,18 +384,28 @@ describe("Harness Profile catalog", () => {
   });
 
   test("accepts documented Claude frontmatter fallbacks and free-form metadata", () => {
-    expect(evaluateSkillFrontmatter("# Deploy\n\nDeploy safely.", "claude-code")).toMatchObject({
+    expect(
+      evaluateSkillFrontmatter(
+        "# Deploy\n\nDeploy safely.",
+        harnessProfile("claude-code").frontmatter.default,
+      ),
+    ).toMatchObject({
       status: "valid",
       issues: [],
     });
-    expect(evaluateSkillFrontmatter("---\n---\nBody.\n", "claude-code")).toMatchObject({
+    expect(
+      evaluateSkillFrontmatter(
+        "---\n---\nBody.\n",
+        harnessProfile("claude-code").frontmatter.default,
+      ),
+    ).toMatchObject({
       status: "valid",
       issues: [],
     });
     expect(
       evaluateSkillFrontmatter(
         "---\ndescription: Use for tables formatted with ---\nname: tables\n---\n",
-        "codex",
+        harnessProfile("codex").frontmatter.default,
       ),
     ).toMatchObject({
       status: "valid",
@@ -398,13 +413,26 @@ describe("Harness Profile catalog", () => {
       issues: [],
     });
     expect(
-      evaluateSkillFrontmatter("---\nmetadata:\n  version: 1\n---\n", "claude-code"),
+      evaluateSkillFrontmatter(
+        "---\nmetadata:\n  version: 1\n---\n",
+        harnessProfile("claude-code").frontmatter.default,
+      ),
     ).toMatchObject({ status: "valid", issues: [] });
-    expect(evaluateSkillFrontmatter("---\nmetadata: [\n", "claude-code")).toMatchObject({
+    expect(
+      evaluateSkillFrontmatter(
+        "---\nmetadata: [\n",
+        harnessProfile("claude-code").frontmatter.default,
+      ),
+    ).toMatchObject({
       status: "invalid",
       issues: [expect.objectContaining({ code: "frontmatter-invalid" })],
     });
-    expect(evaluateSkillFrontmatter("---\nmetadata: hello\n---\n", "claude-code")).toMatchObject({
+    expect(
+      evaluateSkillFrontmatter(
+        "---\nmetadata: hello\n---\n",
+        harnessProfile("claude-code").frontmatter.default,
+      ),
+    ).toMatchObject({
       status: "valid",
       issues: [],
     });
@@ -412,20 +440,27 @@ describe("Harness Profile catalog", () => {
 
   test("keeps OpenCode V1 and V2 contracts distinct", () => {
     const profile = harnessProfile("opencode");
+    expect([
+      profile.frontmatter.default.variant,
+      ...Object.values(profile.frontmatter.variants).map((contract) => contract.variant),
+    ]).toEqual(["v1", "v2"]);
     expect(
-      profile.frontmatter.map(({ variant, default: isDefault }) => [variant, isDefault]),
-    ).toEqual([
-      ["v1", true],
-      ["v2", false],
-    ]);
-    expect(
-      evaluateSkillFrontmatter("---\nslash: false\n---\n", "opencode", { variant: "v2" }),
+      evaluateSkillFrontmatter(
+        "---\nslash: false\n---\n",
+        harnessProfile("opencode").frontmatter.variants.v2,
+      ),
     ).toMatchObject({ status: "valid", variant: "v2" });
     expect(
-      evaluateSkillFrontmatter("---\ngarbage: true\n---\n", "opencode", { variant: "v2" }),
+      evaluateSkillFrontmatter(
+        "---\ngarbage: true\n---\n",
+        harnessProfile("opencode").frontmatter.variants.v2,
+      ),
     ).toMatchObject({ status: "unknown", variant: "v2" });
     expect(
-      evaluateSkillFrontmatter("---\nlicense: [1]\n---\n", "opencode", { variant: "v2" }),
+      evaluateSkillFrontmatter(
+        "---\nlicense: [1]\n---\n",
+        harnessProfile("opencode").frontmatter.variants.v2,
+      ),
     ).toMatchObject({ status: "valid", issues: [] });
   });
 });

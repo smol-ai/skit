@@ -1,8 +1,9 @@
+import { SetupPlanStale } from "../setup-failures.js";
 import { Service } from "../service.js";
 import type { Interface } from "../library.js";
 import { join } from "node:path";
 
-import { Data, Effect } from "effect";
+import { Effect } from "effect";
 import { canonicalJson } from "../../shared/json.js";
 import type { Hash } from "../../shared/hash.js";
 import { hashParts } from "../../artifact/descriptor.js";
@@ -17,35 +18,13 @@ import { setupCollectionGroups } from "./collections.js";
 import type { SetupResult } from "./contract.js";
 import { collectSetupEvidence, suggestRepositoryRoots } from "./discovery.js";
 import { scanSetupCopies } from "./copies.js";
-import {
-  planInstalledSkillChanges,
-  hasChangesToApply,
-  changesNeedingChoice,
-} from "./installed-skills.js";
+import { planInstalledSkillChanges } from "./installed-skills.js";
 import { classifySetupOnboarding } from "./onboarding.js";
 import {
   copyConflict,
   recommendedSetupSelection,
-  setupApplyCommandLine,
   setupDuplicateChoiceRequired,
 } from "./decisions.js";
-import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
-export class SetupPlanStale
-  extends Data.TaggedError("SetupPlanStale")<{
-    approvedPlanId: Hash;
-    currentPlanId: Hash;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  // Like every other plan that changed after it was reviewed.
-  readonly code = "CONFLICT" as const;
-  readonly remediation =
-    "Run `skit setup` again and review the current plan; `skit setup --json` reports its planId.";
-  get message() {
-    return "The setup plan changed after it was reviewed. Review the current plan before applying.";
-  }
-}
 
 export interface SetupOptions {
   readonly libraryHome: string;
@@ -210,13 +189,9 @@ export const scanForSetup = Effect.fn("Library.scan")(function* (
     onboarding: {
       planId,
       candidates: onboarding,
-      ...(!changesNeedingChoice(installedSkillChanges).length &&
-      (recommended.sources.length ||
-        recommended.copies.length ||
-        hasChangesToApply(installedSkillChanges))
+      ...(recommended.sources.length || recommended.copies.length
         ? {
-            applyCommand: setupApplyCommandLine({
-              planId,
+            apply: {
               repositoryRoots: discoveryRoots,
               needsDuplicateDecision: recommended.copies.some((copy) =>
                 setupDuplicateChoiceRequired({
@@ -226,7 +201,7 @@ export const scanForSetup = Effect.fn("Library.scan")(function* (
                   ),
                 }),
               ),
-            }),
+            },
           }
         : {}),
       recommended,
@@ -258,3 +233,5 @@ export const revalidateSetupPlan = Effect.fn("Setup.revalidatePlan")(function* (
     });
   return current;
 });
+
+export { SetupPlanStale } from "../setup-failures.js";

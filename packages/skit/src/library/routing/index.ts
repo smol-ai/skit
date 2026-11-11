@@ -1,5 +1,5 @@
 /** Device routing and read-only duplicate facts shared by frontends and Library. */
-export type { DuplicateScanIncomplete } from "../installed-skill-facts.js";
+export { DuplicateScanIncomplete, DuplicateScanIssue } from "../installed-skill-facts.js";
 export { skillsDirectoryFor, inventoryRootOptions, type InventoryRootOptions } from "./roots.js";
 export {
   DuplicateCopy,
@@ -7,5 +7,5 @@ export {
   scanSkillsDirectory,
   readableSkillsDirectories,
   findDuplicates,
-  type DuplicateScanError,
+  DuplicateScanError,
 } from "./duplicates.js";

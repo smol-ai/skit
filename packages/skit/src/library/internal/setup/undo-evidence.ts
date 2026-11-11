@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { FileIdentityNumber, LinkStat } from "../../../platform/link-stat.js";
 
 import { recoveryFingerprint } from "../recovery/evidence.js";
-import { RecoveryInvalid } from "../../recovery-facts.js";
+import { RecoveryInvalid } from "../../store/operation-failures.js";
 
 const Identity = { dev: FileIdentityNumber, ino: FileIdentityNumber };
 const Anchor = Schema.Struct({ path: Schema.String, physicalPath: Schema.String, ...Identity });
@@ -72,13 +72,16 @@ export const readSkillPathDetails = Effect.fn("SetupUndo.readSkillPathDetails")(
   let anchor = dirname(path);
   while (!(yield* maybeStat(anchor))) {
     const parent = dirname(anchor);
-    if (parent === anchor) return yield* new RecoveryInvalid({ detail: `No parent for ${path}` });
+    if (parent === anchor)
+      return yield* new RecoveryInvalid({
+        reason: { _tag: "UnsafePath", kind: "missing-parent", path },
+      });
     anchor = parent;
   }
   const physicalPath = yield* links.realPathNative(anchor);
   const parent = yield* links.identity.lstat(physicalPath);
   if (parent.type !== "Directory")
-    return yield* new RecoveryInvalid({ detail: `Unsafe parent for ${path}` });
+    return yield* new RecoveryInvalid({ reason: { _tag: "UnsafePath", kind: "parent", path } });
   const info = yield* maybeStat(path);
   const markerInfo =
     info?.type === "Directory" ? yield* maybeStat(join(path, ".skit-ownership.json")) : undefined;

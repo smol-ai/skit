@@ -14,7 +14,8 @@ import { prepareSetupUndo } from "../src/library/setup/undo.js";
 import { setupResultActions } from "../src/library/setup/actions.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
-import { renderContract } from "../src/commands/output-presenters.js";
+import { renderSetupUndo } from "../src/library/setup/undo-result.js";
+import { Block } from "../src/terminal/blocks.js";
 import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply.js";
 import { runSetup } from "@smolai/skit-core/library/setup";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
@@ -114,7 +115,10 @@ it.effect("undo refuses an occupied removal destination and redirected original 
         yield* f.fs.makeDirectory(replacement);
         yield* f.fs.symlink(replacement, join(f.root, "agents"));
         const redirected = yield* prepareSetupUndo(f.operationId);
-        expect(redirected.summary.conflicts).toContain(`Original parent changed: ${f.source}`);
+        expect(redirected.summary.conflicts).toContainEqual({
+          _tag: "ParentChanged",
+          path: f.source,
+        });
         expect(yield* f.fs.readDirectory(replacement)).toEqual([]);
         expect(
           yield* f.fs.readFileString(join(f.root, "original-parent", "review", "notes.txt")),
@@ -334,8 +338,13 @@ it.effect(
       if (!apply) return yield* Effect.die(new Error("Missing guarded undo apply"));
       const applied = yield* invoke(apply.argv);
       expect(applied.data.status).toBe("undone");
-      expect(renderContract(applied, { color: false, detail: "full" })).toContain(
-        "Setup undo: undone",
+      expect(renderSetupUndo(applied.data)[0]).toEqual(
+        Block.Fields({
+          rows: [
+            { label: "Setup undo", value: ["undone"] },
+            { label: "Operation", value: [applied.data.operationId] },
+          ],
+        }),
       );
       expect(applied.data.actions.some((action) => action.rel === "inspect-preserved")).toBe(true);
       expect((yield* invoke(applied.data.actions[0].argv)).data.status).toBe("already-undone");
@@ -447,7 +456,9 @@ it.effect.each([".git", "skit.json", "skit.remote.json"])(
       const inverse = yield* f.home.owned(prepareSetupUndo(f.operationId));
       expect(inverse.summary.status).toBe("conflicted");
       expect(
-        inverse.summary.conflicts.some((conflict) => conflict.includes("ownership protects")),
+        inverse.summary.conflicts.some(
+          (conflict) => conflict._tag === "PathProtected" && conflict.path === f.successor,
+        ),
       ).toBe(true);
       expect((yield* Effect.result(f.home.owned(inverse.apply())))._tag).toBe("Failure");
       expect(yield* f.home.durable).toEqual(before);

@@ -3,7 +3,7 @@ import { isErrno } from "@smolai/skit-core/shared";
 import * as HomeLock from "@smolai/skit-core/platform/home-lock";
 import { serverDiscoverySchema } from "@smolai/skit-core/api";
 import { Clock, Config, Effect, FileSystem, Option, Redacted, Result, Schema } from "effect";
-import { Cookies, HttpClientRequest } from "effect/http";
+import { Cookies, HttpClient, HttpClientRequest } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import { ChildProcessSpawner } from "effect/process";
 import type { HttpClientResponse } from "effect/http/HttpClientResponse";
@@ -22,6 +22,11 @@ import {
   SignOutRejected,
   TooManyAuthAttempts,
 } from "./failures.js";
+import {
+  CredentialRotationWarning,
+  type AuthCleanupFailure,
+  type AuthOperation,
+} from "./auth-failures.js";
 import { isRegistryTransportError, RegistryHttp } from "./registry-http.js";
 import {
   osTokenStorage,
@@ -47,8 +52,9 @@ import {
 } from "@smolai/skit-core/api";
 import {
   authenticatedApiMiddleware,
-  isSuccessfulResponseDecodeFailure,
-  registryApiFailureMessage,
+  classifyRegistryApiFailure,
+  markRegistryResponseDecoding,
+  registryApiFailure,
   sessionApiMiddleware,
 } from "./api-client.js";
 
@@ -96,6 +102,7 @@ function readAuthDocument(home?: string) {
           new CredentialsUnusable({
             path,
             reason: isErrno(error, "EACCES", "EPERM") ? "unreadable" : "invalid",
+            failure: error,
           }),
         );
       }),
@@ -103,7 +110,7 @@ function readAuthDocument(home?: string) {
     if (text === undefined) return { schemaVersion: 1 as const, registryAliases: {}, servers: {} };
     // This configuration reader deliberately classifies malformed values as unusable.
     return yield* decodeAuthConfig(text).pipe(
-      Effect.mapError(() => new CredentialsUnusable({ path, reason: "invalid" })),
+      Effect.mapError((failure) => new CredentialsUnusable({ path, reason: "invalid", failure })),
     );
   });
 }
@@ -322,7 +329,16 @@ export const reuseLogin = Effect.fn("Auth.reuseLogin")(function* (input: {
     const body = yield* response.json.pipe(
       Effect.flatMap(Schema.decodeUnknownEffect(ApiErrorBody)),
       Effect.mapError(
-        () => new SignInFailed({ message: `Credential check failed (${response.status})` }),
+        (failure) =>
+          new SignInFailed({
+            origin,
+            reason: {
+              _tag: "RequestFailed",
+              operation: "credential-check",
+              status: response.status,
+              failure,
+            },
+          }),
       ),
     );
     if (
@@ -331,7 +347,15 @@ export const reuseLogin = Effect.fn("Auth.reuseLogin")(function* (input: {
         (response.status === 403 && body.error === "insufficient_scope")
       )
     )
-      return yield* new SignInFailed({ message: `Credential check failed (${response.status})` });
+      return yield* new SignInFailed({
+        origin,
+        reason: {
+          _tag: "RequestFailed",
+          operation: "credential-check",
+          status: response.status,
+          registryCode: body.error,
+        },
+      });
   }
   const alias = input.alias ?? accounts.aliasesOf(input.origin)[0];
   return {
@@ -354,22 +378,28 @@ export const registryStatus = Effect.fn("Registry.status")(function* (
   return yield* accounts.status(selectedRegistry, yield* Clock.currentTimeMillis);
 });
 
-/** The Registry's own words for a rejected request, in the shape every branch reported. */
+/** A rejected authentication request, retaining only statuses and codes actually received. */
 export const rejected = Effect.fn("Auth.rejected")(function* (
   response: HttpClientResponse,
-  context: string,
+  origin: string,
+  operation: AuthOperation,
 ) {
   const body = yield* response.json.pipe(
-    Effect.catchTag("HttpClientError", () => Effect.succeed({})),
+    Effect.flatMap(Schema.decodeUnknownEffect(ApiErrorBody)),
+    Effect.result,
   );
-  if (response.status === 401) return yield* new SignInRejected({ context });
+  if (response.status === 401) return yield* new SignInRejected({ operation });
   if (response.status === 429) return yield* new TooManyAuthAttempts();
-  const detail = yield* Schema.decodeUnknownEffect(ApiErrorBody)(body).pipe(
-    Effect.map(({ error }) => error),
-    Effect.orElseSucceed(() => "unknown_error"),
-  );
   return yield* new SignInFailed({
-    message: `${context} failed (${response.status}): ${detail}`,
+    origin,
+    reason: {
+      _tag: "RequestFailed",
+      operation,
+      status: response.status,
+      ...(Result.isSuccess(body)
+        ? { registryCode: body.success.error }
+        : { failure: body.failure }),
+    },
   });
 });
 
@@ -398,18 +428,29 @@ export const openExchange = Effect.fn("Auth.openExchange")(function* (
   const discoveryResponse = yield* send(new URL("/.well-known/skit", origin), { method: "GET" });
   if (!ok(discoveryResponse))
     return yield* new SignInFailed({
-      message: `Registry discovery failed (${discoveryResponse.status})`,
+      origin,
+      reason: { _tag: "RequestFailed", operation: "discovery", status: discoveryResponse.status },
     });
   const discovery = yield* discoveryResponse.json.pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(serverDiscoverySchema)),
     Effect.mapError(
-      (error) => new SignInFailed({ message: `Registry discovery is invalid: ${error.message}` }),
+      (failure) =>
+        new SignInFailed({
+          origin,
+          reason: {
+            _tag: "ResponseInvalid",
+            operation: "discovery",
+            status: discoveryResponse.status,
+            failure,
+          },
+        }),
     ),
   );
   const unsupportedScopes = scopes.filter((scope) => !discovery.scopes.includes(scope));
   if (unsupportedScopes.length > 0)
     return yield* new SignInFailed({
-      message: `Registry does not support requested scopes: ${unsupportedScopes.join(", ")}`,
+      origin,
+      reason: { _tag: "UnsupportedScopes", scopes: unsupportedScopes },
     });
   // A CLI can self-assert Origin; this preserves Better Auth compatibility rather than acting as
   // a security boundary. Browser requests still receive real origin enforcement.
@@ -453,18 +494,25 @@ export const loginEffect = Effect.fn("Auth.login")(
           headers: json,
           body: JSON.stringify({ email: input.email, password: input.password }),
         });
-        if (!ok(signIn)) return yield* rejected(signIn, "Sign in");
+        if (!ok(signIn)) return yield* rejected(signIn, origin, "sign-in");
         const cookie = Cookies.toCookieHeader(signIn.cookies);
-        if (!cookie)
-          return yield* new SignInFailed({ message: "Sign in did not establish a session" });
+        if (!cookie) return yield* new SignInFailed({ origin, reason: { _tag: "SessionMissing" } });
         return { ...json, cookie };
       }
       if (input.approvedSessionToken === undefined)
-        return yield* new SignInFailed({ message: "No sign-in method was given" });
+        return yield* new SignInFailed({ origin, reason: { _tag: "MethodMissing" } });
       return { ...json, authorization: `Bearer ${input.approvedSessionToken}` };
     });
+    // This client makes only the credential-creation request. Keep the received status even
+    // when its body fails decoding; an API error code alone cannot prove the HTTP status.
+    let credentialResponseStatus: number | undefined;
     const sessionClient = yield* HttpApiClient.makeWith(ConsumerAuthenticatedApi, {
-      httpClient: http,
+      transformResponse: markRegistryResponseDecoding,
+      httpClient: HttpClient.tap(http, (response) =>
+        Effect.sync(() => {
+          credentialResponseStatus = response.status;
+        }),
+      ),
       baseUrl: origin,
     }).pipe(Effect.provide(sessionApiMiddleware(session)));
     const revoke = (credential: StoredCredential) =>
@@ -476,19 +524,26 @@ export const loginEffect = Effect.fn("Auth.login")(
             responseMode: "response-only",
           }),
         ),
-        Effect.mapError((error) =>
-          isRegistryTransportError(error)
-            ? new RegistryUnreachable({ origin, cause: error.cause })
-            : new SignInFailed({ message: "Credential cleanup request could not be encoded" }),
-        ),
       );
 
+    const credentialCleanup = Effect.fn("Auth.cleanupCredential")(function* (
+      credential: StoredCredential,
+    ) {
+      const response = yield* Effect.result(revoke(credential));
+      if (Result.isFailure(response))
+        return { _tag: "RequestFailed", failure: response.failure } satisfies AuthCleanupFailure;
+      if (ok(response.success) || [401, 404].includes(response.success.status)) return undefined;
+      return {
+        _tag: "ResponseRejected",
+        status: response.success.status,
+      } satisfies AuthCleanupFailure;
+    });
     const signOutRequest = () =>
-      send(new URL("/api/auth/sign-out", origin), {
-        method: "POST",
-        headers: session,
-        body: "{}",
-      });
+      http.execute(
+        HttpClientRequest.make("POST")(new URL("/api/auth/sign-out", origin), {
+          headers: session,
+        }).pipe(HttpClientRequest.bodyText("{}", "application/json")),
+      );
     // The temporary session and an unsaved credential are resources from here on, not steps.
     //
     // The promise implementation reached its sign-out because nothing could cancel it; a native
@@ -515,22 +570,46 @@ export const loginEffect = Effect.fn("Auth.login")(
             },
           })
           .pipe(
-            Effect.mapError((error) =>
-              Schema.is(UnauthorizedResponse)(error)
-                ? new SignInRejected({ context: "Credential creation" })
-                : Schema.is(RateLimitedResponse)(error)
-                  ? new TooManyAuthAttempts()
-                  : isSuccessfulResponseDecodeFailure(error, [201])
-                    ? new SignInFailed({
-                        message:
-                          "Credential was created but its response did not match the Registry contract",
-                      })
-                    : new SignInFailed({
-                        message: registryApiFailureMessage("Credential creation", error, {
-                          defaultStatus: 400,
-                        }),
-                      }),
-            ),
+            Effect.mapError((error) => {
+              const classified = classifyRegistryApiFailure(error, [201]);
+              if (Schema.is(UnauthorizedResponse)(error))
+                return new SignInRejected({ operation: "credential-create" });
+              if (Schema.is(RateLimitedResponse)(error)) return new TooManyAuthAttempts();
+              if (classified.kind === "response_decode")
+                return new SignInFailed({
+                  origin,
+                  reason: {
+                    _tag: "ResponseInvalid",
+                    operation: "credential-create",
+                    ...(credentialResponseStatus === undefined
+                      ? {}
+                      : { status: credentialResponseStatus }),
+                    failure: classified.failure,
+                  },
+                });
+              if (classified.kind === "request_encoding")
+                return new SignInFailed({
+                  origin,
+                  reason: {
+                    _tag: "RequestInvalid",
+                    operation: "credential-create",
+                    failure: classified.failure,
+                  },
+                });
+              const facts = registryApiFailure(error);
+              return new SignInFailed({
+                origin,
+                reason: {
+                  _tag: "RequestFailed",
+                  operation: "credential-create",
+                  ...(credentialResponseStatus === undefined
+                    ? {}
+                    : { status: credentialResponseStatus }),
+                  ...(facts.code === undefined ? {} : { registryCode: facts.code }),
+                  failure: error,
+                },
+              });
+            }),
           );
         return {
           token: body.token,
@@ -548,44 +627,77 @@ export const loginEffect = Effect.fn("Auth.login")(
     // Marked before the request, not after: the finalizer covers a sign-out that was never
     // reached, and must not race a second one against a request already in flight.
     signedOut = true;
-    const signOut = yield* signOutRequest();
-    if (!ok(signOut)) {
-      const cleanup = created ? yield* revoke(created) : undefined;
+    const signOut = yield* Effect.result(signOutRequest());
+    if (Result.isFailure(signOut) || !ok(signOut.success)) {
+      const cleanup = created ? yield* credentialCleanup(created) : undefined;
       unsaved = undefined;
-      const original = Result.isFailure(creation) ? `: ${creation.failure.message}` : "";
-      if (created && cleanup && !ok(cleanup) && ![401, 404].includes(cleanup.status))
-        return yield* new SignInFailed({
-          message: `Sign out and credential cleanup failed; token ${created.tokenId} (${created.tokenPrefix}) may still be live and the temporary session may also be live`,
-        });
-      const detail = yield* signOut.text.pipe(
-        Effect.catchTag("HttpClientError", () => Effect.succeed("")),
-      );
+      const original = Result.isFailure(creation) ? { original: creation.failure } : {};
+      const sessionCleanup: AuthCleanupFailure = yield* Effect.gen(function* () {
+        if (Result.isFailure(signOut))
+          return { _tag: "RequestFailed", failure: signOut.failure } as const;
+        // As before, do not read the sign-out body when credential cleanup also failed.
+        if (cleanup) return { _tag: "ResponseRejected", status: signOut.success.status } as const;
+        const detail = yield* Effect.result(signOut.success.text);
+        return {
+          _tag: "ResponseRejected",
+          status: signOut.success.status,
+          ...(Result.isSuccess(detail)
+            ? { body: detail.success.slice(0, 500) }
+            : { failure: detail.failure }),
+        } as const;
+      });
       return yield* new SignInFailed({
-        message: `Sign out failed (${signOut.status}): ${detail.slice(0, 500)}; the CLI credential was not saved${original}`,
+        origin,
+        reason: {
+          _tag: "SessionEndFailed",
+          cleanup: sessionCleanup,
+          ...original,
+          ...(created && cleanup
+            ? {
+                credential: {
+                  tokenId: created.tokenId,
+                  tokenPrefix: created.tokenPrefix,
+                  cleanup,
+                },
+              }
+            : {}),
+        },
       });
     }
     if (Result.isFailure(creation)) return yield* creation.failure;
-    if (!created) return yield* new SignInFailed({ message: "Credential creation failed" });
+    if (!created) return yield* new SignInFailed({ origin, reason: { _tag: "CredentialMissing" } });
 
     const signedIn = accounts.signedIn(origin, created, input.alias);
     const stored = yield* Effect.result(writeConfig(signedIn.config, input.home));
     if (Result.isFailure(stored)) {
-      const cleanup = yield* revoke(created);
+      const cleanup = yield* credentialCleanup(created);
       unsaved = undefined;
-      if (!ok(cleanup) && ![401, 404].includes(cleanup.status))
+      if (cleanup)
         return yield* new SignInFailed({
-          message: `Credential storage and cleanup failed; token ${created.tokenId} (${created.tokenPrefix}) may still be live`,
+          origin,
+          reason: {
+            _tag: "StorageCleanupFailed",
+            tokenId: created.tokenId,
+            tokenPrefix: created.tokenPrefix,
+            cleanup,
+            original: stored.failure,
+          },
         });
       return yield* stored.failure;
     }
     // Stored: an interrupt after this point must not revoke the credential the caller now has.
     unsaved = undefined;
 
-    let warning: string | undefined;
+    let warning: typeof CredentialRotationWarning.Type | undefined;
     if (existing) {
-      const replaced = yield* revoke(existing);
-      if (!ok(replaced) && ![401, 404].includes(replaced.status))
-        warning = `The new credential is active, but previous token ${existing.tokenId} (${existing.tokenPrefix}) could not be revoked and may still be live`;
+      const cleanup = yield* credentialCleanup(existing);
+      if (cleanup)
+        warning = {
+          _tag: "PreviousCredentialNotRevoked",
+          tokenId: existing.tokenId,
+          tokenPrefix: existing.tokenPrefix,
+          cleanup,
+        };
     }
     return {
       origin,
@@ -605,8 +717,8 @@ export const loginEffect = Effect.fn("Auth.login")(
 /**
  * Revoke the stored credential and forget it locally.
  *
- * The local forget happens whether or not the Registry accepted the revocation: a credential the
- * server already rejected or lost is still not one this machine should keep offering.
+ * Forget only after successful revocation or an already absent/rejected credential (401/404).
+ * Other failures keep the saved credential so a later logout can retry its revocation.
  */
 export const logoutEffect = Effect.fn("Auth.logout")(
   function* (home?: string, selectedOrigin?: string) {
@@ -625,21 +737,25 @@ export const logoutEffect = Effect.fn("Auth.logout")(
         Effect.mapError((error) =>
           isRegistryTransportError(error)
             ? new RegistryUnreachable({ origin, cause: error.cause })
-            : new SignOutRejected({ message: "Logout request could not be encoded" }),
+            : new SignOutRejected({ origin, reason: { _tag: "RequestInvalid", failure: error } }),
         ),
       );
     const ok = response.status >= 200 && response.status < 300;
     if (!ok && ![401, 404].includes(response.status)) {
       const body = yield* response.json.pipe(
-        Effect.catchTag("HttpClientError", () => Effect.succeed({})),
+        Effect.flatMap(Schema.decodeUnknownEffect(ApiErrorBody)),
+        Effect.result,
       );
       if (response.status === 429) return yield* new TooManyAuthAttempts();
-      const detail = yield* Schema.decodeUnknownEffect(ApiErrorBody)(body).pipe(
-        Effect.map(({ error }) => error),
-        Effect.orElseSucceed(() => "unknown_error"),
-      );
       return yield* new SignOutRejected({
-        message: `Logout failed (${response.status}): ${detail}`,
+        origin,
+        reason: {
+          _tag: "ResponseRejected",
+          status: response.status,
+          ...(Result.isSuccess(body)
+            ? { registryCode: body.success.error }
+            : { failure: body.failure }),
+        },
       });
     }
     yield* writeConfig(accounts.signedOut(origin), home);

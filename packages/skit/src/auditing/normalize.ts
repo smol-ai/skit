@@ -123,7 +123,7 @@ export function normalizeAuditReport(report: AuditReport): AuditReportV1Alpha4 {
         code: finding.code,
         entryIds,
         unresolvedSubject: entryIds.length === 0 ? finding.subject : null,
-        problem: finding.problem,
+        reason: finding.reason,
         locations: [...finding.locations],
         details: finding.details,
       };

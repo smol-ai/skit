@@ -1,3 +1,4 @@
+import { HarnessDiscoveryFailed } from "../src/harnesses/discovery-failures.js";
 import { skitLayer, SourceProcess, skitConfigurationLayer } from "../src/platform/index.js";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
@@ -49,7 +50,7 @@ it.effect.each([false, true])(
         home: f.root,
         configHome: join(f.root, "config"),
         overrides: {
-          codex: [join(f.root, "codex")],
+          codex: [join(f.root, "codex"), join(f.root, "other-codex")],
           "claude-code": [join(f.root, "claude")],
           opencode: [join(f.root, "opencode")],
           devin: [join(f.root, "devin")],
@@ -69,21 +70,35 @@ it.effect.each([false, true])(
           output: () => Effect.die("Unexpected native process"),
         }),
       );
-      yield* Schema.decodeEffect(DoctorReport)({
+      const encoded = yield* Schema.encodeEffect(Schema.toCodecJson(DoctorReport))({
         ...libraryDoctorReport(inventory),
         ...report,
       });
+      yield* Schema.decodeUnknownEffect(DoctorReport)(encoded);
       expect(report.codex.status).toBe("skipped");
+      expect(report.codex).toHaveProperty("rootOverrides", [
+        join(f.root, "codex"),
+        join(f.root, "other-codex"),
+      ]);
+      expect(report.codex).not.toHaveProperty("protocol");
+      expect(report.codex).not.toHaveProperty("detail");
       expect(report.listing_budgets[0]).toMatchObject({
         _tag: "Unavailable",
         harness: "codex",
         cwd,
       });
-      expect(report.listing_budgets[0]).toHaveProperty(
-        "detail",
-        "detail" in report.codex ? report.codex.detail : undefined,
-      );
+      expect(report.listing_budgets[0]).toHaveProperty("reason", {
+        _tag: "CustomRoot",
+        roots: [join(f.root, "codex"), join(f.root, "other-codex")],
+      });
+      expect(report.listing_budgets[0]).not.toHaveProperty("detail");
       expect(report.listing_budgets[1]).toMatchObject({ harness: "claude-code", cwd });
+      for (const check of report.harnesses) {
+        expect(check).toHaveProperty("rootOverrides");
+        expect(check).not.toHaveProperty("protocol");
+        expect(check).not.toHaveProperty("detail");
+        expect(check).not.toHaveProperty("limitations");
+      }
       expect(report.harnesses.map((check) => [check.harness, check.status, check.cwd])).toEqual([
         ["claude-code", "skipped", cwd],
         ["opencode", "skipped", cwd],
@@ -98,8 +113,10 @@ it.effect.each([false, true])(
       for (const check of report.harnesses) {
         expect(check.locations?.every((location) => location.harness === check.harness)).toBe(true);
         expect(
-          check.warnings.some((warning) =>
-            warning.includes(`Could not inspect skill aliases at ${loop}:`),
+          Boolean(
+            check.aliasErrors?.some(
+              (error) => error.path === loop && error.reason._tag === "Unreadable",
+            ),
           ),
         ).toBe(unreadable);
       }
@@ -108,27 +125,41 @@ it.effect.each([false, true])(
 );
 
 const processLayer = (stdout: unknown, exitCode = 0, stderr = "") =>
-  Layer.succeed(
+  Layer.effect(
     SourceProcess,
-    SourceProcess.of({
-      run: () => Effect.die("Unexpected process.run"),
-      output: (_executable, args, options) =>
-        Effect.sync(() => {
-          expect(options?.cwd).toBe("/project");
-          expect(options?.maxOutputBytes).toBe(4_000_000);
-          if (args[0] === "-e") {
-            expect(args[1]).toContain("spawnSync");
-            expect(args[2]).toBe("opencode");
-            expect(args[3]).toMatch(/skills.json$/);
-          } else expect(args).toEqual(["skills", "list", "--json"]);
-          return { stdout: new TextEncoder().encode(JSON.stringify(stdout)), exitCode, stderr };
-        }),
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      return SourceProcess.of({
+        run: () => Effect.die("Unexpected process.run"),
+        output: (_executable, args, options) =>
+          Effect.gen(function* () {
+            expect(options?.cwd).toBe("/project");
+            expect(options?.maxOutputBytes).toBe(4_000_000);
+            if (args[0] === "-e") {
+              expect(args[1]).toContain("spawnSync");
+              expect(args[2]).toBe("opencode");
+              expect(args[3]).toMatch(/skills.json$/);
+              const body = JSON.stringify(stdout);
+              yield* fs.writeFileString(args[3]!, body);
+              return {
+                stdout: new TextEncoder().encode(
+                  JSON.stringify({ exitCode, signal: null, size: Buffer.byteLength(body) }),
+                ),
+                exitCode: 0,
+                stderr,
+              };
+            }
+            expect(args).toEqual(["skills", "list", "--json"]);
+            return { stdout: new TextEncoder().encode(JSON.stringify(stdout)), exitCode, stderr };
+          }),
+      });
     }),
   ).pipe(Layer.provideMerge(NodeServices.layer));
 
 it.effect("keeps OpenCode resolved metadata and warnings, excluding full skill bodies", () =>
   Effect.gen(function* () {
     const result = yield* nativeDiscovery.opencode.read("opencode", "/project");
+    expect(nativeDiscovery.opencode.protocol()).toBe("opencode-debug-skill");
     expect(result.skills).toEqual([
       { name: "review", description: "Review", path: "/skill/SKILL.md", warnings: [], errors: [] },
     ]);
@@ -243,9 +274,17 @@ require('node:readline').createInterface({input:process.stdin}).on('line', () =>
 `,
     );
     yield* fs.chmod(executable, 0o755);
-    expect(Result.isFailure(yield* Effect.result(readClaudeCommands(executable, f.root)))).toBe(
-      true,
-    );
+    const result = yield* Effect.result(readClaudeCommands(executable, f.root));
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result) && kind !== "malformed") {
+      expect(Schema.is(HarnessDiscoveryFailed)(result.failure)).toBe(true);
+      if (Schema.is(HarnessDiscoveryFailed)(result.failure))
+        expect(result.failure.reason).toEqual(
+          kind === "error"
+            ? { _tag: "RemoteError", method: "initialize", diagnostic: "unsupported initialize" }
+            : { _tag: "ResponseMissing", method: "initialize" },
+        );
+    }
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
@@ -330,8 +369,9 @@ process.stdin.on('end', () => { if (${JSON.stringify(kind)} === 'success') asser
       const result = yield* Effect.result(
         nativeDiscovery.opencode.read(executable, f.root, "2.0.20"),
       );
+      expect(nativeDiscovery.opencode.protocol("2.0.20")).toBe("opencode-http-v2");
       if (kind === "success") {
-        expect(Result.isSuccess(result), String(result)).toBe(true);
+        expect(Result.isSuccess(result), JSON.stringify(result)).toBe(true);
         if (Result.isSuccess(result)) {
           expect(result.success.skills.map((skill) => [skill.id, skill.name])).toEqual([
             ["review-a", "Review"],
@@ -339,7 +379,39 @@ process.stdin.on('end', () => { if (${JSON.stringify(kind)} === 'success') asser
           ]);
           expect(JSON.stringify(result.success)).not.toContain("PRIVATE BODY");
         }
-      } else expect(Result.isFailure(result)).toBe(true);
+      } else {
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result) && kind !== "malformed") {
+          expect(Schema.is(HarnessDiscoveryFailed)(result.failure)).toBe(true);
+          if (Schema.is(HarnessDiscoveryFailed)(result.failure)) {
+            const reason = result.failure.reason;
+            if (kind === "wrong-directory")
+              expect(reason).toEqual({
+                _tag: "DirectoryMismatch",
+                endpoint: "/api/plugin",
+                expected: yield* fs.realPath(f.root),
+                actual: "/wrong",
+              });
+            if (kind === "plugin-failure")
+              expect(reason).toEqual({ _tag: "HttpStatus", endpoint: "/api/plugin", status: 500 });
+            if (kind === "oversized")
+              expect(reason).toMatchObject({
+                _tag: "OutputLimitExceeded",
+                endpoint: "/api/plugin",
+                limitBytes: 4_000_000,
+                actualBytes: expect.any(Number),
+              });
+            const encoded = Schema.encodeSync(Schema.toCodecJson(HarnessDiscoveryFailed))(
+              result.failure,
+            );
+            const decoded = Schema.decodeUnknownSync(HarnessDiscoveryFailed)(
+              JSON.parse(JSON.stringify(encoded)),
+            );
+            expect(decoded.reason).toEqual(reason);
+            expect(encoded).not.toHaveProperty("message");
+          }
+        }
+      }
       expect(yield* fs.readFileString(closed)).toBe("closed");
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
@@ -371,7 +443,6 @@ const collisionFixture = () => {
     status: "checked",
     cwd: "/home/project",
     coverage: "resolved-skills",
-    limitations: [],
     warnings: [warning],
     findings: [],
     skills: [
@@ -403,6 +474,14 @@ test.each([
     state.installed_skills[1] = {
       ...claude,
       status: "conflicted",
+      conflicts: [
+        {
+          _tag: "ContentChanged",
+          baseline: "marker",
+          expected: claude.expected_hash,
+          actual: `sha256:${"b".repeat(64)}`,
+        },
+      ],
       current_hash: `sha256:${"b".repeat(64)}`,
     };
   if (kind === "different-version")
@@ -460,3 +539,38 @@ test("doctor exposes deduplicated collision facts, selected copy and unclassifie
   ]);
   expect(check.warnings).toEqual([collision, `${collision}\n${unknown}`, malformed]);
 });
+
+it.effect.each(["exit", "oversized"])("OpenCode capture retains native %s facts", (kind) =>
+  Effect.gen(function* () {
+    const f = yield* nativeLibraryFixture;
+    const fs = yield* FileSystem.FileSystem;
+    const executable = join(f.root, "fake-opencode");
+    yield* fs.writeFileString(
+      executable,
+      `#!${process.execPath}\n${kind === "exit" ? "process.stderr.write('native diagnostic');process.exit(7);" : "require('node:fs').writeSync(1, 'x'.repeat(4000001));"}`,
+    );
+    yield* fs.chmod(executable, 0o755);
+    const result = yield* Effect.result(nativeDiscovery.opencode.read(executable, f.root));
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(Schema.is(HarnessDiscoveryFailed)(result.failure)).toBe(true);
+      if (Schema.is(HarnessDiscoveryFailed)(result.failure))
+        expect(result.failure.reason).toEqual(
+          kind === "exit"
+            ? {
+                _tag: "ExitCode",
+                command: executable,
+                arguments: ["debug", "skill", "--print-logs", "--log-level", "WARN"],
+                exitCode: 7,
+                stderr: "native diagnostic",
+              }
+            : {
+                _tag: "OutputLimitExceeded",
+                phase: "inventory",
+                limitBytes: 4_000_000,
+                actualBytes: 4_000_001,
+              },
+        );
+    }
+  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+);

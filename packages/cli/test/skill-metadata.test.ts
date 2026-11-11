@@ -15,6 +15,7 @@ import { readLibrarySkillMetadata, readSkillPreviews } from "@smolai/skit-core/l
 
 import { renderMachineSkills } from "../src/library/inventory/present.js";
 import { renderLibraryList } from "../src/library/list/present.js";
+import { Block } from "../src/terminal/blocks.js";
 import { presentListCommand } from "../src/library/list.js";
 
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
@@ -120,8 +121,30 @@ it.effect(
         revision: "1".repeat(40),
         source_updated_at: "2026-04-20T00:00:00.000Z",
       });
-      expect(renderLibraryList(listing)).toContain("Source updated: 2026-04-20");
-      expect(renderLibraryList(listing)).toContain("Imported: 2026-05-01");
+      expect(renderLibraryList(listing)[0]).toMatchObject({
+        children: [
+          {},
+          {
+            _tag: "Table",
+            columns: [
+              { title: "Skill" },
+              { title: "Source" },
+              { title: "Revision" },
+              { title: "Source updated" },
+              { title: "Imported" },
+            ],
+            rows: [
+              [
+                [{ emph: "review" }],
+                ["example/skills"],
+                ["1".repeat(12)],
+                ["2026-04-20"],
+                ["2026-05-01"],
+              ],
+            ],
+          },
+        ],
+      });
       const unavailable = yield* readLibrarySkillMetadata(
         {
           ...selected,
@@ -213,19 +236,29 @@ it.effect("inventory distinguishes physical copy dates and follows symlink targe
     ).toEqual(["2026-01-03T00:00:00.000Z", "2026-09-20T00:00:00.000Z"]);
     expect((yield* readSkillPreviews([alias]))[0]?.modifiedAt).toBe("2026-01-03T00:00:00.000Z");
     expect((yield* readSkillPreviews([join(root, "missing")]))[0]?.modifiedAt).toBeNull();
-    const rendered = renderMachineSkills(inventory.machine);
-    expect(rendered).toContain("SKILL.md modified 2026-01-03");
-    expect(rendered).toContain("SKILL.md modified 2026-09-20");
-    expect(rendered).toContain("linked-review");
+    // Each listed path, an alias included, reads its own SKILL.md date.
+    const rows = (blocks: readonly Block[]): Extract<Block, { _tag: "Table" }>["rows"] =>
+      blocks.flatMap((block) =>
+        block._tag === "Table" ? block.rows : block._tag === "Group" ? rows(block.children) : [],
+      );
+    const dates = (machine: typeof inventory.machine) =>
+      rows(renderMachineSkills(machine)).map((row) => [row[1]?.[0], row[2]?.[0]]);
+    expect(dates(inventory.machine)).toEqual(
+      expect.arrayContaining([
+        [first, "2026-01-03"],
+        [alias, "2026-01-03"],
+        [second, "2026-09-20"],
+      ]),
+    );
     expect(
-      renderMachineSkills({
+      dates({
         ...inventory.machine,
         instances: inventory.machine.instances.map((instance) => ({
           ...instance,
           skill_md_modified_at: null,
         })),
-      }),
-    ).toContain("SKILL.md modified unavailable");
+      }).map(([, date]) => date),
+    ).toEqual(dates(inventory.machine).map(() => "unavailable"));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 

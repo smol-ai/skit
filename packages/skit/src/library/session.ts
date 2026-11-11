@@ -1,17 +1,11 @@
 /** Interactive Library state, choices and reviewed transitions. Frontends own prompts and widgets. */
 export { invocationOptions, type InvocationOption } from "./internal/session/invocation-option.js";
-export {
-  destinationLabel,
-  invocationBriefing,
-  invocationRowSummary,
-} from "./internal/session/invocation.js";
+export { InvocationReadModel } from "./internal/session/invocation.js";
 export {
   type ScopeChoice,
   scopeKey,
   scopeChoices,
-  DESTINATION_QUESTION,
   invocationEligibleScopes,
-  invocationChoices,
 } from "./internal/session/read-model.js";
 export {
   type ScopeRow,
@@ -29,3 +23,5 @@ export {
   confirmLibraryChange,
 } from "./internal/session/session.js";
 export type { InstallScope } from "./scope.js";
+
+export { AuthorInvocationFailure, InvocationUnavailable } from "./invocation-failure.js";

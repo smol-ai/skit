@@ -1,11 +1,20 @@
 import { Revision } from "./snapshot.js";
+import { InstalledSkillConflict } from "../installed-skills/conflict.js";
 import { Schema } from "effect";
 import * as InstalledSkills from "./installed-skills.js";
 import type { LibraryStateReadError, LibraryStateWriteError } from "./store/library-store.js";
 import { InstalledSkill } from "./device-state.js";
 import { LibraryState } from "./library-state.js";
-import { Intent as EnabledIntent, Invocation, type InvalidIntent } from "./enabled-plan.js";
-import type { InstalledSkillInvalid } from "./installation/install-enabled.js";
+import {
+  Intent as EnabledIntent,
+  Invocation,
+  type InvalidIntent,
+  type SetEnabledInvalid,
+} from "./enabled-plan.js";
+import {
+  InstalledSkillInvalidReason,
+  type InstalledSkillInvalid,
+} from "./installation/install-enabled.js";
 import type { CollectionRemovalMissing } from "./installation/remove.js";
 import { CollectionId, InstalledSkillId, SkillId, SkillVersionId } from "./entity-ids.js";
 import { ManageApproval } from "../installed-skills/files.js";
@@ -13,7 +22,6 @@ import { OwnershipMarker } from "../installed-skills/ownership-marker.js";
 import { Hash } from "../shared/hash.js";
 import { InstallDestination } from "../installed-skills/destination.js";
 import { InstallScope } from "./scope.js";
-import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 import type { UninstallConflict } from "../installed-skills/failures.js";
 
 // ── Intents ──────────────────────────────────────────────────────────────────────────────────────
@@ -65,76 +73,18 @@ export const Approval = Schema.Union([
 ]);
 export type Approval = typeof Approval.Type;
 
-// ── Errors ───────────────────────────────────────────────────────────────────────────────────────
-/** The Library moved on since the change was planned; a revision check names both revisions. */
-export class StalePlan
-  extends Schema.TaggedError<StalePlan, { readonly brand: unique symbol }>()("Library.StalePlan", {
-    message: Schema.String,
-    expected: Schema.optionalKey(Schema.String.pipe(Schema.brand("Revision"))),
-    actual: Schema.optionalKey(Schema.String.pipe(Schema.brand("Revision"))),
-  })
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT";
-  readonly remediation = "Preview the change again.";
-}
-
-/** Enabling would replace the user's own link where SKIT writes the copy; keeping both is impossible. */
-export class InstalledSkillWouldReplaceLink
-  extends Schema.TaggedError<InstalledSkillWouldReplaceLink, { readonly brand: unique symbol }>()(
-    "InstalledSkillWouldReplaceLink",
-    {
-      links: Schema.Array(Schema.String),
-    },
-  )
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT";
-  readonly remediation =
-    "Remove the link and enable again, or run `skit setup` and choose `--duplicates retire-aliases` to back it up with a move record.";
-  get message() {
-    return `Enabling would replace the link at ${this.links.join(", ")} with SKIT's copy, so both cannot be kept`;
-  }
-}
-
-/** Policy: Library refuses a duplicate; InstalledSkills only reports that it is there. */
-export class InstalledSkillWouldDuplicate
-  extends Schema.TaggedError<InstalledSkillWouldDuplicate, { readonly brand: unique symbol }>()(
-    "InstalledSkillWouldDuplicate",
-    {
-      duplicates: Schema.Array(InstalledSkills.Duplicate),
-    },
-  )
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT";
-  readonly remediation =
-    "Remove the redundant agent location, keep the Skill in the Library without enabling it, or explicitly use --allow-duplicate.";
-  get message() {
-    return `Enabling would create duplicate skills: ${this.duplicates.flatMap((item) => item.aliases.map((alias) => `${item.name} (${item.harness}): ${alias.path}${alias.via === "symlink" ? ` -> ${item.canonicalPath} (symlink${alias.linkPath !== alias.path ? ` at ${alias.linkPath} -> ${alias.linkTarget}` : ""})` : ""}`)).join("; ")}`;
-  }
-}
-
-export class DestinationsIncomplete
-  extends Schema.TaggedError<DestinationsIncomplete, { readonly brand: unique symbol }>()(
-    "Library.DestinationsIncomplete",
-    {
-      paths: Schema.Array(Schema.String),
-    },
-  )
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT";
-  readonly remediation =
-    "Inspect these destinations and keep foreign or modified content before retrying.";
-  get message() {
-    return `Selected destinations have not converged: ${this.paths.join(", ")}`;
-  }
-}
+export {
+  StalePlan,
+  InstalledSkillWouldReplaceLink,
+  InstalledSkillWouldDuplicate,
+  DestinationsIncomplete,
+} from "./plan-failures.js";
+import type {
+  StalePlan,
+  InstalledSkillWouldReplaceLink,
+  InstalledSkillWouldDuplicate,
+  DestinationsIncomplete,
+} from "./plan-failures.js";
 
 // ── Plan and outcome ─────────────────────────────────────────────────────────────────────────────
 import { EnabledChange } from "./enabled-change.js";
@@ -190,10 +140,15 @@ export const InstalledSkillChange = Schema.Union([
     hash: Hash,
     currentHash: Hash,
     expectedHash: Hash,
+    conflicts: Schema.Array(InstalledSkillConflict),
     edited: Schema.Boolean,
   }),
   /** Nothing installs here any more, but the folder was edited where agents do not read it: it is left, and recorded as conflicted. */
-  Schema.TaggedStruct("Conflict", { recorded: InstalledSkill, currentHash: Hash }),
+  Schema.TaggedStruct("Conflict", {
+    recorded: InstalledSkill,
+    currentHash: Hash,
+    conflicts: Schema.Array(InstalledSkillConflict),
+  }),
   /** The folder is someone else's in itself: it and its record are left exactly as they are. */
   Schema.TaggedStruct("Protected", { ...installedSkillFields, reason: InstalledSkills.Protection }),
   Schema.TaggedStruct("Protected", {
@@ -201,13 +156,16 @@ export const InstalledSkillChange = Schema.Union([
     reason: InstalledSkills.Protection,
   }),
   /** The folder there cannot be read as skill content; apply fails on it. */
-  Schema.TaggedStruct("Unreadable", { ...installedSkillFields, reason: Schema.String }),
+  Schema.TaggedStruct("Unreadable", {
+    ...installedSkillFields,
+    reason: InstalledSkillInvalidReason,
+  }),
   /** Nothing installs here any more: SKIT's folder goes to recovery. */
   Schema.TaggedStruct("Uninstall", { recorded: InstalledSkill }),
   /** Nothing installs here any more, and the folder is gone or was never SKIT's: only the record goes. */
   Schema.TaggedStruct("Forget", { recorded: InstalledSkill }),
   /** Nothing installs here any more, but it was edited where agents read it: apply refuses. */
-  Schema.TaggedStruct("Refuse", { recorded: InstalledSkill, detail: Schema.String }),
+  Schema.TaggedStruct("Refuse", { recorded: InstalledSkill }),
 ]);
 export type InstalledSkillChange = typeof InstalledSkillChange.Type;
 
@@ -221,6 +179,8 @@ export type Route = typeof Route.Type;
  * Plain data. Nothing in it is trusted at apply: apply plans again from the loaded Library, and
  * refuses a different revision, different changes or different folders.
  */
+// Keep the complete state codec behind its named wire/type interfaces in plan declarations.
+const plannedLibrary: Schema.Codec<LibraryState, LibraryState.Encoded> = LibraryState;
 const planFields = {
   baseRevision: Revision,
   approvals: Schema.Array(Approval),
@@ -228,7 +188,7 @@ const planFields = {
   /** Every folder the changes were decided on, and every original they are built from. */
   folders: Schema.Array(InstalledSkills.Folder),
   /** The Library the intent leaves, before apply records its Installed Skills. */
-  next: LibraryState,
+  next: plannedLibrary,
   changes: Schema.Array(Schema.Union([EnabledChange, InstalledSkillChange])),
 };
 /** The top-level tag and intent always name the same operation. */
@@ -281,6 +241,7 @@ export type Outcome =
 export type PlanError =
   | LibraryStateReadError
   | InvalidIntent
+  | SetEnabledInvalid
   | StalePlan
   | CollectionRemovalMissing
   | InstalledSkillInvalid

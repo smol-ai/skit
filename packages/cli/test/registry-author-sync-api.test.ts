@@ -50,9 +50,9 @@ it.effect.each([
 it.effect.each([
   { status: 401, body: { error: "unauthorized" }, tag: "AuthenticationRequired" },
   { status: 403, body: { error: "insufficient_scope" }, tag: "CredentialLacksScope" },
-  { status: 403, body: { error: "forbidden" }, tag: "SyncRejected" },
+  { status: 403, body: { error: "forbidden" }, tag: "AuthorRequestFailed" },
   { status: 404, body: { error: "skit_not_found" }, tag: "RemoteSkitUnavailable" },
-  { status: 502, body: { error: "gateway" }, tag: "SyncRejected" },
+  { status: 502, body: { error: "gateway" }, tag: "AuthorRequestFailed" },
   { status: 200, body: {}, tag: "SkitContractError" },
 ])("classifies current response $status as $tag", ({ status, body, tag }) =>
   Effect.gen(function* () {

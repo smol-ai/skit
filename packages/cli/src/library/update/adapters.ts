@@ -7,29 +7,39 @@ import { authorRegistry } from "../../registry/author-sync.js";
 import { importSource, type SkitSource } from "@smolai/skit-core/library/source";
 import { sourceRequest } from "../../registry/library-source.js";
 import { LibraryProgress } from "./progress.js";
-import { commandFailure, type ClassifiedFailure } from "../../commands/failure-classification.js";
 
 const updateAuthoredSkills = Effect.fn("CLI.update.authored")(function* (
   input: string,
-  owner: { readonly library: Library.Interface; readonly home: string },
+  owner: {
+    readonly library: Library.Interface;
+    readonly home: string;
+    readonly expectedImportId: string;
+  },
 ) {
   const { home, library } = owner;
   const supplied = yield* Effect.serviceOption(RegistryHttp);
   const transport = Option.isSome(supplied)
     ? Layer.succeed(RegistryHttp, supplied.value)
     : registryHttpLayer();
-  const outcome = yield* updateAuthorWorkspace(input, { home }, authorRegistry(home)).pipe(
+  const outcome = yield* updateAuthorWorkspace(
+    input,
+    { home, expectedImportId: owner.expectedImportId },
+    authorRegistry(home),
+  ).pipe(
     Effect.provideService(Library.Service, library),
     Effect.provide(Layer.merge(authorLayer({ home }), transport)),
   );
   const installation = yield* Effect.fromResult(outcome.installation);
   return {
     installed: installation.installed,
-    messages: installation.messages,
+    issues: installation.issues,
+    ...(outcome.installation_error === undefined
+      ? {}
+      : { installation_error: Cause.fail(outcome.installation_error) }),
     ...(outcome.sync === undefined
       ? {}
       : outcome.sync._tag === "Failure"
-        ? { sync_status: "failed", sync_error: commandFailure(Cause.fail(outcome.sync.failure)) }
+        ? { sync_status: "failed", sync_error: Cause.fail(outcome.sync.failure) }
         : { sync_status: outcome.sync.success.status }),
   };
 });
@@ -49,11 +59,9 @@ type AdapterContext =
   | Effect.Services<ReturnType<typeof importUpdateSource>>;
 
 /** CLI lends Registry access and rendering; the Author owner coordinates authored updates. */
-export const updateAdapters: Effect.Effect<
-  SourceUpdateAdapters<AdapterError, AdapterContext, ClassifiedFailure>
-> = Effect.map(LibraryProgress, (progress) => ({
-  progress,
-  classifyFailure: commandFailure,
-  updateAuthoredSkills,
-  importSource: importUpdateSource,
-}));
+export const updateAdapters: Effect.Effect<SourceUpdateAdapters<AdapterError, AdapterContext>> =
+  Effect.map(LibraryProgress, (progress) => ({
+    progress,
+    updateAuthoredSkills,
+    importSource: importUpdateSource,
+  }));

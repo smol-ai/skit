@@ -86,7 +86,7 @@ it.effect(
         yield* installedSkillFixture;
       const before = yield* library.durable;
       const prepared = yield* Effect.flatMap(Library.Service, (library) =>
-        library.edit(skill.name, "agents"),
+        library.edit(skill.name, join(roots.codexRoot, "review")),
       ).pipe(Effect.provide(configuration));
       const plan = prepared.preview;
       assert.strictEqual(plan.skill_id, skill.skill_id);
@@ -170,7 +170,7 @@ it.effect.each(["selected", "other", "Library"] as const)(
     Effect.gen(function* () {
       const f = yield* installedSkillFixture;
       const prepared = yield* Effect.flatMap(Library.Service, (library) =>
-        library.edit(f.skill.name, "agents"),
+        library.edit(f.skill.name, join(f.roots.codexRoot, "review")),
       ).pipe(Effect.provide(f.configuration));
       const otherHome = join(f.workspace, "other-library");
       const applicationLayer = f.configuration;
@@ -213,7 +213,7 @@ it.effect("manages identical edited copies into one retained Version", () =>
       identity: true,
     });
     const prepared = yield* Effect.flatMap(Library.Service, (library) =>
-      library.edit(f.skill.name, "agents"),
+      library.edit(f.skill.name, join(f.roots.codexRoot, "review")),
     ).pipe(Effect.provide(f.configuration));
     yield* assertDiskUnchanged(before);
     assert.deepStrictEqual(
@@ -243,7 +243,7 @@ it.effect("a prepared edit stays with its owner when ambient home changes", () =
   Effect.gen(function* () {
     const f = yield* installedSkillFixture;
     const prepared = yield* Effect.flatMap(Library.Service, (library) =>
-      library.edit(f.skill.name, "agents"),
+      library.edit(f.skill.name, join(f.roots.codexRoot, "review")),
     ).pipe(Effect.provide(f.configuration));
     const otherHome = join(f.workspace, "other-library");
     const applied = yield* prepared.apply().pipe(Effect.provide(skitConfigurationLayer(otherHome)));

@@ -9,7 +9,7 @@ import { HarnessName } from "./contracts.js";
 import { LinkStat } from "../platform/link-stat.js";
 import { harnessDrivers, harnessFromAlias } from "./drivers.js";
 
-import { UnknownHarness } from "./probe-failures.js";
+import { UnknownHarness, HarnessProbeFailure } from "./probe-failures.js";
 
 export const HarnessProbeResult = Schema.Struct({
   harnessId: HarnessName,
@@ -19,7 +19,7 @@ export const HarnessProbeResult = Schema.Struct({
   resolvedPath: Schema.NullOr(Schema.String),
   version: Schema.NullOr(Schema.String),
   versionOutput: Schema.NullOr(Schema.String),
-  error: Schema.NullOr(Schema.String),
+  failure: Schema.NullOr(HarnessProbeFailure),
 });
 export type HarnessProbeResult = typeof HarnessProbeResult.Type;
 
@@ -42,7 +42,7 @@ function probeResult(
     executablePath: string;
     resolvedPath: string;
     versionOutput: string;
-    error: string | null;
+    failure: HarnessProbeFailure | null;
   } | null,
 ): HarnessProbeResult {
   if (!observed)
@@ -54,17 +54,17 @@ function probeResult(
       resolvedPath: null,
       version: null,
       versionOutput: null,
-      error: `Executable not found on PATH: ${command}`,
+      failure: { _tag: "ExecutableMissing", command },
     };
   return {
     harnessId,
-    status: observed.error ? "failed" : "installed",
+    status: observed.failure ? "failed" : "installed",
     command,
     executablePath: observed.executablePath,
     resolvedPath: observed.resolvedPath,
     version: versionFrom(observed.versionOutput),
     versionOutput: observed.versionOutput || null,
-    error: observed.error,
+    failure: observed.failure,
   };
 }
 
@@ -106,11 +106,11 @@ export const probeHarness = Effect.fn("Probe.harness")(function* (
     executablePath,
     resolvedPath,
     versionOutput: Result.isSuccess(attempt) ? attempt.success.output.trim() : "",
-    error: Result.isSuccess(attempt)
+    failure: Result.isSuccess(attempt)
       ? attempt.success.exitCode === 0
         ? null
-        : `exit ${attempt.success.exitCode}`
-      : attempt.failure.message,
+        : { _tag: "ExitCode", command, exitCode: attempt.success.exitCode }
+      : { _tag: "ProcessFailed", failure: attempt.failure },
   });
 });
 

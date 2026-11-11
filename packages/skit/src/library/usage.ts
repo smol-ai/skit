@@ -6,6 +6,5 @@ export {
   type UsageRoot,
   type UsageOptions,
   type InstalledSkillUsage,
-  type InvalidUsageOptions,
 } from "./usage/contracts.js";
 export { scanUsage } from "./usage/scanner.js";

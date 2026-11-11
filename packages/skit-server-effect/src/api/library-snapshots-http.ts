@@ -32,7 +32,8 @@ export const librarySnapshotHandlers = HttpApiBuilder.group(
                   Effect.logError("snapshot blob failed", error).pipe(
                     Effect.andThen(Effect.fail(storageFailureResponse)),
                   ),
-                "Library.SnapshotStoreInvalid": () => Effect.fail(storageFailureResponse),
+                "Library.CollectionVersionArchiveStoreInvalid": () =>
+                  Effect.fail(storageFailureResponse),
                 PlatformError: (error) =>
                   Effect.logError("snapshot digest failed", error).pipe(
                     Effect.andThen(Effect.fail(storageFailureResponse)),
@@ -45,8 +46,9 @@ export const librarySnapshotHandlers = HttpApiBuilder.group(
             const principal = yield* requirePrincipal;
             return yield* snapshots.download(principal, params.library_id, params.digest).pipe(
               Effect.catchTags({
-                "Library.SnapshotMissing": () => Effect.fail(libraryNotFoundResponse),
-                "Library.SnapshotForbidden": () => Effect.fail(forbiddenResponse),
+                "Library.CollectionVersionArchiveMissing": () =>
+                  Effect.fail(libraryNotFoundResponse),
+                "Library.CollectionVersionArchiveForbidden": () => Effect.fail(forbiddenResponse),
                 "Library.SnapshotArchiveInvalid": () => Effect.fail(storageFailureResponse),
                 "Cloudflare.DatabaseError": (error) =>
                   Effect.logError("snapshot database failed", error).pipe(
@@ -56,7 +58,8 @@ export const librarySnapshotHandlers = HttpApiBuilder.group(
                   Effect.logError("snapshot blob failed", error).pipe(
                     Effect.andThen(Effect.fail(storageFailureResponse)),
                   ),
-                "Library.SnapshotStoreInvalid": () => Effect.fail(storageFailureResponse),
+                "Library.CollectionVersionArchiveStoreInvalid": () =>
+                  Effect.fail(storageFailureResponse),
                 PlatformError: (error) =>
                   Effect.logError("snapshot digest failed", error).pipe(
                     Effect.andThen(Effect.fail(storageFailureResponse)),

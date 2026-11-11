@@ -1,8 +1,8 @@
+import { invocationConformanceIssue } from "./invocation-diagnostic.js";
 import {
   assessInvocationConformance,
   auditSkill,
   canonicalJson,
-  describeInvocationConformanceIssue,
   evaluateSkillAudit,
   parseSkitConfig,
   parseSkitReadme,
@@ -124,7 +124,7 @@ export const validateArtifactBundle = Effect.fn("Integrity.validateArtifactBundl
       code: "INVOCATION_METADATA_MISMATCH",
       severity: "error",
       path: issue.path,
-      message: describeInvocationConformanceIssue(issue),
+      message: invocationConformanceIssue(issue),
     });
 
   for (const path of [

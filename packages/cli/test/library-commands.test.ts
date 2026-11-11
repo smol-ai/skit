@@ -1,10 +1,11 @@
+import { renderBlocks } from "../src/terminal/blocks.js";
+import { classifyFailure } from "../src/commands/failure-classification.js";
 import * as Library from "@smolai/skit-core/library";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Layer, Deferred, Effect, Fiber, FileSystem, Result, Schema } from "effect";
 import { join } from "node:path";
-import { stripVTControlCharacters } from "node:util";
 
 import { presentListCommand } from "../src/library/list.js";
 import { browseLibrary } from "../src/library/list/browse.js";
@@ -74,7 +75,10 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
     const listing = yield* Schema.decodeUnknownEffect(ListResult)(rendered[0]?.data);
     assert.strictEqual(listing.subjects[0]?.subject_id, collection.collection?.collection_id);
     assert.strictEqual(listing.subjects[0]?.label, "tim/skills");
-    assert.match(renderLibraryList(listing), /^tim\/skills \(Registry release\)\n/);
+    assert.containSubset(renderLibraryList(listing)[0], {
+      _tag: "Group",
+      title: "tim/skills (Registry release)",
+    });
     assert.deepStrictEqual(
       listing.subjects[0]?.skills.map((skill) => skill.name),
       ["review"],
@@ -98,7 +102,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
     const stale = yield* home.owned(confirmLibraryChange(proposed));
     assert.strictEqual(stale.outcome?.kind, "failed");
     if (stale.outcome?.kind === "failed")
-      assert.strictEqual(stale.outcome.failure.code, "CONFLICT");
+      assert.strictEqual(classifyFailure(stale.outcome.failure).code, "CONFLICT");
     yield* home.writeDurable(beforeStaleChange);
 
     const interaction = yield* makeScriptedInteraction([
@@ -113,14 +117,9 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
     );
     assert.strictEqual((yield* interaction.prompts)[0]?.message, "Select a collection");
     assert.strictEqual(yield* interaction.remaining, 0);
-    const detail = (yield* interaction.notes).find((note) => note.title === "Skill");
-    assert.ok(detail?.renderBody);
-    assert.ok(detail.body.includes("review"));
-    assert.strictEqual(detail.body.includes("\u001b"), false);
-    assert.strictEqual(detail.renderBody(false), detail.body);
-    const colored = detail.renderBody(true);
-    assert.ok(colored.includes("\u001b[36m"));
-    assert.strictEqual(stripVTControlCharacters(colored), detail.body);
+    const detail = (yield* interaction.notes).find((note) => note.title === row.name);
+    assert.ok(detail);
+    assert.strictEqual(renderBlocks(detail.body, { color: false }).includes("\u001b"), false);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -207,10 +206,14 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     assert.deepStrictEqual(disabled.repositories, []);
     for (const result of yield* interaction.results) {
       assert.strictEqual(result.schema, "skit.disable.v8");
-      assert.ok(
-        renderSetEnabled(result.data as Parameters<typeof renderSetEnabled>[0], true).includes(
-          "Disabled review",
-        ),
+      const [headline] = renderSetEnabled(
+        result.data as Parameters<typeof renderSetEnabled>[0],
+        true,
+      ).filter((block) => block._tag === "Status");
+      assert.strictEqual(headline?.tone, "ok");
+      assert.match(
+        headline?.text.find((part) => typeof part === "string") ?? "",
+        /^Disabled review/,
       );
     }
 

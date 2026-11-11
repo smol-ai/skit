@@ -1,3 +1,4 @@
+import { defineCommand } from "../../commands/definition.js";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Effect } from "effect";
 import { Command } from "effect/cli";
@@ -9,7 +10,7 @@ import { Registry } from "../index.js";
 import { Renderer } from "../../terminal/renderer.js";
 import { result } from "../../commands/result.js";
 
-export const registryListCliCommand = Command.make("list", { json: jsonFlag }, () =>
+export const registryListCliCommand = defineCommand("list", { json: jsonFlag }, () =>
   Effect.gen(function* () {
     const paths = yield* SkitConfiguration;
 
@@ -27,7 +28,6 @@ export const registryListCliCommand = Command.make("list", { json: jsonFlag }, (
       subprocesses: credentialStoreReadSubprocesses,
     },
     outputSchemas: [outputContracts.registryList],
-    exitCodes: [0, 12, 64],
     interactive: false,
   }),
 );

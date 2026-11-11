@@ -232,9 +232,7 @@ it.effect.each(["installing", "cleanup"] as const)(
       if (outcome._tag !== "Success") return;
       const applied = outcome.success;
       expect(
-        applied.backupWarnings?.some((warning) =>
-          warning.message.includes("changed before preservation"),
-        ),
+        applied.backupWarnings?.some((warning) => warning.reason._tag === "ReplacementChanged"),
       ).toBe(true);
       expect(applied.recoveryDirectories).toEqual([]);
     }).pipe(Effect.provide(skitLayer)),

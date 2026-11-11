@@ -1,11 +1,13 @@
 import type * as Library from "../../library.js";
-import { InvalidIntent } from "../../enabled-plan.js";
-import { FailureTypeId, type SkitFailure } from "../../../shared/failure.js";
-import { Effect, Schema } from "effect";
+import { SetEnabledInvalid } from "../../enabled-plan.js";
+import { Effect } from "effect";
 import { expandSetEnabledIntent, type SetEnabledIntent } from "./set-enabled-request.js";
 export type { SetEnabledIntent } from "./set-enabled-request.js";
-import { failureDetails } from "../../../shared/failure.js";
-import { setEnabledResults, SetEnabledChange, SetEnabledResult } from "./set-enabled-contract.js";
+import {
+  setEnabledResults,
+  SetEnabledChange,
+  SetEnabledIncomplete,
+} from "./set-enabled-contract.js";
 
 import { emptyLibraryState } from "../../library-state.js";
 import type { Snapshot } from "../../snapshot.js";
@@ -20,29 +22,6 @@ export interface SetEnabledPlan {
     readonly invocation?: import("./invocation-option.js").InvocationOption;
     readonly listingSize: number;
   })[];
-}
-
-/** Accepted intent survives a later failure; callers must not mistake this for rejection. */
-export class SetEnabledIncomplete
-  extends Schema.TaggedError<SetEnabledIncomplete, { readonly brand: unique symbol }>()(
-    "Library.SetEnabledIncomplete",
-    {
-      results: Schema.Array(SetEnabledResult),
-      reason: Schema.Literals(["destinations", "update"]),
-      failure: Schema.Unknown,
-    },
-  )
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  get code() {
-    return failureDetails(this.failure).code;
-  }
-  get message() {
-    return `Binding intent was saved or already in place, but the operation did not complete. ${failureDetails(this.failure).message}`;
-  }
-  readonly remediation =
-    "Inspect the saved bindings and installed copies, resolve the reported condition, then preview and retry the change. No binding rollback was attempted.";
 }
 
 /** Resolve names and member choices against the explicitly reviewed snapshot. */
@@ -83,10 +62,7 @@ export const planEnabled = Effect.fn("Library.planEnabled")(function* (
     });
   }
   const [first, ...rest] = selected;
-  if (first === undefined)
-    return yield* new InvalidIntent({
-      detail: "Choose something to enable or disable",
-    });
+  if (first === undefined) return yield* new SetEnabledInvalid({ reason: "nothing-selected" });
   const plan = yield* library.plan(
     { _tag: "Enabled", changes: [first, ...rest] },
     {
@@ -130,3 +106,5 @@ export const setEnabledOutcomes = Effect.fn("SetEnabled.outcomes")(function* (
     });
   return results.map((value) => ({ kind: "applied" as const, value }));
 });
+
+export { SetEnabledIncomplete } from "./set-enabled-contract.js";

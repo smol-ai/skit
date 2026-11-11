@@ -30,7 +30,7 @@
     "conflicts": {
       "type": "array",
       "items": {
-        "type": "string"
+        "$ref": "#/definitions/UndoConflict"
       }
     },
     "files": {
@@ -141,5 +141,571 @@
     "actions"
   ],
   "additionalProperties": true,
+  "definitions": {
+    "DiscoveryRestoreConflict": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "MachineChanged"
+              ]
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "DiscoveryFoldersChanged"
+              ]
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "UndoScope": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "Account"
+              ]
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "Device"
+              ]
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "Repository"
+              ]
+            },
+            "root": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "root"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "UndoConflict": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/DiscoveryRestoreConflict"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "UnsupportedOperation"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "recovery",
+                "apply",
+                "sync",
+                "pending"
+              ]
+            }
+          },
+          "required": [
+            "_tag",
+            "kind"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "SelectionChanged"
+              ]
+            },
+            "scope": {
+              "$ref": "#/definitions/UndoScope"
+            },
+            "key": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "enabled",
+                "invocation"
+              ]
+            }
+          },
+          "required": [
+            "_tag",
+            "scope",
+            "key",
+            "kind"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "SelectionMissing"
+              ]
+            },
+            "scope": {
+              "$ref": "#/definitions/UndoScope"
+            },
+            "key": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "scope",
+            "key"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "DeviceModeChanged"
+              ]
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "DeviceSelectionChanged"
+              ]
+            }
+          },
+          "required": [
+            "_tag"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "SkillVersionChanged"
+              ]
+            },
+            "skillId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "skillId"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "SkillMissing"
+              ]
+            },
+            "skillId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "skillId"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "CollectionMembershipChanged"
+              ]
+            },
+            "collectionId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "collectionId"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "SourceChanged"
+              ]
+            },
+            "collectionId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "collectionId"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "SourceEvidenceMissing"
+              ]
+            },
+            "collectionId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "collectionId"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "SourceBytesChanged"
+              ]
+            },
+            "collectionId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "collectionId"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "ImportAlreadyRecorded"
+              ]
+            },
+            "collectionId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "collectionId"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "ClockNotAdvanced"
+              ]
+            },
+            "collectionId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "collectionId"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "OwnershipUnconfirmed"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "PathProtected"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "ParentChanged"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "StorageOverlap"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "OriginalPathsOverlap"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "InstalledChoiceChanged"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "OriginalEdited"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "DestinationOccupied"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "CopyMissing"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "OriginalBytesMissing"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "DifferentDevice"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    }
+  },
   "$schema": "http://json-schema.org/draft-07/schema#"
 }

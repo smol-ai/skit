@@ -19,6 +19,7 @@ import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-c
 import { authLoginCommand } from "../src/registry/commands/login.js";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { systemError } from "effect/PlatformError";
 
 /**
  * The native login with an injected Registry transport.
@@ -552,8 +553,145 @@ describe("CLI authentication journey", () => {
           server,
         ),
       );
-      expect(failure.message).toMatch(/pat_one.*skit_pat_secret.*session may also be live/);
+      expect(failure).toMatchObject({
+        _tag: "SignInFailed",
+        reason: {
+          _tag: "SessionEndFailed",
+          cleanup: { _tag: "ResponseRejected", status: 503 },
+          credential: {
+            tokenId: "pat_one",
+            tokenPrefix: "skit_pat_secret_on",
+            cleanup: { _tag: "ResponseRejected", status: 503 },
+          },
+        },
+      });
+      expect(failure.message).toContain("The temporary session may still be live");
     }).pipe(Effect.provide(testPlatformLayer)),
+  );
+
+  it.effect(
+    "keeps the received status when the credential error code describes a different status",
+    () =>
+      Effect.gen(function* () {
+        const home = yield* authHome;
+        const base = successfulServer([]);
+        const server: TestHttpHandler = (request, url, signal) =>
+          url.pathname === "/api/tokens" && request.method === "POST"
+            ? Effect.succeed(Response.json({ error: "invalid_request" }, { status: 503 }))
+            : base(request, url, signal);
+        const failure = yield* login(
+          {
+            origin: "https://skit.example",
+            email: "user@example.test",
+            password: "secret",
+            scopes: ["library:sync"],
+            home,
+          },
+          server,
+        ).pipe(Effect.flip);
+        expect(failure).toMatchObject({
+          _tag: "SignInFailed",
+          reason: {
+            _tag: "RequestFailed",
+            operation: "credential-create",
+            status: 503,
+          },
+        });
+        expect(failure.message).toContain("could not be confirmed");
+      }).pipe(Effect.provide(testPlatformLayer)),
+  );
+
+  it.effect("keeps credential-creation rejection when temporary-session sign-out also fails", () =>
+    Effect.gen(function* () {
+      const home = yield* authHome;
+      const requests: Array<{ url: string; init?: RequestInit }> = [];
+      const base = successfulServer(requests);
+      const server: TestHttpHandler = (request, url, signal) =>
+        url.pathname === "/api/tokens" && request.method === "POST"
+          ? Effect.succeed(Response.json({ error: "unauthorized" }, { status: 401 }))
+          : url.pathname === "/api/auth/sign-out"
+            ? Effect.succeed(new Response("session cleanup unavailable", { status: 503 }))
+            : base(request, url, signal);
+      const failure = yield* login(
+        {
+          origin: "https://skit.example",
+          email: "user@example.test",
+          password: "secret",
+          scopes: ["library:sync"],
+          home,
+        },
+        server,
+      ).pipe(Effect.flip);
+      expect(failure).toMatchObject({
+        _tag: "SignInFailed",
+        reason: {
+          _tag: "SessionEndFailed",
+          cleanup: { _tag: "ResponseRejected", status: 503, body: "session cleanup unavailable" },
+          original: { _tag: "SignInRejected", operation: "credential-create" },
+        },
+      });
+      expect(yield* registryCredentials({ home })).toMatchObject({ source: "none" });
+    }).pipe(Effect.provide(testPlatformLayer)),
+  );
+
+  it.effect(
+    "keeps the exact storage error when revocation of the unsaved credential is rejected",
+    () =>
+      Effect.gen(function* () {
+        const home = yield* authHome;
+        const fs = yield* FileSystem.FileSystem;
+        const path = join(home, "auth.json");
+        const original = systemError({
+          _tag: "PermissionDenied",
+          module: "FileSystem",
+          method: "rename",
+          pathOrDescriptor: path,
+        });
+        const requests: Array<{ url: string; init?: RequestInit }> = [];
+        const base = successfulServer(requests);
+        const seen: string[] = [];
+        const server: TestHttpHandler = (request, url, signal) => {
+          seen.push(`${request.method} ${url.pathname}`);
+          return request.method === "DELETE"
+            ? Effect.succeed(new Response(null, { status: 503 }))
+            : base(request, url, signal);
+        };
+        const failure = yield* login(
+          {
+            origin: "https://skit.example",
+            email: "user@example.test",
+            password: "secret",
+            scopes: ["library:sync"],
+            home,
+          },
+          server,
+        ).pipe(
+          Effect.provideService(FileSystem.FileSystem, {
+            ...fs,
+            rename: (from, to) => (to === path ? Effect.fail(original) : fs.rename(from, to)),
+          }),
+          Effect.flip,
+        );
+        expect(failure).toMatchObject({
+          _tag: "SignInFailed",
+          reason: {
+            _tag: "StorageCleanupFailed",
+            cleanup: { _tag: "ResponseRejected", status: 503 },
+            tokenId: "pat_one",
+          },
+        });
+        if (failure._tag !== "SignInFailed" || failure.reason._tag !== "StorageCleanupFailed")
+          return yield* Effect.die("Expected failed credential cleanup");
+        expect(failure.reason.original).toBe(original);
+        expect(seen).toEqual([
+          "GET /.well-known/skit",
+          "POST /api/auth/sign-in/email",
+          "POST /api/tokens",
+          "POST /api/auth/sign-out",
+          "DELETE /api/tokens/pat_one",
+        ]);
+        expect(yield* fs.exists(path)).toBe(false);
+      }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("logging in again rotates the credential for that origin", () =>
@@ -640,7 +778,11 @@ describe("CLI authentication journey", () => {
       yield* login({ ...input, scopes: [...input.scopes] }, server);
       const result = yield* login({ ...input, scopes: [...input.scopes] }, server);
 
-      expect(result.warning).toMatch(/pat_one.*may still be live/);
+      expect(result.warning).toMatchObject({
+        _tag: "PreviousCredentialNotRevoked",
+        tokenId: "pat_one",
+        cleanup: { _tag: "ResponseRejected", status: 503 },
+      });
       expect(yield* registryCredentials({ home })).toMatchObject({ tokenId: "pat_two" });
     }).pipe(Effect.provide(testPlatformLayer)),
   );

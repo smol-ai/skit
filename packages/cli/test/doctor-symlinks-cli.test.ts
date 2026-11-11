@@ -87,7 +87,9 @@ require('node:readline').createInterface({input: process.stdin}).on('line', line
       const report = (yield* Schema.decodeUnknownEffect(envelope)(JSON.parse(json.stdout)).pipe(
         Effect.orDie,
       )).data;
-      expect(report.codex.status, report.codex.detail).toBe("checked");
+      expect(report.codex.status, JSON.stringify(report.codex)).toBe("checked");
+      expect(report.codex.protocol).toBe("codex-app-server");
+      expect(report.codex).not.toHaveProperty("detail");
       expect(report.codex.errors).toEqual([]);
       expect(report.codex.findings).toHaveLength(1);
       const finding = report.codex.findings[0];

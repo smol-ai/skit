@@ -138,8 +138,8 @@ it.effect("does not attribute an unrecorded user alias to pnpm", () =>
       Effect.provide(skitConfigurationLayer()),
     );
     expect(
-      audited.skills.find((entry) => entry.location === join(alias, "SKILL.md"))?.provenance.source,
-    ).toBe("symlink");
+      audited.skills.find((entry) => entry.location === join(alias, "SKILL.md"))?.provenance.origin,
+    ).toEqual({ _tag: "Symlink" });
     yield* f.fs.symlink(f.skill, f.alias);
     const home = yield* libraryHome({
       home: join(f.root, "library"),

@@ -11,9 +11,8 @@ import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
  * exited 0 without running anything, which an agent reads as success. Execution and the help
  * documents the command manifest is generated from share this grammar.
  */
-export const skitCliConfigLayer = CliConfig.layer({
-  builtIns: GlobalFlag.BuiltIns.filter((flag) => flag !== GlobalFlag.Wizard),
-});
+export const skitBuiltInFlags = GlobalFlag.BuiltIns.filter((flag) => flag !== GlobalFlag.Wizard);
+export const skitCliConfigLayer = CliConfig.layer({ builtIns: skitBuiltInFlags });
 
 export const jsonFlag = Flag.Boolean("json").pipe(
   Flag.withDescription("Emit structured JSON."),

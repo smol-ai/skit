@@ -1,7 +1,7 @@
 import { buildInfo } from "../../../scripts/build-info.mjs";
 import { build } from "esbuild";
 import { builtinModules } from "node:module";
-import { readFile, rm } from "node:fs/promises";
+import { copyFile, readFile, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const jsoncParserEsm = fileURLToPath(import.meta.resolve("jsonc-parser/lib/esm/main.js"));
@@ -76,3 +76,9 @@ for (const { output, result } of results) {
     );
   }
 }
+
+// Storybook embeds the pinned upstream document fixture; retain its license in the package.
+await copyFile(
+  "src/storybook/fixtures/doctor-collection.LICENSE",
+  "dist/src/storybook/chunks/doctor-collection.LICENSE",
+);

@@ -80,14 +80,40 @@ export const scanAuthorInventory = Effect.fn("Author.scanInventory")(function* (
 const isBulkRemoval = (removed: number, known: number) =>
   removed > 0 && (removed === known || (removed > 5 && removed > known / 2));
 
+type RemovalCheckState =
+  | { readonly _tag: "Clear" }
+  | { readonly _tag: "Confirming"; readonly key: string; readonly since: bigint }
+  | { readonly _tag: "Blocked" }
+  | { readonly _tag: "Unreadable" };
+
+/** Only Confirming carries elapsed time; a pause cannot resume an earlier grace period. */
+const checkMissingInputs = (
+  state: RemovalCheckState,
+  missing: { readonly key: string; readonly at: bigint; readonly bulk: boolean },
+  allowLargeDeletion: boolean,
+): RemovalCheckState => {
+  if (allowLargeDeletion) return { _tag: "Clear" };
+  if (missing.bulk) return { _tag: "Blocked" };
+  switch (state._tag) {
+    case "Confirming":
+      if (state.key === missing.key)
+        return missing.at - state.since >= 10_000_000_000n ? { _tag: "Clear" } : state;
+      return { _tag: "Confirming", key: missing.key, since: missing.at };
+    case "Clear":
+    case "Blocked":
+    case "Unreadable":
+      return { _tag: "Confirming", key: missing.key, since: missing.at };
+  }
+};
+
 /** Pending time belongs to this runtime only; restart and unreadability restart the grace.
  * Persistence of the accepted baseline belongs to AuthorHistory, under the workspace lease. */
 export const makeRemovalCheck = () => {
-  const pending = new Map<string, { key: string; since: bigint }>();
+  const checks = new Map<string, RemovalCheckState>();
   return {
     reset: (workspaceId: string) =>
       Effect.sync(() => {
-        pending.delete(workspaceId);
+        checks.delete(workspaceId);
       }),
     check: Effect.fn("Author.checkRemovals")(function* (
       workspaceId: string,
@@ -116,25 +142,25 @@ export const makeRemovalCheck = () => {
       const isBulk =
         isBulkRemoval(removedFiles.length, baseline.files.length) ||
         isBulkRemoval(removedMembers.length, baseline.members.length);
-      let status: RemovalDecision["status"] = "accepted";
+      let next: RemovalCheckState;
       if (!membershipReadable) {
-        pending.delete(workspaceId);
         // Invalid membership is backed up, but cannot grant any removal authority.
-        status = "waiting";
+        next = { _tag: "Unreadable" };
       } else if (removedFiles.length || removedMembers.length) {
-        const key = JSON.stringify({ files: removedFiles, members: removedMembers });
-        const now = yield* Clock.monotonicTimeNanos;
-        const before = pending.get(workspaceId);
-        if (isBulk && !allowLargeDeletion) status = "blocked";
-        else if (
-          !allowLargeDeletion &&
-          (before?.key !== key || now - before.since < 10_000_000_000n)
-        )
-          status = "waiting";
-        if (status === "waiting" && before?.key !== key)
-          pending.set(workspaceId, { key, since: now });
-        if (status !== "waiting") pending.delete(workspaceId);
-      } else pending.delete(workspaceId);
+        next = checkMissingInputs(
+          checks.get(workspaceId) ?? { _tag: "Clear" },
+          {
+            key: JSON.stringify({ files: removedFiles, members: removedMembers }),
+            at: yield* Clock.monotonicTimeNanos,
+            bulk: isBulk,
+          },
+          allowLargeDeletion,
+        );
+      } else next = { _tag: "Clear" };
+      if (next._tag === "Clear") checks.delete(workspaceId);
+      else checks.set(workspaceId, next);
+      const status: RemovalDecision["status"] =
+        next._tag === "Clear" ? "accepted" : next._tag === "Blocked" ? "blocked" : "waiting";
       const heldFiles = status === "accepted" ? [] : removedFiles;
       const heldMembers = status === "accepted" ? [] : removedMembers;
       const accepted: AuthorRemovalState = {

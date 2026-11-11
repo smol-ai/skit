@@ -1,3 +1,4 @@
+import { failureExitCode } from "../src/commands/exit-code.js";
 import { Layer, Deferred, Effect, Fiber, Result } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { HttpClientError } from "effect/http";
@@ -12,7 +13,7 @@ import { runCommandTree } from "../src/commands/runtime.js";
 import { Command } from "effect/cli";
 import type { ResolvedAuth } from "../src/registry/auth.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
-import { registryApiFailureMessage } from "../src/registry/api-client.js";
+import { classifyFailure } from "../src/commands/failure-classification.js";
 import {
   CredentialsUnusable,
   RegistryOriginInvalid,
@@ -66,7 +67,7 @@ it.effect.each([
     authState: Result.fail(new CredentialsUnusable({ path: "/auth.json", reason: "invalid" })),
     response: page(),
     code: "CONFLICT",
-    exitCode: 12,
+    exitCode: 1,
   },
   {
     label: "invalid ambient origin",
@@ -80,7 +81,7 @@ it.effect.each([
     authState: authState({ origin: input.origin }),
     response: page(),
     code: "AUTHENTICATION_REQUIRED",
-    exitCode: 13,
+    exitCode: 1,
   },
   {
     label: "defensive invalid resolved origin",
@@ -94,14 +95,14 @@ it.effect.each([
     authState: authState(input),
     response: new Response("null", { status: 401 }),
     code: "AUTHENTICATION_REQUIRED",
-    exitCode: 13,
+    exitCode: 1,
   },
   {
     label: "insufficient scope",
     authState: authState(input),
     response: Response.json({ error: "insufficient_scope" }, { status: 403 }),
     code: "AUTHENTICATION_REQUIRED",
-    exitCode: 13,
+    exitCode: 1,
   },
   {
     label: "unclassified forbidden",
@@ -147,9 +148,9 @@ it.effect.each([
   },
 ])("classifies $label at the command boundary", ({ authState, response, code, exitCode }) =>
   Effect.gen(function* () {
-    expect(yield* classifiedFailures(authState, response)).toEqual([
-      expect.objectContaining({ code, exitCode }),
-    ]);
+    const failures = yield* classifiedFailures(authState, response);
+    expect(failures).toEqual([expect.objectContaining({ code })]);
+    expect(failureExitCode(failures[0]!.code)).toBe(exitCode);
   }),
 );
 
@@ -223,10 +224,11 @@ it.effect("request and body rejections use Effect HTTP's typed failure channel",
     }).pipe(
       Effect.flip,
       Effect.map((failure) => {
-        assert.match(
-          failure.message,
-          stage === "request" ? /Unable to reach Registry/ : /author SKIT list response/,
-        );
+        if (stage === "request") assert.strictEqual(failure._tag, "RegistryUnreachable");
+        else {
+          assert.ok(failure instanceof SkitContractError);
+          assert.strictEqual(failure.contract, "author SKIT list response");
+        }
         assert.strictEqual(requests, 1);
       }),
     );
@@ -315,10 +317,14 @@ it.effect("later failure discards accumulated inventory", () =>
 it.effect.each([null, [], 3, { error: null }, { error: {} }])(
   "invalid rejection body %j has a deliberate diagnostic",
   (body) =>
-    Effect.sync(() => {
-      expect(registryApiFailureMessage("Author SKIT list", body, { defaultStatus: 403 })).toBe(
-        "Author SKIT list failed (403): Registry returned an invalid error response",
-      );
+    Effect.gen(function* () {
+      const failure = yield* listWithTransport(input, () =>
+        Effect.succeed(Response.json(body, { status: 503 })),
+      ).pipe(Effect.flip);
+      expect(failure).toMatchObject({ _tag: "AuthorListResponseError", status: 503 });
+      expect(failure).not.toHaveProperty("registryCode");
+      expect(classifyFailure(failure).message).toContain("503");
+      expect(classifyFailure(failure).message).not.toContain("unknown_error");
     }),
 );
 

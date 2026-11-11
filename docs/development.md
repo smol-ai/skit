@@ -141,7 +141,11 @@ Use `pnpm format` to apply repository formatting.
 
 ## Generated CLI contracts
 
-Every command declares its output schemas, exit codes, and interaction behavior in the typed Command Catalog. The generated command manifest and JSON Schemas under `packages/cli/contracts/` are committed so contract changes are visible in review.
+Every command declares its output schemas, effects, and interaction behavior in the typed Command Catalog. The generated command manifest publishes one shared policy for normal command outcomes: `0` for success, `1` for failure (including partial batches), and `2` for invalid syntax or arguments. JSON errors retain precise domain codes; batch results retain each item’s outcome and code. Commands and error classes do not choose numeric statuses; the CLI output boundary does.
+
+This replaces the statuses `11`, `12`, `13`, `64`, `65`, and `77` in the next release. Scripts that branch on those numbers should use the shared statuses and inspect JSON codes for details. Output schema names remain unchanged by the exit-code simplification. Signal termination keeps the runtime and shell’s conventional signal status.
+
+The generated command manifest and JSON Schemas under `packages/cli/contracts/` are committed so contract changes are visible in review.
 
 Regenerate them after changing command metadata or output schemas:
 
@@ -158,11 +162,23 @@ change. Development CI checks artifact freshness and payload validity; merging i
 
 Contract version bumps are finalized during release preparation, following the
 [compatibility policy](./coding-standards.md#name-things-plainly). The release
-workflow runs:
+workflow and local check use the latest published npm package as their baseline:
 
 ```sh
-pnpm --filter @smolai/skit contracts:check --base origin/dev
+pnpm --filter @smolai/skit contracts:check
 ```
+
+The checker downloads the published archive, verifies its SHA512 integrity, and
+reads the shipped manifest and schemas without installing or executing the package.
+It reports the compared version and integrity. Use `--release 0.3.0` to compare
+against an exact published version. Git branches and tags are not release baselines.
+Network or archive failures fail the check; they never skip compatibility checks.
+
+The next release uses `skit.add.preview.v5` for the changed Source diagnostics.
+Installed-edit outputs retain the published wire-name families as
+`skit.update.projection-retention.v3` and
+`skit.update.projection-retention.plan.v3`; their internal names remain
+`installedEdit` and `installedEditPlan`.
 
 ## Tests
 

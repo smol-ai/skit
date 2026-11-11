@@ -1,3 +1,6 @@
+import { sourceUpdateOutput } from "../src/library/update/output.js";
+import { commandFailure } from "../src/commands/failure-classification.js";
+import { result as commandResult } from "../src/commands/result.js";
 import { assert, it } from "@effect/vitest";
 import { Clock, Duration, Deferred, Effect, Fiber, FileSystem, Layer } from "effect";
 import { HttpClient, HttpClientError } from "effect/http";
@@ -12,12 +15,13 @@ import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { updateAdapters } from "../src/library/update/adapters.js";
 import { renderUpdate } from "../src/library/update/present.js";
-import { updateExitCode } from "../src/library/update/exit-code.js";
+import { Block } from "../src/terminal/blocks.js";
+import { resultExitCode } from "../src/commands/exit-code.js";
 import { RegistryHttp, registryClient } from "../src/registry/registry-http.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { authorRegistry } from "../src/registry/author-sync.js";
 import { TestClock } from "effect/testing";
-import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
+import { makeAuthorSyncWorld } from "../src/platform/author-sync-fixture/world.js";
 import { registryCredentialLayer } from "./helpers/registry-credential.js";
 import { testHttpClientLayer } from "./helpers/http-test-client.js";
 import { inspectLibrarySource } from "../src/library/source.js";
@@ -112,7 +116,9 @@ it.effect(
         assert.strictEqual(preview.length, 1);
         assert.strictEqual(preview[0]!.changed, true);
         assert.deepStrictEqual(preview[0]!.updated, ["explain"]);
-        assert.include(preview[0]!.messages?.join("\n") ?? "", "review");
+        assert.isTrue(
+          preview[0]!.issues?.some((issue) => "skill" in issue && issue.skill === "review"),
+        );
         assert.isUndefined(preview[0]!.available_snapshot_digest);
         yield* assertDiskUnchanged(disk);
         const elsewhere = yield* Library.Service.pipe(
@@ -136,8 +142,23 @@ it.effect(
         if ("status" in result) return assert.fail(JSON.stringify(result));
         assert.strictEqual(result.sync_status, "failed");
         assert.isDefined(result.sync_error);
-        assert.include(renderUpdate(outcomes), "local update completed; Registry sync failed");
-        assert.strictEqual(updateExitCode(outcomes), 1);
+        assert.deepInclude(
+          renderUpdate(sourceUpdateOutput(outcomes)),
+          Block.Status({ tone: "warn", text: ["Local updates complete; Registry sync failed"] }),
+        );
+        assert.deepInclude(
+          renderUpdate(sourceUpdateOutput(outcomes)).flatMap((block) =>
+            block._tag === "Group" ? block.children : [],
+          ),
+          Block.Group({
+            title: "Registry sync failed after the local update",
+            children: commandFailure(result.sync_error!).presentation,
+          }),
+        );
+        assert.strictEqual(
+          resultExitCode(commandResult("update", sourceUpdateOutput(outcomes))),
+          1,
+        );
         const before = yield* library.read;
         yield* library.update(undefined, adapters);
         assert.strictEqual((yield* library.read).revision, before.revision);

@@ -76,7 +76,7 @@ const auditOwnershipClaims = Effect.fn("Audit.ownershipClaims")(function* (
             severity: "error",
             code: "unreadable-library-ledger",
             subject: ledger.path,
-            problem: "SKIT Library state could not be read",
+            reason: { _tag: "LibraryUnreadable" },
             locations: [ledger.path],
             details: { statePath: ledger.path },
           },
@@ -98,9 +98,9 @@ const auditOwnershipClaims = Effect.fn("Audit.ownershipClaims")(function* (
         severity: "error",
         code: "invalid-ownership-marker",
         subject: observation.path,
-        problem: "SKIT ownership marker is invalid",
+        reason: { _tag: "OwnershipMarkerInvalid", reason: inspection.reason },
         locations: [markerPath],
-        details: { markerPath, detail: inspection.detail },
+        details: { markerPath },
       });
       continue;
     }
@@ -118,7 +118,7 @@ const auditOwnershipClaims = Effect.fn("Audit.ownershipClaims")(function* (
       // collection still exists. Keep it out of the TUI's retained-collection grouping.
       observation.provenance = {
         confidence: "matched",
-        source: "SKIT orphan claim",
+        origin: { _tag: "SkitUnrecorded" },
         evidence: markerPath,
         ...(observation.provenance.parentPlugin
           ? { parentPlugin: observation.provenance.parentPlugin }
@@ -131,7 +131,7 @@ const auditOwnershipClaims = Effect.fn("Audit.ownershipClaims")(function* (
         severity: "error",
         code: "orphaned-projection-claim",
         subject: observation.path,
-        problem: "Installed skill claims SKIT ownership, but its Library entry is missing",
+        reason: { _tag: "LibrarySkillMissing" },
         locations: [observation.path, markerPath],
         details: {
           markerPath,
@@ -205,7 +205,7 @@ export const auditLocalCapabilities = Effect.fn("Audit.capabilities")(function* 
         severity: "warning",
         code: "advertised-mcp-not-configured",
         subject: server,
-        problem: `Rules reference MCP server “${server}”, but no supported registration was found`,
+        reason: { _tag: "McpRegistrationMissing", server },
         locations: [...paths],
         details: { server, advertisingPaths: [...paths] },
       });
@@ -226,7 +226,10 @@ export const auditLocalCapabilities = Effect.fn("Audit.capabilities")(function* 
         id: profile.id,
         profileId: profile.profile.id,
         version: profile.profile.version,
-        frontmatterContracts: profile.frontmatter.map((contract) => contract.id),
+        frontmatterContracts: [
+          profile.frontmatter.default,
+          ...Object.values(profile.frontmatter.variants),
+        ].map((contract) => contract.id),
         skillMetadataContracts: (profile.skillMetadata ?? []).map((contract) => contract.id),
         documentation: profile.documentation,
       })),
@@ -249,7 +252,7 @@ export const auditLocalCapabilities = Effect.fn("Audit.capabilities")(function* 
 });
 
 /**
- * The audit the CLI runs.
+ * The versioned audit snapshot for frontend consumers.
  *
  * Its declared subprocesses execute through the process service on this fiber — interrupting the
  * command kills them — and the synchronous observation then folds their results into the report.

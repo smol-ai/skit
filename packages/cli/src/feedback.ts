@@ -1,3 +1,4 @@
+import { defineCommand } from "./commands/definition.js";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 
@@ -16,7 +17,7 @@ const text = Argument.String("message").pipe(
   Argument.optional,
 );
 
-export const feedbackSendCliCommand = Command.make(
+export const feedbackSendCliCommand = defineCommand(
   "send",
   {
     text,
@@ -80,7 +81,6 @@ export const feedbackSendCliCommand = Command.make(
       subprocesses: credentialStoreReadSubprocesses,
     },
     outputSchemas: [outputContracts.feedbackSend],
-    exitCodes: [0, 1, 13, 64],
     interactive: false,
   }),
 );

@@ -1,4 +1,5 @@
-import { Option, Schema } from "effect";
+import { Option, Result, Schema } from "effect";
+import { SchemaFailure } from "../src/shared/schema-issue.js";
 import { expect, test } from "vitest";
 import {
   ModelContextCatalog,
@@ -6,6 +7,27 @@ import {
   modelContextWindow,
   modelMaxContextWindow,
 } from "../src/harnesses/model-context-windows.js";
+
+test.each([
+  {
+    models: [{ ...modelContextCatalog.models[0], maxContextWindow: 499_999 }],
+    id: "skit/schema/model-context-bounds",
+  },
+  {
+    models: [modelContextCatalog.models[0], modelContextCatalog.models[0]],
+    id: "skit/schema/model-identifiers-unique",
+  },
+])("invalid catalog relationships store constraint facts: $id", ({ models, id }) => {
+  const result = Schema.decodeResult(ModelContextCatalog)({ ...modelContextCatalog, models });
+  if (!Result.isFailure(result)) throw new Error("Invalid model catalog accepted");
+  const facts = Schema.encodeSync(SchemaFailure)(result.failure);
+  expect(facts.issues).toContainEqual(
+    expect.objectContaining({
+      reason: { _tag: "InvalidValue", check: { id, payload: null } },
+    }),
+  );
+  expect(JSON.stringify(facts)).not.toContain('"message"');
+});
 
 test("bundled catalog resolves known models without native configuration or cache", () => {
   expect(Option.getOrNull(modelContextWindow("openai", "gpt-6.1-sol"))).toBe(500_000);

@@ -1,3 +1,4 @@
+import type { DiscoveryRestoreConflict } from "./machine-settings-conflicts.js";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { hostname } from "node:os";
 import { join, resolve } from "node:path";
@@ -6,12 +7,14 @@ import { hashParts } from "../artifact/descriptor.js";
 import { Hash } from "../shared/hash.js";
 import { canonicalJson } from "../shared/json.js";
 import { LibraryChanged } from "./failures.js";
-import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
+import { Unusable, SetupNotRecorded } from "./machine-settings-failures.js";
+export { Unusable } from "./machine-settings-failures.js";
 import { makeMachineId, type OperationId } from "./entity-ids.js";
 import {
   currentMachineDocument,
   emptyMachineDocument,
-  MachineDocumentJson,
+  MachineDocument,
+  supportedMachineDocumentVersions,
   MachineDocumentV6,
   CurrentMachineDocument,
   type DiscoveryEvidence,
@@ -22,25 +25,6 @@ import { withLibraryStateReplacement } from "./store/writer-lock.js";
 
 /** Current settings, without exposing the persisted document version. */
 export type Settings = Omit<CurrentMachineDocument, "schemaVersion"> & { readonly path: string };
-
-export class Unusable
-  extends Schema.TaggedError<Unusable, { readonly brand: unique symbol }>()(
-    "MachineSettingsUnusable",
-    {
-      path: Schema.String,
-    },
-  )
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  get remediation(): string {
-    return `Correct or move aside ${this.path}, then run \`skit setup\` again.`;
-  }
-  get message(): string {
-    return `SKIT machine configuration is invalid: ${this.path}`;
-  }
-}
 
 /** The caller may retain typed inverse evidence while this owner still holds publication authority. */
 export type BeforeSave<E = never, R = never> = (
@@ -61,15 +45,29 @@ export const read = Effect.fn("MachineSettings.read")(function* (home: string) {
     .readFileString(path)
     .pipe(
       Effect.catchTag("PlatformError", (error) =>
-        error.reason._tag === "NotFound" ? Effect.undefined : Effect.fail(new Unusable({ path })),
+        error.reason._tag === "NotFound"
+          ? Effect.undefined
+          : Effect.fail(new Unusable({ path, reason: { _tag: "ReadFailed", failure: error } })),
       ),
     );
-  const document =
-    text === undefined
-      ? emptyMachineDocument()
-      : yield* Schema.decodeEffect(MachineDocumentJson)(text).pipe(
-          Effect.mapError(() => new Unusable({ path })),
-        );
+  if (text === undefined) return settingsAt(path, emptyMachineDocument());
+  const invalid = (failure: Schema.SchemaError) =>
+    new Unusable({ path, reason: { _tag: "InvalidData", failure } });
+  const input = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
+    Effect.mapError(invalid),
+  );
+  const supported = supportedMachineDocumentVersions;
+  if (
+    Schema.is(Schema.Struct({ schemaVersion: Schema.Int }))(input) &&
+    !supported.includes(input.schemaVersion)
+  )
+    return yield* new Unusable({
+      path,
+      reason: { _tag: "UnsupportedVersion", version: input.schemaVersion, supported },
+    });
+  const document = yield* Schema.decodeUnknownEffect(MachineDocument)(input).pipe(
+    Effect.mapError(invalid),
+  );
   return settingsAt(path, document);
 });
 
@@ -129,7 +127,15 @@ const mutate = Effect.fn("MachineSettings.mutate")(function* <E = never, R = nev
                   },
                 ],
         }),
-      ).pipe(Effect.mapError(() => new Unusable({ path: prior.path })));
+      ).pipe(
+        Effect.mapError(
+          (failure) =>
+            new Unusable({
+              path: prior.path,
+              reason: { _tag: "InvalidData", failure: new Schema.SchemaError(failure) },
+            }),
+        ),
+      );
       if (beforeSave)
         yield* beforeSave(
           structuredClone(prior),
@@ -262,24 +268,6 @@ export const setupRecord = Effect.fn("MachineSettings.setupRecord")(function* (
 });
 
 /** No record of the setup to undo: it saved no discovery folders, or a later setup has since. */
-class SetupNotRecorded
-  extends Schema.TaggedError<SetupNotRecorded, { readonly brand: unique symbol }>()(
-    "MachineSettings.SetupNotRecorded",
-    {
-      path: Schema.String,
-      operationId: Schema.String,
-    },
-  )
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "NOT_FOUND" as const;
-  readonly remediation = "Review the discovery folders in a new setup.";
-  get message(): string {
-    return `No discovery folders are recorded for setup ${this.operationId} in ${this.path}`;
-  }
-}
-
 /**
  * Put back the discovery folders the setup `operationId` replaced. Refuses with `LibraryChanged`
  * unless they and this machine's identity are still what that setup saved. Never touches the
@@ -311,7 +299,7 @@ export interface DiscoveryRestorePlan {
   readonly planId: Hash;
   readonly before: Settings;
   readonly after: Settings;
-  readonly conflicts: readonly string[];
+  readonly conflicts: readonly DiscoveryRestoreConflict[];
   readonly changed: boolean;
   readonly recorded: boolean;
 }
@@ -325,13 +313,13 @@ export const planRestoreDiscovery = Effect.fn("MachineSettings.planRestoreDiscov
   const completed = before.undoneSetups.includes(operationId);
   const record = before.setups.find((saved) => saved.operationId === operationId);
   let after = before;
-  let conflicts: readonly string[] = [];
+  let conflicts: readonly DiscoveryRestoreConflict[] = [];
   if (!completed && record !== undefined) {
     if (before.machineId !== record.expectedAfter.machineId)
-      conflicts = ["Setup belongs to a different machine identity"];
+      conflicts = [{ _tag: "MachineChanged" }];
     else if (!equal(before.discoveryRoots, record.before.discoveryRoots)) {
       if (!equal(before.discoveryRoots, record.expectedAfter.discoveryRoots))
-        conflicts = ["Discovery folders changed after setup"];
+        conflicts = [{ _tag: "DiscoveryFoldersChanged" }];
       else after = { ...before, discoveryRoots: [...record.before.discoveryRoots] };
     }
   }

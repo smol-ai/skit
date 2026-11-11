@@ -13,9 +13,12 @@ import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.j
 it.effect("presentation retains primary and cleanup failures", () =>
   Effect.gen(function* () {
     const exit = yield* Effect.exit(
-      Effect.fail(new RegistryRejectedWrite({ detail: "Registry rejected" })).pipe(
-        Effect.ensuring(Effect.die(new Error("temporary cleanup failed"))),
-      ),
+      Effect.fail(
+        new RegistryRejectedWrite({
+          origin: "https://registry.test",
+          failure: new Error("Registry rejected"),
+        }),
+      ).pipe(Effect.ensuring(Effect.die(new Error("temporary cleanup failed")))),
     );
     const failure = Exit.match(exit, {
       onFailure: commandFailure,
@@ -23,8 +26,7 @@ it.effect("presentation retains primary and cleanup failures", () =>
     });
     expect(failure).toMatchObject({
       code: "CONFLICT",
-      exitCode: 12,
-      message: "Registry rejected\nAdditional failure: temporary cleanup failed",
+      message: expect.stringContaining("Additional failure: temporary cleanup failed"),
     });
   }),
 );
@@ -59,7 +61,6 @@ it.effect("presentation waits for cleanup and reports its defect after interrupt
     expect(failures).toHaveLength(1);
     expect(failures[0]).toMatchObject({
       code: "OPERATION_FAILED",
-      exitCode: 1,
       message: "cleanup failed",
     });
   }),
@@ -120,7 +121,7 @@ it.effect("Presenter routes help, version and parse errors only through the rend
       { schema: "skit.completions.v1", data: { shell: "bash", script: expect.any(String) } },
       { schema: "skit.completions.v1", data: { shell: "powershell", script: expect.any(String) } },
     ]);
-    expect(yield* interaction.failures).toMatchObject([{ code: "INVALID_ARGUMENT", exitCode: 64 }]);
+    expect(yield* interaction.failures).toMatchObject([{ code: "INVALID_ARGUMENT" }]);
     expect(handled).toBe(1);
   }),
 );

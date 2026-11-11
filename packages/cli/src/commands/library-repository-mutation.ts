@@ -1,3 +1,4 @@
+import { defineCommand } from "./definition.js";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Effect } from "effect";
 import { Argument, Command } from "effect/cli";
@@ -10,12 +11,14 @@ import { Renderer } from "../terminal/renderer.js";
 import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { encodeResult as result } from "./encode-result.js";
 
-const path = Argument.String("path");
+const path = Argument.String("path").pipe(
+  Argument.withDescription("Repository directory to watch, ignore, or forget."),
+);
 
 const flags = { json: jsonFlag };
 
 export const makeRepositoryCommand = (name: "watch" | "ignore" | "forget") =>
-  Command.make(name, { path, ...flags }, (input) =>
+  defineCommand(name, { path, ...flags }, (input) =>
     Effect.gen(function* () {
       const paths = yield* SkitConfiguration;
 
@@ -46,7 +49,6 @@ export const makeRepositoryCommand = (name: "watch" | "ignore" | "forget") =>
     Command.annotate(CommandMetadata, {
       effects: { capabilities: ["filesystem.read", "filesystem.write"] },
       outputSchemas: [repositoryOutputContracts.repositoryPolicy],
-      exitCodes: [0, 12, 64],
       interactive: false,
     }),
   );

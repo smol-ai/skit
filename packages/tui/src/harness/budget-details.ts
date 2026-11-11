@@ -1,3 +1,4 @@
+import { listingUnavailable } from "./listing-failures";
 import { fg, StyledText } from "@opentui/core";
 import { ink, tone } from "../shell/theme";
 import type { ListingBudget } from "@smolai/skit-core/harnesses";
@@ -6,7 +7,10 @@ const amount = (value: number) => value.toLocaleString("en-US");
 
 export function budgetDetails(budget: ListingBudget): StyledText {
   if (budget._tag === "Unavailable")
-    return new StyledText([fg(tone.warning)("Unavailable\n"), fg(ink.muted)(budget.detail)]);
+    return new StyledText([
+      fg(tone.warning)("Unavailable\n"),
+      fg(ink.muted)(listingUnavailable(budget.reason)),
+    ]);
   const unit = budget.unit === "characters" ? "characters" : "budget tokens";
   if (budget._tag === "DemandOnly")
     return new StyledText([

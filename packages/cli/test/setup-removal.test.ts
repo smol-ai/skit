@@ -21,6 +21,20 @@ import {
 
 import * as Library from "@smolai/skit-core/library";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
+import { Block } from "../src/terminal/blocks.js";
+/** The rows of the confirm step's table under `title`, each cell as its text. */
+const planRows = (body: readonly Block[] | undefined, title: string) =>
+  body === undefined
+    ? []
+    : body
+        .filter(Block.$is("Group"))
+        .filter((group) => group.title === title)
+        .flatMap((group) => group.children.filter(Block.$is("Table")))
+        .flatMap((table) =>
+          table.rows.map((row) =>
+            row.map((cell) => cell.filter((part) => typeof part === "string").join("")),
+          ),
+        );
 
 const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -130,9 +144,10 @@ it.effect(
       const plan = (yield* interaction.steps).find(
         (step) => step.title === setupStepTitles.confirm,
       )!.body;
-      expect(plan).toContain(`copied | ${f.copy}`);
-      expect(plan).toContain(`linked | ${f.link} (symlink only; source stays)`);
-      expect(plan).not.toContain(`linked | ${f.source}`);
+      const removals = planRows(plan, "Remove installed copies (2)");
+      expect(removals).toContainEqual(["copied", f.copy, "move directory to recovery"]);
+      expect(removals).toContainEqual(["linked", f.link, "symlink only; source stays"]);
+      expect(removals.some((row) => row.includes(f.source))).toBe(false);
       expect(yield* f.fs.exists(f.copy)).toBe(false);
       expect(yield* f.fs.exists(f.link)).toBe(false);
       expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain("Original contents");
@@ -283,7 +298,8 @@ it.effect("removing one duplicate row preserves the independent copy in another 
     const plan = (yield* interaction.steps).find(
       (step) => step.title === setupStepTitles.confirm,
     )!.body;
-    expect(plan).toContain("Remove installed copies: 1");
-    expect(plan).not.toContain(`copied | ${otherCopy}`);
+    const removals = planRows(plan, "Remove installed copies (1)");
+    expect(removals).toHaveLength(1);
+    expect(removals.some((row) => row.includes(otherCopy))).toBe(false);
   }).pipe(Effect.provide(skitLayer)),
 );

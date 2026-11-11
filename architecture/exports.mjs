@@ -1,5 +1,6 @@
 /** Core package subpaths and source files used by Oxlint import rules. */
 export const coreExports = {
+  "./sync/failures": { source: "packages/skit/src/sync/failures.ts" },
   "./platform/home-lock": { source: "packages/skit/src/platform/home-lock.ts" },
   "./machine-settings": { source: "packages/skit/src/library/machine-settings.ts" },
   "./library/source": { source: "packages/skit/src/library/source.ts" },
@@ -18,10 +19,47 @@ export const coreExports = {
   "./library/sync": { source: "packages/skit/src/library/sync.ts" },
   "./library/recovery": { source: "packages/skit/src/library/recovery.ts" },
   "./library/session": { source: "packages/skit/src/library/session.ts" },
+  "./author/workspace-contracts": { source: "packages/skit/src/author/workspace-contracts.ts" },
+  "./author/failures": { source: "packages/skit/src/author/failures.ts" },
   "./author": { source: "packages/skit/src/author/index.ts" },
   "./harnesses": { source: "packages/skit/src/harnesses/index.ts" },
   "./audit": { source: "packages/skit/src/auditing/index.ts" },
   "./universal/consumer": { source: "packages/skit/src/universal-consumer.ts" },
   "./universal/authoring": { source: "packages/skit/src/universal-authoring.ts" },
   "./api": { source: "packages/skit/src/api/index.ts" },
+  "./author/history-failures": { source: "packages/skit/src/author/history-failures.ts" },
+  "./sync": { source: "packages/skit/src/sync/sync.ts" },
+  "./machine-settings/failures": {
+    source: "packages/skit/src/library/machine-settings-failures.ts",
+  },
+  "./library/setup/failures": { source: "packages/skit/src/library/setup-failures.ts" },
+  "./library/usage/contracts": { source: "packages/skit/src/library/usage/contracts.ts" },
+  "./library/source/failures": { source: "packages/skit/src/sources/fetch-failures.ts" },
+  "./library/source-restore/failures": {
+    source: "packages/skit/src/library/source-restore-failures.ts",
+  },
+  "./harnesses/probe-failures": { source: "packages/skit/src/harnesses/probe-failures.ts" },
+  "./auditing/probe-failures": { source: "packages/skit/src/auditing/probe-failures.ts" },
+  "./library/source/plugin-failures": { source: "packages/skit/src/sources/plugin-failures.ts" },
+  "./library/source/installer": { source: "packages/skit/src/sources/installer-guidance.ts" },
+  "./installed-skills/pnpm-failures": {
+    source: "packages/skit/src/installed-skills/pnpm-failures.ts",
+  },
+  "./library/import/failures": { source: "packages/skit/src/library/import-failures.ts" },
+  "./library/update/failures": { source: "packages/skit/src/library/update-failures.ts" },
+  "./library/restore/failures": { source: "packages/skit/src/library/restore-failures.ts" },
+  "./library/audit/failures": { source: "packages/skit/src/library/audit/failures.ts" },
+  "./library/sync/failures": { source: "packages/skit/src/library/sync-input-failures.ts" },
+  "./harnesses/discovery-failures": { source: "packages/skit/src/harnesses/discovery-failures.ts" },
+  "./harnesses/listing-contracts": {
+    source: "packages/skit/src/harnesses/skill-listing/contracts.ts",
+  },
+  "./harnesses/discovery-contracts": {
+    source: "packages/skit/src/harnesses/discovery-contracts.ts",
+  },
+  "./library/recorded-failures": { source: "packages/skit/src/library/recorded-failures.ts" },
+  "./library/manifest-violation": { source: "packages/skit/src/library/manifest-violation.ts" },
+  "./library/local-state-violation": {
+    source: "packages/skit/src/library/local-state-violation.ts",
+  },
 };

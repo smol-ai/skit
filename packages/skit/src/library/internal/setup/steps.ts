@@ -1,3 +1,4 @@
+import type { SetupWarning, SetupWarningReason } from "../../setup-warning.js";
 // Setup's Manage and Update steps. Each routes by the routing recorded in its step, never by this
 // machine's configuration, so a re-run after a crash installs exactly where the first run did.
 
@@ -10,7 +11,7 @@ import { LinkStat } from "../../../platform/link-stat.js";
 import { InstallScope } from "../../scope.js";
 import type { OperationScope } from "../operations/operations.js";
 import { routedInstalledSkills, destinationsIn, readableIn } from "../../routing/recorded.js";
-import { InvalidIntent } from "../../enabled-plan.js";
+import { InvalidLibraryState, ManageSelectionInvalid } from "../../failures.js";
 import type { CollectionId, OperationId } from "../../entity-ids.js";
 import { absentUnder, holdsEvidence, parentIsAsRecorded } from "../../folder-evidence.js";
 import { importCollection } from "../../import-collection.js";
@@ -25,7 +26,7 @@ import { setEnabledResults, type SetEnabledResult } from "../session/set-enabled
 import { incompleteManageWarning, planManage } from "../../manage-plan.js";
 import { planIntent } from "../../plan-changes.js";
 import { moveAside, recoveryDirectory } from "./moves.js";
-import { loadLibrary } from "../../store/library-store.js";
+import { libraryStatePath, loadLibrary } from "../../store/library-store.js";
 import type {
   FolderEvidence,
   LinkEvidence,
@@ -44,7 +45,7 @@ import { resolveLibrarySubject } from "../../subject-resolution.js";
 export interface ManageResult {
   readonly _tag: "Manage";
   readonly results: readonly SetEnabledResult[];
-  readonly warnings: readonly { readonly name: string; readonly message: string }[];
+  readonly warnings: readonly SetupWarning[];
   readonly recoveryDirectories: readonly string[];
 }
 
@@ -219,7 +220,7 @@ const enable = Effect.fn("Library.setup.enable")(function* (
   // Setup keeps the managed copy while other differing copies stay where agents read them.
   const warning = incompleteManageWarning(selection.name, {
     reason: outcome.reason,
-    message: outcome.cause.message,
+    failure: outcome.cause,
   });
   if (Option.isNone(warning)) return yield* outcome.cause;
   return { results: setEnabledResults(outcome), warnings: [warning.value] };
@@ -265,9 +266,7 @@ const replacementMissing = Effect.fn("Library.setup.replacementMissing")(functio
     );
     const installedPaths = yield* Effect.forEach(candidates, (copy) => canonical(copy.path));
     if (!(yield* fs.exists(join(path, "SKILL.md"))) || !installedPaths.includes(expectedPath))
-      return Option.some(
-        `Bound ${name}; existing copies were left in place because the replacement at ${path} is not installed. Run skit doctor to inspect the conflict.`,
-      );
+      return Option.some<SetupWarningReason>({ _tag: "ReplacementMissing", path });
     const installed = candidates.find((candidate) => candidate.path === path);
     const ownership = installed ? yield* inspectInstalledSkill(installed) : undefined;
     if (
@@ -278,27 +277,26 @@ const replacementMissing = Effect.fn("Library.setup.replacementMissing")(functio
       ownership.marker.skill_version_id !== installed.skill_version_id ||
       (yield* links.lstat(path)).type !== "Directory"
     )
-      return Option.some(
-        `Bound ${name}; existing copies remain because the replacement at ${path} changed before preservation.`,
-      );
+      return Option.some<SetupWarningReason>({ _tag: "ReplacementChanged", path });
   }
-  if (!required)
-    return Option.some(
-      `Bound ${name}; existing copies were left in place because no active replacement is readable by their harness. Run skit doctor to inspect the conflict.`,
-    );
-  return Option.none<string>();
+  if (!required) return Option.some<SetupWarningReason>({ _tag: "ReplacementUnreadable" });
+  return Option.none<SetupWarningReason>();
 });
 
 /** The Collection that the Import step `step` saved, as its Done write recorded it. */
 const importedCollection = Effect.fn("Library.setup.importedCollection")(function* (
   steps: readonly RecordedSetupStep[],
   step: number,
+  home: string,
 ) {
   const [collectionId] = (steps[step]?.after ?? []).flatMap((evidence) =>
     evidence._tag === "Retained" ? [evidence.collectionId] : [],
   );
   if (collectionId === undefined)
-    return yield* new InvalidIntent({ detail: `Setup step ${step + 1} imported no Collection` });
+    return yield* new InvalidLibraryState({
+      path: libraryStatePath(home),
+      reason: { _tag: "MissingRecord", record: "imported-collection", at: String(step + 1) },
+    });
   return collectionId;
 });
 
@@ -306,6 +304,7 @@ const importedCollection = Effect.fn("Library.setup.importedCollection")(functio
 const sourceCollection = Effect.fn("Library.setup.sourceCollection")(function* (
   selection: ManageNewSelection,
   steps: readonly RecordedSetupStep[],
+  home: string,
 ) {
   switch (selection.importFrom._tag) {
     case "Import":
@@ -314,7 +313,7 @@ const sourceCollection = Effect.fn("Library.setup.sourceCollection")(function* (
     case "Collection":
       return selection.importFrom.collectionId;
     case "Step":
-      return yield* importedCollection(steps, selection.importFrom.step);
+      return yield* importedCollection(steps, selection.importFrom.step, home);
   }
 });
 
@@ -333,7 +332,7 @@ export const runManage = Effect.fn("Library.setup.manage")(function* (
   const { home } = scope;
   const files = yield* routedInstalledSkills(step.routing);
   const results: SetEnabledResult[] = [];
-  const warnings: { readonly name: string; readonly message: string }[] = [];
+  const warnings: SetupWarning[] = [];
   const recoveryDirectories: string[] = [];
   const after: StepEvidence[] = [];
   const selections: readonly (ManageExistingSelection | ManageNewSelection)[] = step.selections;
@@ -346,7 +345,7 @@ export const runManage = Effect.fn("Library.setup.manage")(function* (
       subjectId = selection.subjectId;
       manage = { path: selection.source.path, equalPaths: [], currentHash: selection.currentHash };
     } else {
-      const collectionId: CollectionId = yield* sourceCollection(selection, steps);
+      const collectionId: CollectionId = yield* sourceCollection(selection, steps, home);
       if (policy === "retain-only" || Option.isNone(selection.ownership)) continue;
       subjectId = collectionId;
       for (const copy of selection.equalCopies)
@@ -385,12 +384,14 @@ export const runManage = Effect.fn("Library.setup.manage")(function* (
           plan.targets.some((target) => target.status === "adoptable") &&
           Option.isNone(ownership.machineId)
         )
-          return yield* new InvalidIntent({
-            detail: `Managing ${selection.name} needs this machine's identity`,
+          return yield* new ManageSelectionInvalid({
+            skillName: selection.name,
+            reason: "machine-identity-missing",
           });
         if (!plan.applicable || plan.sourcePath === undefined || plan.skill === undefined)
-          return yield* new InvalidIntent({
-            detail: `${selection.name} cannot be managed as it is`,
+          return yield* new ManageSelectionInvalid({
+            skillName: selection.name,
+            reason: "candidate-not-manageable",
           });
         manage = { ...manage, path: plan.sourcePath, currentHash: plan.skill.validationHash };
       }
@@ -409,7 +410,7 @@ export const runManage = Effect.fn("Library.setup.manage")(function* (
       moving,
     );
     if (Option.isSome(missing)) {
-      warnings.push({ name: selection.name, message: missing.value });
+      warnings.push({ name: selection.name, reason: missing.value });
       continue;
     }
     const moved = yield* moveAside(

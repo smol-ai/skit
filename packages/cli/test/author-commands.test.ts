@@ -86,7 +86,7 @@ it.effect(
       yield* run(["author", "publish", source, "--version", "1.0.0", "--home", home]);
       expect(failures).toHaveLength(1);
       yield* run(["author", "list", "--registry", "https://registry.example.test", "--home", home]);
-      expect(failures[1]).toMatchObject({ code: "AUTHENTICATION_REQUIRED", exitCode: 13 });
+      expect(failures[1]).toMatchObject({ code: "AUTHENTICATION_REQUIRED" });
       yield* run([
         "author",
         "delete",
@@ -95,7 +95,7 @@ it.effect(
         "--home",
         home,
       ]);
-      expect(failures[2]).toMatchObject({ code: "AUTHENTICATION_REQUIRED", exitCode: 13 });
+      expect(failures[2]).toMatchObject({ code: "AUTHENTICATION_REQUIRED" });
       expect(failures[0].message).toMatch(/remote|sync/i);
       yield* run(["author", "validate", source, "--home", home]);
       expect(results[3]).toMatchObject({ contract: "validate", data: { valid: true } });

@@ -1,3 +1,29 @@
+import { PnpmSkillManaged } from "../src/installed-skills/pnpm-failures.js";
+import { PluginManifestInvalid } from "../src/sources/plugin-failures.js";
+import { DedicatedInstallerRequired } from "../src/sources/installer-guidance.js";
+import { ImportRequestInvalid } from "../src/library/import-failures.js";
+import {
+  CollectionNotUpdatable,
+  ReviewedChangeDiffers,
+  GitInspectionFailed,
+} from "../src/library/update-failures.js";
+import {
+  AuthorWorkspaceBusy,
+  AuthorWorkspaceUnsafe,
+  AuthorWorkspaceConflict,
+  AuthorSyncStateInvalid,
+  WorkspaceRoot,
+} from "../src/author/workspace-contracts.js";
+import { AuthorWorkspaceAlreadyRegistered, PublicationBlocked } from "../src/author/failures.js";
+import { CollectionVersionArchiveInvalid } from "../src/library/snapshot-archive-universal.js";
+import { SetEnabledIncomplete } from "../src/library/internal/session/set-enabled-contract.js";
+import { InvocationUnavailable } from "../src/library/invocation-failure.js";
+import { DescriptorMalformed } from "../src/artifact/failures.js";
+import { HarnessMetadataInvalid } from "../src/harnesses/metadata-failures.js";
+import {
+  CollectionRemovalMissing,
+  SkillRemovalRequiresCollection,
+} from "../src/library/installation/remove.js";
 import { openLibrary } from "./helpers/library-store.js";
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Option, Predicate, Result, Schema } from "effect";
@@ -13,9 +39,47 @@ import {
 import { recordedLibrary } from "../src/library/internal/setup/intent.js";
 import { readSnapshotArchive } from "../src/library/snapshot-archive.js";
 import { OperationStatus, StepError } from "../src/library/store/state-schema.js";
-import { InvalidLibraryState, LibraryChanged } from "../src/library/failures.js";
+import {
+  ImportContentInvalid,
+  AddNoSkills,
+  SetupImportInvalid,
+  LibrarySubjectNotFound,
+  LibrarySubjectAmbiguous,
+  SharedMappingInvalid,
+  AcceptanceIncomplete,
+  ContentAddressCollision,
+  SecurityFindingAbsent,
+  UnknownInstalledSkill,
+  InvalidLibraryState,
+  LibraryChanged,
+  ManageSelectionInvalid,
+  SetupStepsInvalid,
+} from "../src/library/failures.js";
 import { HomeBusy } from "../src/platform/lock-failures.js";
+import { InvalidIntent, SetEnabledInvalid } from "../src/library/enabled-plan.js";
+import { SyncConflicted } from "../src/library/internal/sync/conflict.js";
 import { TreeError } from "../src/shared/tree-error.js";
+import { RecoveryInvalid } from "../src/library/store/operation-failures.js";
+import { InstalledSkillFailure } from "../src/installed-skills/files.js";
+import { InstalledSkillInvalid } from "../src/library/installation/install-enabled.js";
+import {
+  StalePlan,
+  InstalledSkillWouldDuplicate,
+  InstalledSkillWouldReplaceLink,
+  DestinationsIncomplete,
+} from "../src/library/plan-failures.js";
+import { Revision } from "../src/library/snapshot.js";
+import { Changed } from "../src/library/installed-skill-facts.js";
+import {
+  UnsafeInstalledSkillName,
+  UninstallConflict,
+  UnsafeInstalledSkillBackups,
+  SharedTargetCollision,
+  InstalledPathCollision,
+  SkillsDirectoryNotWritable,
+  OwnershipMarkerDisagrees,
+  InstalledSkillFileMissing,
+} from "../src/installed-skills/failures.js";
 import { badArgument, systemError } from "effect/PlatformError";
 
 import {
@@ -318,11 +382,217 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { save, home } = yield* library;
+      const nativeSchemaError = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ requestId: Schema.String }),
+      )({ requestId: 42 }).pipe(Effect.flip);
+      const liveDescriptor = new DescriptorMalformed({
+        format: "json",
+        issue: { _tag: "Schema", failure: nativeSchemaError },
+      });
+      const storedDescriptor = new DescriptorMalformed({
+        format: "json",
+        issue: {
+          _tag: "Schema",
+          failure: {
+            _tag: "StoredSchemaFailure",
+            issues: [
+              {
+                path: ["requestId"],
+                reason: { _tag: "InvalidType", expected: [{ type: "String" }] },
+              },
+            ],
+          },
+        },
+      });
       const errors: readonly StepError[] = [
+        liveDescriptor,
+        new AuthorWorkspaceUnsafe({
+          path: "/author/.skit/lock.sqlite",
+          reason: {
+            _tag: "LockFailed",
+            cause: Object.assign(
+              new Error("file is not a database", { cause: new Error("native context") }),
+              { errcode: 26, code: "ERR_SQLITE_ERROR" },
+            ),
+          },
+        }),
+        new AuthorWorkspaceBusy({ root: WorkspaceRoot.make("/author") }),
+        new AuthorSyncStateInvalid({
+          path: "/author/.skit/connection.json",
+          reason: { _tag: "MismatchedRemote", actual: "actual/tools", expected: "expected/tools" },
+        }),
+        new AuthorWorkspaceConflict({
+          root: WorkspaceRoot.make("/author"),
+          found: {
+            root: WorkspaceRoot.make("/author"),
+            identity: Option.none(),
+            connection: { _tag: "Unconnected" },
+          },
+        }),
+        new PublicationBlocked({
+          reason: "content",
+          diagnostics: [
+            {
+              code: "INVOCATION_METADATA_MISMATCH",
+              severity: "error",
+              path: "skills/review/SKILL.md",
+              issue: {
+                skill: "review",
+                harness: "claude-code",
+                path: "skills/review/SKILL.md",
+                field: "disable-model-invocation",
+                policy: "explicit",
+                expected: "explicit",
+              },
+            },
+          ],
+        }),
+        new AuthorWorkspaceAlreadyRegistered({ workspaceId: "workspace", at: "/author/original" }),
+        new CollectionVersionArchiveInvalid({
+          reason: {
+            _tag: "HashMismatch",
+            kind: "archive",
+            expected: `sha256:${"a".repeat(64)}`,
+            actual: `sha256:${"b".repeat(64)}`,
+          },
+        }),
+        new DescriptorMalformed({
+          format: "json",
+          issue: {
+            _tag: "Schema",
+            failure: {
+              _tag: "StoredSchemaFailure",
+              issues: [
+                {
+                  path: ["skills", 0, "path"],
+                  reason: {
+                    _tag: "InvalidValue",
+                    check: { id: "skit/schema/path-relative", payload: null },
+                  },
+                },
+              ],
+            },
+          },
+        }),
+        new SetEnabledIncomplete({
+          results: [],
+          reason: "destinations",
+          failure: new DestinationsIncomplete({ paths: ["/skills/review"] }),
+        }),
+        new InvocationUnavailable({
+          failure: systemError({
+            _tag: "PermissionDenied",
+            module: "FileSystem",
+            method: "readFileString",
+            pathOrDescriptor: "/source/review/SKILL.md",
+          }),
+        }),
+        new DescriptorMalformed({ format: "json", issue: { _tag: "JsonSyntax", offset: 1 } }),
+        new HarnessMetadataInvalid({
+          path: "/skills/review/SKILL.md",
+          kind: "SKILL.md frontmatter",
+        }),
+        new ImportContentInvalid({
+          reason: { _tag: "ContentChanged", kind: "collection", skillName: "review" },
+        }),
+        new AddNoSkills({ source: "/sources/empty" }),
+        new SetupImportInvalid({ skillName: "review", reason: "lock-changed" }),
+        new LibrarySubjectNotFound({ query: "review" }),
+        new LibrarySubjectAmbiguous({ query: "review" }),
+        new SharedMappingInvalid({ target: "../escape" }),
+        new CollectionRemovalMissing({ collection_id: "collection" }),
+        new SkillRemovalRequiresCollection({ skill_id: "skill", collection_id: "collection" }),
+        new StalePlan({
+          reason: { _tag: "InstalledBytesChanged", kind: "reviewed", path: "/skills/review" },
+          expected: Revision.make("present:reviewed"),
+          actual: Revision.make("present:current"),
+        }),
+        new InstalledSkillWouldReplaceLink({ links: ["/skills/review"] }),
+        new InstalledSkillWouldDuplicate({
+          duplicates: [
+            {
+              name: "review",
+              harness: "codex",
+              canonicalPath: "/source/review",
+              aliases: [{ path: "/skills/review", via: "directory" }],
+              documentHash: "hash",
+            },
+          ],
+        }),
+        new DestinationsIncomplete({ paths: ["/skills/review"] }),
+        new Changed({ path: "/skills/review" }),
+        new RecoveryInvalid({
+          reason: {
+            _tag: "OperationStopped",
+            operation: "Restore",
+            operationId: "stopped-restore",
+            reason: {
+              _tag: "EvidenceDiffers",
+              step: 1,
+              path: "/skills/review",
+              expected: {
+                before: Option.some({
+                  _tag: "Directory" as const,
+                  path: "/skills/review",
+                  dev: 1n,
+                  ino: 9007199254740993n,
+                  parent: { path: "/skills", dev: 1n, ino: 9007199254740995n },
+                  contentHash: `sha256:${"a".repeat(64)}`,
+                  treeHash: `sha256:${"b".repeat(64)}`,
+                  marker: Option.none(),
+                }),
+                after: Option.none(),
+              },
+            },
+          },
+        }),
+        new RecoveryInvalid({
+          reason: {
+            _tag: "OperationStopped",
+            operation: "Undo",
+            operationId: "stopped-undo",
+            reason: {
+              _tag: "StepFailed",
+              step: 2,
+              error: new RecoveryInvalid({
+                reason: { _tag: "MissingRecord", record: "undo-file" },
+              }),
+            },
+          },
+        }),
+        new InstalledSkillInvalid({ reason: { _tag: "InputsChanged", skillName: "review" } }),
+        new UninstallConflict({ path: "/skills/review" }),
+        new UnsafeInstalledSkillName({ skillName: "../outside" }),
+        new UnsafeInstalledSkillBackups({ path: "/backup" }),
+        new SharedTargetCollision({ target: "/skills" }),
+        new InstalledPathCollision({ path: "/skills/review", kind: "file-or-directory" }),
+        new SkillsDirectoryNotWritable({ root: "/skills" }),
+        new OwnershipMarkerDisagrees({ skillId: "review", target: "/skills/review" }),
+        new InstalledSkillFileMissing({ path: "/skills/review/SKILL.md" }),
         new TreeError({ reason: { _tag: "UnsupportedEntry", path: "/skills/review/socket" } }),
+        new InstalledSkillFailure({
+          reason: {
+            _tag: "InvalidTree",
+            reason: { _tag: "UnsupportedEntry", path: "/skills/review/socket" },
+          },
+        }),
+        new RecoveryInvalid({
+          reason: {
+            _tag: "InvalidTree",
+            reason: { _tag: "UnsupportedEntry", path: "/recovery/socket" },
+          },
+        }),
+        new InvalidLibraryState({
+          path: "/home/originals",
+          reason: { _tag: "InvalidData", tree: { _tag: "InvalidSymlink", path: "review/link" } },
+        }),
         new HomeBusy({ path: "/home/lock.sqlite" }),
         new LibraryChanged({ path: "/home/state.json" }),
-        new InvalidLibraryState({ path: "/home/state.json", detail: "invalid setup record" }),
+        new AcceptanceIncomplete({ reason: "invalid-expiry" }),
+        new ContentAddressCollision(),
+        new SecurityFindingAbsent({ fingerprint: "sha256:finding" }),
+        new UnknownInstalledSkill({ query: "review" }),
+        new InvalidLibraryState({ path: "/home/state.json", reason: { _tag: "InvalidData" } }),
         systemError({
           _tag: "PermissionDenied",
           module: "FileSystem",
@@ -332,12 +602,41 @@ it.effect(
           pathOrDescriptor: "/skills/review",
         }),
         badArgument({ module: "FileSystem", method: "open", description: "bad flag" }),
-        {
-          _tag: "PnpmSkillManaged",
-          code: "CONFLICT",
-          message: "/skills/review is managed by pnpm (a-package); SKIT leaves it in place.",
-          remediation: "Manage this Skill through pnpm's dependency and permission settings.",
-        },
+        // Failures that carry data and no words keep their facts when stored.
+        new SetEnabledInvalid({ reason: "selection-required" }),
+        new InvalidIntent({ intent: "Sync" }),
+        new ManageSelectionInvalid({ skillName: "review", reason: "machine-identity-missing" }),
+        new SetupStepsInvalid({ reason: "path-in-library-storage", path: "/home/originals" }),
+        new SyncConflicted({
+          conflicts: [
+            {
+              _tag: "InstalledSkillChanged",
+              key: "device:installed:modified-projection",
+              resolution: "local",
+              path: "/skills/review",
+            },
+          ],
+        }),
+        new PnpmSkillManaged({ path: "/skills/review", package: "a-package" }),
+        new PluginManifestInvalid({
+          path: "/source/plugin.json",
+          reason: { _tag: "LinkEscape", root: "/source", target: "/outside" },
+        }),
+        new DedicatedInstallerRequired({
+          sourceCoordinate: "github:pbakaus/impeccable",
+          displayName: "Impeccable",
+          command: "npx impeccable install",
+          documentationUrl: "https://example.invalid/install",
+        }),
+        new ImportRequestInvalid({
+          reason: { _tag: "DuplicateSkillName", name: "review", paths: ["a", "b"] },
+        }),
+        new CollectionNotUpdatable({ subject_id: "collection-review", label: "review" }),
+        new ReviewedChangeDiffers({ path: "/skills/review" }),
+        new GitInspectionFailed({
+          operation: "cat-file",
+          reason: { _tag: "ExitCode", exitCode: 128, stderr: "object missing" },
+        }),
       ];
       const operations = errors.map((error, step) =>
         OperationStatus.cases.Stopped.make({
@@ -376,7 +675,7 @@ it.effect(
             ? fields(operation.reason.error)
             : undefined,
         ),
-        errors.map(fields),
+        errors.map((error) => fields(error === liveDescriptor ? storedDescriptor : error)),
       );
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -419,6 +718,54 @@ it.effect("reads a recorded LibraryBusy failure without rewriting it, and encode
     assert.deepStrictEqual(yield* Schema.encodeEffect(StepError)(operation.reason.error), {
       _tag: "HomeBusy",
       path: "/home/lock.sqlite",
+    });
+    assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), bytes);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("reads historical stored prose without rewriting bytes or inventing failure facts", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-old-step-text-" });
+    const state = emptyLibraryState();
+    const bytes = JSON.stringify({
+      ...state,
+      operations: [
+        {
+          _tag: "Stopped",
+          operationId: makeOperationId(),
+          steps: [],
+          before: recordedLibrary(state),
+          after: recordedLibrary(state),
+          reason: {
+            _tag: "StepFailed",
+            step: 0,
+            error: {
+              _tag: "HistoricalFailure",
+              code: "CONFLICT",
+              message: "historical diagnostic",
+              remediation: "historical guidance",
+            },
+          },
+        },
+      ],
+    });
+    yield* fs.writeFileString(join(home, "state.json"), bytes);
+    const snapshot = yield* (yield* openLibrary(home)).read;
+    assert.strictEqual(snapshot._tag, "Present");
+    if (snapshot._tag !== "Present") return;
+    const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
+      snapshot.state.operations,
+    );
+    const operation = operations[0];
+    if (operation?._tag !== "Stopped" || operation.reason._tag !== "StepFailed")
+      return yield* Effect.die("Missing historical failure");
+    assert.deepStrictEqual(yield* Schema.encodeEffect(StepError)(operation.reason.error), {
+      _tag: "Library.LegacyStepFailure",
+      failureTag: "HistoricalFailure",
+      originalCode: "CONFLICT",
+      diagnostic: "historical diagnostic",
+      originalRemediation: "historical guidance",
     });
     assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), bytes);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),

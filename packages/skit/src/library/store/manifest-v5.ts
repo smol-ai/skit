@@ -243,6 +243,6 @@ export const LibraryManifestFromV5 = LibraryManifestV5.pipe(
         })),
       };
     }),
-    encode: SchemaGetter.forbidden(() => "v5 portable Library manifests are decode-only"),
+    encode: SchemaGetter.forbiddenEncoding,
   }),
 );

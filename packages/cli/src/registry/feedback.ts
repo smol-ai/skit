@@ -1,33 +1,17 @@
-import { Config, Data, Effect, Option } from "effect";
+import { Config, Effect, Option } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
+import { FeedbackNotSent, FeedbackUnconfirmed } from "../feedback/failures.js";
 import { FeedbackApi, FeedbackInput } from "@smolai/skit-core/api";
 import { officialRegistryOrigin, parseOrigin } from "./accounts.js";
-import { registryApiFailure, registryApiFailureMessage } from "./api-client.js";
+import {
+  registryApiFailure,
+  classifyRegistryApiFailure,
+  markRegistryResponseDecoding,
+} from "./api-client.js";
 import { Registry } from "./index.js";
 import { AuthenticationRequired } from "./failures.js";
-import { isRegistryTransportError, RegistryHttp } from "./registry-http.js";
-
-class FeedbackNotSent
-  extends Data.TaggedError("FeedbackNotSent")<{ readonly message: string }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation =
-    "Nothing was sent. Retry the same command; feedback is not saved for later.";
-}
-
-class FeedbackUnconfirmed
-  extends Data.TaggedError("FeedbackUnconfirmed")<{ readonly message: string }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation =
-    "The report may have arrived. Do not send it again; carry on with the task.";
-}
+import { RegistryHttp } from "./registry-http.js";
 
 /**
  * Where feedback goes: SKIT's maintainers, whichever Registry this machine uses. Only
@@ -64,6 +48,7 @@ export const sendFeedback = Effect.fn("Feedback.send")(function* (
 ) {
   const transport = yield* (yield* RegistryHttp).client;
   const client = yield* HttpApiClient.makeWith(FeedbackApi, {
+    transformResponse: markRegistryResponseDecoding,
     httpClient:
       token === undefined
         ? transport
@@ -71,27 +56,37 @@ export const sendFeedback = Effect.fn("Feedback.send")(function* (
     baseUrl: origin,
   });
   return yield* client.feedback.send({ payload: input }).pipe(
-    Effect.mapError((error) =>
-      isRegistryTransportError(error)
-        ? new FeedbackUnconfirmed({ message: `Lost contact with ${origin}: ${error.message}` })
-        : registryApiFailure(error).code === "unauthorized"
-          ? new AuthenticationRequired({ origin })
-          : new FeedbackNotSent({
-              message: registryApiFailureMessage(`Sending feedback to ${origin}`, error),
-            }),
-    ),
+    Effect.mapError((error) => {
+      const classified = classifyRegistryApiFailure(error, [200, 201, 202, 204]);
+      if (classified.kind === "transport")
+        return new FeedbackUnconfirmed({
+          origin,
+          reason: { _tag: "TransportFailed", failure: classified.error },
+        });
+      if (classified.kind === "response_decode")
+        return new FeedbackUnconfirmed({
+          origin,
+          reason: { _tag: "ResponseInvalid", failure: classified.failure },
+        });
+      if (classified.kind === "request_encoding")
+        return new FeedbackNotSent({
+          reason: { _tag: "RequestInvalid", failure: classified.failure },
+        });
+      const failure = registryApiFailure(error);
+      if (failure.code === "unauthorized") return new AuthenticationRequired({ origin });
+      if (failure.status !== undefined && failure.status < 500 && failure.code !== undefined)
+        return new FeedbackNotSent({ reason: { _tag: "Rejected", origin, ...failure } });
+      return new FeedbackUnconfirmed({ origin, reason: { _tag: "ServerError", ...failure } });
+    }),
     Effect.timeoutOrElse({
       duration: "10 seconds",
       orElse: () =>
         Effect.fail(
-          new FeedbackUnconfirmed({ message: `${origin} did not answer within 10 seconds.` }),
+          new FeedbackUnconfirmed({ origin, reason: { _tag: "TimedOut", timeoutMs: 10_000 } }),
         ),
     }),
   );
 });
-
-// Required to name inferred command errors in generated declarations.
-export type { FeedbackNotSent, FeedbackUnconfirmed };
 
 export const submitFeedback = Effect.fn("Registry.submitFeedback")(function* (
   input: FeedbackInput,

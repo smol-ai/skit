@@ -1,5 +1,11 @@
+import {
+  FailureCode,
+  FailureTypeId,
+  isSkitFailure,
+  type SkitFailure,
+} from "../../../shared/failure.js";
 import type { Outcome } from "../../library-plan.js";
-import { failureDetails } from "../../../shared/failure.js";
+import { ApplyFailure } from "../../apply-failure.js";
 import { Enabled } from "../../library-contracts.js";
 import { InstallScope } from "../../scope.js";
 import { InvocationPolicy } from "../../../artifact/invocation-policy.js";
@@ -46,13 +52,7 @@ export const SetEnabledResult = SetEnabledChange.pipe(
       intent: Schema.Literals(["saved", "unchanged"]),
       revision: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
       status: Schema.Literals(["complete", "incomplete"]),
-      failure: Schema.optionalKey(
-        Schema.Struct({
-          code: Schema.String,
-          message: Schema.String,
-          remediation: Schema.String,
-        }),
-      ),
+      failure: Schema.optionalKey(Schema.Struct({ code: FailureCode, cause: ApplyFailure })),
     }),
     /**
      * Every copy of the changed skills at this scope after the change, with its status. A
@@ -69,11 +69,29 @@ export const SetEnabledResult = SetEnabledChange.pipe(
 );
 export type SetEnabledResult = typeof SetEnabledResult.Type;
 
+/** Accepted intent survives a later failure; callers must not mistake this for rejection. */
+export class SetEnabledIncomplete
+  extends Schema.TaggedError<SetEnabledIncomplete, { readonly brand: unique symbol }>()(
+    "Library.SetEnabledIncomplete",
+    {
+      results: Schema.Array(SetEnabledResult),
+      reason: Schema.Literals(["destinations", "update"]),
+      failure: ApplyFailure,
+    },
+  )
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  get code() {
+    return isSkitFailure(this.failure) ? this.failure.code : "OPERATION_FAILED";
+  }
+}
+
 /** One shared result view preserves partial application details for every enable caller. */
 export const setEnabledResults = (outcome: Outcome): SetEnabledResult[] => {
   return outcome.results.map((result): SetEnabledResult => {
     const { _tag, ...change } = result.change;
-    const failure = result.failure === null ? undefined : failureDetails(result.failure);
+    const failure = result.failure === null ? undefined : result.failure;
     return {
       ...change,
       installed_skills: result.installedSkills.map(({ destination, path, status }) => ({
@@ -89,9 +107,8 @@ export const setEnabledResults = (outcome: Outcome): SetEnabledResult[] => {
           ? {}
           : {
               failure: {
-                code: failure.code,
-                message: failure.message,
-                remediation: failure.remediation,
+                code: isSkitFailure(failure) ? failure.code : "OPERATION_FAILED",
+                cause: failure,
               },
             }),
       },

@@ -6,7 +6,7 @@ import { InvalidLibraryState, type ContentAddressCollision } from "../../failure
 import { type HomeBusy } from "../../../platform/lock-failures.js";
 import type { PlatformError } from "effect/PlatformError";
 import type { TreeError } from "../../../shared/tree-error.js";
-import type { SnapshotArchiveInvalid } from "../../snapshot-archive-universal.js";
+import type { CollectionVersionArchiveInvalid } from "../../snapshot-archive-universal.js";
 import { withLock as withHomeLock } from "../../../platform/home-lock.js";
 import { canonicalJson } from "../../../shared/json.js";
 import { sha256Hash, type Hash } from "../../../shared/hash.js";
@@ -67,7 +67,7 @@ export const planContent = Effect.fn("Library.content.plan")(function* (
   })(structuredClone(target)).pipe(
     Effect.mapError(
       () =>
-        new InvalidLibraryState({ path: libraryStatePath(home), detail: "invalid content target" }),
+        new InvalidLibraryState({ path: libraryStatePath(home), reason: { _tag: "InvalidData" } }),
     ),
   );
   return yield* planCollectionVersions(normalizeLibraryManifest(manifest), {
@@ -88,7 +88,12 @@ export const inspectContent = Effect.fn("Library.content.inspect")(function* (
       readCollectionVersion(originalsPath, tree.hash).pipe(
         Effect.flatMap(originalTreeHash),
         Effect.catchTag("TreeError", (error) =>
-          Effect.fail(new InvalidLibraryState({ path, detail: error.message })),
+          Effect.fail(
+            new InvalidLibraryState({
+              path,
+              reason: { _tag: "InvalidData", tree: error.reason },
+            }),
+          ),
         ),
       ),
     );
@@ -111,18 +116,25 @@ export const packContent = Effect.fn("Library.content.pack")(function* (
       readCollectionVersion(originalsPath, tree.hash).pipe(
         Effect.flatMap(readSnapshotArchive),
         Effect.catchTag("TreeError", (error) =>
-          Effect.fail(new InvalidLibraryState({ path, detail: error.message })),
+          Effect.fail(
+            new InvalidLibraryState({
+              path,
+              reason: { _tag: "InvalidData", tree: error.reason },
+            }),
+          ),
         ),
       ),
     );
     if (archive.digest !== tree.hash)
       return yield* new InvalidLibraryState({
         path,
-        detail: `retained bytes changed: ${tree.hash}`,
+        reason: { _tag: "ContentChanged", entry: tree.hash },
       });
     yield* verifySnapshotArchive(archive).pipe(
       Effect.catchTag("Library.SnapshotArchiveInvalid", (error) =>
-        Effect.fail(new InvalidLibraryState({ path, detail: error.message })),
+        Effect.fail(
+          new InvalidLibraryState({ path, reason: { _tag: "ArchiveInvalid", failure: error } }),
+        ),
       ),
     );
     archives.set(archive.digest, archive);
@@ -145,7 +157,14 @@ export const stageContent = Effect.fn("Library.content.stage")(function* <E = ne
   const manifest = normalizeLibraryManifest(
     yield* Schema.decodeEffect(LibraryManifest, { onExcessProperty: "error" })(
       structuredClone(target),
-    ).pipe(Effect.mapError(() => new RestoreInvalid({ detail: "invalid target manifest" }))),
+    ).pipe(
+      Effect.mapError(
+        (failure) =>
+          new RestoreInvalid({
+            reason: { _tag: "StateInvalid", stage: "target-manifest", failure },
+          }),
+      ),
+    ),
   );
   const manifestDigest = yield* sha256Hash(new TextEncoder().encode(canonicalJson(manifest)));
   const plan =
@@ -156,7 +175,7 @@ export const stageContent = Effect.fn("Library.content.stage")(function* <E = ne
         })
       : structuredClone(source.plan);
   const invalid = restorePlanProblem(manifest, plan);
-  if (invalid !== undefined) return yield* new RestoreInvalid({ detail: invalid });
+  if (invalid !== undefined) return yield* new RestoreInvalid({ reason: invalid });
   const unavailable = new Set<Hash>(source.download === undefined ? plan.download : []);
   for (const id of plan.reacquire) {
     if (
@@ -206,7 +225,7 @@ export const stageContent = Effect.fn("Library.content.stage")(function* <E = ne
 export type ContentStageError =
   | RestoreInvalid
   | SourceRestoreInvalid
-  | SnapshotArchiveInvalid
+  | CollectionVersionArchiveInvalid
   | ContentAddressCollision
   | PlatformError
   | TreeError

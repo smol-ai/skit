@@ -1,3 +1,4 @@
+import { Block } from "../terminal/blocks.js";
 import * as Library from "@smolai/skit-core/library";
 import { MissingRequirement } from "../commands/input-failures.js";
 
@@ -21,7 +22,6 @@ import {
 import { Prompter } from "../terminal/prompter.js";
 import { Renderer } from "../terminal/renderer.js";
 import { promptForScope } from "./presentation/scope-prompt.js";
-import { failureExitCodes } from "../commands/failure-classification.js";
 import { encodeResult as result } from "../commands/encode-result.js";
 
 import { largeCollectionWarning, descriptionLoadMessage } from "./presentation/description-size.js";
@@ -54,9 +54,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
 ) {
   if (input.subject === undefined && !input.interactive)
     return yield* new MissingRequirement({
-      command: input.action,
-      requires: "a skill or collection",
-      hint: "`skit list --json` lists them. Add `--global` or `--repo <path>` to choose the scope, and `--all` for a whole collection.",
+      reason: { _tag: "SkillSelection", action: input.action },
     });
   const library = yield* Library.Service;
   const base = yield* library.read;
@@ -89,7 +87,12 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
       )
       .map(withLocation);
     if (enabled.length === 0)
-      return yield* new NothingToSelect({ detail: "No Skills are currently enabled" });
+      return yield* new NothingToSelect({
+        reason: {
+          _tag: "EnabledSkills",
+          ...(input.scope === undefined ? {} : { scope: input.scope }),
+        },
+      });
     const everywhere = [...new Set(enabled.map((target) => target.collectionId))].flatMap(
       (collectionId) => {
         const all = enabled.filter((target) => target.collectionId === collectionId);
@@ -126,7 +129,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
   if (query === undefined) {
     const collections = view.collections.filter((collection) => collection.members.length > 0);
     if (collections.length === 0)
-      return yield* new NothingToSelect({ detail: "The local Library contains no Skills" });
+      return yield* new NothingToSelect({ reason: { _tag: "LibrarySkills" } });
     query = yield* prompter
       .autocomplete("Select a collection", [
         ...collections.map((collection): { value: string; label: string; hint: string } => ({
@@ -226,7 +229,10 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
       .map(withLocation)
       .filter((target) => target.collectionId === collection.id);
     if (!enabled.length) {
-      yield* renderer.note("This collection is not enabled anywhere.", "Nothing to change");
+      yield* renderer.note(
+        [Block.Note({ text: ["This collection is not enabled anywhere."] })],
+        "Nothing to change",
+      );
       return;
     }
     const chosen =
@@ -271,7 +277,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
   const plan = yield* library.planEnabled([intent], { base });
   const outcomes = yield* renderer.withStatus(
     input.dryRun
-      ? "Planning Collection Bindings"
+      ? "Planning what to enable"
       : input.enabled
         ? "Installing skills"
         : "Removing installed skills",
@@ -307,7 +313,8 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
             sameInstallScope(change.scope, outcome.value.scope),
         )!.listingSize,
       );
-      if (warning !== undefined) yield* renderer.note(warning, "Skill listing");
+      if (warning !== undefined)
+        yield* renderer.note([Block.Status({ tone: "warn", text: [warning] })], "Skill listing");
     }
     yield* renderer.result(
       outcome.kind === "plan"
@@ -321,23 +328,9 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
               ...identity,
             })
         : input.enabled
-          ? // Completion is decided by the application; the CLI maps its classification to an exit.
-            result(
-              "enable",
-              enableOutputContracts.enable,
-              { ...outcome.value, ...identity },
-              outcome.value.application.status === "incomplete" && incomplete
-                ? failureExitCodes[incomplete.code]
-                : undefined,
-            )
-          : result(
-              "disable",
-              enableOutputContracts.disable,
-              { ...outcome.value, ...identity },
-              outcome.value.application.status === "incomplete" && incomplete
-                ? failureExitCodes[incomplete.code]
-                : undefined,
-            ),
+          ? // The output boundary reads the application completion facts.
+            result("enable", enableOutputContracts.enable, { ...outcome.value, ...identity })
+          : result("disable", enableOutputContracts.disable, { ...outcome.value, ...identity }),
     );
   }
   // A later scope can refuse before accepting intent. Keep the earlier results and

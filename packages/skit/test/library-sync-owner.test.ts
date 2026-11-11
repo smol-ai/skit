@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Option, Schema } from "effect";
+import { Cause, Effect, FileSystem, Layer, Option, Schema } from "effect";
 import { join } from "node:path";
 import * as Library from "../src/library/library.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
@@ -116,7 +116,7 @@ it.effect(
           { base: snapshot },
         );
         assert.strictEqual(undo.change.status, "conflicted");
-        assert.match(undo.change.conflicts.join("; "), /Sync records support startup recovery/);
+        assert.deepInclude(undo.change.conflicts, { _tag: "UnsupportedOperation", kind: "sync" });
         const clean = yield* library.plan(
           {
             ...portable.intent,
@@ -288,7 +288,10 @@ for (const boundary of ["retired", "retired-edited", "published", "installed", "
           ),
         );
         assert.strictEqual(interrupted._tag, "Failure");
-        assert.isTrue(crashed);
+        assert.isTrue(
+          crashed,
+          interrupted._tag === "Failure" ? Cause.pretty(interrupted.cause) : "Unexpected success",
+        );
         const saved = yield* Schema.decodeUnknownEffect(LibraryState)(
           JSON.parse(yield* fs.readFileString(join(home, "state.json"))),
         );

@@ -500,7 +500,7 @@ it.effect("Space keeps same-name skills from separate repositories selected toge
       git: { status: index === 0 ? "committed" : "untracked", repository: `/work/${repository}` },
       locks: [],
       contentIdentity: {
-        status: "none",
+        status: "hashed",
         currentHash: `sha256:${String(index).repeat(64)}`,
         libraryMatches: [],
       },

@@ -1,25 +1,8 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { Effect, FileSystem, Result, Schema } from "effect";
+import { Effect, FileSystem, Result } from "effect";
 import { SourceProcess } from "../../../platform/source-process.js";
-import { FailureTypeId, type SkitFailure } from "../../../shared/failure.js";
-
-class GitInspectionFailed
-  extends Schema.TaggedError<GitInspectionFailed, { readonly brand: unique symbol }>()(
-    "SkillsSh.GitInspectionFailed",
-    {
-      operation: Schema.String,
-    },
-  )
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Check that git is installed and the repository is readable, then retry.";
-  get message(): string {
-    return `git ${this.operation} failed`;
-  }
-}
+import { GitInspectionFailed } from "../../update-failures.js";
 
 const gitBytes = Effect.fn("SkillsSh.gitBytes")(function* (
   gitDirectory: string | undefined,
@@ -27,10 +10,20 @@ const gitBytes = Effect.fn("SkillsSh.gitBytes")(function* (
 ) {
   const process = yield* SourceProcess;
   const gitArgs = [...(gitDirectory ? [`--git-dir=${gitDirectory}`] : []), ...args];
-  const result = yield* process
-    .output("git", gitArgs)
-    .pipe(Effect.mapError(() => new GitInspectionFailed({ operation: args[0] ?? "git" })));
-  if (result.exitCode !== 0) return yield* new GitInspectionFailed({ operation: args[0] ?? "git" });
+  const result = yield* process.output("git", gitArgs).pipe(
+    Effect.mapError(
+      (failure) =>
+        new GitInspectionFailed({
+          operation: args[0] ?? "git",
+          reason: { _tag: "ProcessFailed", failure },
+        }),
+    ),
+  );
+  if (result.exitCode !== 0)
+    return yield* new GitInspectionFailed({
+      operation: args[0] ?? "git",
+      reason: { _tag: "ExitCode", exitCode: result.exitCode, stderr: result.stderr },
+    });
   return result.stdout;
 });
 
@@ -46,8 +39,19 @@ const gitTree = Effect.fn("SkillsSh.gitTree")(function* (
   commit: string,
   folder: string,
 ) {
-  const result = yield* Effect.result(gitText(gitDirectory, ["rev-parse", `${commit}:${folder}`]));
-  return Result.isSuccess(result) ? result.success.trim() || undefined : undefined;
+  let tree = (yield* gitText(gitDirectory, ["rev-parse", `${commit}^{tree}`])).trim();
+  // Only a successful listing can prove absence. A failed process is not a missing folder.
+  for (const name of folder.split("/").filter((part) => part !== "." && part !== "")) {
+    const records = (yield* gitText(gitDirectory, ["ls-tree", "-z", "--full-tree", tree])).split(
+      "\0",
+    );
+    const entry = records.find((record) => record.slice(record.indexOf("\t") + 1) === name);
+    if (!entry) return undefined;
+    const [, type, object] = entry.slice(0, entry.indexOf("\t")).split(" ");
+    if (type !== "tree" || !object) return undefined;
+    tree = object;
+  }
+  return tree;
 });
 
 const skillsShHashForTree = Effect.fn("SkillsSh.hashGitTree")(function* (
@@ -130,10 +134,16 @@ export const inspectSkillsShGitEvidence = Effect.fn("SkillsSh.inspectGitEvidence
     ensureMirror(join(home, "cache", "skills-sh-sources"), source),
   );
   if (Result.isFailure(mirror))
-    return { _tag: "Unavailable" as const, reason: "could not reach Git source" };
+    return {
+      _tag: "Unavailable" as const,
+      reason: { _tag: "MirrorUnavailable" as const, failure: mirror.failure },
+    };
   const tip = yield* Effect.result(gitText(mirror.success, ["rev-parse", `${ref}^{commit}`]));
   if (Result.isFailure(tip))
-    return { _tag: "Unavailable" as const, reason: `could not resolve ref ${ref}` };
+    return {
+      _tag: "Unavailable" as const,
+      reason: { _tag: "RefUnavailable" as const, ref, failure: tip.failure },
+    };
   const commit = tip.success.trim();
   return {
     _tag: "Ready" as const,

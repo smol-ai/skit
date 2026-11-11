@@ -1,3 +1,10 @@
+import {
+  AuthorHistoryInvalid,
+  AuthorHistoryBusy,
+  AuthorSyncStateConflict,
+  AuthorBackupStateConflict,
+} from "./history-failures.js";
+export { AuthorHistoryInvalid } from "./history-failures.js";
 /**
  * AuthorHistory: the owner of this device's author history (ADR-0027).
  *
@@ -23,7 +30,6 @@ import { Digest, SecureRandom } from "effect/crypto";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { isSqlError } from "effect/sql/SqlError";
 import { AuthorIgnoreRepository } from "../artifact/plain-author-ignore.js";
-import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 import { Hash, sha256Hash } from "../shared/hash.js";
 import * as History from "../history/history.js";
 import { type HomeBusy } from "../platform/lock-failures.js";
@@ -41,9 +47,10 @@ import { AuthorWorkspaceAlreadyRegistered, LocalFilesChangedDuringSync } from ".
 import {
   AuthorSyncStateInvalid,
   AuthorWorkspace,
+  AuthorWorkspaceConflict,
+  type WorkspaceReadError,
   SyncKey,
   WorkspaceId,
-  type AuthorLeaseNotHeld,
   type CreateReceipt,
   type WorkspaceLease,
   type WorkspaceRoot,
@@ -58,102 +65,6 @@ import {
 
 // ── Errors ─────────────────────────────────────────────────────────────────────────────────────
 
-export class AuthorHistoryInvalid
-  extends Schema.TaggedError<AuthorHistoryInvalid, { readonly brand: unique symbol }>()(
-    "AuthorHistoryInvalid",
-    {
-      path: Schema.String,
-      reason: Schema.String,
-    },
-  )
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  get message() {
-    return `Author history at ${this.path} is unusable: ${this.reason}`;
-  }
-  readonly remediation =
-    "Keep the history files and resolve the storage problem before syncing again.";
-}
-
-/** Contention is temporary; it says nothing about the validity of stored history. */
-class AuthorHistoryBusy
-  extends Schema.TaggedError<AuthorHistoryBusy, { readonly brand: unique symbol }>()(
-    "AuthorHistoryBusy",
-    { path: Schema.String },
-  )
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly retryable = true;
-  get message() {
-    return `Author history at ${this.path} is busy with another recording`;
-  }
-  readonly remediation = "Retry after the other recording completes.";
-}
-
-/** The saved checkpoint is no longer the one the step planned from. */
-class AuthorSyncStateConflict
-  extends Schema.TaggedError<AuthorSyncStateConflict, { readonly brand: unique symbol }>()(
-    "AuthorSyncStateConflict",
-    {
-      key: SyncKey,
-      found: Sync.SyncState,
-    },
-  )
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly retryable = true;
-  get message() {
-    return `The sync checkpoint for ${this.key.locator} changed while this sync was running`;
-  }
-  readonly remediation = "Sync again; it plans from the checkpoint saved now.";
-}
-
-/** Another backup pass advanced this workspace's acknowledged observation. */
-class AuthorBackupStateConflict
-  extends Schema.TaggedError<AuthorBackupStateConflict, { readonly brand: unique symbol }>()(
-    "AuthorBackupStateConflict",
-    {
-      key: SyncKey,
-      found: Schema.NullOr(History.RevisionId),
-    },
-  )
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly retryable = true;
-  get message() {
-    return `The backup checkpoint for ${this.key.locator} changed while this backup was running`;
-  }
-  readonly remediation = "Sync again; it resumes from the acknowledged observation.";
-}
-
-/** `from → to` is not a step the sync engine takes (Sync.allowsStep). */
-class AuthorSyncStateIllegal
-  extends Schema.TaggedError<AuthorSyncStateIllegal, { readonly brand: unique symbol }>()(
-    "AuthorSyncStateIllegal",
-    {
-      key: SyncKey,
-      from: Sync.SyncState,
-      to: Sync.SyncState,
-    },
-  )
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  get message() {
-    return `Sync tried to save ${this.to._tag} after ${this.from._tag} for ${this.key.locator}, a step the sync engine never takes`;
-  }
-  readonly remediation = "Report this; the saved checkpoint is unchanged.";
-}
-
 // ── Vocabulary ─────────────────────────────────────────────────────────────────────────────────
 
 /** What refresh saw: the revision that records the workspace's files now, and their tree hash. */
@@ -165,17 +76,27 @@ export interface SavedRevision {
 
 /**
  * Proof that a durable Writing checkpoint names exactly these trees, saved under this lease hold
- * at this revision (A13). Minted only by syncState.prepareWrite; WorkspaceLease.writeTree
- * requires one and uses it up.
+ * at this revision (A13). Kept private inside the operation returned by syncState.prepareWrite.
  */
-const PreparedWrite = Schema.Struct({
+const WriteCheckpoint = Schema.Struct({
   key: SyncKey,
   from: History.TreeHash,
   to: History.TreeHash,
   ownerId: Schema.String,
   revision: Schema.Finite,
-}).pipe(Schema.brand("PreparedWrite"));
-export type PreparedWrite = typeof PreparedWrite.Type;
+}).pipe(Schema.brand("WriteCheckpoint"));
+export type WriteCheckpoint = typeof WriteCheckpoint.Type;
+
+/** A write bound to its saved trees and lease. Callers cannot replace either. */
+interface PreparedWrite {
+  readonly apply: () => Effect.Effect<
+    (typeof Sync.Writing.Type)["next"],
+    | Effect.Error<ReturnType<WorkspaceLease["writeTree"]>>
+    | AuthorSyncStateConflict
+    | HomeBusy
+    | SyncStateError
+  >;
+}
 
 /** <home>/author-sync.json: one checkpoint per workspace and SKIT locator (A5). */
 const AuthorSyncState = Schema.Struct({
@@ -225,7 +146,11 @@ const loadAuthorSyncState = Effect.fn("AuthorHistory.loadSyncState")(function* (
     return { schema: "skit.author-sync.v1", workspaces: {} } satisfies AuthorSyncState;
   return yield* Schema.decodeEffect(AuthorSyncStateDocument)(text.value).pipe(
     Effect.mapError(
-      (error) => new AuthorSyncStateInvalid({ path: syncStatePath, reason: String(error) }),
+      (error) =>
+        new AuthorSyncStateInvalid({
+          path: syncStatePath,
+          reason: { _tag: "InvalidData", failure: error },
+        }),
     ),
   );
 });
@@ -281,7 +206,7 @@ const resolveJournalWorkspace = Effect.fn("AuthorHistory.resolveJournalWorkspace
   if (workspaceId === undefined && roots.length > 1)
     return yield* new AuthorHistoryInvalid({
       path,
-      reason: "workspace identity is ambiguous at this path",
+      reason: { _tag: "AmbiguousWorkspace" },
     });
   const existing = roots.length === 1 ? roots[0] : undefined;
   if (existing && (workspaceId === undefined || existing.workspace_id === null)) {
@@ -312,7 +237,10 @@ const journalVersion = Effect.fn("AuthorHistory.journalVersion")(function* (path
   return yield* Schema.decodeUnknownEffect(JournalVersion)(
     (yield* sql`PRAGMA user_version`)[0],
   ).pipe(
-    Effect.mapError(() => new AuthorHistoryInvalid({ path, reason: "unsupported journal schema" })),
+    Effect.mapError(
+      (failure) =>
+        new AuthorHistoryInvalid({ path, reason: { _tag: "JournalVersionInvalid", failure } }),
+    ),
   );
 });
 
@@ -393,7 +321,11 @@ const writeHistoryEvent = Effect.fn("AuthorHistory.writeHistoryEvent")(function*
               if (last && last.workspace_key !== key)
                 return yield* new AuthorHistoryInvalid({
                   path,
-                  reason: "journal workspace does not match",
+                  reason: {
+                    _tag: "JournalWorkspaceMismatch",
+                    expected: key,
+                    actual: last.workspace_key,
+                  },
                 });
               const saved = yield* save(last?.revision);
               if (last?.revision === saved.id) return saved;
@@ -431,10 +363,9 @@ const writeHistoryEvent = Effect.fn("AuthorHistory.writeHistoryEvent")(function*
         Effect.fail(
           new AuthorHistoryInvalid({
             path,
-            // SchemaError overrides string formatting; SqlError inherits Error's formatter.
             reason: Schema.isSchemaError(error)
-              ? String(error)
-              : Error.prototype.toString.call(error),
+              ? { _tag: "JournalSchemaInvalid", failure: error }
+              : { _tag: "JournalFailure", cause: error },
           }),
         ),
       ),
@@ -451,7 +382,7 @@ export interface AuthorHistoryShape {
       tree: History.Tree,
       allowLargeDeletion?: boolean,
       knownTrees?: readonly History.Tree[],
-    ) => Effect.Effect<RemovalDecision, SyncStateError | AuthorLeaseNotHeld | HomeBusy>;
+    ) => Effect.Effect<RemovalDecision, SyncStateError | HomeBusy>;
     readonly reset: (root: string) => Effect.Effect<void>;
   };
   /**
@@ -479,11 +410,7 @@ export interface AuthorHistoryShape {
       change: { readonly from: History.RevisionId | null; readonly to: History.RevisionId },
     ) => Effect.Effect<
       void,
-      | AuthorBackupStateConflict
-      | AuthorHistoryInvalid
-      | AuthorLeaseNotHeld
-      | HomeBusy
-      | SyncStateError
+      AuthorBackupStateConflict | AuthorHistoryInvalid | HomeBusy | SyncStateError
     >;
   };
   /** The sync checkpoint, Idle | Sending | Writing. */
@@ -491,23 +418,22 @@ export interface AuthorHistoryShape {
     /** Absent reads as Idle { base: null }. Never writes. */
     readonly read: (key: SyncKey) => Effect.Effect<Sync.SyncState, SyncStateError>;
     /**
-     * Every step except into Writing, under the home lock for the whole read-modify-write, then
-     * lease.advance. `reset` is the only way back to Idle { base: null }: the first connection.
+     * Normal Idle/Sending steps, under the home lock for the whole read-modify-write, then
+     * lease.advance. Prepared operations own completion from Writing. Only the first connection's
+     * `reset` can return to Idle { base: null }.
      */
     readonly save: (
       lease: WorkspaceLease,
       key: SyncKey,
       change:
         | {
-            readonly from: Sync.SyncState;
-            readonly to: Exclude<Sync.SyncState, { readonly _tag: "Writing" }>;
+            readonly from: typeof Sync.Idle.Type | typeof Sync.Sending.Type;
+            readonly to: (typeof Sync.Writing.Type)["next"];
           }
         | { readonly from: Sync.SyncState; readonly reset: CreateReceipt },
     ) => Effect.Effect<
       void,
       | AuthorSyncStateConflict
-      | AuthorSyncStateIllegal
-      | AuthorLeaseNotHeld
       | HomeBusy // the shared home lock excludes other home writers
       | SyncStateError
     >;
@@ -515,16 +441,13 @@ export interface AuthorHistoryShape {
     readonly prepareWrite: (
       lease: WorkspaceLease,
       key: SyncKey,
-      change: {
-        readonly from: Sync.SyncState;
-        readonly to: Extract<Sync.SyncState, { readonly _tag: "Writing" }>;
-      },
+      change: Sync.WriteRequest,
     ) => Effect.Effect<
       PreparedWrite,
       | AuthorSyncStateConflict
-      | AuthorSyncStateIllegal
-      | AuthorLeaseNotHeld
       | AuthorHistoryInvalid
+      | AuthorWorkspaceConflict
+      | WorkspaceReadError
       | HomeBusy // the shared home lock excludes other home writers
       | SyncStateError
     >;
@@ -578,13 +501,13 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
   // Stored history that cannot be read back is unusable history, whatever the store's reason.
   const storeFailure = (error: History.StoreError) =>
     Effect.fail(
-      error._tag === "History.StoreFailed"
-        ? new AuthorHistoryInvalid({ path: directory, reason: String(error.cause) })
-        : new AuthorHistoryInvalid({
-            path: storedPath(path, directory, error.kind, error.hash),
-            reason:
-              error._tag === "History.StoreMissing" ? `${error.kind} is missing` : error.reason,
-          }),
+      new AuthorHistoryInvalid({
+        path:
+          error._tag === "History.StoreFailed"
+            ? directory
+            : storedPath(path, directory, error.kind, error.hash),
+        reason: { _tag: "StoreFailure", failure: error },
+      }),
     );
 
   /**
@@ -599,7 +522,7 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
     if (insideRoot(home))
       return yield* new AuthorHistoryInvalid({
         path: directory,
-        reason: "history cannot be inside its workspace",
+        reason: { _tag: "HistoryInsideWorkspace", workspace: root, resolved: false },
       });
     for (const folder of [
       home,
@@ -611,7 +534,7 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
       if (insideRoot(yield* fs.realPath(folder)))
         return yield* new AuthorHistoryInvalid({
           path: directory,
-          reason: "history resolves inside its workspace",
+          reason: { _tag: "HistoryInsideWorkspace", workspace: root, resolved: true },
         });
     }
     const journalFile = yield* links
@@ -620,7 +543,7 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
     if (journalFile?.type === "SymbolicLink")
       return yield* new AuthorHistoryInvalid({
         path: journalPath,
-        reason: "journal cannot be a symbolic link",
+        reason: { _tag: "JournalRedirected" },
       });
     // Broken device-local metadata must not prevent backing up the authored files. This is
     // path-provenance fallback only; it neither creates nor repairs a workspace identity.
@@ -771,8 +694,11 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
         )
           return yield* new AuthorHistoryInvalid({
             path: syncStatePath,
-            reason:
-              "a backup checkpoint must advance one observed revision without skipping its parent",
+            reason: {
+              _tag: "BackupParentMismatch",
+              expected: change.from,
+              actual: revision.parents,
+            },
           });
         yield* saveSyncState({
           ...document,
@@ -791,8 +717,8 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
     key: SyncKey,
     change:
       | {
-          readonly from: Sync.SyncState;
-          readonly to: Exclude<Sync.SyncState, { readonly _tag: "Writing" }>;
+          readonly from: typeof Sync.Idle.Type | typeof Sync.Sending.Type;
+          readonly to: (typeof Sync.Writing.Type)["next"];
         }
       | { readonly from: Sync.SyncState; readonly reset: CreateReceipt },
   ) {
@@ -800,46 +726,53 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
       yield* step(lease, key, change.from, Sync.Idle.make({ base: null }), true);
       return;
     }
-    if (!Sync.allowsStep(change.from, change.to))
-      return yield* new AuthorSyncStateIllegal({ key, from: change.from, to: change.to });
     yield* step(lease, key, change.from, change.to);
   });
 
   const prepareWrite = Effect.fn("AuthorHistory.syncState.prepareWrite")(function* (
     lease: WorkspaceLease,
     key: SyncKey,
-    change: {
-      readonly from: Sync.SyncState;
-      readonly to: Extract<Sync.SyncState, { readonly _tag: "Writing" }>;
-    },
+    request: Sync.WriteRequest,
   ) {
-    if (!Sync.allowsStep(change.from, change.to))
-      return yield* new AuthorSyncStateIllegal({ key, from: change.from, to: change.to });
-    // Reading verifies each tree against its hash, so a missing or corrupt tree refuses here.
-    yield* Effect.forEach(
-      [change.to.from, change.to.to],
-      (hash) =>
-        Effect.gen(function* () {
-          const tree = yield* engineStore.tree(hash);
-          const issue = History.treePathIssue(tree);
-          if (issue)
-            return yield* new AuthorHistoryInvalid({
-              path: syncStatePath,
-              reason: `${issue.path}: ${issue.message}`,
-            });
-        }),
-      {
-        discard: true,
-      },
-    ).pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure));
-    const revision = yield* step(lease, key, change.from, change.to);
-    return PreparedWrite.make({
-      key,
-      from: change.to.from,
-      to: change.to.to,
+    const change = structuredClone(request);
+    const writing =
+      "trees" in change
+        ? Sync.Writing.make({ ...change.from, ...change.trees, merged: true })
+        : change.to;
+    const savedKey = { ...key };
+    yield* lease.revision;
+    const workspace = yield* workspaces.read(lease.root);
+    if (!Option.exists(workspace.identity, (identity) => identity.workspaceId === key.workspaceId))
+      return yield* new AuthorWorkspaceConflict({ root: lease.root, found: workspace });
+    // Load the exact saved trees once. They remain private to the returned operation.
+    const trees = yield* Effect.all({
+      from: engineStore.tree(writing.from),
+      to: engineStore.tree(writing.to),
+    }).pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure));
+    for (const tree of [trees.from, trees.to]) {
+      const issue = History.treePathIssue(tree);
+      if (issue)
+        return yield* new AuthorHistoryInvalid({
+          path: syncStatePath,
+          reason: { _tag: "InvalidTree", issue },
+        });
+    }
+    const revision = yield* step(lease, savedKey, change.from, writing);
+    const prepared = WriteCheckpoint.make({
+      key: savedKey,
+      from: writing.from,
+      to: writing.to,
       ownerId: lease.ownerId,
       revision,
     });
+    return {
+      apply: () =>
+        Effect.gen(function* () {
+          yield* lease.writeTree({ prepared, ...trees });
+          yield* step(lease, savedKey, writing, writing.next);
+          return structuredClone(writing.next);
+        }).pipe(Effect.provide(context)),
+    };
   });
 
   const refreshInventory = Effect.fn("AuthorHistory.inventory.refresh")(function* (
@@ -928,13 +861,8 @@ export class AuthorHistory extends Context.Service<AuthorHistory, AuthorHistoryS
 /** Storage representation errors are reported as unusable Author history at the owner boundary. */
 export const authorHistoryStoreError = (error: History.StoreError) =>
   new AuthorHistoryInvalid({
-    path: error._tag === "History.StoreFailed" ? "history" : `history ${error.kind} ${error.hash}`,
-    reason:
-      error._tag === "History.StoreFailed"
-        ? String(error.cause)
-        : error._tag === "History.StoreMissing"
-          ? `${error.kind} is missing`
-          : error.reason,
+    path: "history",
+    reason: { _tag: "StoreFailure", failure: error },
   });
 
 /** A passive check starts no grace and saves no smaller baseline. It describes a fresh manual
@@ -953,9 +881,4 @@ export const checkAuthorRemovals = Effect.fn("Author.checkRemovals")(function* (
   )).decision;
 });
 
-export type {
-  AuthorHistoryBusy,
-  AuthorSyncStateConflict,
-  AuthorBackupStateConflict,
-  AuthorSyncStateIllegal,
-};
+export type { AuthorHistoryBusy, AuthorSyncStateConflict, AuthorBackupStateConflict };

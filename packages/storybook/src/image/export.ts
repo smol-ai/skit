@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { Resvg } from "@resvg/resvg-js";
-import { Terminal, type IBufferCell } from "@xterm/headless";
+// @xterm/headless is CommonJS; Node exposes it only as a default export.
+import xterm from "@xterm/headless";
+
+const { Terminal } = xterm;
 
 const foreground = "#d8dee9";
 const background = "#171c26";
@@ -44,16 +47,22 @@ const paddingX = 32;
 const headerPaddingY = 20;
 const bodyPaddingY = 28;
 
-type Run = {
+/** A colour as the terminal names it: an ANSI palette index or an RGB hex; undefined is the default. */
+type TerminalColor = number | string;
+
+/** Equally styled cells side by side on one terminal row. */
+type TerminalRun = {
   readonly column: number;
   readonly cells: ReadonlyArray<{ readonly column: number; readonly char: string }>;
   readonly width: number;
-  readonly fill: string;
-  readonly background: string | undefined;
+  readonly foreground: TerminalColor | undefined;
+  readonly background: TerminalColor | undefined;
+  readonly inverse: boolean;
   readonly bold: boolean;
   readonly dim: boolean;
   readonly italic: boolean;
   readonly underline: boolean;
+  readonly overline: boolean;
 };
 
 const cube = [0, 95, 135, 175, 215, 255];
@@ -65,25 +74,13 @@ const paletteColor = (index: number): string => {
   const offset = index - 16;
   return hex(cube[Math.floor(offset / 36)]!, cube[Math.floor(offset / 6) % 6]!, cube[offset % 6]!);
 };
+const drawn = (color: TerminalColor) => (typeof color === "number" ? paletteColor(color) : color);
 
-function cellColors(cell: IBufferCell) {
-  const fg = cell.isFgRGB()
-    ? `#${cell.getFgColor().toString(16).padStart(6, "0")}`
-    : cell.isFgPalette()
-      ? paletteColor(cell.getFgColor())
-      : undefined;
-  const bg = cell.isBgRGB()
-    ? `#${cell.getBgColor().toString(16).padStart(6, "0")}`
-    : cell.isBgPalette()
-      ? paletteColor(cell.getBgColor())
-      : undefined;
-  return cell.isInverse()
-    ? { fill: bg ?? background, background: fg ?? foreground }
-    : { fill: fg ?? foreground, background: bg };
-}
-
-/** Lays ANSI text onto an exact terminal grid and groups equally styled cells. */
-async function layout(ansi: string, columns: number): Promise<ReadonlyArray<ReadonlyArray<Run>>> {
+/** Lays ANSI text onto an exact terminal grid and groups equally styled cells into runs. */
+async function layoutTerminal(
+  ansi: string,
+  columns: number,
+): Promise<ReadonlyArray<ReadonlyArray<TerminalRun>>> {
   const terminal = new Terminal({
     cols: columns,
     rows: 1,
@@ -94,31 +91,44 @@ async function layout(ansi: string, columns: number): Promise<ReadonlyArray<Read
   });
   await new Promise<void>((done) => terminal.write(ansi.trimEnd(), done));
   const buffer = terminal.buffer.active;
-  const rows: Array<Array<Run>> = [];
+  const rows: Array<Array<TerminalRun>> = [];
   for (let y = 0; y < buffer.length; y++) {
     const line = buffer.getLine(y)!;
-    const runs: Array<Run> = [];
+    const runs: Array<TerminalRun> = [];
     for (let x = 0; x < columns; x++) {
       const cell = line.getCell(x)!;
       if (cell.getWidth() === 0) continue;
       const style = {
-        ...cellColors(cell),
+        foreground: cell.isFgRGB()
+          ? `#${cell.getFgColor().toString(16).padStart(6, "0")}`
+          : cell.isFgPalette()
+            ? cell.getFgColor()
+            : undefined,
+        background: cell.isBgRGB()
+          ? `#${cell.getBgColor().toString(16).padStart(6, "0")}`
+          : cell.isBgPalette()
+            ? cell.getBgColor()
+            : undefined,
+        inverse: cell.isInverse() !== 0,
         bold: cell.isBold() !== 0,
         dim: cell.isDim() !== 0,
         italic: cell.isItalic() !== 0,
         underline: cell.isUnderline() !== 0,
+        overline: cell.isOverline() !== 0,
       };
       const char = cell.getChars() || " ";
       const previous = runs.at(-1);
       if (
         previous &&
         previous.column + previous.width === x &&
-        previous.fill === style.fill &&
+        previous.foreground === style.foreground &&
         previous.background === style.background &&
+        previous.inverse === style.inverse &&
         previous.bold === style.bold &&
         previous.dim === style.dim &&
         previous.italic === style.italic &&
-        previous.underline === style.underline
+        previous.underline === style.underline &&
+        previous.overline === style.overline
       ) {
         runs[runs.length - 1] = {
           ...previous,
@@ -132,7 +142,14 @@ async function layout(ansi: string, columns: number): Promise<ReadonlyArray<Read
     rows.push(runs);
   }
   terminal.dispose();
-  while (rows.at(-1)?.every((run) => !run.background && run.cells.every((c) => c.char === " ")))
+  while (
+    rows
+      .at(-1)
+      ?.every(
+        (run) =>
+          run.background === undefined && !run.inverse && run.cells.every((c) => c.char === " "),
+      )
+  )
     rows.pop();
   return rows;
 }
@@ -140,36 +157,63 @@ async function layout(ansi: string, columns: number): Promise<ReadonlyArray<Read
 const escape = (text: string) =>
   text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 
-function drawRows(rows: ReadonlyArray<ReadonlyArray<Run>>, left: number, top: number): string {
+function drawRows(
+  rows: ReadonlyArray<ReadonlyArray<TerminalRun>>,
+  left: number,
+  top: number,
+): string {
   return rows
     .flatMap((runs, row) =>
       runs.flatMap((run) => {
+        const fill = run.inverse
+          ? run.background === undefined
+            ? background
+            : drawn(run.background)
+          : run.foreground === undefined
+            ? foreground
+            : drawn(run.foreground);
+        const back = run.inverse
+          ? run.foreground === undefined
+            ? foreground
+            : drawn(run.foreground)
+          : run.background === undefined
+            ? undefined
+            : drawn(run.background);
         const x = left + run.column * cellWidth;
         const y = top + row * lineHeight;
         const glyphs = run.cells.filter(({ char }) => char !== " ");
         const opacity = run.dim ? ` fill-opacity="0.55"` : "";
         return [
-          run.background &&
-            `<rect x="${x}" y="${y}" width="${run.width * cellWidth}" height="${lineHeight}" fill="${run.background}"/>`,
+          back &&
+            `<rect x="${x}" y="${y}" width="${run.width * cellWidth}" height="${lineHeight}" fill="${back}"/>`,
           glyphs.length > 0 &&
-            `<text x="${glyphs.map(({ column }) => left + column * cellWidth).join(" ")}" y="${y + baseline}" fill="${run.fill}"${opacity}${run.bold ? ` font-weight="700"` : ""}${run.italic ? ` font-style="italic"` : ""}>${escape(glyphs.map(({ char }) => char).join(""))}</text>`,
+            `<text x="${glyphs.map(({ column }) => left + column * cellWidth).join(" ")}" y="${y + baseline}" fill="${fill}"${opacity}${run.bold ? ` font-weight="700"` : ""}${run.italic ? ` font-style="italic"` : ""}>${escape(glyphs.map(({ char }) => char).join(""))}</text>`,
           run.underline &&
-            `<rect x="${x}" y="${y + baseline + 2}" width="${run.width * cellWidth}" height="1" fill="${run.fill}"${opacity}/>`,
+            `<rect x="${x}" y="${y + baseline + 2}" width="${run.width * cellWidth}" height="1" fill="${fill}"${opacity}/>`,
         ].filter((part): part is string => typeof part === "string");
       }),
     )
     .join("");
 }
 
-/** Owns the palette, fonts, terminal grid, and card chrome for one exported image. */
-export async function renderImage(options: {
+/** Terminal fonts as CSS, so one stylesheet can serve many drawn terminals. */
+const terminalFontFaces = (): string =>
+  terminalFonts
+    .map(
+      ({ file, weight }) =>
+        `@font-face{font-family:"DejaVu Sans Mono";font-weight:${weight};src:url(data:font/ttf;base64,${readFileSync(file).toString("base64")}) format("truetype")}`,
+    )
+    .join("");
+
+/** Owns the palette, terminal grid, and card chrome for one drawn terminal, without fonts. */
+async function drawTerminal(options: {
   ansi: string;
   command?: string;
   columns: number;
-}): Promise<{ svg: string; png: Buffer }> {
-  const body = await layout(options.ansi, options.columns);
+}): Promise<{ svg: (style: string) => string; width: number; height: number }> {
+  const body = await layoutTerminal(options.ansi, options.columns);
   const header = options.command
-    ? await layout(`\x1b[32m❯\x1b[39m \x1b[97m${options.command}`, options.columns)
+    ? await layoutTerminal(`\x1b[32m❯\x1b[39m \x1b[97m${options.command}`, options.columns)
     : [];
   const cardWidth = options.columns * cellWidth + 2 * paddingX;
   const headerHeight = header.length > 0 ? header.length * lineHeight + 2 * headerPaddingY : 0;
@@ -186,9 +230,22 @@ export async function renderImage(options: {
   ]
     .filter((part): part is string => typeof part === "string")
     .join("");
-  const svg = (style: string) =>
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" font-family="DejaVu Sans Mono, DejaVu Sans, monospace" font-size="${fontSize}">${style}${content}</svg>`;
-  const png = new Resvg(svg(""), {
+  return {
+    width,
+    height,
+    svg: (style) =>
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" font-family="DejaVu Sans Mono, DejaVu Sans, monospace" font-size="${fontSize}">${style}${content}</svg>`,
+  };
+}
+
+/** One exported image: the drawn terminal as a 2× PNG and an SVG that embeds its fonts. */
+export async function renderImage(options: {
+  ansi: string;
+  command?: string;
+  columns: number;
+}): Promise<{ svg: string; png: Buffer }> {
+  const drawn = await drawTerminal(options);
+  const png = new Resvg(drawn.svg(""), {
     fitTo: { mode: "zoom", value: 2 },
     font: {
       fontFiles: [...terminalFonts.map(({ file }) => file), fallbackFont],
@@ -199,11 +256,5 @@ export async function renderImage(options: {
     .render()
     .asPng();
   // The SVG embeds only the terminal font; fallback glyphs keep their cell positions.
-  const fontFaces = terminalFonts
-    .map(
-      ({ file, weight }) =>
-        `@font-face{font-family:"DejaVu Sans Mono";font-weight:${weight};src:url(data:font/ttf;base64,${readFileSync(file).toString("base64")}) format("truetype")}`,
-    )
-    .join("");
-  return { svg: svg(`<style>${fontFaces}</style>`), png };
+  return { svg: drawn.svg(`<style>${terminalFontFaces()}</style>`), png };
 }

@@ -1,8 +1,9 @@
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { HarnessName } from "@smolai/skit-core/harnesses";
-import { compactHomePath } from "../../terminal/home-path.js";
 import type { Choice } from "../../terminal/prompter.js";
+import { setupLeftAloneReason } from "./reasons.js";
+import { harnessOrigin } from "../presentation/harness-origin.js";
 import {
   type SetupOnboardingCandidate,
   type SetupSkillInstance,
@@ -27,10 +28,9 @@ const usage = (instance: SetupSkillInstance) =>
 const sourceGroup = (instance: SetupSkillInstance, home: string): string => {
   if (instance.owner.kind === "pnpm")
     return `pnpm | ${instance.owner.package}@${instance.owner.version}`;
-  if (instance.git.repository)
-    return `Repository | ${compactHomePath(instance.git.repository, home)}`;
+  if (instance.git.repository) return `Repository | ${instance.git.repository}`;
   const owner = instance.owner;
-  if (owner.kind === "harness") return `Plugins | ${owner.source}`;
+  if (owner.kind === "harness") return `Plugins | ${harnessOrigin(owner)}`;
   if (owner.kind === "skills-sh") return `Known source | ${owner.source}`;
   if (owner.kind === "skit" && owner.membership.kind === "in-library" && owner.membership.source)
     return `Known source | ${owner.membership.source}`;
@@ -40,7 +40,7 @@ const sourceGroup = (instance: SetupSkillInstance, home: string): string => {
   const parent = dirname(instance.path);
   if (parent === join(home, ".claude", "skills")) return "Claude local skills | ~/.claude/skills";
   if (parent === join(home, ".codex", "skills")) return "Codex local skills | ~/.codex/skills";
-  return `Local source | ${compactHomePath(parent, home)}`;
+  return `Local source | ${parent}`;
 };
 
 const groupOrder = (group: string) =>
@@ -63,11 +63,11 @@ const candidateStatus = (instance: SetupSkillInstance, candidate?: SetupOnboardi
       : "Managed copy missing from Library | inspect before changing";
   if (instance.owner.kind === "authored") return "Authored SKIT source | kept in place";
   if (candidate?.action === "blocked" && candidate.reason !== "divergent-copies")
-    return `Blocked | ${candidate.reason.replaceAll("-", " ")} | preview to inspect`;
+    return `Blocked | ${setupLeftAloneReason(candidate.reason)} | preview to inspect`;
   if (candidate?.action === "bind-existing-entry") return "Exact Library match | reconnect";
   if (candidate?.action === "import-observed-collection") return "Add installed copy to Library";
   if (candidate?.action === "repository-owned")
-    return "Add to Library; project files stay in place";
+    return "Add to Library; repository files stay in place";
   return candidate ? undefined : "Left in place | no setup action";
 };
 
@@ -81,7 +81,8 @@ export const setupReviewSkillChoices = (
     .map(({ instance, candidate, value, selectable, groupKey, siblings, removeValue }) => {
       const identical = siblings.filter(
         (item) =>
-          instance.contentIdentity.currentHash !== undefined &&
+          instance.contentIdentity.status === "hashed" &&
+          item.contentIdentity.status === "hashed" &&
           instance.contentIdentity.currentHash === item.contentIdentity.currentHash,
       );
       const differing = siblings.filter((item) => !identical.includes(item));
@@ -110,25 +111,22 @@ export const setupReviewSkillChoices = (
         .join("\n");
       const links = instance.aliases
         .filter((path) => path !== instance.path)
-        .map(
-          (path) =>
-            `Link: ${compactHomePath(path, home)} → ${compactHomePath(instance.path, home)}`,
-        );
-      const details = [compactHomePath(instance.path, home), metadata, ...links].join("\n");
+        .map((path) => `Link: ${path} → ${instance.path}`);
+      const details = [instance.path, metadata, ...links].join("\n");
       const choice: Choice<string> = {
         value,
         ...(removeValue === undefined ? {} : { removeValue }),
         label: instance.name,
         hint:
           [
-            compactHomePath(instance.path, home),
+            instance.path,
             ...(instance.git.status !== "outside-git" ? [instance.git.status] : []),
             ...sources,
             ...(disabled ? ["inspect"] : []),
           ].join(" | ") || undefined,
         searchText: details,
         group: differing.length
-          ? `Copies | ${instance.name} | ${instance.git.repository ? compactHomePath(instance.git.repository, home) : "global"} | choose one`
+          ? `Copies | ${instance.name} | ${instance.git.repository ? instance.git.repository : "global"} | choose one`
           : sourceGroup(instance, home),
         disabled,
         // Guided setup starts from the same selection `skit setup --apply` takes.

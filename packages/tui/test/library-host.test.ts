@@ -1,6 +1,8 @@
 // Runtime entry and disposal are the subject here, so these tests drive the Promise host API.
-import { Deferred, Effect, Layer } from "effect";
-import { expect, test } from "vitest";
+import { Deferred, Effect, Layer, Logger } from "effect";
+import { expect, test, vi } from "vitest";
+import { LibraryRecoveryNotice } from "@smolai/skit-core/library";
+import { tuiLogger } from "../src/library/logging";
 import type { LibrarySessionState, LibrarySkillRow } from "@smolai/skit-core/library/session";
 import { createLibraryHost } from "../src/library/host";
 
@@ -17,6 +19,35 @@ const outside = <A>(effect: Effect.Effect<A>): Promise<A> => Effect.runPromise(e
 const initial: LibrarySessionState = { skills: [] };
 const row = (name: string) => ({ name }) as LibrarySkillRow;
 const names = (state: LibrarySessionState | undefined) => state?.skills.map((skill) => skill.name);
+
+test("the host keeps its frontend logger and stderr policy for later operations", async () => {
+  const captured: Logger.Options<unknown>[] = [];
+  const stderr: boolean[] = [];
+  const spy = vi.spyOn(Logger.defaultLogger, "log").mockImplementation((entry) => {
+    captured.push(entry);
+    stderr.push(entry.fiber.getRef(Logger.LogToStderr));
+  });
+  const host = createLibraryHost(
+    Layer.mergeAll(Logger.layer([tuiLogger]), Layer.succeed(Logger.LogToStderr, true)),
+    Effect.succeed(initial),
+  );
+  try {
+    await host.open();
+    const failure = new Error("Native failure");
+    await host.run(
+      Effect.logWarning(
+        LibraryRecoveryNotice.cases.HistoryDeliveryPending.make({ home: "/tmp/library", failure }),
+      ),
+    );
+    expect(captured).toHaveLength(1);
+    expect(captured[0]!.message).toContain("Library history delivery is pending in /tmp/library");
+    expect(captured[0]!.message).toContain(failure);
+    expect(stderr).toEqual([true]);
+  } finally {
+    await host.dispose();
+    spy.mockRestore();
+  }
+});
 
 test("queued transitions read the state committed by their predecessor", async () => {
   const reached = Deferred.makeUnsafe<void>();

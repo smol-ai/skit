@@ -5,10 +5,8 @@ import * as Library from "@smolai/skit-core/library";
 import { librarySyncApi } from "./sync/api.js";
 import { officialRegistryOrigin } from "../registry/accounts.js";
 import { Renderer } from "../terminal/renderer.js";
-import { createColors } from "picocolors";
 import { terminalSyncProgress } from "./sync/present-progress.js";
-import { renderLibrarySyncPlan } from "./sync/present.js";
-import { terminalData } from "../terminal/text.js";
+import { presentLibrarySyncPlan } from "./sync/present.js";
 
 export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthError>(options: {
   readonly authState: Result.Result<ResolvedAuth, AuthError>;
@@ -50,10 +48,7 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
             ...(options.apply
               ? {
                   onPlan: (plan) =>
-                    renderer.note(renderLibrarySyncPlan(plan), "Applying Library sync plan", {
-                      renderBody: (color) =>
-                        renderLibrarySyncPlan(terminalData(plan), createColors(color)),
-                    }),
+                    renderer.note(presentLibrarySyncPlan(plan), "Applying Library sync plan"),
                 }
               : {}),
           },
@@ -65,4 +60,4 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
 
 export { syncOutputContracts } from "./sync/output.js";
 
-export { renderLibrarySync } from "./sync/present.js";
+export { presentLibrarySync } from "./sync/present.js";

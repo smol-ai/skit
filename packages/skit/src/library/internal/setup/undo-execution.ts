@@ -14,7 +14,7 @@ import { LibraryWriter, libraryOriginalsPath, loadLibrary } from "../../store/li
 import { OperationStatus, type UndoProgram } from "../../store/state-schema.js";
 import type { OperationId } from "../../entity-ids.js";
 import { ensureRecoveryOperation } from "../recovery/moves.js";
-import { RecoveryInvalid } from "../../recovery-facts.js";
+import { RecoveryInvalid } from "../../store/operation-failures.js";
 import { readSkillPathDetails } from "./undo-evidence.js";
 import { checkSetupGlobalContent } from "./protection.js";
 import { checkAnchor, restoreMarker } from "./undo-files.js";
@@ -39,7 +39,7 @@ export const runUndo = Effect.fn("Library.runUndo")(function* (
     const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(state.operations);
     const operation = operations.find((item) => item.operationId === operationId);
     if (operation?._tag !== "Pending" || operation.steps[index]?.step._tag !== "Undo")
-      return yield* new StalePlan({ message: "Undo requires its Pending operation" });
+      return yield* new StalePlan({ reason: { _tag: "OperationMissing", kind: "undo" } });
     const changed = {
       ...operation,
       steps: operation.steps.map((step, at) =>
@@ -62,7 +62,7 @@ export const runUndo = Effect.fn("Library.runUndo")(function* (
     const state = yield* loadLibrary(home);
     const { operations: _operations, ...body } = state;
     if (!equal(body, program.before) && !equal(body, program.after))
-      return yield* new StalePlan({ message: "Library state differs from the recorded Undo" });
+      return yield* new StalePlan({ reason: { _tag: "LibraryChanged" } });
     return state;
   });
   const isAfter = (action: UndoAction, actual: UndoPath) =>
@@ -86,13 +86,18 @@ export const runUndo = Effect.fn("Library.runUndo")(function* (
     yield* publication();
     for (const source of program.sourceImports)
       if ((yield* originalTreeHash(source.path)) !== source.hash)
-        return yield* new RecoveryInvalid({ detail: `Undo source changed: ${source.path}` });
+        return yield* new RecoveryInvalid({
+          reason: { _tag: "ContentChanged", kind: "undo-source", path: source.path },
+        });
     for (const before of program.paths) {
       const action = actionAt(before);
       const actual = yield* readSkillPathDetails(before.path);
       if (action) {
         const file = program.files.find((item) => item.path === before.path);
-        if (!file) return yield* new RecoveryInvalid({ detail: "Missing Undo file evidence" });
+        if (!file)
+          return yield* new RecoveryInvalid({
+            reason: { _tag: "MissingRecord", record: "file-evidence" },
+          });
         yield* checkAnchor(file);
         yield* checkSetupGlobalContent(file.path);
         if (
@@ -112,7 +117,9 @@ export const runUndo = Effect.fn("Library.runUndo")(function* (
           continue;
       }
       if (!equal(actual, before))
-        return yield* new StalePlan({ message: `Undo evidence changed at ${before.path}` });
+        return yield* new StalePlan({
+          reason: { _tag: "EvidenceChanged", path: before.path, kind: "undo" },
+        });
     }
     for (const source of program.sources) {
       const actual = yield* readSkillPathDetails(source.path);
@@ -122,11 +129,13 @@ export const runUndo = Effect.fn("Library.runUndo")(function* (
       if (moved && isAfter(moved, yield* readSkillPathDetails(moved.path))) {
         if (actual.entry === null && equal(actual.anchor, source.anchor)) continue;
         return yield* new StalePlan({
-          message: `Restored Undo source is occupied: ${source.path}`,
+          reason: { _tag: "DestinationOccupied", path: source.path, kind: "undo-source" },
         });
       }
       if (!equal(actual, source))
-        return yield* new StalePlan({ message: `Undo source changed at ${source.path}` });
+        return yield* new StalePlan({
+          reason: { _tag: "ContentChanged", path: source.path, kind: "undo-source" },
+        });
     }
     for (const action of program.actions)
       if (
@@ -134,11 +143,15 @@ export const runUndo = Effect.fn("Library.runUndo")(function* (
         !isAfter(action, yield* readSkillPathDetails(action.path)) &&
         !equal(yield* readSkillPathDetails(action.staged.path), action.staged)
       )
-        return yield* new StalePlan({ message: `Undo staging changed: ${action.path}` });
+        return yield* new StalePlan({
+          reason: { _tag: "EvidenceChanged", path: action.path, kind: "undo-staging" },
+        });
     if (program.preserved)
       for (const file of program.preserve)
         if (!(yield* preserved(file.path)))
-          return yield* new RecoveryInvalid({ detail: `Undo recovery copy changed: ${file.path}` });
+          return yield* new RecoveryInvalid({
+            reason: { _tag: "ContentChanged", kind: "recovery-copy", path: file.path },
+          });
   });
   // Bind postimages before any live destination mutation. Copy/rebuild staging lives beside the
   // destination, so publication is an atomic rename even when the Library is on another device.
@@ -148,13 +161,17 @@ export const runUndo = Effect.fn("Library.runUndo")(function* (
     const file = program.files.find((item) => item.path === action.path);
     const before = program.paths.find((item) => item.path === action.path);
     if (!file || !before)
-      return yield* new RecoveryInvalid({ detail: "Missing Undo action evidence" });
+      return yield* new RecoveryInvalid({
+        reason: { _tag: "MissingRecord", record: "action-evidence" },
+      });
     let after: UndoPath;
     let staged: UndoPath | undefined;
     if (action.kind === "remove-created") after = { ...before, entry: null };
     else if (action.kind === "release-ownership") {
       if (!file.entry || !before.entry)
-        return yield* new RecoveryInvalid({ detail: "Missing ownership evidence" });
+        return yield* new RecoveryInvalid({
+          reason: { _tag: "MissingRecord", record: "ownership-evidence" },
+        });
       after = {
         ...before,
         entry: {
@@ -168,20 +185,29 @@ export const runUndo = Effect.fn("Library.runUndo")(function* (
     } else if (action.transfer === "move") {
       const source = program.sources.find((item) => item.path === action.source);
       if (!source?.entry)
-        return yield* new RecoveryInvalid({ detail: "Missing original source evidence" });
+        return yield* new RecoveryInvalid({
+          reason: { _tag: "MissingRecord", record: "source-evidence" },
+        });
       after = { ...source, path: action.path, anchor: before.anchor };
     } else {
       if (!file.entry || !action.source)
-        return yield* new RecoveryInvalid({ detail: "Missing reconstruction evidence" });
+        return yield* new RecoveryInvalid({
+          reason: { _tag: "MissingRecord", record: "reconstruction-evidence" },
+        });
       const staging = join(dirname(action.path), `.skit-undo-${operationId}-${at + 1}`);
       if (!(yield* fs.exists(staging))) yield* fs.makeDirectory(staging, { mode: 0o700 });
       if ((yield* links.identity.lstat(staging)).type !== "Directory")
-        return yield* new RecoveryInvalid({ detail: `Redirected Undo staging: ${staging}` });
+        return yield* new RecoveryInvalid({
+          reason: { _tag: "UnsafePath", kind: "undo-staging", path: staging },
+        });
       const path = join(staging, basename(action.path));
       if (!(yield* fs.exists(path))) {
         if (action.transfer === "rebuild") {
           const prior = program.after.installed_skills.find((item) => item.path === action.path);
-          if (!prior) return yield* new RecoveryInvalid({ detail: "Missing reconstruction owner" });
+          if (!prior)
+            return yield* new RecoveryInvalid({
+              reason: { _tag: "MissingRecord", record: "reconstruction-owner" },
+            });
           const state = { ...program.after, operations: [] };
           const policy = globalEnabled(state).invocation_policies?.[prior.skill_id];
           const rebuild = yield* prepareInstalledSkillRebuild(
@@ -191,7 +217,9 @@ export const runUndo = Effect.fn("Library.runUndo")(function* (
             policy === undefined ? { source: "declared" } : { source: "override", policy },
           );
           if (rebuild.collectionVersionPath !== action.source)
-            return yield* new RecoveryInvalid({ detail: "Undo reconstruction source changed" });
+            return yield* new RecoveryInvalid({
+              reason: { _tag: "ContentChanged", kind: "reconstruction-source" },
+            });
           yield* rebuild.build(path);
         } else yield* copyLocalTree(action.source, path, undefined, true);
         if (file.entry.type === "Directory") yield* restoreMarker(path, file.entry);
@@ -199,7 +227,7 @@ export const runUndo = Effect.fn("Library.runUndo")(function* (
       staged = yield* readSkillPathDetails(path);
       if (staged.entry?.hash !== file.entry.hash)
         return yield* new RecoveryInvalid({
-          detail: `Reconstruction differs from original: ${file.path}`,
+          reason: { _tag: "ContentChanged", kind: "reconstruction", path: file.path },
         });
       after = { ...staged, path: action.path, anchor: before.anchor };
     }
@@ -215,32 +243,44 @@ export const runUndo = Effect.fn("Library.runUndo")(function* (
     yield* ensureRecoveryOperation(home, join(home, "removed", program.backupId));
     const moved = yield* moveAside(operationId, directory, program.preserve);
     if (moved._tag === "Differs")
-      return yield* new StalePlan({ message: `Undo successor changed: ${moved.folder.path}` });
+      return yield* new StalePlan({
+        reason: { _tag: "EvidenceChanged", path: moved.folder.path, kind: "undo-successor" },
+      });
     yield* save({ ...program, preserved: true });
   }
   for (const action of program.actions) {
     yield* check();
     if (isAfter(action, yield* readSkillPathDetails(action.path))) continue;
     const file = program.files.find((item) => item.path === action.path);
-    if (!file) return yield* new RecoveryInvalid({ detail: "Missing Undo file" });
+    if (!file)
+      return yield* new RecoveryInvalid({ reason: { _tag: "MissingRecord", record: "undo-file" } });
     if (action.kind === "release-ownership") {
-      if (!file.entry) return yield* new RecoveryInvalid({ detail: "Missing original marker" });
+      if (!file.entry)
+        return yield* new RecoveryInvalid({
+          reason: { _tag: "MissingRecord", record: "original-marker" },
+        });
       yield* restoreMarker(action.path, file.entry);
     } else if (action.kind === "restore") {
       if ((yield* readSkillPathDetails(action.path)).entry !== null)
-        return yield* new StalePlan({ message: `Undo destination occupied: ${action.path}` });
+        return yield* new StalePlan({
+          reason: { _tag: "DestinationOccupied", path: action.path, kind: "undo-destination" },
+        });
       const source = action.transfer === "move" ? action.source : action.staged?.path;
       const expected =
         action.transfer === "move"
           ? program.sources.find((item) => item.path === source)
           : action.staged;
-      if (!source || !expected || !equal(yield* readSkillPathDetails(source), expected))
-        return yield* new StalePlan({ message: `Undo source changed: ${source}` });
+      if (!source)
+        return yield* new StalePlan({ reason: { _tag: "MissingRecord", record: "undo-source" } });
+      if (!expected || !equal(yield* readSkillPathDetails(source), expected))
+        return yield* new StalePlan({
+          reason: { _tag: "ContentChanged", path: source, kind: "undo-source" },
+        });
       yield* fs.rename(source, action.path);
     }
     if (!isAfter(action, yield* readSkillPathDetails(action.path)))
       return yield* new RecoveryInvalid({
-        detail: `Original restoration incomplete: ${action.path}`,
+        reason: { _tag: "ContentChanged", kind: "restoration", path: action.path },
       });
   }
   yield* check();

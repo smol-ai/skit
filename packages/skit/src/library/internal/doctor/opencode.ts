@@ -1,19 +1,9 @@
-import { Data, Effect, FileSystem, Option, Schedule, Schema, Stream } from "effect";
+import { Effect, FileSystem, Option, Schedule, Schema, Stream } from "effect";
 import { randomBytes } from "node:crypto";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { FailureTypeId, type SkitFailure } from "../../../shared/index.js";
+import { HarnessDiscoveryFailed } from "../../../harnesses/discovery-failures.js";
 
-class OpenCodeDiscoveryFailure
-  extends Data.TaggedError("OpenCodeDiscoveryFailure")<{
-    message: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Check that OpenCode runs, then retry.";
-}
 const Ready = Schema.Struct({ url: Schema.String });
 const Plugins = Schema.Array(
   Schema.Struct({
@@ -109,7 +99,16 @@ export const readOpenCodeV2Skills = Effect.fn("Doctor.readOpenCodeV2Skills")(fun
           size += chunk.length;
           return size > 32_000
             ? Effect.fail(
-                new OpenCodeDiscoveryFailure({ message: "OpenCode startup exceeded 32 KB" }),
+                new HarnessDiscoveryFailed({
+                  harness: "opencode",
+                  cwd,
+                  reason: {
+                    _tag: "OutputLimitExceeded",
+                    phase: "startup",
+                    limitBytes: 32_000,
+                    actualBytes: size,
+                  },
+                }),
               )
             : Effect.succeed(chunk);
         }),
@@ -120,8 +119,10 @@ export const readOpenCodeV2Skills = Effect.fn("Doctor.readOpenCodeV2Skills")(fun
         Stream.runHead,
       );
       if (Option.isNone(ready))
-        return yield* new OpenCodeDiscoveryFailure({
-          message: "OpenCode exited before server readiness",
+        return yield* new HarnessDiscoveryFailed({
+          harness: "opencode",
+          cwd,
+          reason: { _tag: "ResponseMissing", method: "serve", ...(stderr ? { stderr } : {}) },
         });
       const url = new URL(ready.value.url);
       if (
@@ -131,8 +132,17 @@ export const readOpenCodeV2Skills = Effect.fn("Doctor.readOpenCodeV2Skills")(fun
         url.username ||
         url.password
       )
-        return yield* new OpenCodeDiscoveryFailure({
-          message: "OpenCode returned an unexpected server address",
+        return yield* new HarnessDiscoveryFailed({
+          harness: "opencode",
+          cwd,
+          reason: {
+            _tag: "ServerAddressInvalid",
+            protocol: url.protocol,
+            hostname: url.hostname,
+            port: url.port,
+            hasUsername: Boolean(url.username),
+            hasPassword: Boolean(url.password),
+          },
         });
       const client = yield* HttpClient.HttpClient;
       const read = Effect.fn("Doctor.OpenCodeV2.get")(function* (endpoint: string) {
@@ -145,8 +155,10 @@ export const readOpenCodeV2Skills = Effect.fn("Doctor.readOpenCodeV2Skills")(fun
           ),
         );
         if (response.status !== 200)
-          return yield* new OpenCodeDiscoveryFailure({
-            message: `OpenCode ${endpoint} returned HTTP ${response.status}`,
+          return yield* new HarnessDiscoveryFailed({
+            harness: "opencode",
+            cwd,
+            reason: { _tag: "HttpStatus", endpoint, status: response.status },
           });
         let bytes = 0;
         return yield* response.stream.pipe(
@@ -154,7 +166,17 @@ export const readOpenCodeV2Skills = Effect.fn("Doctor.readOpenCodeV2Skills")(fun
             bytes += chunk.length;
             return bytes > 4_000_000
               ? Effect.fail(
-                  new OpenCodeDiscoveryFailure({ message: "OpenCode discovery exceeded 4 MB" }),
+                  new HarnessDiscoveryFailed({
+                    harness: "opencode",
+                    cwd,
+                    reason: {
+                      _tag: "OutputLimitExceeded",
+                      phase: "inventory",
+                      endpoint,
+                      limitBytes: 4_000_000,
+                      actualBytes: bytes,
+                    },
+                  }),
                 )
               : Effect.succeed(chunk);
           }),
@@ -170,8 +192,15 @@ export const readOpenCodeV2Skills = Effect.fn("Doctor.readOpenCodeV2Skills")(fun
           yield* read("/api/plugin"),
         );
         if (report.location.directory !== directory)
-          return yield* new OpenCodeDiscoveryFailure({
-            message: "OpenCode inventory belongs to another directory",
+          return yield* new HarnessDiscoveryFailed({
+            harness: "opencode",
+            cwd,
+            reason: {
+              _tag: "DirectoryMismatch",
+              endpoint: "/api/plugin",
+              expected: directory,
+              actual: report.location.directory,
+            },
           });
         return requiredPlugins.every((id) =>
           report.data.some((plugin) => plugin.id === id && plugin.state.status === "active"),
@@ -187,8 +216,15 @@ export const readOpenCodeV2Skills = Effect.fn("Doctor.readOpenCodeV2Skills")(fun
           yield* read("/api/skill"),
         );
         if (report.location.directory !== directory)
-          return yield* new OpenCodeDiscoveryFailure({
-            message: "OpenCode inventory belongs to another directory",
+          return yield* new HarnessDiscoveryFailed({
+            harness: "opencode",
+            cwd,
+            reason: {
+              _tag: "DirectoryMismatch",
+              endpoint: "/api/skill",
+              expected: directory,
+              actual: report.location.directory,
+            },
           });
         const snapshot = JSON.stringify([...report.data].sort((a, b) => a.id.localeCompare(b.id)));
         stable = snapshot === previous ? stable + 1 : 1;
@@ -213,8 +249,10 @@ export const readOpenCodeV2Skills = Effect.fn("Doctor.readOpenCodeV2Skills")(fun
       duration: 20_000,
       orElse: () =>
         Effect.fail(
-          new OpenCodeDiscoveryFailure({
-            message: "OpenCode v2 discovery timed out after 20 seconds",
+          new HarnessDiscoveryFailed({
+            harness: "opencode",
+            cwd,
+            reason: { _tag: "TimedOut", timeoutMs: 20_000 },
           }),
         ),
     }),

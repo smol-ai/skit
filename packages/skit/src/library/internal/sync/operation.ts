@@ -1,4 +1,6 @@
 import { Effect, Option } from "effect";
+import { SyncEnablementIssue, type SyncIssue } from "../../sync-issues.js";
+import { stepError } from "../../store/step-error.js";
 import { sha256Hash } from "../../../shared/hash.js";
 import { normalizeLibraryManifest } from "../../manifest.js";
 import { inspectContent } from "../content/content.js";
@@ -10,7 +12,7 @@ import * as InstalledSkills from "../../installed-skills.js";
 import { operationScope } from "../operations/operations.js";
 import { planIntent } from "../../plan-changes.js";
 import { currentSkillVersion, enabledSkillIds } from "../../library-contracts.js";
-import { InvalidIntent } from "../../enabled-plan.js";
+import { InvalidLibraryState } from "../../failures.js";
 import { LibraryState } from "../../library-state.js";
 import { routedInstalledSkills } from "../../routing/recorded.js";
 import { libraryOriginalsPath, libraryStatePath, loadLibrary } from "../../store/library-store.js";
@@ -27,7 +29,7 @@ export interface SyncStepResult {
   readonly phase: "retire" | "publish" | "install";
   readonly installed: number;
   readonly uninstalled: number;
-  readonly issues: readonly string[];
+  readonly issues: readonly SyncIssue[];
 }
 
 /** History is not part of a publication, or each Sync would recursively copy earlier operations. */
@@ -125,10 +127,16 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
 ) {
   const step = steps[index]?.step;
   if (step?._tag !== "Sync")
-    return yield* new InvalidIntent({ detail: "Expected a recorded Sync step" });
+    return yield* new InvalidLibraryState({
+      path: libraryStatePath(home),
+      reason: { _tag: "MissingRecord", record: "sync-step" },
+    });
   const found = programFor(step, steps);
   if (Option.isNone(found))
-    return yield* new InvalidIntent({ detail: "Sync step has no recorded program" });
+    return yield* new InvalidLibraryState({
+      path: libraryStatePath(home),
+      reason: { _tag: "MissingRecord", record: "sync-program" },
+    });
   const program = found.value;
   const files = yield* routedInstalledSkills(program.routing);
   return yield* Effect.gen(function* () {
@@ -206,7 +214,7 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
     yield* checkFolders(program, current, step.phase === "install", home);
     let installed = 0;
     let uninstalled = 0;
-    const issues = [...program.issues];
+    const issues: SyncIssue[] = [...program.issues];
     if (step.phase === "retire" && !alreadyPublished) {
       const live = program.retire.filter((copy) =>
         current.installed_skills.some((row) => row.installed_skill_id === copy.installed_skill_id),
@@ -243,11 +251,19 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
       if (attempt._tag === "Failure") {
         if (attempt.failure instanceof InstalledSkills.Changed) return yield* attempt.failure;
         if (program.after.device_skill_selection?.mode !== "choose") return yield* attempt.failure;
-        issues.push(`Enablement failed: ${String(attempt.failure)}`);
+        issues.push(
+          SyncEnablementIssue.cases.InstallationFailed.make({
+            failure: stepError(attempt.failure),
+          }),
+        );
       } else if (attempt.success._tag === "Incomplete") {
         if (program.after.device_skill_selection?.mode !== "choose")
           return yield* attempt.success.cause;
-        issues.push(`Enablement failed: ${String(attempt.success.cause)}`);
+        issues.push(
+          SyncEnablementIssue.cases.InstallationFailed.make({
+            failure: stepError(attempt.success.cause),
+          }),
+        );
       } else {
         installed = attempt.success.copies.filter((copy) => copy._tag === "Installed").length;
         uninstalled = attempt.success.copies.filter((copy) => copy._tag === "Uninstalled").length;
@@ -261,9 +277,13 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
               selected.has(copy.skill_id) &&
               program.routing.active.includes(copy.destination),
           ))
-            issues.push(
-              `Cannot install at ${copy.path}: existing content or ownership conflicts. Preserve it and review before retrying.`,
-            );
+            if (copy.status === "conflicted")
+              issues.push(
+                SyncEnablementIssue.cases.InstalledFolderConflicted.make({
+                  path: copy.path,
+                  conflicts: copy.conflicts,
+                }),
+              );
         }
       }
     }

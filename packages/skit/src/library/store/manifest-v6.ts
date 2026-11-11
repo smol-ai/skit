@@ -38,6 +38,6 @@ export const LibraryManifestFromV6 = LibraryManifestV6.pipe(
       schema: "skit.library.v7" as const,
       bindings: mergeGlobalBindingsV7(manifest, manifest.bindings),
     })),
-    encode: SchemaGetter.forbidden(() => "v6 portable Library manifests are decode-only"),
+    encode: SchemaGetter.forbiddenEncoding,
   }),
 );

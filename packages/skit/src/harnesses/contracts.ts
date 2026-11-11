@@ -2,7 +2,6 @@ import { Schema } from "effect";
 export const HarnessName = Schema.Literals(["codex", "claude-code", "opencode", "devin"]);
 export type HarnessName = typeof HarnessName.Type;
 
-type SkillsDirectoryBase = "home" | "config" | "repository";
 export type SkillsDirectoryRole = "native" | "compatibility";
 type HarnessEvidence = "documented" | "observed" | "unknown";
 export type FrontmatterValueType =
@@ -39,9 +38,9 @@ export interface HarnessFrontmatterField {
 }
 
 export interface HarnessFrontmatterContract {
+  readonly harness: HarnessName;
   id: string;
   variant: string;
-  default: boolean;
   frontmatter: "required" | "optional";
   unknownFields: "ignored" | "unknown";
   sourceIds: readonly string[];
@@ -73,16 +72,17 @@ export interface HarnessSkillMetadataContract {
   fields: readonly HarnessSkillMetadataField[];
 }
 
-export interface SkillsDirectory {
+export type SkillsDirectory = {
   id: string;
-  base: SkillsDirectoryBase;
   path: string;
-  scope: "global" | "project";
   role: SkillsDirectoryRole;
   readable: boolean;
   writable: boolean;
   evidence: HarnessEvidence;
-}
+} & (
+  | { readonly base: "home" | "config"; readonly scope: "global" }
+  | { readonly base: "repository"; readonly scope: "project" }
+);
 
 export interface SkillListingContract {
   readonly fraction: number;
@@ -104,13 +104,16 @@ export interface HarnessProfile {
     version: string;
     verifiedAt: string;
   };
-  roots: readonly SkillsDirectory[];
+  roots: Readonly<Record<string, SkillsDirectory>>;
   documentation: readonly HarnessDocumentationSource[];
-  frontmatter: readonly HarnessFrontmatterContract[];
+  frontmatter: {
+    readonly default: HarnessFrontmatterContract;
+    readonly variants: Readonly<Record<string, HarnessFrontmatterContract>>;
+  };
   skillMetadata?: readonly HarnessSkillMetadataContract[];
   installedSkill: {
-    globalTarget: string | null;
-    projectTarget: string | null;
+    globalTarget: Extract<SkillsDirectory, { scope: "global" }> & { readonly writable: true };
+    projectTarget: Extract<SkillsDirectory, { scope: "project" }> & { readonly writable: true };
     strategy: "copy" | "symlink";
   };
 }
@@ -122,8 +125,6 @@ export function defineHarnessProfile<const T extends HarnessProfile>(profile: T)
 /** Device-local skills directories that stand in for a Harness's own global roots. */
 export type SkillsDirectoryOverrides = Partial<Record<HarnessName, readonly string[]>>;
 
-export interface SkillsDirectoryContext {
-  home: string;
-  configHome: string;
-  repository?: string;
-}
+export type SkillsDirectoryContext =
+  | { readonly scope: "global"; readonly home: string; readonly configHome: string }
+  | { readonly scope: "project"; readonly repository: string };

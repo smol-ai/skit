@@ -1,3 +1,4 @@
+import { defineCommand } from "./definition.js";
 import { Cause, Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
@@ -16,14 +17,16 @@ import { encodeResult as result } from "./encode-result.js";
 
 const flags = { json: jsonFlag };
 
-const operation = Argument.String("operation");
+const operation = Argument.String("operation").pipe(
+  Argument.withDescription("Recovery operation ID from skit library recovery list."),
+);
 
 const apply = optionalString(
   "apply",
   "Restore only if this reviewed recovery planId still matches. Omit to preview.",
 );
 
-const list = Command.make("list", flags, () =>
+const list = defineCommand("list", flags, () =>
   Effect.gen(function* () {
     const configuration = yield* SkitConfiguration;
     const home = configuration.skitHome;
@@ -45,12 +48,11 @@ const list = Command.make("list", flags, () =>
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read"] },
     outputSchemas: [recoveryOutputContracts.recoveryList],
-    exitCodes: [0, 11, 12, 64],
     interactive: false,
   }),
 );
 
-const inspect = Command.make("inspect", { operation, ...flags }, (input) =>
+const inspect = defineCommand("inspect", { operation, ...flags }, (input) =>
   Effect.gen(function* () {
     const configuration = yield* SkitConfiguration;
     const home = configuration.skitHome;
@@ -71,12 +73,11 @@ const inspect = Command.make("inspect", { operation, ...flags }, (input) =>
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read"] },
     outputSchemas: [recoveryOutputContracts.recovery],
-    exitCodes: [0, 11, 12, 64],
     interactive: false,
   }),
 );
 
-const restore = Command.make("restore", { operation, apply, ...flags }, (input) =>
+const restore = defineCommand("restore", { operation, apply, ...flags }, (input) =>
   Effect.gen(function* () {
     const configuration = yield* SkitConfiguration;
     const home = configuration.skitHome;
@@ -100,17 +101,12 @@ const restore = Command.make("restore", { operation, apply, ...flags }, (input) 
       );
     if (approved !== plan.change.planId)
       return yield* renderer.result(
-        result(
-          "recovery",
-          recoveryOutputContracts.recovery,
-          {
-            ...plan.change,
-            phase: "stale",
-            failure: "The recovery plan changed. Review a new preview before applying.",
-            actions: recoveryActions(home, input.operation),
-          },
-          12,
-        ),
+        result("recovery", recoveryOutputContracts.recovery, {
+          ...plan.change,
+          phase: "stale",
+          failure: "The recovery plan changed. Review a new preview before applying.",
+          actions: recoveryActions(home, input.operation),
+        }),
       );
     const applied = yield* restore.apply;
     const inspection = applied.inspection;
@@ -119,23 +115,18 @@ const restore = Command.make("restore", { operation, apply, ...flags }, (input) 
     const allRestored = inspection.entries.every((entry) => entry.status === "at-original");
     const someRestored = inspection.entries.some((entry) => entry.status === "at-original");
     yield* renderer.result(
-      result(
-        "recovery",
-        recoveryOutputContracts.recovery,
-        {
-          ...inspection,
-          phase: failed
-            ? "failed"
-            : allRestored
-              ? "restored"
-              : someRestored
-                ? "partial"
-                : "conflicted",
-          ...(failed ? { failure: failed.message } : {}),
-          actions: recoveryActions(home, input.operation),
-        },
-        failed?.exitCode ?? (allRestored ? 0 : 12),
-      ),
+      result("recovery", recoveryOutputContracts.recovery, {
+        ...inspection,
+        phase: failed
+          ? "failed"
+          : allRestored
+            ? "restored"
+            : someRestored
+              ? "partial"
+              : "conflicted",
+        ...(failed ? { failure: failed.message } : {}),
+        actions: recoveryActions(home, input.operation),
+      }),
     );
   }),
 ).pipe(
@@ -146,7 +137,6 @@ const restore = Command.make("restore", { operation, apply, ...flags }, (input) 
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read", "filesystem.write"] },
     outputSchemas: [recoveryOutputContracts.recovery],
-    exitCodes: [0, 11, 12, 64],
     interactive: false,
   }),
 );

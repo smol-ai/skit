@@ -1,11 +1,11 @@
 // Probes are declared subprocesses, so they belong to the command's fiber and an interrupted audit
 // kills the child. The allowlist is checked before spawning, and a probe that refuses, exceeds its
 // budget or answers with something other than JSON is a failed probe rather than a failed audit.
-import { Data, Effect, Result } from "effect";
+import { Effect, Result } from "effect";
 import { captureBounded } from "../harnesses/probe-process.js";
 import { arrayAt, isJsonObject } from "../shared/json.js";
 
-class ProbeFailed extends Data.TaggedError("ProbeFailed")<{ message: string }> {}
+import { AuditProbeFailure } from "./probe-failures.js";
 
 export interface ProbeOptions {
   probes?: readonly string[];
@@ -16,7 +16,7 @@ export interface ProbeResult {
   harness: string;
   status: "ok" | "failed";
   observed?: { plugins?: number; mcpServers?: number };
-  reason?: string;
+  failure?: AuditProbeFailure;
 }
 
 function count(value: unknown): number {
@@ -42,25 +42,27 @@ export const runAuditProbes = Effect.fn("Audit.probes")(function* (options: Prob
     const invocation = args.join(" ");
     // The allowlist is the boundary: an undeclared invocation is refused before spawning.
     if (!allowed.has(invocation))
-      return yield* new ProbeFailed({ message: `Probe is not declared: ${invocation}` });
+      return yield* Effect.fail(AuditProbeFailure.cases.UndeclaredInvocation.make({ invocation }));
     // The same budget spawnSync enforced with maxBuffer, and the same timeout.
     const captured = yield* captureBounded(args[0], args.slice(1), {
       limit: 5_000_000,
       timeoutMs: 10_000,
-    });
+    }).pipe(Effect.mapError((failure) => AuditProbeFailure.cases.ProcessFailed.make({ failure })));
     if (captured.exitCode !== 0)
-      return yield* new ProbeFailed({ message: `exit ${captured.exitCode}` });
+      return yield* Effect.fail(
+        AuditProbeFailure.cases.ExitCode.make({ invocation, exitCode: captured.exitCode }),
+      );
     // Malformed output is a failed probe, as it was before, not a defect.
     return yield* Effect.try({
       try: (): unknown => JSON.parse(captured.output),
-      catch: () => new ProbeFailed({ message: `${invocation} did not return JSON` }),
+      catch: (failure) => AuditProbeFailure.cases.InvalidJson.make({ invocation, failure }),
     });
   });
   const results: ProbeResult[] = [];
   for (const harness of options.probes ?? []) {
     const steps = invocations[harness];
     if (!steps) {
-      results.push({ harness, status: "failed", reason: "unsupported probe" });
+      results.push({ harness, status: "failed", failure: { _tag: "UnsupportedHarness", harness } });
       continue;
     }
     const observed: { plugins?: number; mcpServers?: number } = {};
@@ -75,7 +77,7 @@ export const runAuditProbes = Effect.fn("Audit.probes")(function* (options: Prob
         : {
             harness,
             status: "failed",
-            reason: attempt.failure.message,
+            failure: attempt.failure,
           },
     );
   }

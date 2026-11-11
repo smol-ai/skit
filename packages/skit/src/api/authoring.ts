@@ -58,7 +58,10 @@ const dedicatedRevisionErrorCodes = new Set([
 const InvalidRevisionResponse = Schema.Struct({
   error: Schema.String.check(
     Schema.makeFilter((value) => !dedicatedRevisionErrorCodes.has(value), {
-      message: "Invalid SKIT errors must not overlap dedicated HTTP responses",
+      representation: {
+        id: "skit/schema/revision-error-code",
+        payload: { reserved: [...dedicatedRevisionErrorCodes] },
+      },
     }),
   ),
 }).pipe(HttpApiSchema.status(400));

@@ -81,13 +81,14 @@ export const planSetupRemovals = Effect.fn("Setup.planRemovals")(function* (
         if (folders.some((folder) => folder.path === path)) continue;
         const observed = yield* readPathEvidence(path);
         if (Option.isNone(observed))
-          return yield* new StalePlan({ message: "The Library changed since this was previewed" });
+          return yield* new StalePlan({ reason: { _tag: "ReviewedStateChanged" } });
         const evidence = observed.value;
         if (
           evidence._tag === "Directory" &&
-          evidence.treeHash !== instance.contentIdentity.currentHash
+          (instance.contentIdentity.status !== "hashed" ||
+            evidence.treeHash !== instance.contentIdentity.currentHash)
         )
-          return yield* new StalePlan({ message: "The Library changed since this was previewed" });
+          return yield* new StalePlan({ reason: { _tag: "ReviewedStateChanged" } });
         entries.push({ name: selection.name, path, type: evidence._tag });
         folders.push(evidence);
       }

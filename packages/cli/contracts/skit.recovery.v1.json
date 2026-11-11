@@ -43,7 +43,15 @@
             ]
           },
           "reason": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "parent-changed",
+              "saved",
+              "at-original",
+              "missing",
+              "destination-occupied",
+              "entry-changed"
+            ]
           }
         },
         "required": [

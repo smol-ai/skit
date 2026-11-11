@@ -1,5 +1,28 @@
+import * as Library from "../library/library.js";
+import * as MachineSettings from "../library/machine-settings.js";
+import { LibraryAuditInvalid } from "../library/audit/failures.js";
+import { RestoreInvalid } from "../library/restore-failures.js";
+import { UpdateFailure } from "../library/update-failures.js";
+import { ImportFailure } from "../library/import-failures.js";
+import { PluginFailure } from "../sources/plugin-failures.js";
+import { DedicatedInstallerRequired } from "../sources/installer-guidance.js";
+import { PnpmSkillManaged } from "../installed-skills/pnpm-failures.js";
+import { SourceRestoreInvalid } from "../library/source-restore-failures.js";
+import { SourceFetchFailure } from "../sources/fetch-failures.js";
+import { MachineSettingsFailure } from "../library/machine-settings-failures.js";
+import { AuthoredSkillIssue } from "../library/authored-skill-issues.js";
 import { Effect, FileSystem, Option, Ref, Schedule, Schema, Stream } from "effect";
+import { SchemaFailure } from "../shared/schema-issue.js";
 import { isAbsolute, relative } from "node:path";
+import { isDeepStrictEqual } from "node:util";
+import { AuthorHistoryFailure } from "./history-failures.js";
+import { WorkspaceFailure } from "./workspace-contracts.js";
+import { AuthorFailure } from "./failures.js";
+import { StoreError } from "../history/history.js";
+import { SyncFailure } from "../sync/failures.js";
+import { SkitContractError } from "../api/contracts.js";
+import { ApplyFailure } from "../library/apply-failure.js";
+import { SourceFailure } from "../sources/failures.js";
 import { AuthorWorkspace, AuthorWorkspaceUnsafe } from "./workspace.js";
 import { AuthorHistory } from "./history.js";
 import { NoRemoteHome } from "./failures.js";
@@ -10,6 +33,34 @@ import type { AuthorRegistry } from "./transport.js";
 import { updateAuthoredSkills } from "./operations.js";
 import { TreeEntry } from "../artifact/tree-entry.js";
 import { AuthoredInstallation, AuthoredInstalledCopy } from "../library/update-authored-skills.js";
+
+export const AuthorWatchRetrying = Schema.Struct({
+  event: Schema.Literal("retrying"),
+  operation: Schema.Literals(["observe", "install", "sync", "events"]),
+  failure: Schema.Union([
+    AuthorHistoryFailure,
+    WorkspaceFailure,
+    AuthorFailure,
+    StoreError,
+    SyncFailure,
+    SkitContractError,
+    ApplyFailure,
+    MachineSettingsFailure,
+    SourceFailure,
+    SourceFetchFailure,
+    LibraryAuditInvalid,
+    RestoreInvalid,
+    UpdateFailure,
+    ImportFailure,
+    PluginFailure,
+    DedicatedInstallerRequired,
+    PnpmSkillManaged,
+    SourceRestoreInvalid,
+    SchemaFailure,
+    // Registry transports and filesystem event streams can fail with native errors.
+    Schema.Defect(),
+  ]),
+});
 
 export const AuthorWatchEvent = Schema.Union([
   Schema.Struct({ event: Schema.Literal("watching"), path: Schema.String }),
@@ -33,18 +84,14 @@ export const AuthorWatchEvent = Schema.Union([
     status: Schema.Literals(["unregistered", "held", "unchanged", "updated"]),
     installed: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     installed_copies: Schema.Array(AuthoredInstalledCopy),
-    messages: Schema.Array(Schema.String),
+    issues: Schema.Array(AuthoredSkillIssue),
     context: Schema.optionalKey(AuthoredInstallation),
   }),
   Schema.Struct({
     event: Schema.Literal("recovered"),
     operation: Schema.Literals(["observe", "install", "sync", "events"]),
   }),
-  Schema.Struct({
-    event: Schema.Literal("retrying"),
-    operation: Schema.Literals(["observe", "install", "sync", "events"]),
-    message: Schema.String,
-  }),
+  AuthorWatchRetrying,
 ]);
 export type AuthorWatchEvent = typeof AuthorWatchEvent.Type;
 
@@ -72,16 +119,18 @@ export const watchAuthorWorkspace = Effect.fn("Author.watch")(function* <E, R, P
   const unsafe = () =>
     new AuthorWorkspaceUnsafe({
       path: root,
-      reason: "the watched workspace was replaced; restart watch after checking it",
+      reason: { _tag: "WatchedRootReplaced" },
     });
   if (Option.isNone(native)) return yield* unsafe();
   const original = native.value;
   const previous = yield* Ref.make<{ id: string; tree: readonly TreeEntry[] } | undefined>(
     undefined,
   );
-  const failures = yield* Ref.make(new Map<string, string>());
+  const failures = yield* Ref.make(new Map<string, unknown>());
   const sameEntry = Option.makeEquivalence(Schema.toEquivalence(TreeEntry));
   const previousSync = yield* Ref.make<string | undefined>(undefined);
+  const library = yield* Library.Service;
+  let installedInputs: string | undefined;
   const previousInstall = yield* Ref.make<{ issues: string; configuration: string } | undefined>(
     undefined,
   );
@@ -106,14 +155,19 @@ export const watchAuthorWorkspace = Effect.fn("Author.watch")(function* <E, R, P
     });
   const retrying = (operation: "observe" | "install" | "sync" | "events", error: unknown) =>
     Effect.gen(function* () {
-      if (operation === "observe" || operation === "install") yield* history.inventory.reset(root);
-      const message = error instanceof Error ? error.message : String(error);
+      if (operation === "observe" || operation === "install") {
+        installedInputs = undefined;
+        yield* history.inventory.reset(root);
+      }
       const changed = yield* Ref.modify(
         failures,
         (current) =>
-          [current.get(operation) !== message, new Map(current).set(operation, message)] as const,
+          [
+            !current.has(operation) || !isDeepStrictEqual(current.get(operation), error),
+            new Map(current).set(operation, error),
+          ] as const,
       );
-      if (changed) yield* report({ event: "retrying", operation, message });
+      if (changed) yield* report({ event: "retrying", operation, failure: error });
     });
   const observe = (trigger: "filesystem" | "rescan") =>
     Effect.gen(function* () {
@@ -143,13 +197,27 @@ export const watchAuthorWorkspace = Effect.fn("Author.watch")(function* <E, R, P
     }).pipe(Effect.catch((error) => retrying("observe", error)));
   const install = Effect.gen(function* () {
     yield* checkRoot;
+    const saved = yield* Ref.get(previous);
+    const inputs = JSON.stringify({
+      revision: saved?.id,
+      library: (yield* library.read).revision,
+      settings: yield* MachineSettings.read(options.home),
+    });
+    if (inputs === installedInputs) return;
     const result = yield* updateAuthoredSkills(root);
+    // Pending removals and failed/conflicted copies still need retries without a file edit.
+    installedInputs =
+      result.issues.length === 0 &&
+      result.status === "unchanged" &&
+      result.revision_id === saved?.id
+        ? inputs
+        : undefined;
     const current = {
       issues: JSON.stringify({
         status: result.status === "updated" ? "unchanged" : result.status,
-        messages: result.messages,
+        issues: result.issues,
       }),
-      configuration: JSON.stringify(result.context),
+      configuration: JSON.stringify("context" in result ? result.context : undefined),
     };
     const before = yield* Ref.getAndSet(previousInstall, current);
     const reason =
@@ -178,7 +246,11 @@ export const watchAuthorWorkspace = Effect.fn("Author.watch")(function* <E, R, P
       workspace.connection.remote.skit !== remote.skit
     )
       return yield* unsafe();
-    const result = yield* syncAuthorWorkspace(root, { home: options.home, apply: true }, registry);
+    const result = yield* syncAuthorWorkspace(
+      root,
+      { home: options.home, apply: true, confirmRemovals: false },
+      registry,
+    );
     const key = JSON.stringify(result);
     const before = yield* Ref.getAndSet(previousSync, key);
     if (result.status !== "up_to_date" && before !== key) yield* report({ event: "sync", result });

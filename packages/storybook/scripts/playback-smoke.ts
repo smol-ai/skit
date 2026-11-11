@@ -43,30 +43,48 @@ try {
     harness.mockInput.pressKey("ARROW_RIGHT");
   assert.equal(app.state().status, "Downloading 3 Skill copies | 0/3");
   await harness.flush();
-  const headingSpan = () =>
-    harness
-      .captureSpans()
-      .lines.flatMap((line) => line.spans)
-      .find((span) => span.text.includes("This device"));
+  const headingSpans = () => {
+    const heading = "This device";
+    for (const { spans } of harness.captureSpans().lines) {
+      const start = spans
+        .map((span) => span.text)
+        .join("")
+        .indexOf(heading);
+      if (start < 0) continue;
+      let offset = 0;
+      // ANSI styling can split a visible heading across several captured spans.
+      return spans.filter((span) => {
+        const end = offset + span.text.length;
+        const overlaps = offset < start + heading.length && end > start;
+        offset = end;
+        return overlaps;
+      });
+    }
+    assert.fail("The preview must contain the This device heading");
+  };
   assert.equal(app.state().color, false);
-  assert.deepEqual(headingSpan()?.fg.toInts().slice(0, 3), [208, 209, 210]);
-  assert.deepEqual(headingSpan()?.bg.toInts().slice(0, 3), [16, 17, 18]);
+  for (const span of headingSpans()) {
+    assert.deepEqual(span.fg.toInts().slice(0, 3), [208, 209, 210]);
+    assert.deepEqual(span.bg.toInts().slice(0, 3), [16, 17, 18]);
+  }
   harness.mockInput.pressKey("l", { ctrl: true });
   await settle();
   assert.equal(app.state().color, true);
-  assert.deepEqual(
-    headingSpan()?.fg.toInts().slice(0, 3),
-    [18, 52, 86],
-    "ANSI cyan must use the host palette",
-  );
+  for (const span of headingSpans())
+    assert.deepEqual(
+      span.fg.toInts().slice(0, 3),
+      [18, 52, 86],
+      "ANSI cyan must use the host palette",
+    );
   harness.mockInput.pressKey("l", { ctrl: true });
   await settle();
   assert.equal(app.state().color, false);
-  assert.deepEqual(
-    headingSpan()?.fg.toInts().slice(0, 3),
-    [208, 209, 210],
-    "turning colour off must remove recorded plan styling",
-  );
+  for (const span of headingSpans())
+    assert.deepEqual(
+      span.fg.toInts().slice(0, 3),
+      [208, 209, 210],
+      "turning colour off must remove recorded plan styling",
+    );
   const pausedIndex = app.state().index;
   const before = app.screen().text;
   app.tick();
@@ -114,7 +132,7 @@ try {
   harness.mockInput.pressTab();
   for (let index = 0; index < (app.state().count ?? 0); index++) harness.mockInput.pressEnter();
   await harness.flush();
-  assert.match(app.screen().text, /Error:/);
+  assert.match(app.screen().text, /✖ The Registry rejected/);
   assert.doesNotMatch(app.screen().text, /Library synced\./);
   assert.equal(app.state().status, undefined);
   console.log(

@@ -10,12 +10,13 @@ import { result } from "../commands/result.js";
 import { commandFailure } from "../commands/failure-classification.js";
 import { Renderer } from "../terminal/renderer.js";
 import { registryHttpLayer } from "../registry/registry-http.js";
+import type { TypeCommand } from "./interaction-recorder.js";
 
 /** Run the real sync command against a fixture Registry and disposable device homes. */
-export const syncJourney = (failDownload: boolean) =>
+export const syncJourney = (failDownload: boolean, home: string, typed: TypeCommand) =>
   Effect.scoped(
     Effect.gen(function* () {
-      const { workspace, seeded } = yield* makeSyncJourneyFixture;
+      const { workspace, seeded } = yield* makeSyncJourneyFixture(home);
       const remote = {
         library_id: "library_story",
         revision_id: "revision_story",
@@ -58,8 +59,9 @@ export const syncJourney = (failDownload: boolean) =>
           ),
         ),
       );
-      const home = join(workspace, "fresh-device");
+      const device = join(workspace, "fresh-device");
       const renderer = yield* Renderer;
+      yield* typed("skit sync --apply");
       const synced = yield* librarySyncCommand({
         authState: Result.succeed({
           origin: "https://registry.fixture",
@@ -71,13 +73,16 @@ export const syncJourney = (failDownload: boolean) =>
         // The fixture device's Library, routed as its installs.
         Effect.provide(
           Library.layer({
-            home,
+            home: device,
             roots: {
               home: workspace,
               configHome: workspace,
               overrides: { codex: [join(workspace, "agents-skills")] },
             },
-          }).pipe(Layer.provideMerge(skitConfigurationLayer(home)), Layer.provideMerge(transport)),
+          }).pipe(
+            Layer.provideMerge(skitConfigurationLayer(device)),
+            Layer.provideMerge(transport),
+          ),
         ),
         Effect.catchCause((cause) =>
           renderer.failure(commandFailure(cause)).pipe(Effect.andThen(Effect.failCause(cause))),

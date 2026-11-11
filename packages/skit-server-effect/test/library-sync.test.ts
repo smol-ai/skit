@@ -421,3 +421,29 @@ describe("Library sync Worker persistence", () => {
     }),
   );
 });
+
+it.effect("invalid snapshot facts keep the HTTP refusal and leave storage untouched", () =>
+  Effect.gen(function* () {
+    const headers = yield* session();
+    for (const rejected of [
+      { ...archive, digest: `sha256:${"0".repeat(64)}` },
+      { ...archive, entries: [{ path: "link", kind: "symlink", target: "../outside" }] },
+    ]) {
+      const response = yield* Effect.promise(() =>
+        SELF.fetch(`${origin}/api/library/snapshots`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(rejected),
+        }),
+      );
+      expect(response.status).toBe(400);
+      expect(yield* Effect.promise(() => response.json())).toEqual({ error: "invalid_request" });
+    }
+    expect(
+      yield* Effect.promise(() =>
+        env.DB.prepare("SELECT COUNT(*) AS count FROM library_snapshots").first("count"),
+      ),
+    ).toBe(0);
+    expect((yield* Effect.promise(() => env.SKIT_BLOBS.list())).objects).toEqual([]);
+  }),
+);

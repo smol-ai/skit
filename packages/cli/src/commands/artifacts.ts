@@ -1,10 +1,14 @@
+import { errorOutputContract } from "./error-output.js";
+import { processExitCodes } from "./exit-code.js";
 import { Effect, JsonSchema, Schema } from "effect";
 import { outputContracts } from "./output-contracts.js";
 import type { AnyOutputContract } from "./output-contracts.js";
 import { commandDocuments } from "./manifest.js";
 import { skitCommand } from "./tree.js";
 
-function contractJsonSchema(contract: AnyOutputContract): JsonSchema.JsonSchema {
+function contractJsonSchema(
+  contract: AnyOutputContract | typeof errorOutputContract,
+): JsonSchema.JsonSchema {
   const document = JsonSchema.toDocumentDraft07(
     Schema.toJsonSchemaDocument(contract.schema, {
       onExcessProperty: "ignore",
@@ -23,14 +27,13 @@ export const commandContractArtifacts = Effect.fn("CLI.commandContractArtifacts"
     summary: command.summary,
     effects: command.effects,
     outputSchemas: command.outputSchemas.slice(0, -2),
-    exitCodes: command.successExitCodes,
     interactive: command.interactive,
     examples: command.examples,
     positionals: command.positionals,
     flags: command.documentedFlags,
   }));
   const artifacts: Record<string, string> = {
-    "command-manifest.json": `${JSON.stringify({ commands: definitions }, null, 2)}\n`,
+    "command-manifest.json": `${JSON.stringify({ exitCodes: processExitCodes, commands: definitions }, null, 2)}\n`,
   };
   // Global output flags emit contracts independently of command handlers.
   const exposedOutputSchemas = new Set([
@@ -38,7 +41,7 @@ export const commandContractArtifacts = Effect.fn("CLI.commandContractArtifacts"
     outputContracts.completions.id,
     ...documents.flatMap((command) => command.outputSchemas),
   ]);
-  for (const contract of Object.values(outputContracts)) {
+  for (const contract of [...Object.values(outputContracts), errorOutputContract]) {
     if (!exposedOutputSchemas.has(contract.id)) continue;
     artifacts[`${contract.id}.json`] = `${JSON.stringify(
       {

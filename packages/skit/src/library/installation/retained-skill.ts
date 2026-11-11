@@ -29,13 +29,13 @@ export const prepareInstalledSkillRebuild = Effect.fn("Install.prepareRebuild")(
   );
   if (!skill || !version)
     return yield* new InstalledSkillFailure({
-      message: "Former installed skill has no stored Skill Version",
+      reason: { _tag: "VersionMissing", kind: "former" },
     });
   const retainedPath = yield* Effect.scoped(
     Effect.gen(function* () {
       const source = yield* installedSkillSource(state, originalsPath, skill, version);
       if (source.kind !== "source")
-        return yield* new InstalledSkillFailure({ message: source.detail });
+        return yield* new InstalledSkillFailure({ reason: source.reason });
       return source.retainedPath;
     }),
   );
@@ -45,7 +45,7 @@ export const prepareInstalledSkillRebuild = Effect.fn("Install.prepareRebuild")(
       // Retained bytes may have changed since review; validate them again before reading.
       const current = yield* installedSkillSource(state, originalsPath, skill, version);
       if (current.kind !== "source")
-        return yield* new InstalledSkillFailure({ message: current.detail });
+        return yield* new InstalledSkillFailure({ reason: current.reason });
       yield* copySkill({
         ...current,
         libraryPath: current.libraryPath,

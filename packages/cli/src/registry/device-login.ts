@@ -56,16 +56,29 @@ const requestDeviceCode = Effect.fn("Auth.requestDeviceCode")(function* (
     headers: json,
     body: JSON.stringify({ client_id: CLI_DEVICE_CLIENT_ID }),
   });
-  if (!ok(started)) return yield* rejected(started, "Device authorization");
+  if (!ok(started)) return yield* rejected(started, origin, "device-authorization");
   const code = yield* started.json.pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(DeviceCodeResponse)),
     Effect.mapError(
-      (error) => new SignInFailed({ message: `Device authorization is invalid: ${error.message}` }),
+      (failure) =>
+        new SignInFailed({
+          origin,
+          reason: {
+            _tag: "ResponseInvalid",
+            operation: "device-authorization",
+            status: started.status,
+            failure,
+          },
+        }),
     ),
   );
-  const expiresAt = new Date((yield* Clock.currentTimeMillis) + code.expires_in * 1_000);
+  const receivedAt = yield* Clock.currentTimeMillis;
+  const expiresAt = new Date(receivedAt + code.expires_in * 1_000);
   if (!Number.isFinite(expiresAt.getTime()))
-    return yield* new SignInFailed({ message: "Device authorization expiry is out of range" });
+    return yield* new SignInFailed({
+      origin,
+      reason: { _tag: "DeviceExpiryInvalid", expiresIn: code.expires_in, receivedAt },
+    });
   return {
     origin,
     deviceCode: code.device_code,
@@ -186,8 +199,16 @@ const awaitDeviceApproval = Effect.fn("Auth.awaitDeviceApproval")(function* (
       const granted = yield* polled.json.pipe(
         Effect.flatMap(Schema.decodeUnknownEffect(DeviceTokenResponse)),
         Effect.mapError(
-          (error) =>
-            new SignInFailed({ message: `Device authorization is invalid: ${error.message}` }),
+          (failure) =>
+            new SignInFailed({
+              origin: pending.origin,
+              reason: {
+                _tag: "ResponseInvalid",
+                operation: "device-token",
+                status: polled.status,
+                failure,
+              },
+            }),
         ),
       );
       return granted.access_token;
@@ -205,7 +226,7 @@ const awaitDeviceApproval = Effect.fn("Auth.awaitDeviceApproval")(function* (
     if (error === "access_denied") return yield* new DeviceLoginEnded({ reason: "denied" });
     if (error === "expired_token") return yield* new DeviceLoginEnded({ reason: "expired" });
     if (error === "invalid_grant") return yield* new DeviceLoginEnded({ reason: "invalid" });
-    return yield* rejected(polled, "Device authorization");
+    return yield* rejected(polled, pending.origin, "device-token");
   }
 });
 

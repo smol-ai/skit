@@ -1,6 +1,7 @@
+import { ListingBudget } from "../src/harnesses/skill-listing/contracts.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { it } from "@effect/vitest";
-import { ConfigProvider, Effect, FileSystem } from "effect";
+import { ConfigProvider, Effect, FileSystem, Schema } from "effect";
 import { loadLibrary } from "../src/library/store/library-store.js";
 import { join } from "node:path";
 import { expect } from "vitest";
@@ -91,7 +92,19 @@ it.effect(
         model: "explicit-model",
         unit: "characters",
         fidelity: "bounded",
+        provenance: {
+          _tag: "ClaudeFilesystem",
+          modelSource: { _tag: "Environment", name: "ANTHROPIC_MODEL" },
+          limitSource: { _tag: "Environment", name: "SLASH_COMMAND_TOOL_CHAR_BUDGET", value: 500 },
+        },
       });
+      const successfulWire = Schema.encodeSync(Schema.toCodecJson(ListingBudget))(override.budget);
+      const successfulStored = Schema.decodeUnknownSync(ListingBudget)(
+        JSON.parse(JSON.stringify(successfulWire)),
+      );
+      expect(successfulStored).toEqual(override.budget);
+      for (const field of ["basis", "coverage", "warnings"])
+        expect(successfulWire).not.toHaveProperty(field);
       for (const [model, fraction, expected] of [
         ["opus", 0.01, 40000],
         ["claude-haiku-4-5", 0.01, 8000],
@@ -114,7 +127,29 @@ it.effect(
       expect(invalid.budget).toMatchObject({ _tag: "Unavailable" });
       yield* fs.writeFileString(join(project, ".claude", "settings.local.json"), "invalid json");
       const malformed = yield* readClaudeListingSnapshot(state, options);
-      expect(malformed.budget).toMatchObject({ _tag: "Unavailable" });
+      expect(malformed.budget).toMatchObject({
+        _tag: "Unavailable",
+        reason: {
+          _tag: "ListingReadFailed",
+          failure: {
+            reason: {
+              _tag: "ReadFailed",
+              path: join(project, ".claude", "settings.local.json"),
+              failure: { _tag: "SchemaError" },
+            },
+          },
+        },
+      });
+      const wire = Schema.encodeSync(Schema.toCodecJson(ListingBudget))(malformed.budget);
+      const restored = Schema.decodeUnknownSync(ListingBudget)(JSON.parse(JSON.stringify(wire)));
+      expect(restored).toMatchObject({
+        _tag: "Unavailable",
+        reason: {
+          _tag: "ListingReadFailed",
+          failure: { reason: { _tag: "ReadFailed", failure: { _tag: "StoredSchemaFailure" } } },
+        },
+      });
+      expect(wire).not.toHaveProperty("detail");
     }).pipe(
       Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
       Effect.scoped,
@@ -147,11 +182,17 @@ it.effect("nested discovery uses root shared settings, then local settings and a
     };
     const snapshot = yield* readClaudeListingSnapshot(state, options);
     expect(snapshot.budget).toMatchObject({ _tag: "Estimated", model: "opus", limit: 40000 });
-    expect("settings" in snapshot ? snapshot.settings.modelSource : null).toBe(shared);
+    expect("settings" in snapshot ? snapshot.settings.modelSource : null).toEqual({
+      _tag: "SettingsFile",
+      path: shared,
+    });
     const local = join(project, ".claude", "settings.local.json");
     yield* fs.writeFileString(local, JSON.stringify({ model: "sonnet" }));
     const localSnapshot = yield* readClaudeListingSnapshot(state, options);
-    expect("settings" in localSnapshot ? localSnapshot.settings.modelSource : null).toBe(local);
+    expect("settings" in localSnapshot ? localSnapshot.settings.modelSource : null).toEqual({
+      _tag: "SettingsFile",
+      path: local,
+    });
     const pinned = yield* readClaudeListingSnapshot(state, options).pipe(
       Effect.provide(
         ConfigProvider.layer(
@@ -164,9 +205,10 @@ it.effect("nested discovery uses root shared settings, then local settings and a
       model: "claude-haiku-4-5",
       limit: 8000,
     });
-    expect("settings" in pinned ? pinned.settings.modelSource : null).toBe(
-      "ANTHROPIC_DEFAULT_SONNET_MODEL",
-    );
+    expect("settings" in pinned ? pinned.settings.modelSource : null).toEqual({
+      _tag: "Environment",
+      name: "ANTHROPIC_DEFAULT_SONNET_MODEL",
+    });
   }).pipe(
     Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
     Effect.scoped,

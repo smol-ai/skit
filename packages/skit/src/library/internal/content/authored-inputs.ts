@@ -27,6 +27,9 @@ export const readAuthoredInputs = Effect.fn("Library.readAuthoredInputs")(functi
   const path = join(root, authoredInputsFile);
   if (!(yield* fs.exists(path))) return undefined;
   return yield* Schema.decodeEffect(AuthoredInputs)(yield* fs.readFileString(path)).pipe(
-    Effect.mapError((error) => new InvalidLibraryState({ path, detail: error.message })),
+    Effect.mapError(
+      (error) =>
+        new InvalidLibraryState({ path, reason: { _tag: "SchemaInvalid", failure: error } }),
+    ),
   );
 });

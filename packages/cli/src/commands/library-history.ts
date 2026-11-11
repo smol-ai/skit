@@ -1,3 +1,4 @@
+import { defineCommand } from "./definition.js";
 import * as Library from "@smolai/skit-core/library";
 import { Effect } from "effect";
 import { Command } from "effect/cli";
@@ -8,7 +9,7 @@ import { jsonFlag } from "./parameters.js";
 import { Renderer } from "../terminal/renderer.js";
 import { encodeResult as result } from "./encode-result.js";
 
-export const libraryHistoryCliCommand = Command.make("history", { json: jsonFlag }, () =>
+export const libraryHistoryCliCommand = defineCommand("history", { json: jsonFlag }, () =>
   Effect.gen(function* () {
     const renderer = yield* Renderer;
     const library = yield* Library.Service;
@@ -28,7 +29,6 @@ export const libraryHistoryCliCommand = Command.make("history", { json: jsonFlag
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read"] },
     outputSchemas: [historyOutputContracts.libraryHistory],
-    exitCodes: [0, 64],
     interactive: false,
   }),
 );

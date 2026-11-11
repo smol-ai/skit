@@ -9,9 +9,7 @@ import {
 } from "./contracts.js";
 import type { YamlMapping } from "../shared/json.js";
 
-import { harnessProfile } from "./catalog.js";
-
-const FrontmatterCompatibilityIssue = Schema.Struct({
+export const FrontmatterCompatibilityIssue = Schema.Struct({
   code: Schema.Literals([
     "frontmatter-missing",
     "frontmatter-invalid",
@@ -76,16 +74,6 @@ function constraintMatches(
   );
 }
 
-function frontmatterContract(harness: HarnessName, variant?: string): HarnessFrontmatterContract {
-  const contracts = harnessProfile(harness).frontmatter;
-  const contract = variant
-    ? contracts.find((candidate) => candidate.variant === variant)
-    : contracts.find((candidate) => candidate.default);
-  if (!contract)
-    throw new Error(`Unknown frontmatter contract for ${harness}${variant ? `: ${variant}` : ""}`);
-  return contract;
-}
-
 export function parseSkillFrontmatter(text: string): YamlMapping | null {
   const match = text.match(/^---\r?\n(?:([\s\S]*?)\r?\n)?---(?:\r?\n|$)/);
   if (!match) return null;
@@ -102,10 +90,10 @@ export function parseSkillFrontmatter(text: string): YamlMapping | null {
 
 export function evaluateSkillFrontmatter(
   text: string,
-  harness: HarnessName,
-  options: { variant?: string; directoryName?: string } = {},
+  contract: HarnessFrontmatterContract,
+  options: { directoryName?: string } = {},
 ): FrontmatterCompatibilityResult {
-  const contract = frontmatterContract(harness, options.variant);
+  const harness = contract.harness;
   const parsedFields = parseSkillFrontmatter(text);
   const fields = parsedFields ?? {};
   const issues: FrontmatterCompatibilityIssue[] = [];

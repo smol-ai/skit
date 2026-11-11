@@ -1,5 +1,6 @@
-import { Data, Effect, Option, Schema } from "effect";
-import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
+import { SetupManageSelectionInvalid } from "../setup-failures.js";
+import { Effect, Option, Schema } from "effect";
+
 import { readPathEvidence } from "../folder-evidence.js";
 import { type Hash } from "../../shared/hash.js";
 import type * as Library from "../library.js";
@@ -18,32 +19,6 @@ import type { SetupResult } from "./contract.js";
 
 const SetupManageSelections = Schema.Array(SetupCopySelection);
 
-class SetupManageSelectionInvalid
-  extends Data.TaggedError("SetupManageSelectionInvalid")<{
-    skillName: string;
-    reason:
-      | "duplicate-selection"
-      | "candidate-not-found"
-      | "candidate-not-manageable"
-      | "candidate-not-bindable"
-      | "source-not-candidate"
-      | "content-identity-missing"
-      | "path-not-projection-target"
-      | "duplicate-action-required"
-      | "keep-both-replaces-link"
-      | "aliases-not-retirable"
-      | "copies-not-preservable";
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Set up again and review the current plan.";
-  get message() {
-    return `Cannot manage ${this.skillName} during setup: ${this.reason}`;
-  }
-}
-
 /** The folder at `path` as it is now, which must still hold the reviewed bytes. */
 const reviewedFolder = Effect.fn("Setup.reviewedFolder")(function* (
   path: string,
@@ -59,7 +34,7 @@ const reviewedFolder = Effect.fn("Setup.reviewedFolder")(function* (
     (identity !== undefined &&
       (observed.value.dev !== identity.dev || observed.value.ino !== identity.ino))
   )
-    return yield* new StalePlan({ message: "The Library changed since this was previewed" });
+    return yield* new StalePlan({ reason: { _tag: "ReviewedStateChanged" } });
   return observed.value;
 });
 
@@ -73,7 +48,7 @@ const approvedLink = Effect.fn("Setup.approvedLink")(function* (link: ApprovedSy
     observed.value.ino !== link.ino ||
     observed.value.linkTarget !== link.linkTarget
   )
-    return yield* new StalePlan({ message: "The Library changed since this was previewed" });
+    return yield* new StalePlan({ reason: { _tag: "ReviewedStateChanged" } });
   return observed.value;
 });
 
@@ -137,12 +112,12 @@ export const setupExistingSelections = Effect.fn("Setup.existingSelections")(fun
         skillName: name,
         reason: "candidate-not-bindable",
       });
-    const currentHash = instance?.contentIdentity.currentHash;
-    if (!currentHash)
+    if (!instance || instance.contentIdentity.status !== "hashed")
       return yield* new SetupManageSelectionInvalid({
         skillName: name,
         reason: "content-identity-missing",
       });
+    const currentHash = instance.contentIdentity.currentHash;
     if (instance.scope !== "global" || !instance.harnesses.length)
       return yield* new SetupManageSelectionInvalid({
         skillName: name,
@@ -192,12 +167,16 @@ export const setupNewSelections = Effect.fn("Setup.newSelections")(function* (
         skillName: name,
         reason: "source-not-candidate",
       });
-    const currentHash = instance.contentIdentity.currentHash;
+    const currentHash =
+      instance.contentIdentity.status === "hashed"
+        ? instance.contentIdentity.currentHash
+        : undefined;
     const equalCopies = current.instances.filter(
       (other) =>
         other.name === name &&
         other.path !== sourcePath &&
         currentHash !== undefined &&
+        other.contentIdentity.status === "hashed" &&
         other.contentIdentity.currentHash === currentHash &&
         isSetupInstallDestination(other),
     );

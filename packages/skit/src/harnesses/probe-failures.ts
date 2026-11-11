@@ -1,19 +1,22 @@
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
-import { Data } from "effect";
+import { Schema } from "effect";
+import { SourceProcessLimitFailure } from "../platform/source-process-failures.js";
+import { PlatformErrorSchema } from "../platform/error-schema.js";
 
 export class UnknownHarness
-  extends Data.TaggedError("UnknownHarness")<{
-    value: string;
-    allowed?: readonly string[];
-  }>
+  extends Schema.TaggedError<UnknownHarness, { readonly brand: unique symbol }>()(
+    "UnknownHarness",
+    { value: Schema.String, allowed: Schema.optionalKey(Schema.Array(Schema.String)) },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "INVALID_ARGUMENT" as const;
-  readonly remediation = "Run the command with --help to see the supported harnesses.";
-  get message(): string {
-    return this.allowed
-      ? `--for must be ${this.allowed.join(", ")}`
-      : `Unknown harness: ${this.value}`;
-  }
 }
+
+export const HarnessProbeFailure = Schema.TaggedUnion({
+  ExecutableMissing: { command: Schema.String },
+  ExitCode: { command: Schema.String, exitCode: Schema.Int },
+  ProcessFailed: { failure: Schema.Union([SourceProcessLimitFailure, PlatformErrorSchema]) },
+});
+export type HarnessProbeFailure = typeof HarnessProbeFailure.Type;

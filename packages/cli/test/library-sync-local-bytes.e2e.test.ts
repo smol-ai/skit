@@ -1,5 +1,6 @@
 import { assert, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
+import { SyncIssue } from "@smolai/skit-core/library/sync";
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { join } from "node:path";
@@ -88,13 +89,26 @@ it.effect("reports an already-synced Library with a blocked device selection as 
         child.on("close", (code) => resume(Effect.succeed({ code, stdout })));
       },
     );
-    assert.strictEqual(output.code, 12);
+    // The CLI's committed process-status policy uses 1 for incomplete results.
+    assert.strictEqual(output.code, 1);
     const result = JSON.parse(output.stdout).data;
     assert.strictEqual(result.status, "enablement_incomplete");
     assert.strictEqual(result.sync_status, "clean");
-    assert.isTrue(
-      result.enablement_issues.some((issue: string) => issue.includes(join(b.root, "first"))),
+    const issues = yield* Schema.decodeUnknownEffect(Schema.Array(SyncIssue))(
+      result.enablement_issues,
     );
+    const conflict = issues.find((issue) => issue._tag === "InstalledFolderConflicted");
+    assert.strictEqual(conflict?._tag, "InstalledFolderConflicted");
+    if (conflict?._tag === "InstalledFolderConflicted") {
+      assert.strictEqual(conflict.path, join(b.root, "first"));
+      assert.deepEqual(
+        conflict.conflicts.map((reason) => reason._tag),
+        ["MarkerMissing", "ContentChanged"],
+      );
+      const changed = conflict.conflicts.find((reason) => reason._tag === "ContentChanged");
+      assert.strictEqual(changed?._tag, "ContentChanged");
+      if (changed?._tag === "ContentChanged") assert.strictEqual(changed.baseline, "library");
+    }
     assert.strictEqual(
       yield* fs.readFileString(join(b.root, "first", "SKILL.md")),
       "existing copy\n",

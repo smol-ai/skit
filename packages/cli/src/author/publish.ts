@@ -21,7 +21,7 @@ export const publishCommand = Effect.fn("CLI.publish")(function* (options: {
   readonly home?: string;
 }) {
   if (!options.version)
-    return yield* new MissingRequirement({ command: "publish", requires: "--version" });
+    return yield* new MissingRequirement({ reason: { _tag: "PublishVersion" } });
 
   const renderer = yield* Renderer;
   return yield* renderer.withStatus(

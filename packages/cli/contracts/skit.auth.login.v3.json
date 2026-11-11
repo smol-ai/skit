@@ -1,0 +1,361 @@
+{
+  "$id": "skit.auth.login.v3",
+  "type": "object",
+  "properties": {
+    "origin": {
+      "type": "string"
+    },
+    "tokenPrefix": {
+      "type": "string"
+    },
+    "scopes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "expiresAt": {
+      "type": "string"
+    },
+    "warning": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "PreviousCredentialNotRevoked"
+          ]
+        },
+        "tokenId": {
+          "type": "string"
+        },
+        "tokenPrefix": {
+          "type": "string"
+        },
+        "cleanup": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "RequestFailed"
+                  ]
+                },
+                "failure": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/RegistryTransportErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/definitions/SchemaFailureEncoded"
+                    },
+                    {}
+                  ]
+                }
+              },
+              "required": [
+                "_tag",
+                "failure"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ResponseRejected"
+                  ]
+                },
+                "status": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "body": {
+                  "type": "string"
+                },
+                "failure": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/RegistryTransportErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/definitions/SchemaFailureEncoded"
+                    },
+                    {}
+                  ]
+                }
+              },
+              "required": [
+                "_tag",
+                "status"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "tokenId",
+        "tokenPrefix",
+        "cleanup"
+      ],
+      "additionalProperties": true
+    },
+    "alias": {
+      "type": "string"
+    },
+    "defaultRegistry": {
+      "type": "string"
+    },
+    "alreadyAuthenticated": {
+      "type": "boolean"
+    },
+    "credentialPath": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "origin",
+    "tokenPrefix",
+    "scopes"
+  ],
+  "additionalProperties": true,
+  "definitions": {
+    "RegistryTransportErrorEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "RegistryTransportError"
+          ]
+        },
+        "cause": {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "stack": {
+              "type": "string"
+            },
+            "cause": {}
+          },
+          "required": [
+            "message"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "_tag",
+        "cause"
+      ],
+      "additionalProperties": true
+    },
+    "SchemaIssueFact": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          }
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "MissingKey"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "UnexpectedKey"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "InvalidType"
+                  ]
+                },
+                "expected": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "Declaration",
+                          "Null",
+                          "Undefined",
+                          "Void",
+                          "Never",
+                          "Unknown",
+                          "Any",
+                          "String",
+                          "Number",
+                          "Boolean",
+                          "BigInt",
+                          "Symbol",
+                          "Literal",
+                          "UniqueSymbol",
+                          "ObjectKeyword",
+                          "Enum",
+                          "TemplateLiteral",
+                          "Arrays",
+                          "Objects",
+                          "Union",
+                          "Suspend"
+                        ]
+                      },
+                      "values": {
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": true
+                  }
+                }
+              },
+              "required": [
+                "_tag",
+                "expected"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "InvalidValue"
+                  ]
+                },
+                "check": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "payload": {}
+                  },
+                  "required": [
+                    "id",
+                    "payload"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "Forbidden"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "OneOf"
+                  ]
+                },
+                "matches": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "_tag",
+                "matches"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "SchemaFailureEncoded": {
+      "type": "object",
+      "properties": {
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SchemaIssueFact"
+          }
+        }
+      },
+      "required": [
+        "issues"
+      ],
+      "additionalProperties": true
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

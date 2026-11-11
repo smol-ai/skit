@@ -84,6 +84,250 @@ const OPENCODE_V1_FIELDS = [
   },
 ] as const;
 
+const codexDirectories = {
+  "codex-global-native": {
+    id: "codex-global-native",
+    base: "home",
+    path: ".codex/skills",
+    scope: "global",
+    role: "native",
+    readable: true,
+    writable: false,
+    evidence: "documented",
+  },
+  "codex-global-shared": {
+    id: "codex-global-shared",
+    base: "home",
+    path: ".agents/skills",
+    scope: "global",
+    role: "compatibility",
+    readable: true,
+    writable: true,
+    evidence: "observed",
+  },
+  "codex-project-agents": {
+    id: "codex-project-agents",
+    base: "repository",
+    path: ".agents/skills",
+    scope: "project",
+    role: "compatibility",
+    readable: true,
+    writable: true,
+    evidence: "observed",
+  },
+  "codex-project-codex": {
+    id: "codex-project-codex",
+    base: "repository",
+    path: ".codex/skills",
+    scope: "project",
+    role: "native",
+    readable: true,
+    writable: false,
+    evidence: "documented",
+  },
+} as const satisfies Record<string, SkillsDirectory>;
+
+// Claude reads project .agents/skills, but has no global .agents compatibility root.
+const claudeCodeDirectories = {
+  "claude-global-native": {
+    id: "claude-global-native",
+    base: "home",
+    path: ".claude/skills",
+    scope: "global",
+    role: "native",
+    readable: true,
+    writable: true,
+    evidence: "documented",
+  },
+  "claude-project-native": {
+    id: "claude-project-native",
+    base: "repository",
+    path: ".claude/skills",
+    scope: "project",
+    role: "native",
+    readable: true,
+    writable: true,
+    evidence: "documented",
+  },
+  "claude-project-agents": {
+    id: "claude-project-agents",
+    base: "repository",
+    path: ".agents/skills",
+    scope: "project",
+    role: "compatibility",
+    readable: true,
+    writable: false,
+    evidence: "observed",
+  },
+} as const satisfies Record<string, SkillsDirectory>;
+
+const opencodeDirectories = {
+  "opencode-global-native": {
+    id: "opencode-global-native",
+    base: "config",
+    path: "opencode/skills",
+    scope: "global",
+    role: "native",
+    readable: true,
+    writable: false,
+    evidence: "documented",
+  },
+  "opencode-global-legacy": {
+    id: "opencode-global-legacy",
+    base: "home",
+    path: ".config/opencode/skills",
+    scope: "global",
+    role: "compatibility",
+    readable: true,
+    writable: true,
+    evidence: "observed",
+  },
+  "opencode-project-native": {
+    id: "opencode-project-native",
+    base: "repository",
+    path: ".opencode/skills",
+    scope: "project",
+    role: "native",
+    readable: true,
+    writable: true,
+    evidence: "documented",
+  },
+  "opencode-project-agents": {
+    id: "opencode-project-agents",
+    base: "repository",
+    path: ".agents/skills",
+    scope: "project",
+    role: "compatibility",
+    readable: true,
+    writable: false,
+    evidence: "documented",
+  },
+  "opencode-project-claude": {
+    id: "opencode-project-claude",
+    base: "repository",
+    path: ".claude/skills",
+    scope: "project",
+    role: "compatibility",
+    readable: true,
+    writable: false,
+    evidence: "documented",
+  },
+} as const satisfies Record<string, SkillsDirectory>;
+
+// Devin CLI 3000.10.21 reports these roots; dedicated writable roots avoid shared-directory collisions.
+const devinDirectories = {
+  "devin-global-native": {
+    id: "devin-global-native",
+    base: "config",
+    path: "devin/skills",
+    scope: "global",
+    role: "native",
+    readable: true,
+    writable: true,
+    evidence: "observed",
+  },
+  "devin-global-cognition": {
+    id: "devin-global-cognition",
+    base: "config",
+    path: "cognition/skills",
+    scope: "global",
+    role: "compatibility",
+    readable: true,
+    writable: false,
+    evidence: "observed",
+  },
+  "devin-global-agents": {
+    id: "devin-global-agents",
+    base: "home",
+    path: ".agents/skills",
+    scope: "global",
+    role: "compatibility",
+    readable: true,
+    writable: false,
+    evidence: "observed",
+  },
+  "devin-project-native": {
+    id: "devin-project-native",
+    base: "repository",
+    path: ".devin/skills",
+    scope: "project",
+    role: "native",
+    readable: true,
+    writable: true,
+    evidence: "documented",
+  },
+  "devin-project-compat-0": {
+    id: "devin-project-compat-0",
+    base: "repository",
+    path: ".agents/skills",
+    scope: "project",
+    role: "compatibility",
+    readable: true,
+    writable: false,
+    evidence: "observed",
+  },
+  "devin-project-compat-1": {
+    id: "devin-project-compat-1",
+    base: "repository",
+    path: ".cognition/skills",
+    scope: "project",
+    role: "compatibility",
+    readable: true,
+    writable: false,
+    evidence: "observed",
+  },
+  "devin-project-compat-2": {
+    id: "devin-project-compat-2",
+    base: "repository",
+    path: ".github/skills",
+    scope: "project",
+    role: "compatibility",
+    readable: true,
+    writable: false,
+    evidence: "observed",
+  },
+  "devin-project-compat-3": {
+    id: "devin-project-compat-3",
+    base: "repository",
+    path: ".claude/skills",
+    scope: "project",
+    role: "compatibility",
+    readable: true,
+    writable: false,
+    evidence: "observed",
+  },
+  "devin-project-compat-4": {
+    id: "devin-project-compat-4",
+    base: "repository",
+    path: ".cursor/skills",
+    scope: "project",
+    role: "compatibility",
+    readable: true,
+    writable: false,
+    evidence: "observed",
+  },
+  "devin-project-compat-5": {
+    id: "devin-project-compat-5",
+    base: "repository",
+    path: ".codex/skills",
+    scope: "project",
+    role: "compatibility",
+    readable: true,
+    writable: false,
+    evidence: "observed",
+  },
+  "devin-project-compat-6": {
+    id: "devin-project-compat-6",
+    base: "repository",
+    path: ".windsurf/skills",
+    scope: "project",
+    role: "compatibility",
+    readable: true,
+    writable: false,
+    evidence: "observed",
+  },
+} as const satisfies Record<string, SkillsDirectory>;
+
 export const harnessProfiles = {
   codex: defineHarnessProfile({
     id: "codex",
@@ -94,48 +338,7 @@ export const harnessProfiles = {
       sourceIds: ["openai-codex-skills"],
     },
     profile: { id: "skit/harness/codex", version: "2026-08-25", verifiedAt: VERIFIED_AT },
-    roots: [
-      {
-        id: "codex-global-native",
-        base: "home",
-        path: ".codex/skills",
-        scope: "global",
-        role: "native",
-        readable: true,
-        writable: false,
-        evidence: "documented",
-      },
-      {
-        id: "codex-global-shared",
-        base: "home",
-        path: ".agents/skills",
-        scope: "global",
-        role: "compatibility",
-        readable: true,
-        writable: true,
-        evidence: "observed",
-      },
-      {
-        id: "codex-project-agents",
-        base: "repository",
-        path: ".agents/skills",
-        scope: "project",
-        role: "compatibility",
-        readable: true,
-        writable: true,
-        evidence: "observed",
-      },
-      {
-        id: "codex-project-codex",
-        base: "repository",
-        path: ".codex/skills",
-        scope: "project",
-        role: "native",
-        readable: true,
-        writable: false,
-        evidence: "documented",
-      },
-    ],
+    roots: codexDirectories,
     documentation: [
       STANDARD_SOURCE,
       {
@@ -147,11 +350,11 @@ export const harnessProfiles = {
       },
       ...CODEX_SKILL_METADATA_SOURCES,
     ],
-    frontmatter: [
-      {
+    frontmatter: {
+      default: {
+        harness: "codex",
         id: "skit/frontmatter/codex/2026-08-25",
         variant: "current",
-        default: true,
         frontmatter: "required",
         unknownFields: "unknown",
         sourceIds: ["openai-codex-skills"],
@@ -180,11 +383,12 @@ export const harnessProfiles = {
           },
         ],
       },
-    ],
+      variants: {},
+    },
     skillMetadata: CODEX_SKILL_METADATA_CONTRACTS,
     installedSkill: {
-      globalTarget: "codex-global-shared",
-      projectTarget: "codex-project-agents",
+      globalTarget: codexDirectories["codex-global-shared"],
+      projectTarget: codexDirectories["codex-project-agents"],
       strategy: "copy",
     },
   }),
@@ -202,40 +406,7 @@ export const harnessProfiles = {
       sourceIds: ["claude-code-skills"],
     },
     profile: { id: "skit/harness/claude-code", version: "2026-08-25", verifiedAt: VERIFIED_AT },
-    roots: [
-      {
-        id: "claude-global-native",
-        base: "home",
-        path: ".claude/skills",
-        scope: "global",
-        role: "native",
-        readable: true,
-        writable: true,
-        evidence: "documented",
-      },
-      {
-        id: "claude-project-native",
-        base: "repository",
-        path: ".claude/skills",
-        scope: "project",
-        role: "native",
-        readable: true,
-        writable: true,
-        evidence: "documented",
-      },
-      {
-        id: "claude-project-agents",
-        base: "repository",
-        path: ".agents/skills",
-        scope: "project",
-        role: "compatibility",
-        readable: true,
-        writable: false,
-        evidence: "observed",
-      },
-      // Claude documents project-level `.agents/skills` compatibility, but not a global
-      // `~/.agents/skills` root. Keep that absence explicit instead of inferring symmetry.
-    ],
+    roots: claudeCodeDirectories,
     documentation: [
       STANDARD_SOURCE,
       {
@@ -246,11 +417,11 @@ export const harnessProfiles = {
         verifiedAt: VERIFIED_AT,
       },
     ],
-    frontmatter: [
-      {
+    frontmatter: {
+      default: {
+        harness: "claude-code",
         id: "skit/frontmatter/claude-code/2026-08-25",
         variant: "current",
-        default: true,
         frontmatter: "optional",
         unknownFields: "unknown",
         sourceIds: ["claude-code-skills"],
@@ -324,68 +495,18 @@ export const harnessProfiles = {
           },
         ],
       },
-    ],
+      variants: {},
+    },
     installedSkill: {
-      globalTarget: "claude-global-native",
-      projectTarget: "claude-project-native",
+      globalTarget: claudeCodeDirectories["claude-global-native"],
+      projectTarget: claudeCodeDirectories["claude-project-native"],
       strategy: "copy",
     },
   }),
   opencode: defineHarnessProfile({
     id: "opencode",
     profile: { id: "skit/harness/opencode", version: "2026-08-25", verifiedAt: VERIFIED_AT },
-    roots: [
-      {
-        id: "opencode-global-native",
-        base: "config",
-        path: "opencode/skills",
-        scope: "global",
-        role: "native",
-        readable: true,
-        writable: false,
-        evidence: "documented",
-      },
-      {
-        id: "opencode-global-legacy",
-        base: "home",
-        path: ".config/opencode/skills",
-        scope: "global",
-        role: "compatibility",
-        readable: true,
-        writable: true,
-        evidence: "observed",
-      },
-      {
-        id: "opencode-project-native",
-        base: "repository",
-        path: ".opencode/skills",
-        scope: "project",
-        role: "native",
-        readable: true,
-        writable: true,
-        evidence: "documented",
-      },
-      {
-        id: "opencode-project-agents",
-        base: "repository",
-        path: ".agents/skills",
-        scope: "project",
-        role: "compatibility",
-        readable: true,
-        writable: false,
-        evidence: "documented",
-      },
-      {
-        id: "opencode-project-claude",
-        base: "repository",
-        path: ".claude/skills",
-        scope: "project",
-        role: "compatibility",
-        readable: true,
-        writable: false,
-        evidence: "documented",
-      },
-    ],
+    roots: opencodeDirectories,
     documentation: [
       {
         id: "opencode-v1-skills",
@@ -402,140 +523,81 @@ export const harnessProfiles = {
         verifiedAt: VERIFIED_AT,
       },
     ],
-    frontmatter: [
-      {
+    frontmatter: {
+      default: {
+        harness: "opencode",
         id: "skit/frontmatter/opencode/v1/2026-08-25",
         variant: "v1",
-        default: true,
         frontmatter: "required",
         unknownFields: "ignored",
         sourceIds: ["opencode-v1-skills"],
         fields: OPENCODE_V1_FIELDS,
       },
-      {
-        id: "skit/frontmatter/opencode/v2/2026-08-25",
-        variant: "v2",
-        default: false,
-        frontmatter: "optional",
-        unknownFields: "unknown",
-        sourceIds: ["opencode-v2-skills"],
-        fields: [
-          {
-            name: "name",
-            support: "optional",
-            type: "string",
-            semantics: "Display name; ID is path-derived",
-            sourceIds: ["opencode-v2-skills"],
-          },
-          {
-            name: "description",
-            support: "optional",
-            type: "string",
-            semantics: "Model-facing discovery summary",
-            sourceIds: ["opencode-v2-skills"],
-          },
-          {
-            name: "slash",
-            support: "optional",
-            type: "boolean",
-            semantics: "Interactive catalog visibility",
-            sourceIds: ["opencode-v2-skills"],
-          },
-          {
-            name: "metadata",
-            support: "optional",
-            type: "string-map",
-            semantics: "Includes opencode/slash and opencode/autoinvoke extensions",
-            sourceIds: ["opencode-v2-skills"],
-          },
-          {
-            name: "license",
-            support: "ignored",
-            type: "string",
-            semantics: "Accepted for portability but not interpreted",
-            sourceIds: ["opencode-v2-skills"],
-          },
-          {
-            name: "compatibility",
-            support: "ignored",
-            type: "string",
-            semantics: "Accepted for portability but not interpreted",
-            sourceIds: ["opencode-v2-skills"],
-          },
-        ],
+      variants: {
+        v2: {
+          harness: "opencode",
+          id: "skit/frontmatter/opencode/v2/2026-08-25",
+          variant: "v2",
+          frontmatter: "optional",
+          unknownFields: "unknown",
+          sourceIds: ["opencode-v2-skills"],
+          fields: [
+            {
+              name: "name",
+              support: "optional",
+              type: "string",
+              semantics: "Display name; ID is path-derived",
+              sourceIds: ["opencode-v2-skills"],
+            },
+            {
+              name: "description",
+              support: "optional",
+              type: "string",
+              semantics: "Model-facing discovery summary",
+              sourceIds: ["opencode-v2-skills"],
+            },
+            {
+              name: "slash",
+              support: "optional",
+              type: "boolean",
+              semantics: "Interactive catalog visibility",
+              sourceIds: ["opencode-v2-skills"],
+            },
+            {
+              name: "metadata",
+              support: "optional",
+              type: "string-map",
+              semantics: "Includes opencode/slash and opencode/autoinvoke extensions",
+              sourceIds: ["opencode-v2-skills"],
+            },
+            {
+              name: "license",
+              support: "ignored",
+              type: "string",
+              semantics: "Accepted for portability but not interpreted",
+              sourceIds: ["opencode-v2-skills"],
+            },
+            {
+              name: "compatibility",
+              support: "ignored",
+              type: "string",
+              semantics: "Accepted for portability but not interpreted",
+              sourceIds: ["opencode-v2-skills"],
+            },
+          ],
+        },
       },
-    ],
+    },
     installedSkill: {
-      globalTarget: "opencode-global-legacy",
-      projectTarget: "opencode-project-native",
+      globalTarget: opencodeDirectories["opencode-global-legacy"],
+      projectTarget: opencodeDirectories["opencode-project-native"],
       strategy: "copy",
     },
   }),
   devin: defineHarnessProfile({
     id: "devin",
     profile: { id: "skit/harness/devin", version: "2026-09-11", verifiedAt: "2026-09-11" },
-    roots: [
-      // Devin CLI 3000.10.21 reports these locations via `devin skills paths`. SKIT writes the
-      // dedicated Devin roots so its Bindings do not collide with Codex at `.agents/skills`.
-      {
-        id: "devin-global-native",
-        base: "config",
-        path: "devin/skills",
-        scope: "global",
-        role: "native",
-        readable: true,
-        writable: true,
-        evidence: "observed",
-      },
-      {
-        id: "devin-global-cognition",
-        base: "config",
-        path: "cognition/skills",
-        scope: "global",
-        role: "compatibility",
-        readable: true,
-        writable: false,
-        evidence: "observed",
-      },
-      {
-        id: "devin-global-agents",
-        base: "home",
-        path: ".agents/skills",
-        scope: "global",
-        role: "compatibility",
-        readable: true,
-        writable: false,
-        evidence: "observed",
-      },
-      {
-        id: "devin-project-native",
-        base: "repository",
-        path: ".devin/skills",
-        scope: "project",
-        role: "native",
-        readable: true,
-        writable: true,
-        evidence: "documented",
-      },
-      ...[
-        ".agents/skills",
-        ".cognition/skills",
-        ".github/skills",
-        ".claude/skills",
-        ".cursor/skills",
-        ".codex/skills",
-        ".windsurf/skills",
-      ].map((path, index) => ({
-        id: `devin-project-compat-${index}`,
-        base: "repository" as const,
-        path,
-        scope: "project" as const,
-        role: "compatibility" as const,
-        readable: true,
-        writable: false,
-        evidence: "observed" as const,
-      })),
-    ],
+    roots: devinDirectories,
     documentation: [
       STANDARD_SOURCE,
       {
@@ -553,11 +615,11 @@ export const harnessProfiles = {
         verifiedAt: "2026-09-11",
       },
     ],
-    frontmatter: [
-      {
+    frontmatter: {
+      default: {
+        harness: "devin",
         id: "skit/frontmatter/devin/2026-08-25",
         variant: "current",
-        default: true,
         frontmatter: "optional",
         unknownFields: "unknown",
         sourceIds: ["devin-skills", "agent-skills-spec"],
@@ -607,16 +669,17 @@ export const harnessProfiles = {
           },
         ],
       },
-    ],
+      variants: {},
+    },
     installedSkill: {
-      globalTarget: "devin-global-native",
-      projectTarget: "devin-project-native",
+      globalTarget: devinDirectories["devin-global-native"],
+      projectTarget: devinDirectories["devin-project-native"],
       strategy: "copy",
     },
   }),
 } as const satisfies Record<HarnessName, HarnessProfile>;
 
-export function harnessProfile(harness: HarnessName): HarnessProfile {
+export function harnessProfile<H extends HarnessName>(harness: H): (typeof harnessProfiles)[H] {
   return harnessProfiles[harness];
 }
 
@@ -624,37 +687,27 @@ export function hasHarnessProfile(id: string): id is HarnessName {
   return Object.hasOwn(harnessProfiles, id);
 }
 
-export function harnessProfileIds(): readonly HarnessName[] {
-  return Object.values(harnessProfiles).map((profile) => profile.id);
-}
-
-export function skillsDirectory(profile: HarnessProfile, id: string): SkillsDirectory {
-  const root = profile.roots.find((candidate) => candidate.id === id);
-  if (!root) throw new Error(`Unknown root ${id} for ${profile.id}`);
-  return root;
-}
-
+/** The directory carries the context its base needs; project directories cannot omit a repository. */
 export function resolveSkillsDirectory(
-  root: SkillsDirectory,
-  context: SkillsDirectoryContext,
+  directory:
+    | (Extract<SkillsDirectory, { scope: "global" }> & { home: string; configHome: string })
+    | (Extract<SkillsDirectory, { scope: "project" }> & { repository: string }),
 ): string {
   const base =
-    root.base === "home"
-      ? context.home
-      : root.base === "config"
-        ? context.configHome
-        : context.repository;
-  if (!base) throw new Error(`Repository root is required for ${root.id}`);
-  return resolve(join(base, root.path));
+    directory.scope === "project"
+      ? directory.repository
+      : directory.base === "home"
+        ? directory.home
+        : directory.configHome;
+  return resolve(join(base, directory.path));
 }
 
 export function installSkillsDirectory(
   harness: HarnessName,
-  scope: "global" | "project",
   context: SkillsDirectoryContext,
-): string | null {
+): string {
   const profile = harnessProfile(harness);
-  const id =
-    scope === "global" ? profile.installedSkill.globalTarget : profile.installedSkill.projectTarget;
-  return id ? resolveSkillsDirectory(skillsDirectory(profile, id), context) : null;
+  return context.scope === "project"
+    ? resolveSkillsDirectory({ ...profile.installedSkill.projectTarget, ...context })
+    : resolveSkillsDirectory({ ...profile.installedSkill.globalTarget, ...context });
 }

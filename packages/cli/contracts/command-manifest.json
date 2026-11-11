@@ -1,4 +1,9 @@
 {
+  "exitCodes": {
+    "success": 0,
+    "failure": 1,
+    "invalidUsage": 2
+  },
   "commands": [
     {
       "path": [
@@ -28,14 +33,8 @@
         ]
       },
       "outputSchemas": [
-        "skit.auth.login.v2",
+        "skit.auth.login.v3",
         "skit.auth.login.pending.v1"
-      ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        64
       ],
       "interactive": true,
       "examples": [
@@ -124,12 +123,6 @@
       "outputSchemas": [
         "skit.auth.logout.v1"
       ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        64
-      ],
       "interactive": false,
       "examples": [
         "skit auth logout",
@@ -193,12 +186,6 @@
       },
       "outputSchemas": [
         "skit.auth.status.v3"
-      ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        64
       ],
       "interactive": false,
       "examples": [
@@ -265,13 +252,6 @@
       "outputSchemas": [
         "skit.init.v1"
       ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        64,
-        65
-      ],
       "interactive": false,
       "examples": [
         "skit author init ./my-skills"
@@ -336,14 +316,6 @@
       },
       "outputSchemas": [
         "skit.validate.v3"
-      ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        64,
-        65,
-        77
       ],
       "interactive": false,
       "examples": [
@@ -413,14 +385,6 @@
       },
       "outputSchemas": [
         "skit.author.sync.v5"
-      ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        13,
-        64,
-        65
       ],
       "interactive": false,
       "examples": [
@@ -512,14 +476,6 @@
       "outputSchemas": [
         "skit.author.watch.v1"
       ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        13,
-        64,
-        65
-      ],
       "interactive": false,
       "examples": [
         "skit author watch ."
@@ -588,14 +544,6 @@
       },
       "outputSchemas": [
         "skit.publish.v1"
-      ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        13,
-        64,
-        65
       ],
       "interactive": false,
       "examples": [
@@ -666,14 +614,6 @@
       "outputSchemas": [
         "skit.author.list.v2"
       ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        13,
-        64,
-        65
-      ],
       "interactive": false,
       "examples": [
         "skit author list"
@@ -739,14 +679,6 @@
       "outputSchemas": [
         "skit.author.delete.v2"
       ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        13,
-        64,
-        65
-      ],
       "interactive": false,
       "examples": [
         "skit author delete me/my-skills --dry-run"
@@ -810,13 +742,6 @@
       },
       "outputSchemas": [
         "skit.author.invocation.v1"
-      ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        64,
-        65
       ],
       "interactive": false,
       "examples": [
@@ -892,14 +817,7 @@
       },
       "outputSchemas": [
         "skit.add.v7",
-        "skit.add.preview.v4"
-      ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        64,
-        65
+        "skit.add.preview.v5"
       ],
       "interactive": false,
       "examples": [
@@ -1001,13 +919,6 @@
       "outputSchemas": [
         "skit.check.v8"
       ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        64,
-        65
-      ],
       "interactive": false,
       "examples": [
         "skit check",
@@ -1101,13 +1012,6 @@
         "skit.disable.plan.v8",
         "skit.disable.v8"
       ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        64,
-        65
-      ],
       "interactive": true,
       "examples": [
         "skit doctor"
@@ -1197,14 +1101,6 @@
         "skit.disable.v8",
         "skit.disable.plan.v8"
       ],
-      "exitCodes": [
-        0,
-        1,
-        11,
-        12,
-        64,
-        65
-      ],
       "interactive": true,
       "examples": [
         "skit disable review",
@@ -1226,7 +1122,7 @@
         "global": {
           "type": "boolean",
           "valueName": "boolean",
-          "description": "Use global scope, for every project, without asking."
+          "description": "Use the global Scope, for every repository, without asking."
         },
         "all": {
           "type": "boolean",
@@ -1236,7 +1132,7 @@
         "invocation": {
           "type": "choice",
           "valueName": "choice",
-          "description": "Override model invocation policy for every harness; Devin maps explicit to [user], implicit to [user, model], and host-policy preserves authored triggers. (choices: declared, explicit, implicit, host-policy)"
+          "description": "Override model invocation policy for every harness; Devin maps explicit to [user], implicit to [user, model], and host-policy leaves authored triggers. (choices: declared, explicit, implicit, host-policy)"
         },
         "dry-run": {
           "type": "boolean",
@@ -1311,14 +1207,6 @@
         "skit.enable.v8",
         "skit.enable.plan.v8"
       ],
-      "exitCodes": [
-        0,
-        1,
-        11,
-        12,
-        64,
-        65
-      ],
       "interactive": true,
       "examples": [
         "skit enable review",
@@ -1340,7 +1228,7 @@
         "global": {
           "type": "boolean",
           "valueName": "boolean",
-          "description": "Use global scope, for every project, without asking."
+          "description": "Use the global Scope, for every repository, without asking."
         },
         "all": {
           "type": "boolean",
@@ -1350,7 +1238,7 @@
         "invocation": {
           "type": "choice",
           "valueName": "choice",
-          "description": "Override model invocation policy for every harness; Devin maps explicit to [user], implicit to [user, model], and host-policy preserves authored triggers. (choices: declared, explicit, implicit, host-policy)"
+          "description": "Override model invocation policy for every harness; Devin maps explicit to [user], implicit to [user, model], and host-policy leaves authored triggers. (choices: declared, explicit, implicit, host-policy)"
         },
         "dry-run": {
           "type": "boolean",
@@ -1434,12 +1322,6 @@
       },
       "outputSchemas": [
         "skit.feedback.send.v1"
-      ],
-      "exitCodes": [
-        0,
-        1,
-        13,
-        64
       ],
       "interactive": false,
       "examples": [
@@ -1535,12 +1417,6 @@
       "outputSchemas": [
         "skit.inventory.v12"
       ],
-      "exitCodes": [
-        0,
-        12,
-        64,
-        65
-      ],
       "interactive": false,
       "examples": [
         "skit inventory --json"
@@ -1614,10 +1490,6 @@
       "outputSchemas": [
         "skit.library.history.v1"
       ],
-      "exitCodes": [
-        0,
-        64
-      ],
       "interactive": false,
       "examples": [
         "skit library history",
@@ -1673,12 +1545,6 @@
       "outputSchemas": [
         "skit.recovery.list.v1"
       ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        64
-      ],
       "interactive": false,
       "examples": [],
       "positionals": [],
@@ -1730,12 +1596,6 @@
       },
       "outputSchemas": [
         "skit.recovery.v1"
-      ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        64
       ],
       "interactive": false,
       "examples": [],
@@ -1794,12 +1654,6 @@
       },
       "outputSchemas": [
         "skit.recovery.v1"
-      ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        64
       ],
       "interactive": false,
       "examples": [
@@ -1865,12 +1719,6 @@
       "outputSchemas": [
         "skit.setup.undo.v2"
       ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        64
-      ],
       "interactive": false,
       "examples": [],
       "positionals": [
@@ -1931,12 +1779,6 @@
       },
       "outputSchemas": [
         "skit.list.v7"
-      ],
-      "exitCodes": [
-        0,
-        12,
-        64,
-        65
       ],
       "interactive": true,
       "examples": [
@@ -2022,11 +1864,6 @@
       "outputSchemas": [
         "skit.registry.remote.v1"
       ],
-      "exitCodes": [
-        0,
-        12,
-        64
-      ],
       "interactive": false,
       "examples": [
         "skit registry add public https://registry.example.com"
@@ -2099,12 +1936,6 @@
       "outputSchemas": [
         "skit.registry.remote.v1"
       ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        64
-      ],
       "interactive": false,
       "examples": [
         "skit registry default public"
@@ -2167,11 +1998,6 @@
       },
       "outputSchemas": [
         "skit.registry.list.v1"
-      ],
-      "exitCodes": [
-        0,
-        12,
-        64
       ],
       "interactive": false,
       "examples": [
@@ -2236,12 +2062,6 @@
       "outputSchemas": [
         "skit.registry.remote.v1"
       ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        64
-      ],
       "interactive": false,
       "examples": [
         "skit registry remove work"
@@ -2300,10 +2120,6 @@
       "outputSchemas": [
         "skit.repository.policy.v1"
       ],
-      "exitCodes": [
-        0,
-        64
-      ],
       "interactive": false,
       "examples": [],
       "positionals": [],
@@ -2355,11 +2171,6 @@
       },
       "outputSchemas": [
         "skit.repository.policy.v1"
-      ],
-      "exitCodes": [
-        0,
-        12,
-        64
       ],
       "interactive": false,
       "examples": [],
@@ -2418,11 +2229,6 @@
       "outputSchemas": [
         "skit.repository.policy.v1"
       ],
-      "exitCodes": [
-        0,
-        12,
-        64
-      ],
       "interactive": false,
       "examples": [],
       "positionals": [
@@ -2480,11 +2286,6 @@
       "outputSchemas": [
         "skit.repository.policy.v1"
       ],
-      "exitCodes": [
-        0,
-        12,
-        64
-      ],
       "interactive": false,
       "examples": [],
       "positionals": [
@@ -2541,13 +2342,6 @@
       "outputSchemas": [
         "skit.remove.v5",
         "skit.remove.plan.v5"
-      ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        64,
-        65
       ],
       "interactive": false,
       "examples": [
@@ -2633,13 +2427,6 @@
       },
       "outputSchemas": [
         "skit.security.accept.v4"
-      ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        64,
-        65
       ],
       "interactive": false,
       "examples": [
@@ -2739,13 +2526,6 @@
       "outputSchemas": [
         "skit.security.review.v4"
       ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        64,
-        65
-      ],
       "interactive": false,
       "examples": [
         "skit security review owner/tools:review --json"
@@ -2831,10 +2611,6 @@
       },
       "outputSchemas": [
         "skit.server.bootstrap.v1"
-      ],
-      "exitCodes": [
-        0,
-        64
       ],
       "interactive": true,
       "examples": [
@@ -2926,14 +2702,6 @@
         "skit.setup.failed.v1",
         "skit.setup.comparison.v2"
       ],
-      "exitCodes": [
-        0,
-        1,
-        11,
-        12,
-        64,
-        65
-      ],
       "interactive": true,
       "examples": [
         "skit setup",
@@ -2976,22 +2744,7 @@
         "duplicates": {
           "type": "choice",
           "valueName": "choice",
-          "description": "Choose what happens to other copies of the selected skills: retain-only imports into the Library without enabling; keep-both enables and leaves the other copies; retire-aliases enables and moves symlinks to the skill into recovery; preserve-duplicates enables and moves identical global copies into recovery. (choices: retain-only, retire-aliases, keep-both, preserve-duplicates)"
-        },
-        "use-retained": {
-          "type": "string",
-          "valueName": "string",
-          "description": "Use the retained active version for this competing Skill identifier."
-        },
-        "use-copy": {
-          "type": "string",
-          "valueName": "string",
-          "description": "Use this current copy as the active version of its competing Skill."
-        },
-        "reconcile-skill": {
-          "type": "string",
-          "valueName": "string",
-          "description": "Review this already-enabled Skill without selecting unrelated sources; repeat to choose more."
+          "description": "Choose what happens to other copies: import-only imports without enabling; keep-both enables alongside them; back-up-symlinks enables and moves redundant symlinks into recovery; back-up-copies enables and moves identical global copies into recovery. (choices: import-only, keep-both, back-up-symlinks, back-up-copies)"
         },
         "only-selected": {
           "type": "boolean",
@@ -3092,14 +2845,6 @@
       },
       "outputSchemas": [
         "skit.library.sync.v11"
-      ],
-      "exitCodes": [
-        0,
-        11,
-        12,
-        13,
-        64,
-        65
       ],
       "interactive": false,
       "examples": [
@@ -3231,18 +2976,10 @@
         "skit.update.projection-retention.v3",
         "skit.update.projection-retention.plan.v3"
       ],
-      "exitCodes": [
-        0,
-        1,
-        11,
-        12,
-        64,
-        65
-      ],
       "interactive": false,
       "examples": [
         "skit update --dry-run",
-        "skit update my-skill --from-projection claude-code --dry-run"
+        "skit update my-skill --from ~/.claude/skills/my-skill --dry-run"
       ],
       "positionals": [
         {
@@ -3256,10 +2993,10 @@
           "valueName": "boolean",
           "description": "Report changes without applying them."
         },
-        "from-projection": {
+        "from": {
           "type": "string",
           "valueName": "string",
-          "description": "Import edits from this installed skill, given by its ID, harness or path."
+          "description": "Import edits from the installed skill folder at this path; requires <skill>."
         },
         "json": {
           "type": "boolean",
@@ -3329,10 +3066,6 @@
       "outputSchemas": [
         "skit.version.v3"
       ],
-      "exitCodes": [
-        0,
-        64
-      ],
       "interactive": false,
       "examples": [
         "skit version"
@@ -3379,12 +3112,6 @@
       },
       "outputSchemas": [
         "skit.usage.v4"
-      ],
-      "exitCodes": [
-        0,
-        12,
-        64,
-        65
       ],
       "interactive": false,
       "examples": [
