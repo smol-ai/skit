@@ -295,16 +295,55 @@ test("separate author processes back up offline history and converge through rea
         .poll(
           async () => {
             const head = await current();
-            return [wb, restarted].every((watch) =>
-              watch.events.some(
-                (event) =>
-                  event.result?.status === "up_to_date" && event.result.revision_id === head,
-              ),
+            if (head === null) return false;
+            const currentTree = (await revision(head)).revision.tree;
+            const synchronized = await Promise.all(
+              [a, b].map(async (device) => {
+                const document = Schema.decodeUnknownSync(
+                  Schema.fromJsonString(
+                    Schema.Struct({
+                      backups: Schema.optionalKey(
+                        Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.String)),
+                      ),
+                      workspaces: Schema.Record(
+                        Schema.String,
+                        Schema.Record(
+                          Schema.String,
+                          Schema.Struct({
+                            _tag: Schema.String,
+                            base: Schema.NullOr(Schema.String),
+                          }),
+                        ),
+                      ),
+                    }),
+                  ),
+                )(await readFile(join(device.home, "author-sync.json"), "utf8"));
+                const synchronized = Object.values(document.workspaces).some((entries) =>
+                  Object.values(entries).some(
+                    (checkpoint) => checkpoint._tag === "Idle" && checkpoint.base === head,
+                  ),
+                );
+                const acknowledgements = Object.values(document.backups ?? {}).flatMap((entries) =>
+                  Object.values(entries),
+                );
+                const backedUp = await Promise.all(
+                  acknowledgements.map(
+                    async (id) => (await revision(id)).revision.tree === currentTree,
+                  ),
+                );
+                return synchronized && backedUp.some(Boolean);
+              }),
             );
+            return synchronized.every(Boolean);
           },
           { timeout: 15_000 },
         )
         .toBe(true);
+      expect(
+        [wb, restarted].every((watch) =>
+          watch.events.every((event) => event.result?.status !== "up_to_date"),
+        ),
+      ).toBe(true);
       const quiet = await revisionCount();
       await new Promise((resolve) => setTimeout(resolve, 7_000));
       expect(await revisionCount()).toBe(quiet);

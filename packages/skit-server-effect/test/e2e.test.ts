@@ -931,7 +931,7 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
       );
       expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "merged" } });
       await fetch(new URL("/__relay/release", cliOrigin));
-      expect(await raceExit).toBe(12);
+      expect(await raceExit).toBe(1);
       expect(JSON.parse(Buffer.concat(raceOutput).toString()).error.code).toBe("CONFLICT");
       expect(await readFile(join(firstHome, "state.json"))).toEqual(raceStateBefore);
     } finally {
