@@ -7,10 +7,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { Schema } from "effect";
+import { CommandError } from "../src/commands/error-output.js";
 
 const bin = join(import.meta.dirname, "..", "bin", "skit.js");
 const FailureDocument = Schema.fromJsonString(
-  Schema.Struct({ error: Schema.Struct({ code: Schema.String, message: Schema.String }) }),
+  Schema.Struct({ schema: Schema.Literal("skit.error.v2"), error: CommandError }),
 );
 
 function run(args: readonly string[], options: { home: string; cwd?: string }) {
@@ -22,7 +23,7 @@ function run(args: readonly string[], options: { home: string; cwd?: string }) {
 }
 
 /** The structured error envelope, which is the contract callers parse. */
-function failure(result: { stderr: string }): { code: string; message: string } {
+function failure(result: { stderr: string }) {
   return Schema.decodeSync(FailureDocument)(result.stderr).error;
 }
 

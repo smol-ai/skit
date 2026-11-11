@@ -48,7 +48,7 @@ test.each([
   ],
   [
     { _tag: "CannotRetain", entryType: "Socket", path: "review/socket" },
-    "Cannot back up Socket: review/socket",
+    "Cannot back up a socket: review/socket",
   ],
 ] satisfies ReadonlyArray<readonly [TreeErrorReason, string]>)(
   "formats tree reason %j at the frontend",

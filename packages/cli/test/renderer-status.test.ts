@@ -8,11 +8,13 @@ import { consoleRenderer } from "../src/terminal/console-renderer.js";
 const originalTTY = Object.getOwnPropertyDescriptor(process.stderr, "isTTY");
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   if (originalTTY) Object.defineProperty(process.stderr, "isTTY", originalTTY);
   else Reflect.deleteProperty(process.stderr, "isTTY");
 });
 
 const capture = (tty: boolean) => {
+  vi.stubEnv("NO_COLOR", "1");
   Object.defineProperty(process.stderr, "isTTY", { configurable: true, value: tty });
   const writes: string[] = [];
   vi.spyOn(process.stderr, "write").mockImplementation((chunk, ...args) => {

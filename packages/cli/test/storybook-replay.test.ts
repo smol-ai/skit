@@ -55,7 +55,11 @@ it.effect("a result screen names the contract state it reports", () =>
     const story = journeyStories.find((story) => story.name === "library-sync/fresh-device");
     if (!story) return;
     const frames = journeyFrames(yield* recordJourney(story), defaultTerminalEnvironment);
-    expect(frames.at(-1)?.outcome).toEqual({ contract: "librarySync", state: "pulled" });
+    expect(frames.at(-1)?.outcome).toEqual({
+      contract: "librarySync",
+      state: "pulled",
+      variants: [],
+    });
     expect(frames.slice(0, -1).every((frame) => frame.outcome === undefined)).toBe(true);
   }).pipe(Effect.provide(skitLayer)),
 );
