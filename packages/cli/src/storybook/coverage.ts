@@ -1,3 +1,4 @@
+import type { ContractCoverage, CommandCoverage } from "./contracts.js";
 import { authorSyncDetails, authorSyncGaps } from "./author-sync-inventory.js";
 import { scenarioSets } from "./scenario-sets.js";
 import { authorSyncScenarioInventory } from "./author-sync-journey.js";
@@ -5,7 +6,6 @@ import { doctorScenarioInventory } from "./doctor-journey.js";
 import { Effect, SchemaAST } from "effect";
 import { outputContracts } from "../commands/output-contracts.js";
 import type { CommandResult } from "../commands/types.js";
-import type { CommandInvocation } from "../commands/invocation.js";
 import { commandDocuments } from "../commands/manifest.js";
 import { skitCommand } from "../commands/tree.js";
 import { OutputStory, outputStories, outputStoryKey } from "./output-stories.js";
@@ -13,21 +13,6 @@ import { OutputStory, outputStories, outputStoryKey } from "./output-stories.js"
 /** Fields whose values name the distinct states a command can report. */
 const STATE_FIELDS = ["status", "event", "action"] as const;
 type StateField = (typeof STATE_FIELDS)[number];
-
-export interface ContractCoverage {
-  readonly contract: string;
-  /** The field that names the contract's states; absent when the contract has a single state. */
-  readonly field?: StateField;
-  readonly states: ReadonlyArray<{ readonly state: string; readonly stories: readonly string[] }>;
-  /** Stories for the contract, whatever state they show. */
-  readonly stories: readonly string[];
-  readonly variants?: readonly {
-    readonly state: string;
-    readonly field: string;
-    readonly value: string;
-    readonly stories: readonly string[];
-  }[];
-}
 
 // Watch decodes a wire union into an opaque declaration to preserve live causes.
 // Inspect that declaration's encoded shape; its type AST intentionally has no properties.
@@ -179,28 +164,6 @@ export function storyCoverage(): ReadonlyArray<ContractCoverage> {
         : {}),
     };
   });
-}
-
-export interface CommandCoverage {
-  /** The command as typed after `skit`, such as `author sync`. */
-  readonly command: string;
-  readonly interactive: boolean;
-  readonly rules?: readonly string[];
-  readonly scenarios?: readonly {
-    readonly name: string;
-    readonly description: string;
-    readonly flow?: string;
-  }[];
-  readonly details?: readonly {
-    readonly title: string;
-    readonly body: string;
-    readonly source: string;
-  }[];
-  readonly invocation: CommandInvocation;
-  /** The result contracts the command declares. */
-  readonly contracts: readonly string[];
-  /** Output stories for these contracts that apply to this command. */
-  readonly stories: readonly string[];
 }
 
 /** Every command in the executable tree, with the output stories that show what it reports. */

@@ -11,7 +11,8 @@ import { journeyStories as journeys } from "./journey-stories.js";
 import { recordJourney, renderRecordedJourney } from "./journey-runner.js";
 import { journeyFrames } from "./journey-replay.js";
 import { InteractionEvent } from "./interaction-recorder.js";
-import { commandCoverage as commands, type CommandCoverage } from "./coverage.js";
+import { commandCoverage as commands, storyCoverage as coverage } from "./coverage.js";
+import type { CommandCoverage, ContractCoverage } from "./contracts.js";
 import { cliLayer } from "../application.js";
 import { renderFailureFrame, renderResultFrame } from "../commands/output-frame.js";
 import { renderBlocks } from "../terminal/blocks.js";
@@ -29,7 +30,8 @@ export {
 } from "../terminal/contracts.js";
 export { STATUS_FRAME_MS, CLEAR_STATUS_LINE, renderStatusLine } from "../terminal/status.js";
 export { renderReplayFrame } from "./frame.js";
-export { storyCoverage, type ContractCoverage, type CommandCoverage } from "./coverage.js";
+export type { ContractCoverage, CommandCoverage } from "./contracts.js";
+export const storyCoverage: () => ReadonlyArray<ContractCoverage> = coverage;
 
 export const outputStories: readonly Output[] = outputs.map((story) => ({
   key: outputStoryKey(story),

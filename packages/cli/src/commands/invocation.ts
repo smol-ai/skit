@@ -1,41 +1,9 @@
+import type { CommandInvocation, InvocationParameter } from "../storybook/contracts.js";
 import { Context, Option } from "effect";
 import { Command, Param, Primitive } from "effect/cli";
 import type { HelpDoc } from "effect/cli";
 import { CommandParameters, GlobalParameters, SharedParameters } from "./definition.js";
 import { skitBuiltInFlags } from "./parameters.js";
-
-interface InvocationParameter {
-  readonly name: string;
-  readonly aliases: readonly string[];
-  readonly type: string;
-  readonly valueName?: string;
-  readonly description: string;
-  readonly required: boolean;
-  readonly repeated: boolean;
-  readonly min: number;
-  readonly max?: number;
-  readonly choices?: readonly string[];
-  readonly negation?: string;
-  readonly optionalValue?: string;
-  /** These global tokens name a command option when used at the selected command. */
-  readonly shadowedTokens?: readonly string[];
-  readonly beforeCommandExample?: string;
-  readonly globalKind?: "action" | "setting";
-  readonly default: { readonly status: "none" | "value" | "unavailable"; readonly value?: string };
-  readonly missing: readonly string[];
-}
-
-export interface CommandInvocation {
-  readonly usage: string;
-  readonly handlerRules: readonly string[];
-  readonly summary: string;
-  readonly examples: readonly string[];
-  readonly arguments: readonly InvocationParameter[];
-  readonly options: readonly (InvocationParameter & {
-    readonly scope: "local" | "inherited" | "global";
-  })[];
-  readonly missing: readonly string[];
-}
 
 function parameters(config: Command.Command.Config): Param.Any[] {
   const read = (value: unknown): Param.Any[] => {

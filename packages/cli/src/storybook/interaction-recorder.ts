@@ -1,3 +1,4 @@
+import type { PromptKind } from "./contracts.js";
 import { Context, Data, Effect, Layer, Ref } from "effect";
 import { RuleFailed, type CheckRule } from "./rules.js";
 import type { CommandFailure, CommandResult } from "../commands/types.js";
@@ -17,14 +18,6 @@ export type ScriptedAnswer =
   | boolean
   | { readonly label: string }
   | { readonly labels: readonly string[] };
-
-export type PromptKind =
-  | "select"
-  | "autocomplete"
-  | "multiselect"
-  | "confirm"
-  | "text"
-  | "password";
 
 export type InteractionEvent = Data.TaggedEnum<{
   /** The command line a person would type to run what follows. */

@@ -2,7 +2,8 @@ import { errorOutputContract } from "./error-output.js";
 import { Context, Effect, Option } from "effect";
 import * as Command from "effect/cli/Command";
 import { helpDocument } from "./help-document.js";
-import { commandInvocation, type CommandInvocation } from "./invocation.js";
+import { commandInvocation } from "./invocation.js";
+import type { CommandInvocation } from "../storybook/contracts.js";
 import { CommandMetadata } from "./metadata.js";
 import type { CommandDescription } from "./command-contracts.js";
 
