@@ -40,7 +40,7 @@ const versions: Table = {
   keys: ["skill_version_id"],
   fields: [
     ...fields("skill_version_id", "source_hash", "artifact_hash", "validation_identity_hash"),
-    { field: "materialization_profile", column: "copy_format" },
+    { field: "materialization_profile", column: "skill_format" },
   ],
 };
 const collectionVersions: Table = {
@@ -53,7 +53,7 @@ const members: Table = {
   keys: ["collection_version_id", "source_path"],
   fields: [
     ...fields("source_path", "source_hash", "artifact_hash"),
-    { field: "materialization_profile", column: "copy_format" },
+    { field: "materialization_profile", column: "skill_format" },
   ],
 };
 const imports: Table = {

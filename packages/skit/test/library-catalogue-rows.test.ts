@@ -497,7 +497,7 @@ it.effect(
         Effect.gen(function* () {
           const sql = yield* SqlClient.SqlClient;
           for (const table of ["library_skill_versions", "library_collection_version_members"])
-            yield* sql`ALTER TABLE ${sql(table)} RENAME COLUMN copy_format TO ${sql("materialization_profile")}`;
+            yield* sql`ALTER TABLE ${sql(table)} RENAME COLUMN skill_format TO ${sql("materialization_profile")}`;
           yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id=12`;
         }),
       );
@@ -510,7 +510,7 @@ it.effect(
           const sql = yield* SqlClient.SqlClient;
           for (const table of ["library_skill_versions", "library_collection_version_members"]) {
             const columns = yield* sql<{ name: string }>`PRAGMA table_info(${sql(table)})`;
-            assert.isTrue(columns.some(({ name }) => name === "copy_format"));
+            assert.isTrue(columns.some(({ name }) => name === "skill_format"));
             assert.isFalse(columns.some(({ name }) => name === "materialization_profile"));
           }
           assert.deepStrictEqual(yield* sql`PRAGMA foreign_key_check`, []);

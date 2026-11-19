@@ -25,7 +25,7 @@ export const createLibraryTables = Effect.gen(function* () {
   source_hash              TEXT NOT NULL,
   artifact_hash            TEXT NOT NULL,
   validation_identity_hash TEXT NOT NULL,
-  copy_format              TEXT NOT NULL,
+  skill_format              TEXT NOT NULL,
   extra                    TEXT
 ) STRICT`);
   yield* sql.unsafe(
@@ -42,7 +42,7 @@ export const createLibraryTables = Effect.gen(function* () {
   source_path             TEXT NOT NULL,
   source_hash             TEXT NOT NULL,
   artifact_hash           TEXT NOT NULL,
-  copy_format             TEXT NOT NULL,
+  skill_format             TEXT NOT NULL,
   extra                   TEXT,
   PRIMARY KEY (collection_version_id, source_path)
 ) STRICT`);

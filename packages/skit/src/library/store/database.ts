@@ -112,13 +112,13 @@ const libraryMigrations = () => ({
   "009_file_bytes": createFileBytesTable,
   "010_legacy_history_summaries": prepareLegacyHistorySummaries,
   "011_legacy_history_programs": removeLegacyPrograms,
-  "012_skill_copy_format": Effect.gen(function* () {
+  "012_skill_format": Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     // Existing Libraries keep their values; released document field names stay at the codec.
     for (const table of ["library_skill_versions", "library_collection_version_members"]) {
       const columns = yield* sql<{ name: string }>`PRAGMA table_info(${sql(table)})`;
       if (columns.some((column) => column.name === "materialization_profile"))
-        yield* sql`ALTER TABLE ${sql(table)} RENAME COLUMN ${sql("materialization_profile")} TO copy_format`;
+        yield* sql`ALTER TABLE ${sql(table)} RENAME COLUMN ${sql("materialization_profile")} TO skill_format`;
     }
   }),
 });
