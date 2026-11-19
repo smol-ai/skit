@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
@@ -10,46 +11,51 @@ import manifest from "./fixtures/collections/manifest.json" with { type: "json" 
 
 const fixtures = fileURLToPath(new URL("./fixtures/collections/", import.meta.url));
 
-for (const collection of manifest) {
-  it.effect(`imports verbatim upstream excerpts from ${collection.repository}`, () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const source = join(fixtures, collection.id);
-      // Git blob hashes pin upstream bytes and symlink targets, independently of discovery.
-      for (const file of collection.files) {
-        const path = join(source, file.path);
-        const bytes =
-          file.mode === "120000"
-            ? new TextEncoder().encode(yield* fs.readLink(path))
-            : yield* fs.readFile(path);
-        assert.strictEqual(gitBlobHash(bytes), file.gitBlob, file.path);
-      }
-      const { preview, imported } = yield* assertCollectionImport(
-        source,
-        collection.skills.map((skill) => skill.path),
+describe("skit add", () => {
+  describe("Adding a source saves its selected Skills without enabling them.", () => {
+    for (const collection of manifest) {
+      it.effect(`imports verbatim upstream excerpts from ${collection.repository}`, () =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const source = join(fixtures, collection.id);
+          // Git blob hashes pin upstream bytes and symlink targets, independently of discovery.
+          for (const file of collection.files) {
+            const path = join(source, file.path);
+            const bytes =
+              file.mode === "120000"
+                ? new TextEncoder().encode(yield* fs.readLink(path))
+                : yield* fs.readFile(path);
+            assert.strictEqual(gitBlobHash(bytes), file.gitBlob, file.path);
+          }
+          const { preview, imported } = yield* assertCollectionImport(
+            source,
+            collection.skills.map((skill) => skill.path),
+          );
+          assert.deepStrictEqual(
+            preview.skills
+              .map((skill) => ({ name: skill.name, path: skill.verbatim_path }))
+              .toSorted((a, b) => a.path.localeCompare(b.path)),
+            collection.skills.toSorted((a, b) => a.path.localeCompare(b.path)),
+          );
+          for (const file of collection.files) {
+            if (!collection.skills.some((skill) => file.path.startsWith(`${skill.path}/`)))
+              continue;
+            assert.strictEqual(
+              gitBlobHash(yield* fs.readFile(join(imported, file.path))),
+              file.gitBlob,
+              file.path,
+            );
+          }
+          for (const path of collection.excluded) {
+            assert.strictEqual(yield* fs.exists(join(source, path, "SKILL.md")), true);
+            assert.strictEqual(yield* fs.exists(join(imported, path)), false);
+          }
+          for (const selected of collection.explicit) {
+            const explicit = yield* previewLibrarySource(join(source, selected.path));
+            assert.deepStrictEqual(explicit.skills, [{ name: selected.name, verbatim_path: "." }]);
+          }
+        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
       );
-      assert.deepStrictEqual(
-        preview.skills
-          .map((skill) => ({ name: skill.name, path: skill.verbatim_path }))
-          .toSorted((a, b) => a.path.localeCompare(b.path)),
-        collection.skills.toSorted((a, b) => a.path.localeCompare(b.path)),
-      );
-      for (const file of collection.files) {
-        if (!collection.skills.some((skill) => file.path.startsWith(`${skill.path}/`))) continue;
-        assert.strictEqual(
-          gitBlobHash(yield* fs.readFile(join(imported, file.path))),
-          file.gitBlob,
-          file.path,
-        );
-      }
-      for (const path of collection.excluded) {
-        assert.strictEqual(yield* fs.exists(join(source, path, "SKILL.md")), true);
-        assert.strictEqual(yield* fs.exists(join(imported, path)), false);
-      }
-      for (const selected of collection.explicit) {
-        const explicit = yield* previewLibrarySource(join(source, selected.path));
-        assert.deepStrictEqual(explicit.skills, [{ name: selected.name, verbatim_path: "." }]);
-      }
-    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-  );
-}
+    }
+  });
+});

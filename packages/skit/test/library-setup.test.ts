@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import { recordedLibrary } from "../src/library/internal/setup/intent.js";
 import { emptyLibraryState } from "../src/library/library-state.js";
 import { assert, it } from "@effect/vitest";
@@ -80,52 +81,6 @@ const auditLines = (home: string) =>
     ),
   );
 
-it.effect("removes a reviewed folder into removed/<operationId>/ and records it Done", () =>
-  Effect.gen(function* () {
-    const { fs, home, folder, remove } = yield* fixture;
-    const result = yield* withLibrary(home, (library) =>
-      Effect.flatMap(library.read, (base) => library.setup([remove], { base })),
-    );
-
-    assert.strictEqual(result._tag, "Done");
-    if (result._tag !== "Done") return;
-    const saved = join(home, "removed", result.operationId, "step-1", "1-review");
-    assert.isFalse(yield* fs.exists(folder));
-    assert.isTrue(yield* fs.exists(saved));
-    assert.isTrue(
-      yield* fs.exists(join(home, "removed", result.operationId, "step-1", "receipt.json")),
-    );
-    assert.deepStrictEqual(result.recoveryDirectories, [
-      join(home, "removed", result.operationId, "step-1"),
-    ]);
-    // The Done record keeps every step with its evidence, for undo.
-    assert.deepStrictEqual(yield* recordedOperations(home), [
-      OperationStatus.cases.Done.make({
-        operationId: result.operationId,
-        steps: [
-          {
-            step: remove,
-            before: remove._tag === "Remove" ? remove.folders : [],
-            after:
-              remove._tag === "Remove"
-                ? remove.folders.map((folder) => ({
-                    _tag: "Absent" as const,
-                    path: folder.path,
-                    parent: folder.parent,
-                  }))
-                : [],
-            status: "Done",
-          },
-        ],
-        // Moving a folder aside changes nothing the Library records.
-        before: recordedLibrary(emptyLibraryState()),
-        after: recordedLibrary(emptyLibraryState()),
-      }),
-    ]);
-    assert.strictEqual(yield* auditLines(home), 1);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
 /** A home with a source to import and a folder to remove, as one setup. */
 const importFixture = Effect.gen(function* () {
   const { fs, workspace, home, folder, remove } = yield* fixture;
@@ -152,215 +107,6 @@ const importFixture = Effect.gen(function* () {
   };
   return { fs, home, folder, steps: [imported, remove] };
 });
-
-// An import setup commits: the record, the Collection Version, the import's state, the Import's
-// Done mark, then the removal's receipt, move and Done mark, then the operation's Done mark.
-it.effect("a crash after an import saved, before its Done mark, re-runs the import", () =>
-  Effect.gen(function* () {
-    const { fs, home, folder, steps } = yield* importFixture;
-    const crashed = yield* Effect.exit(
-      withLibrary(
-        home,
-        (library) => Effect.flatMap(library.read, (base) => library.setup(steps, { base })),
-        crashingAfter(3),
-      ),
-    );
-    assert.isTrue(Exit.isFailure(crashed));
-    const [interrupted] = yield* recordedOperations(home);
-    if (interrupted?._tag !== "Pending") return assert.fail("setup is not Pending");
-    assert.deepStrictEqual(
-      interrupted.steps.map(({ status }) => status),
-      ["Pending", "Pending"],
-    );
-
-    const startup = yield* restart(home);
-
-    assert.deepStrictEqual(startup, { finished: [interrupted.operationId], stopped: [] });
-    assert.isFalse(yield* fs.exists(folder));
-    const inspected = yield* inspectLibrary(home);
-    assert.isTrue(inspected.present && inspected.state.collections.length === 1);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("the import's Done mark saves the Collection Version it retained", () =>
-  Effect.gen(function* () {
-    const { fs, home, folder, steps } = yield* importFixture;
-    yield* Effect.exit(
-      withLibrary(
-        home,
-        (library) => Effect.flatMap(library.read, (base) => library.setup(steps, { base })),
-        crashingAfter(4),
-      ),
-    );
-    const inspected = yield* inspectLocalLibraryState(home);
-    if (!inspected.present) return assert.fail("no Library");
-    const [interrupted] = yield* recordedOperations(home);
-    if (interrupted?._tag !== "Pending") return assert.fail("setup is not Pending");
-    assert.deepStrictEqual(
-      interrupted.steps.map(({ status, after }) => ({ status, after })),
-      [
-        {
-          status: "Done",
-          after: [
-            {
-              _tag: "Retained",
-              hash: inspected.state.collection_versions[0]!.hash,
-              collectionId: inspected.state.collections[0]!.collection_id,
-            },
-          ],
-        },
-        { status: "Pending", after: interrupted.steps[1]!.after },
-      ],
-    );
-
-    const startup = yield* restart(home);
-
-    assert.deepStrictEqual(startup, { finished: [interrupted.operationId], stopped: [] });
-    assert.isFalse(yield* fs.exists(folder));
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-// Commits a one-folder removal makes, in order: the record, the receipt, the move, the Done mark.
-for (const [commits, after] of [
-  [1, "the record"],
-  [2, "the receipt"],
-  [3, "the move"],
-  [4, "the Done mark"],
-] as const)
-  it.effect(`a crash after ${after} is finished by running setup again`, () =>
-    Effect.gen(function* () {
-      const { fs, home, folder, remove } = yield* fixture;
-      const crashed = yield* Effect.exit(
-        withLibrary(
-          home,
-          (library) => Effect.flatMap(library.read, (base) => library.setup([remove], { base })),
-          crashingAfter(commits),
-        ),
-      );
-      assert.isTrue(Exit.isFailure(crashed));
-      const [operation] = yield* recordedOperations(home);
-      assert.strictEqual(operation?._tag, "Pending");
-      if (operation === undefined) return;
-
-      const startup = yield* restart(home);
-
-      assert.deepStrictEqual(startup, { finished: [operation.operationId], stopped: [] });
-      assert.isFalse(yield* fs.exists(folder));
-      const saved = join(home, "removed", operation.operationId, "step-1", "1-review");
-      assert.strictEqual(
-        yield* fs.readFileString(join(saved, "SKILL.md")),
-        "---\nname: review\n---\nReview.\n",
-      );
-      assert.deepStrictEqual(yield* recordedOperations(home), [
-        OperationStatus.cases.Done.make({
-          operationId: operation.operationId,
-          steps: operation.steps.map((step) => ({ ...step, status: "Done" as const })),
-          before: operation.before,
-          after: operation.before,
-        }),
-      ]);
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
-  );
-
-it.effect("a re-run stops, moving nothing, when the folder changed after the receipt", () =>
-  Effect.gen(function* () {
-    const { fs, home, folder, remove } = yield* fixture;
-    yield* Effect.exit(
-      withLibrary(
-        home,
-        (library) => Effect.flatMap(library.read, (base) => library.setup([remove], { base })),
-        crashingAfter(2),
-      ),
-    );
-    const [operation] = yield* recordedOperations(home);
-    if (operation === undefined) return assert.fail("no operation recorded");
-    yield* fs.writeFileString(join(folder, "notes.md"), "the user's edit\n");
-
-    const startup = yield* restart(home);
-
-    assert.deepStrictEqual(startup.finished, []);
-    const [result] = startup.stopped;
-    if (result === undefined) return assert.fail("not stopped");
-    assert.strictEqual(result.reason._tag, "EvidenceDiffers");
-    assert.strictEqual(yield* fs.readFileString(join(folder, "notes.md")), "the user's edit\n");
-    // The Stopped record keeps every step with its evidence, as recorded before the stop.
-    const [stopped] = yield* recordedOperations(home);
-    assert.deepStrictEqual(
-      stopped,
-      OperationStatus.cases.Stopped.make({
-        operationId: operation.operationId,
-        steps: operation.steps,
-        reason: result.reason,
-        before: operation.before,
-        after: operation.before,
-      }),
-    );
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("a re-run stops when something new is where a moved folder was", () =>
-  Effect.gen(function* () {
-    const { fs, home, folder, remove } = yield* fixture;
-    yield* Effect.exit(
-      withLibrary(
-        home,
-        (library) => Effect.flatMap(library.read, (base) => library.setup([remove], { base })),
-        crashingAfter(3),
-      ),
-    );
-    const [operation] = yield* recordedOperations(home);
-    if (operation === undefined) return assert.fail("no operation recorded");
-    yield* fs.makeDirectory(folder);
-    yield* fs.writeFileString(join(folder, "SKILL.md"), "a new skill\n");
-
-    const startup = yield* restart(home);
-
-    assert.deepStrictEqual(
-      startup.stopped.map(({ operationId }) => operationId),
-      [operation.operationId],
-    );
-    assert.strictEqual(yield* fs.readFileString(join(folder, "SKILL.md")), "a new skill\n");
-    assert.isTrue(
-      yield* fs.exists(join(home, "removed", operation.operationId, "step-1", "1-review")),
-    );
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("refuses a setup reviewed against another revision, writing nothing", () =>
-  Effect.gen(function* () {
-    const { fs, home, folder, remove } = yield* fixture;
-    const error = yield* withLibrary(home, (library) =>
-      Effect.flatMap(library.read, (base) =>
-        library.setup([remove], {
-          base: { ...base, revision: Library.Revision.make("sha256:elsewhere") },
-        }),
-      ),
-    ).pipe(Effect.flip);
-
-    assert.strictEqual(error._tag, "Library.StalePlan");
-    assert.isTrue(yield* fs.exists(folder));
-    assert.isFalse(yield* fs.exists(join(home, "state.json")));
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("refuses to remove the Library's own storage", () =>
-  Effect.gen(function* () {
-    const { fs, home } = yield* fixture;
-    yield* fs.makeDirectory(join(home, "originals"), { recursive: true });
-    const own = yield* readPathEvidence(join(home, "originals"));
-    if (Option.isNone(own)) return assert.fail("no evidence");
-    const error = yield* withLibrary(home, (library) =>
-      Effect.flatMap(library.read, (base) =>
-        library.setup([{ _tag: "Remove", folders: [own.value] }], { base }),
-      ),
-    ).pipe(Effect.flip);
-
-    if (error._tag !== "Library.SetupStepsInvalid") return assert.fail(error._tag);
-    assert.strictEqual(error.reason, "path-in-library-storage");
-    assert.strictEqual(error.path, join(home, "originals"));
-    assert.isTrue(yield* fs.exists(join(home, "originals")));
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
 
 it.effect("a later setup replaces Done records and keeps Stopped ones", () =>
   Effect.gen(function* () {
@@ -423,3 +169,282 @@ it.effect("setup keeps the home lock after an additive step until later steps fi
     yield* Effect.scoped(lockFile(join(home, "lock.sqlite")));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+describe("skit setup", () => {
+  describe("Finding and reviewing", () => {
+    describe("A changed setup must be reviewed again before it can change files.", () => {
+      it.effect("refuses a setup reviewed against another revision, writing nothing", () =>
+        Effect.gen(function* () {
+          const { fs, home, folder, remove } = yield* fixture;
+          const error = yield* withLibrary(home, (library) =>
+            Effect.flatMap(library.read, (base) =>
+              library.setup([remove], {
+                base: { ...base, revision: Library.Revision.make("sha256:elsewhere") },
+              }),
+            ),
+          ).pipe(Effect.flip);
+
+          assert.strictEqual(error._tag, "Library.StalePlan");
+          assert.isTrue(yield* fs.exists(folder));
+          assert.isFalse(yield* fs.exists(join(home, "state.json")));
+        }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      );
+    });
+  });
+});
+
+describe("skit setup", () => {
+  describe("Keeping files recoverable", () => {
+    describe("An interrupted setup keeps the remaining files recoverable.", () => {
+      it.effect("removes a reviewed folder into removed/<operationId>/ and records it Done", () =>
+        Effect.gen(function* () {
+          const { fs, home, folder, remove } = yield* fixture;
+          const result = yield* withLibrary(home, (library) =>
+            Effect.flatMap(library.read, (base) => library.setup([remove], { base })),
+          );
+
+          assert.strictEqual(result._tag, "Done");
+          if (result._tag !== "Done") return;
+          const saved = join(home, "removed", result.operationId, "step-1", "1-review");
+          assert.isFalse(yield* fs.exists(folder));
+          assert.isTrue(yield* fs.exists(saved));
+          assert.isTrue(
+            yield* fs.exists(join(home, "removed", result.operationId, "step-1", "receipt.json")),
+          );
+          assert.deepStrictEqual(result.recoveryDirectories, [
+            join(home, "removed", result.operationId, "step-1"),
+          ]);
+          // The Done record keeps every step with its evidence, for undo.
+          assert.deepStrictEqual(yield* recordedOperations(home), [
+            OperationStatus.cases.Done.make({
+              operationId: result.operationId,
+              steps: [
+                {
+                  step: remove,
+                  before: remove._tag === "Remove" ? remove.folders : [],
+                  after:
+                    remove._tag === "Remove"
+                      ? remove.folders.map((folder) => ({
+                          _tag: "Absent" as const,
+                          path: folder.path,
+                          parent: folder.parent,
+                        }))
+                      : [],
+                  status: "Done",
+                },
+              ],
+              // Moving a folder aside changes nothing the Library records.
+              before: recordedLibrary(emptyLibraryState()),
+              after: recordedLibrary(emptyLibraryState()),
+            }),
+          ]);
+          assert.strictEqual(yield* auditLines(home), 1);
+        }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      );
+
+      // An import setup commits: the record, the Collection Version, the import's state, the Import's
+      // Done mark, then the removal's receipt, move and Done mark, then the operation's Done mark.
+      it.effect("a crash after an import saved, before its Done mark, re-runs the import", () =>
+        Effect.gen(function* () {
+          const { fs, home, folder, steps } = yield* importFixture;
+          const crashed = yield* Effect.exit(
+            withLibrary(
+              home,
+              (library) => Effect.flatMap(library.read, (base) => library.setup(steps, { base })),
+              crashingAfter(3),
+            ),
+          );
+          assert.isTrue(Exit.isFailure(crashed));
+          const [interrupted] = yield* recordedOperations(home);
+          if (interrupted?._tag !== "Pending") return assert.fail("setup is not Pending");
+          assert.deepStrictEqual(
+            interrupted.steps.map(({ status }) => status),
+            ["Pending", "Pending"],
+          );
+
+          const startup = yield* restart(home);
+
+          assert.deepStrictEqual(startup, { finished: [interrupted.operationId], stopped: [] });
+          assert.isFalse(yield* fs.exists(folder));
+          const inspected = yield* inspectLibrary(home);
+          assert.isTrue(inspected.present && inspected.state.collections.length === 1);
+        }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      );
+
+      it.effect("the import's Done mark saves the Collection Version it retained", () =>
+        Effect.gen(function* () {
+          const { fs, home, folder, steps } = yield* importFixture;
+          yield* Effect.exit(
+            withLibrary(
+              home,
+              (library) => Effect.flatMap(library.read, (base) => library.setup(steps, { base })),
+              crashingAfter(4),
+            ),
+          );
+          const inspected = yield* inspectLocalLibraryState(home);
+          if (!inspected.present) return assert.fail("no Library");
+          const [interrupted] = yield* recordedOperations(home);
+          if (interrupted?._tag !== "Pending") return assert.fail("setup is not Pending");
+          assert.deepStrictEqual(
+            interrupted.steps.map(({ status, after }) => ({ status, after })),
+            [
+              {
+                status: "Done",
+                after: [
+                  {
+                    _tag: "Retained",
+                    hash: inspected.state.collection_versions[0]!.hash,
+                    collectionId: inspected.state.collections[0]!.collection_id,
+                  },
+                ],
+              },
+              { status: "Pending", after: interrupted.steps[1]!.after },
+            ],
+          );
+
+          const startup = yield* restart(home);
+
+          assert.deepStrictEqual(startup, { finished: [interrupted.operationId], stopped: [] });
+          assert.isFalse(yield* fs.exists(folder));
+        }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      );
+
+      // Commits a one-folder removal makes, in order: the record, the receipt, the move, the Done mark.
+      for (const [commits, after] of [
+        [1, "the record"],
+        [2, "the receipt"],
+        [3, "the move"],
+        [4, "the Done mark"],
+      ] as const)
+        it.effect(`a crash after ${after} is finished by running setup again`, () =>
+          Effect.gen(function* () {
+            const { fs, home, folder, remove } = yield* fixture;
+            const crashed = yield* Effect.exit(
+              withLibrary(
+                home,
+                (library) =>
+                  Effect.flatMap(library.read, (base) => library.setup([remove], { base })),
+                crashingAfter(commits),
+              ),
+            );
+            assert.isTrue(Exit.isFailure(crashed));
+            const [operation] = yield* recordedOperations(home);
+            assert.strictEqual(operation?._tag, "Pending");
+            if (operation === undefined) return;
+
+            const startup = yield* restart(home);
+
+            assert.deepStrictEqual(startup, { finished: [operation.operationId], stopped: [] });
+            assert.isFalse(yield* fs.exists(folder));
+            const saved = join(home, "removed", operation.operationId, "step-1", "1-review");
+            assert.strictEqual(
+              yield* fs.readFileString(join(saved, "SKILL.md")),
+              "---\nname: review\n---\nReview.\n",
+            );
+            assert.deepStrictEqual(yield* recordedOperations(home), [
+              OperationStatus.cases.Done.make({
+                operationId: operation.operationId,
+                steps: operation.steps.map((step) => ({ ...step, status: "Done" as const })),
+                before: operation.before,
+                after: operation.before,
+              }),
+            ]);
+          }).pipe(Effect.provide(skitLayer), Effect.scoped),
+        );
+
+      it.effect("a re-run stops, moving nothing, when the folder changed after the receipt", () =>
+        Effect.gen(function* () {
+          const { fs, home, folder, remove } = yield* fixture;
+          yield* Effect.exit(
+            withLibrary(
+              home,
+              (library) =>
+                Effect.flatMap(library.read, (base) => library.setup([remove], { base })),
+              crashingAfter(2),
+            ),
+          );
+          const [operation] = yield* recordedOperations(home);
+          if (operation === undefined) return assert.fail("no operation recorded");
+          yield* fs.writeFileString(join(folder, "notes.md"), "the user's edit\n");
+
+          const startup = yield* restart(home);
+
+          assert.deepStrictEqual(startup.finished, []);
+          const [result] = startup.stopped;
+          if (result === undefined) return assert.fail("not stopped");
+          assert.strictEqual(result.reason._tag, "EvidenceDiffers");
+          assert.strictEqual(
+            yield* fs.readFileString(join(folder, "notes.md")),
+            "the user's edit\n",
+          );
+          // The Stopped record keeps every step with its evidence, as recorded before the stop.
+          const [stopped] = yield* recordedOperations(home);
+          assert.deepStrictEqual(
+            stopped,
+            OperationStatus.cases.Stopped.make({
+              operationId: operation.operationId,
+              steps: operation.steps,
+              reason: result.reason,
+              before: operation.before,
+              after: operation.before,
+            }),
+          );
+        }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      );
+
+      it.effect("a re-run stops when something new is where a moved folder was", () =>
+        Effect.gen(function* () {
+          const { fs, home, folder, remove } = yield* fixture;
+          yield* Effect.exit(
+            withLibrary(
+              home,
+              (library) =>
+                Effect.flatMap(library.read, (base) => library.setup([remove], { base })),
+              crashingAfter(3),
+            ),
+          );
+          const [operation] = yield* recordedOperations(home);
+          if (operation === undefined) return assert.fail("no operation recorded");
+          yield* fs.makeDirectory(folder);
+          yield* fs.writeFileString(join(folder, "SKILL.md"), "a new skill\n");
+
+          const startup = yield* restart(home);
+
+          assert.deepStrictEqual(
+            startup.stopped.map(({ operationId }) => operationId),
+            [operation.operationId],
+          );
+          assert.strictEqual(yield* fs.readFileString(join(folder, "SKILL.md")), "a new skill\n");
+          assert.isTrue(
+            yield* fs.exists(join(home, "removed", operation.operationId, "step-1", "1-review")),
+          );
+        }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      );
+    });
+  });
+});
+
+describe("skit setup", () => {
+  describe("Keeping files recoverable", () => {
+    describe("Setup keeps the Library’s own files out of removal choices.", () => {
+      it.effect("refuses to remove the Library's own storage", () =>
+        Effect.gen(function* () {
+          const { fs, home } = yield* fixture;
+          yield* fs.makeDirectory(join(home, "originals"), { recursive: true });
+          const own = yield* readPathEvidence(join(home, "originals"));
+          if (Option.isNone(own)) return assert.fail("no evidence");
+          const error = yield* withLibrary(home, (library) =>
+            Effect.flatMap(library.read, (base) =>
+              library.setup([{ _tag: "Remove", folders: [own.value] }], { base }),
+            ),
+          ).pipe(Effect.flip);
+
+          if (error._tag !== "Library.SetupStepsInvalid") return assert.fail(error._tag);
+          assert.strictEqual(error.reason, "path-in-library-storage");
+          assert.strictEqual(error.path, join(home, "originals"));
+          assert.isTrue(yield* fs.exists(join(home, "originals")));
+        }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      );
+    });
+  });
+});

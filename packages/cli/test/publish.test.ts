@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { expect } from "vitest";
@@ -142,323 +143,6 @@ it.effect.each(["/registry/{owner}/{slug}/publish", undefined, "http://["])(
     }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("publish uses skit.remote.json without including it in the Release", () =>
-  Effect.gen(function* () {
-    const root = yield* scratch("skit-json-publish-test-");
-    yield* makeDir(join(root, "skills", "review"));
-    yield* writeText(join(root, "README.md"), "# Human-owned tools documentation\n");
-    yield* writeText(
-      join(root, "skit.json"),
-      `${JSON.stringify(
-        {
-          slug: "tools",
-          skills: [
-            {
-              name: "review",
-              path: "skills/review",
-              invocation: "explicit",
-              capabilities: ["filesystem_read"],
-            },
-          ],
-        },
-        null,
-        2,
-      )}\n`,
-    );
-    yield* writeText(
-      join(root, "skit.remote.json"),
-      `${JSON.stringify({
-        schema: "skit.remote.v1",
-        origin: "https://registry.example",
-        namespace: "test",
-        skit: "tools",
-      })}\n`,
-    );
-    yield* writeText(
-      join(root, "skills", "review", "SKILL.md"),
-      "---\nname: review\ndescription: Review code.\ndisable-model-invocation: true\n---\n# Review\n",
-    );
-    yield* makeDir(join(root, "skills", "review", "agents"));
-    yield* writeText(
-      join(root, "skills", "review", "agents", "openai.yaml"),
-      "policy:\n  allow_implicit_invocation: false\n",
-    );
-    let publishUrl = "";
-    let archiveBase64 = "";
-    yield* runPublish(root, "1.2.3", revision, {
-      credentialOrigin: "https://registry.example",
-      transport: (input, url) =>
-        Effect.gen(function* () {
-          if (input.url.includes(".well-known")) return new Response(null, { status: 404 });
-          publishUrl = url.toString();
-          archiveBase64 = (yield* Schema.decodeEffect(
-            Schema.fromJsonString(releasePublishRequestSchema),
-          )(
-            new TextDecoder().decode(
-              input.body._tag === "Uint8Array" ? input.body.body : undefined,
-            ),
-          ).pipe(Effect.orDie)).archive_base64;
-          return Response.json(
-            {
-              release: {
-                release_id: "rel_json",
-                version: "1.2.3",
-                revision_id: revision,
-                archive_digest: `sha256:${"a".repeat(64)}`,
-                download_path: "/api/skits/test/tools/releases/1.2.3/download",
-              },
-            },
-            { status: 201 },
-          );
-        }),
-    });
-    expect(publishUrl).toBe("https://registry.example/api/skits/test/tools/releases");
-    const archive = join(root, "skit-json-uploaded.zip");
-    yield* writeBytes(archive, Buffer.from(archiveBase64, "base64"));
-    const archivedPaths = yield* unzipList(archive);
-    expect(archivedPaths).toContain("skit.json");
-    expect(archivedPaths).not.toContain("skit.remote.json");
-  }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect("publish lets the Registry select its current SKIT when --revision is omitted", () =>
-  Effect.gen(function* () {
-    const root = yield* scratch("skit-current-publish-test-");
-    yield* writeRemote(root);
-    yield* copySkitFixtureEffect("authored", root);
-    let publishedRevision: unknown;
-    yield* runPublish(root, "1.2.3", undefined, {
-      credentialOrigin: "https://registry.test",
-      transport: (input, url) =>
-        Effect.gen(function* () {
-          if (url.toString().includes(".well-known")) return new Response(null, { status: 404 });
-          publishedRevision = (yield* Schema.decodeEffect(Schema.fromJsonString(Schema.JsonObject))(
-            new TextDecoder().decode(
-              input.body._tag === "Uint8Array" ? input.body.body : undefined,
-            ),
-          ).pipe(Effect.orDie)).revision_id;
-          return Response.json(
-            {
-              release: {
-                release_id: "rel_current",
-                version: "1.2.3",
-                revision_id: "draft_current",
-                archive_digest: `sha256:${"a".repeat(64)}`,
-                download_path: "/api/skits/test/tools/releases/1.2.3/download",
-              },
-            },
-            { status: 201 },
-          );
-        }),
-    });
-    expect(publishedRevision).toBeUndefined();
-  }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect("publish never sends another Registry's token to the remote home", () =>
-  Effect.gen(function* () {
-    const root = yield* scratch("skit-binding-publish-test-");
-    yield* writeRemote(root, "https://registry.example");
-    yield* writeText(
-      join(root, "skit.json"),
-      `${JSON.stringify({
-        slug: "tools",
-        skills: [{ name: "review", path: "skills/review" }],
-      })}\n`,
-    );
-    let requests = 0;
-    expect(
-      yield* failure(
-        runPublish(root, "1.0.0", revision, {
-          credentialOrigin: "https://other.example",
-          transport: () =>
-            Effect.sync(() => {
-              requests++;
-              return Response.json({});
-            }),
-        }),
-      ),
-    ).toMatchObject({ _tag: "AuthenticationRequired", origin: "https://registry.example" });
-    expect(requests).toBe(0);
-  }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect("publish validates before making a request", () =>
-  Effect.gen(function* () {
-    const root = yield* scratch("skit-invalid-publish-test-");
-    let requests = 0;
-    yield* writeText(join(root, "README.md"), "not a SKIT\n");
-    expect(
-      yield* failure(
-        runPublish(root, "1.0.0", revision, {
-          transport: () =>
-            Effect.sync(() => {
-              requests++;
-              return Response.json({});
-            }),
-        }),
-      ),
-    ).toBeInstanceOf(Error);
-    expect(requests).toBe(0);
-  }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect("publish rejects unbaked invocation policy before any archive exists", () =>
-  Effect.gen(function* () {
-    const root = yield* scratch("skit-unbaked-publish-test-");
-    yield* writeRemote(root);
-    yield* copySkitFixtureEffect("readme-authored", root);
-    yield* writeText(
-      join(root, "skills", "review", "SKILL.md"),
-      "---\nname: review\ndescription: Review code.\n---\n# Review\n",
-    );
-    let requests = 0;
-
-    const blocked = yield* failure(
-      runPublish(root, "1.2.3", revision, {
-        credentialOrigin: "https://registry.test",
-        transport: () =>
-          Effect.sync(() => {
-            requests++;
-            return Response.json({});
-          }),
-      }),
-    );
-    expect(blocked).toMatchObject({
-      code: "VALIDATION_FAILED",
-      diagnostics: expect.arrayContaining([
-        expect.objectContaining({ code: "INVOCATION_METADATA_MISMATCH", severity: "error" }),
-      ]),
-    });
-    expect(classifyFailure(blocked).message).toContain("skit author invocation");
-    expect(requests).toBe(0);
-    expect(yield* listDir(root)).not.toContain("release.zip");
-  }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect("publish reports non-success responses without accepting their body", () =>
-  Effect.gen(function* () {
-    const root = yield* scratch("skit-publish-http-test-");
-    yield* writeRemote(root);
-    yield* copySkitFixtureEffect("authored", root);
-    expect(
-      yield* failure(
-        runPublish(root, "1.0.0", revision, {
-          credentialOrigin: "https://registry.test",
-          transport: () =>
-            Effect.succeed(Response.json({ error: "insufficient_scope" }, { status: 403 })),
-        }),
-      ),
-    ).toMatchObject({ message: expect.stringMatching(/lacks publication:write/) });
-
-    expect(
-      yield* failure(
-        runPublish(root, "1.0.0", revision, {
-          credentialOrigin: "https://registry.test",
-          transport: () => Effect.succeed(Response.json({ error: "forbidden" }, { status: 403 })),
-        }),
-      ),
-    ).toMatchObject({ message: expect.stringMatching(/not authorized to publish this SKIT/) });
-  }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect("publish reports the diagnostics that block publication", () =>
-  Effect.gen(function* () {
-    const root = yield* scratch("skit-blocked-publish-test-");
-    yield* writeRemote(root);
-    yield* copySkitFixtureEffect("authored", root);
-    expect(
-      yield* failure(
-        runPublish(root, "1.0.0", revision, {
-          credentialOrigin: "https://registry.test",
-          transport: (input) =>
-            Effect.succeed(
-              input.url.includes(".well-known")
-                ? new Response(null, { status: 404 })
-                : Response.json(
-                    {
-                      error: "publish_blocked",
-                      diagnostics: [
-                        {
-                          severity: "warning",
-                          code: "REVIEW_RECOMMENDED",
-                          message: "this warning must not be presented as a blocker",
-                        },
-                        {
-                          severity: "error",
-                          code: "SECURITY_POLICY_BLOCKED",
-                          message: "review contains undeclared executable behavior",
-                        },
-                      ],
-                    },
-                    { status: 422 },
-                  ),
-            ),
-        }),
-      ),
-    ).toMatchObject({
-      _tag: "PublicationBlocked",
-      code: "VALIDATION_FAILED",
-      reason: "assessment",
-      diagnostics: [
-        {
-          severity: "error",
-          code: "SECURITY_POLICY_BLOCKED",
-          message: "review contains undeclared executable behavior",
-        },
-      ],
-    });
-  }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect("publish tells the author to sync when local files do not match the SKIT", () =>
-  Effect.gen(function* () {
-    const root = yield* scratch("skit-unsynced-publish-test-");
-    yield* writeRemote(root);
-    yield* copySkitFixtureEffect("authored", root);
-    const error = yield* failure(
-      runPublish(root, "1.0.0", undefined, {
-        credentialOrigin: "https://registry.test",
-        transport: (input) =>
-          Effect.succeed(
-            input.url.includes(".well-known")
-              ? new Response(null, { status: 404 })
-              : Response.json({ error: "ARCHIVE_MANIFEST_MISMATCH" }, { status: 400 }),
-          ),
-      }),
-    );
-    expect(error).toMatchObject({ _tag: "AuthorSyncRequired", root });
-    expect(classifyFailure(error).next).toContainEqual({
-      code: `skit author sync ${root} --apply`,
-    });
-  }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect("publish uses the authored path in sync remediation", () =>
-  Effect.gen(function* () {
-    const parent = yield* scratch("skit-unsynced-path-test-");
-    const root = join(parent, "tools with spaces");
-    yield* makeDir(root);
-    yield* writeRemote(root);
-    yield* copySkitFixtureEffect("authored", root);
-    const error = yield* failure(
-      runPublish(root, "1.0.0", undefined, {
-        credentialOrigin: "https://registry.test",
-        transport: (input) =>
-          Effect.succeed(
-            input.url.includes(".well-known")
-              ? new Response(null, { status: 404 })
-              : Response.json({ error: "ARCHIVE_MANIFEST_MISMATCH" }, { status: 400 }),
-          ),
-      }),
-    );
-    expect(error).toMatchObject({ _tag: "AuthorSyncRequired", root });
-    expect(classifyFailure(error).next).toContainEqual({
-      code: `skit author sync '${root}' --apply`,
-    });
-  }).pipe(Effect.provide(skitLayer)),
-);
-
 it.effect("publish accepts an older successful response without the selected revision", () =>
   Effect.gen(function* () {
     const root = yield* scratch("skit-old-response-publish-test-");
@@ -488,82 +172,427 @@ it.effect("publish accepts an older successful response without the selected rev
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("publish preserves non-JSON Registry error bodies", () =>
-  Effect.gen(function* () {
-    const root = yield* scratch("skit-gateway-publish-test-");
-    yield* writeRemote(root);
-    yield* copySkitFixtureEffect("authored", root);
-    expect(
-      yield* failure(
-        runPublish(root, "1.0.0", undefined, {
-          credentialOrigin: "https://registry.test",
-          transport: (input) =>
-            Effect.succeed(
-              input.url.includes(".well-known")
-                ? new Response(null, { status: 404 })
-                : new Response("upstream unavailable", { status: 502 }),
-            ),
-        }),
-      ),
-    ).toMatchObject({
-      reason: { _tag: "ResponseFailure", status: 502, body: "upstream unavailable" },
-    });
-  }).pipe(Effect.provide(skitLayer)),
-);
+describe("skit author publish", () => {
+  describe("Publish validates authored content before sending a request.", () => {
+    it.effect("publish validates before making a request", () =>
+      Effect.gen(function* () {
+        const root = yield* scratch("skit-invalid-publish-test-");
+        let requests = 0;
+        yield* writeText(join(root, "README.md"), "not a SKIT\n");
+        expect(
+          yield* failure(
+            runPublish(root, "1.0.0", revision, {
+              transport: () =>
+                Effect.sync(() => {
+                  requests++;
+                  return Response.json({});
+                }),
+            }),
+          ),
+        ).toBeInstanceOf(Error);
+        expect(requests).toBe(0);
+      }).pipe(Effect.provide(skitLayer)),
+    );
 
-it.effect("publish carries immutable release conflicts as a typed error", () =>
-  Effect.gen(function* () {
-    const root = yield* scratch("skit-publish-conflict-test-");
-    yield* writeRemote(root);
-    yield* copySkitFixtureEffect("authored", root);
-    expect(
-      yield* failure(
-        runPublish(root, "1.0.0", revision, {
-          credentialOrigin: "https://registry.test",
-          transport: (input) =>
-            Effect.succeed(
-              input.url.includes(".well-known")
-                ? new Response(null, { status: 404 })
-                : Response.json({ error: "release_conflict" }, { status: 409 }),
-            ),
-        }),
-      ),
-    ).toMatchObject({ code: "CONFLICT" });
-  }).pipe(Effect.provide(skitLayer)),
-);
+    it.effect("publish rejects unbaked invocation policy before any archive exists", () =>
+      Effect.gen(function* () {
+        const root = yield* scratch("skit-unbaked-publish-test-");
+        yield* writeRemote(root);
+        yield* copySkitFixtureEffect("readme-authored", root);
+        yield* writeText(
+          join(root, "skills", "review", "SKILL.md"),
+          "---\nname: review\ndescription: Review code.\n---\n# Review\n",
+        );
+        let requests = 0;
 
-it.effect("publish preserves a non-JSON conflict as a rejected write", () =>
-  Effect.gen(function* () {
-    const root = yield* scratch("skit-publish-text-conflict-test-");
-    yield* writeRemote(root);
-    yield* copySkitFixtureEffect("authored", root);
-    expect(
-      yield* failure(
-        runPublish(root, "1.0.0", revision, {
-          credentialOrigin: "https://registry.test",
-          transport: (input) =>
-            Effect.succeed(
-              input.url.includes(".well-known")
-                ? new Response(null, { status: 404 })
-                : new Response("conflict", { status: 409 }),
-            ),
-        }),
-      ),
-    ).toMatchObject({ code: "CONFLICT", message: expect.stringContaining("conflict") });
-  }).pipe(Effect.provide(skitLayer)),
-);
+        const blocked = yield* failure(
+          runPublish(root, "1.2.3", revision, {
+            credentialOrigin: "https://registry.test",
+            transport: () =>
+              Effect.sync(() => {
+                requests++;
+                return Response.json({});
+              }),
+          }),
+        );
+        expect(blocked).toMatchObject({
+          code: "VALIDATION_FAILED",
+          diagnostics: expect.arrayContaining([
+            expect.objectContaining({ code: "INVOCATION_METADATA_MISMATCH", severity: "error" }),
+          ]),
+        });
+        expect(classifyFailure(blocked).message).toContain("skit author invocation");
+        expect(requests).toBe(0);
+        expect(yield* listDir(root)).not.toContain("release.zip");
+      }).pipe(Effect.provide(skitLayer)),
+    );
 
-it.effect("publish rejects a successful response that violates the server contract", () =>
-  Effect.gen(function* () {
-    const root = yield* scratch("skit-publish-contract-test-");
-    yield* writeRemote(root);
-    yield* copySkitFixtureEffect("authored", root);
-    expect(
-      yield* failure(
-        runPublish(root, "1.0.0", revision, {
-          transport: () => Effect.succeed(Response.json({ release: {} })),
-        }),
-      ),
-    ).toBeDefined();
-  }).pipe(Effect.provide(skitLayer)),
-);
+    it.effect("publish reports the diagnostics that block publication", () =>
+      Effect.gen(function* () {
+        const root = yield* scratch("skit-blocked-publish-test-");
+        yield* writeRemote(root);
+        yield* copySkitFixtureEffect("authored", root);
+        expect(
+          yield* failure(
+            runPublish(root, "1.0.0", revision, {
+              credentialOrigin: "https://registry.test",
+              transport: (input) =>
+                Effect.succeed(
+                  input.url.includes(".well-known")
+                    ? new Response(null, { status: 404 })
+                    : Response.json(
+                        {
+                          error: "publish_blocked",
+                          diagnostics: [
+                            {
+                              severity: "warning",
+                              code: "REVIEW_RECOMMENDED",
+                              message: "this warning must not be presented as a blocker",
+                            },
+                            {
+                              severity: "error",
+                              code: "SECURITY_POLICY_BLOCKED",
+                              message: "review contains undeclared executable behavior",
+                            },
+                          ],
+                        },
+                        { status: 422 },
+                      ),
+                ),
+            }),
+          ),
+        ).toMatchObject({
+          _tag: "PublicationBlocked",
+          code: "VALIDATION_FAILED",
+          reason: "assessment",
+          diagnostics: [
+            {
+              severity: "error",
+              code: "SECURITY_POLICY_BLOCKED",
+              message: "review contains undeclared executable behavior",
+            },
+          ],
+        });
+      }).pipe(Effect.provide(skitLayer)),
+    );
+  });
+});
+
+describe("skit author publish", () => {
+  describe("Publish sends credentials only to the selected Registry.", () => {
+    it.effect("publish never sends another Registry's token to the remote home", () =>
+      Effect.gen(function* () {
+        const root = yield* scratch("skit-binding-publish-test-");
+        yield* writeRemote(root, "https://registry.example");
+        yield* writeText(
+          join(root, "skit.json"),
+          `${JSON.stringify({
+            slug: "tools",
+            skills: [{ name: "review", path: "skills/review" }],
+          })}\n`,
+        );
+        let requests = 0;
+        expect(
+          yield* failure(
+            runPublish(root, "1.0.0", revision, {
+              credentialOrigin: "https://other.example",
+              transport: () =>
+                Effect.sync(() => {
+                  requests++;
+                  return Response.json({});
+                }),
+            }),
+          ),
+        ).toMatchObject({ _tag: "AuthenticationRequired", origin: "https://registry.example" });
+        expect(requests).toBe(0);
+      }).pipe(Effect.provide(skitLayer)),
+    );
+  });
+});
+
+describe("skit author publish", () => {
+  describe("Publish leaves device-local workspace files out of the Release.", () => {
+    it.effect("publish uses skit.remote.json without including it in the Release", () =>
+      Effect.gen(function* () {
+        const root = yield* scratch("skit-json-publish-test-");
+        yield* makeDir(join(root, "skills", "review"));
+        yield* writeText(join(root, "README.md"), "# Human-owned tools documentation\n");
+        yield* writeText(
+          join(root, "skit.json"),
+          `${JSON.stringify(
+            {
+              slug: "tools",
+              skills: [
+                {
+                  name: "review",
+                  path: "skills/review",
+                  invocation: "explicit",
+                  capabilities: ["filesystem_read"],
+                },
+              ],
+            },
+            null,
+            2,
+          )}\n`,
+        );
+        yield* writeText(
+          join(root, "skit.remote.json"),
+          `${JSON.stringify({
+            schema: "skit.remote.v1",
+            origin: "https://registry.example",
+            namespace: "test",
+            skit: "tools",
+          })}\n`,
+        );
+        yield* writeText(
+          join(root, "skills", "review", "SKILL.md"),
+          "---\nname: review\ndescription: Review code.\ndisable-model-invocation: true\n---\n# Review\n",
+        );
+        yield* makeDir(join(root, "skills", "review", "agents"));
+        yield* writeText(
+          join(root, "skills", "review", "agents", "openai.yaml"),
+          "policy:\n  allow_implicit_invocation: false\n",
+        );
+        let publishUrl = "";
+        let archiveBase64 = "";
+        yield* runPublish(root, "1.2.3", revision, {
+          credentialOrigin: "https://registry.example",
+          transport: (input, url) =>
+            Effect.gen(function* () {
+              if (input.url.includes(".well-known")) return new Response(null, { status: 404 });
+              publishUrl = url.toString();
+              archiveBase64 = (yield* Schema.decodeEffect(
+                Schema.fromJsonString(releasePublishRequestSchema),
+              )(
+                new TextDecoder().decode(
+                  input.body._tag === "Uint8Array" ? input.body.body : undefined,
+                ),
+              ).pipe(Effect.orDie)).archive_base64;
+              return Response.json(
+                {
+                  release: {
+                    release_id: "rel_json",
+                    version: "1.2.3",
+                    revision_id: revision,
+                    archive_digest: `sha256:${"a".repeat(64)}`,
+                    download_path: "/api/skits/test/tools/releases/1.2.3/download",
+                  },
+                },
+                { status: 201 },
+              );
+            }),
+        });
+        expect(publishUrl).toBe("https://registry.example/api/skits/test/tools/releases");
+        const archive = join(root, "skit-json-uploaded.zip");
+        yield* writeBytes(archive, Buffer.from(archiveBase64, "base64"));
+        const archivedPaths = yield* unzipList(archive);
+        expect(archivedPaths).toContain("skit.json");
+        expect(archivedPaths).not.toContain("skit.remote.json");
+      }).pipe(Effect.provide(skitLayer)),
+    );
+  });
+});
+
+describe("skit author publish", () => {
+  describe("Publish can use the Registry’s current revision when none is selected.", () => {
+    it.effect("publish lets the Registry select its current SKIT when --revision is omitted", () =>
+      Effect.gen(function* () {
+        const root = yield* scratch("skit-current-publish-test-");
+        yield* writeRemote(root);
+        yield* copySkitFixtureEffect("authored", root);
+        let publishedRevision: unknown;
+        yield* runPublish(root, "1.2.3", undefined, {
+          credentialOrigin: "https://registry.test",
+          transport: (input, url) =>
+            Effect.gen(function* () {
+              if (url.toString().includes(".well-known"))
+                return new Response(null, { status: 404 });
+              publishedRevision = (yield* Schema.decodeEffect(
+                Schema.fromJsonString(Schema.JsonObject),
+              )(
+                new TextDecoder().decode(
+                  input.body._tag === "Uint8Array" ? input.body.body : undefined,
+                ),
+              ).pipe(Effect.orDie)).revision_id;
+              return Response.json(
+                {
+                  release: {
+                    release_id: "rel_current",
+                    version: "1.2.3",
+                    revision_id: "draft_current",
+                    archive_digest: `sha256:${"a".repeat(64)}`,
+                    download_path: "/api/skits/test/tools/releases/1.2.3/download",
+                  },
+                },
+                { status: 201 },
+              );
+            }),
+        });
+        expect(publishedRevision).toBeUndefined();
+      }).pipe(Effect.provide(skitLayer)),
+    );
+  });
+});
+
+describe("skit author publish", () => {
+  describe("Publish reports when the Registry requires another sync.", () => {
+    it.effect("publish tells the author to sync when local files do not match the SKIT", () =>
+      Effect.gen(function* () {
+        const root = yield* scratch("skit-unsynced-publish-test-");
+        yield* writeRemote(root);
+        yield* copySkitFixtureEffect("authored", root);
+        const error = yield* failure(
+          runPublish(root, "1.0.0", undefined, {
+            credentialOrigin: "https://registry.test",
+            transport: (input) =>
+              Effect.succeed(
+                input.url.includes(".well-known")
+                  ? new Response(null, { status: 404 })
+                  : Response.json({ error: "ARCHIVE_MANIFEST_MISMATCH" }, { status: 400 }),
+              ),
+          }),
+        );
+        expect(error).toMatchObject({ _tag: "AuthorSyncRequired", root });
+        expect(classifyFailure(error).next).toContainEqual({
+          code: `skit author sync ${root} --apply`,
+        });
+      }).pipe(Effect.provide(skitLayer)),
+    );
+
+    it.effect("publish uses the authored path in sync remediation", () =>
+      Effect.gen(function* () {
+        const parent = yield* scratch("skit-unsynced-path-test-");
+        const root = join(parent, "tools with spaces");
+        yield* makeDir(root);
+        yield* writeRemote(root);
+        yield* copySkitFixtureEffect("authored", root);
+        const error = yield* failure(
+          runPublish(root, "1.0.0", undefined, {
+            credentialOrigin: "https://registry.test",
+            transport: (input) =>
+              Effect.succeed(
+                input.url.includes(".well-known")
+                  ? new Response(null, { status: 404 })
+                  : Response.json({ error: "ARCHIVE_MANIFEST_MISMATCH" }, { status: 400 }),
+              ),
+          }),
+        );
+        expect(error).toMatchObject({ _tag: "AuthorSyncRequired", root });
+        expect(classifyFailure(error).next).toContainEqual({
+          code: `skit author sync '${root}' --apply`,
+        });
+      }).pipe(Effect.provide(skitLayer)),
+    );
+  });
+});
+
+describe("skit author publish", () => {
+  describe("Publish reports a rejected Release without accepting it as published.", () => {
+    it.effect("publish reports non-success responses without accepting their body", () =>
+      Effect.gen(function* () {
+        const root = yield* scratch("skit-publish-http-test-");
+        yield* writeRemote(root);
+        yield* copySkitFixtureEffect("authored", root);
+        expect(
+          yield* failure(
+            runPublish(root, "1.0.0", revision, {
+              credentialOrigin: "https://registry.test",
+              transport: () =>
+                Effect.succeed(Response.json({ error: "insufficient_scope" }, { status: 403 })),
+            }),
+          ),
+        ).toMatchObject({ message: expect.stringMatching(/lacks publication:write/) });
+
+        expect(
+          yield* failure(
+            runPublish(root, "1.0.0", revision, {
+              credentialOrigin: "https://registry.test",
+              transport: () =>
+                Effect.succeed(Response.json({ error: "forbidden" }, { status: 403 })),
+            }),
+          ),
+        ).toMatchObject({ message: expect.stringMatching(/not authorized to publish this SKIT/) });
+      }).pipe(Effect.provide(skitLayer)),
+    );
+
+    it.effect("publish preserves non-JSON Registry error bodies", () =>
+      Effect.gen(function* () {
+        const root = yield* scratch("skit-gateway-publish-test-");
+        yield* writeRemote(root);
+        yield* copySkitFixtureEffect("authored", root);
+        expect(
+          yield* failure(
+            runPublish(root, "1.0.0", undefined, {
+              credentialOrigin: "https://registry.test",
+              transport: (input) =>
+                Effect.succeed(
+                  input.url.includes(".well-known")
+                    ? new Response(null, { status: 404 })
+                    : new Response("upstream unavailable", { status: 502 }),
+                ),
+            }),
+          ),
+        ).toMatchObject({
+          reason: { _tag: "ResponseFailure", status: 502, body: "upstream unavailable" },
+        });
+      }).pipe(Effect.provide(skitLayer)),
+    );
+
+    it.effect("publish carries immutable release conflicts as a typed error", () =>
+      Effect.gen(function* () {
+        const root = yield* scratch("skit-publish-conflict-test-");
+        yield* writeRemote(root);
+        yield* copySkitFixtureEffect("authored", root);
+        expect(
+          yield* failure(
+            runPublish(root, "1.0.0", revision, {
+              credentialOrigin: "https://registry.test",
+              transport: (input) =>
+                Effect.succeed(
+                  input.url.includes(".well-known")
+                    ? new Response(null, { status: 404 })
+                    : Response.json({ error: "release_conflict" }, { status: 409 }),
+                ),
+            }),
+          ),
+        ).toMatchObject({ code: "CONFLICT" });
+      }).pipe(Effect.provide(skitLayer)),
+    );
+
+    it.effect("publish preserves a non-JSON conflict as a rejected write", () =>
+      Effect.gen(function* () {
+        const root = yield* scratch("skit-publish-text-conflict-test-");
+        yield* writeRemote(root);
+        yield* copySkitFixtureEffect("authored", root);
+        expect(
+          yield* failure(
+            runPublish(root, "1.0.0", revision, {
+              credentialOrigin: "https://registry.test",
+              transport: (input) =>
+                Effect.succeed(
+                  input.url.includes(".well-known")
+                    ? new Response(null, { status: 404 })
+                    : new Response("conflict", { status: 409 }),
+                ),
+            }),
+          ),
+        ).toMatchObject({ code: "CONFLICT", message: expect.stringContaining("conflict") });
+      }).pipe(Effect.provide(skitLayer)),
+    );
+
+    it.effect("publish rejects a successful response that violates the server contract", () =>
+      Effect.gen(function* () {
+        const root = yield* scratch("skit-publish-contract-test-");
+        yield* writeRemote(root);
+        yield* copySkitFixtureEffect("authored", root);
+        expect(
+          yield* failure(
+            runPublish(root, "1.0.0", revision, {
+              transport: () => Effect.succeed(Response.json({ release: {} })),
+            }),
+          ),
+        ).toBeDefined();
+      }).pipe(Effect.provide(skitLayer)),
+    );
+  });
+});

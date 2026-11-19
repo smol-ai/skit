@@ -1,5 +1,5 @@
 import { CommandError } from "../src/commands/error-output.js";
-import { expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 import { it } from "@effect/vitest";
 import { Cause, Effect, Schema } from "effect";
 import * as Request from "../src/registry/request-failures.js";
@@ -70,23 +70,29 @@ const cases = {
   >;
 };
 
-test.each(Object.entries(cases))(
-  "%s retains its facts and presentation through watcher JSON",
-  (_, failure) => {
-    const event = { event: "retrying" as const, operation: "sync" as const, failure };
-    const made = AuthorWatchOutput.make(event);
-    expect(made.event === "retrying" && made.failure).toBe(failure);
-    const wire = Schema.encodeSync(AuthorWatchOutput)(event);
-    const decoded = Schema.decodeUnknownSync(AuthorWatchOutput)(JSON.parse(JSON.stringify(wire)));
-    expect(decoded.event).toBe("retrying");
-    if (decoded.event !== "retrying") throw new Error("Missing retry event");
-    expect(decoded.failure).toMatchObject({ _tag: failure._tag, code: failure.code });
-    expect(classifyFailure(decoded.failure).presentation).toEqual(
-      Request.registryRequestFailure(failure).presentation,
+describe("skit author watch", () => {
+  describe("Watch request failures retain their facts and presentation across JSON.", () => {
+    test.each(Object.entries(cases))(
+      "%s retains its facts and presentation through watcher JSON",
+      (_, failure) => {
+        const event = { event: "retrying" as const, operation: "sync" as const, failure };
+        const made = AuthorWatchOutput.make(event);
+        expect(made.event === "retrying" && made.failure).toBe(failure);
+        const wire = Schema.encodeSync(AuthorWatchOutput)(event);
+        const decoded = Schema.decodeUnknownSync(AuthorWatchOutput)(
+          JSON.parse(JSON.stringify(wire)),
+        );
+        expect(decoded.event).toBe("retrying");
+        if (decoded.event !== "retrying") throw new Error("Missing retry event");
+        expect(decoded.failure).toMatchObject({ _tag: failure._tag, code: failure.code });
+        expect(classifyFailure(decoded.failure).presentation).toEqual(
+          Request.registryRequestFailure(failure).presentation,
+        );
+        expect(Request.registryRequestFailure(failure).next.length).toBeGreaterThan(0);
+      },
     );
-    expect(Request.registryRequestFailure(failure).next.length).toBeGreaterThan(0);
-  },
-);
+  });
+});
 
 test("HTTP status and Registry code are distinct facts, not an invented explanation", () => {
   const failure = classifyFailure(cases["Library.LibraryApiRejected"]);

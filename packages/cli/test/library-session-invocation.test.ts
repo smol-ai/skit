@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import {
   invocationBriefing,
   invocationRowSummary,
@@ -79,308 +80,132 @@ const fixture = Effect.fn("Test.invocationLibrary")(function* () {
   return { fs, source, home, importSource };
 });
 
-it.effect(
-  "a session reads native per-agent policy from retained bytes and previews the same install behavior",
-  () =>
-    Effect.gen(function* () {
-      const { fs, source, home, importSource } = yield* fixture();
-      yield* importSource("2026-10-01T00:00:00.000Z");
-      // The working source is not the authority for a Library row.
-      yield* fs.writeFileString(join(source, "SKILL.md"), text(false));
-      const before = yield* home.durable;
-      const session = yield* home.owned(
-        Effect.flatMap(Library.Service, (library) => library.session.open()),
-      );
-      const row = session.skills[0]!;
-      expect(row.skillId).toBe(before.skills[0]?.skill_id);
-      expect(Result.getOrThrow(row.authorInvocation)["claude-code"].policy).toBe("explicit");
-      expect(Result.getOrThrow(row.authorInvocation).codex.policy).toBe("implicit");
-      const proposed = yield* home.owned(
-        proposeLibraryEnable(session, row, { scope: { kind: "global" } }),
-      );
-      expect(proposed.pending?.plan.changes[0]?.subject_id).toBe(row.skillId);
-      const enabled = yield* home.owned(confirmLibraryChange(proposed));
-      expect(enabled.outcome?.kind).toBe("applied");
-      const policy = enabled.skills[0]!.scopes[0]!.policy!;
-      expect(policy.agents["claude-code"].effectivePolicy).toBe("explicit");
-      expect(policy.agents.codex.effectivePolicy).toBe("implicit");
-      expect(invocationRowSummary(policy)).toBe("Varies by agent");
-      expect(invocationBriefing(policy)).toContainEqual(
-        Block.Fields({
-          rows: [
-            { label: "Author preference", value: ["Varies by agent"] },
-            { label: "Current", value: ["Varies by agent"] },
-            { label: "Meaning", value: [invocationExplanation(policy)] },
-          ],
-        }),
-      );
-      expect(invocationExplanation(policy)).toContain("Codex: Automatically");
-
-      const installedSkill = (yield* home.durable).installed_skills.find(
-        (copy) => copy.destination === "agents",
-      )!;
-      // Inspect native output independently of SKIT's policy resolver: a shared reader/writer
-      // mistake must not make the installation appear consistent with the displayed policy.
-      const installedText = yield* fs.readFileString(join(installedSkill.path, "SKILL.md"));
-      const frontmatter = installedText.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
-      expect(frontmatter).not.toBeNull();
-      const native = parseDocument(frontmatter?.[1] ?? "");
-      expect(native.errors).toEqual([]);
-      expect(native.get("disable-model-invocation")).toBe(true);
-      expect(native.getIn(["metadata", "opencode/autoinvoke"])).toBe("false");
-      expect(native.toJS()).toMatchObject({ triggers: ["user"] });
-      const codex = parseDocument(
-        yield* fs.readFileString(join(installedSkill.path, "agents/openai.yaml")),
-      );
-      expect(codex.errors).toEqual([]);
-      expect(codex.getIn(["policy", "allow_implicit_invocation"])).toBe(true);
-      expect(
-        Object.fromEntries(
-          Object.entries(policy.agents).map(([name, agent]) => [name, agent.effectivePolicy]),
-        ),
-      ).toEqual({
-        "claude-code": "explicit",
-        codex: "implicit",
-        opencode: "explicit",
-        devin: "explicit",
-      });
-
-      const explicit = Result.getOrThrow(libraryPolicyAfter(row, "explicit"));
-      expect(
-        Object.values(explicit.agents).every((agent) => agent.effectivePolicy === "explicit"),
-      ).toBe(true);
-      const defaults = Result.getOrThrow(libraryPolicyAfter(row, "host-policy"));
-      expect(defaults.agents.codex.effectivePolicy).toBe("host-policy");
-      expect(defaults.agents.devin.effectivePolicy).toBe("explicit");
-      expect(
-        Result.getOrThrow(libraryPolicyAfter(row, "declared")).agents["claude-code"].authorPolicy,
-      ).toBe("explicit");
-      const disabled = yield* home.owned(
-        proposeLibraryDisable(enabled, enabled.skills[0]!, enabled.skills[0]!.scopes),
-      );
-      expect(disabled.pending?.plan.changes[0]?.subject_id).toBe(row.skillId);
-      expect(disabled.pending?.facts[0]).toMatchObject({
-        action: "disable",
-        fileChange: "uninstall",
-      });
-      expect(renderSetEnabled(disabled.pending!.plan.changes[0]!, false)).toEqual([
-        Block.Changes({ items: [{ action: "remove", label: "Would disable review" }] }),
-      ]);
-      const removed = yield* home.owned(confirmLibraryChange(disabled));
-      expect(removed.outcome?.kind).toBe("applied");
-      expect(removed.skills[0]?.scopes).toEqual([]);
-      expect(yield* fs.exists(installedSkill.path)).toBe(false);
-    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-);
-
-it.effect(
-  "session invocation evidence follows the selected retained version rather than the latest acquisition",
-  () =>
-    Effect.gen(function* () {
-      const { fs, source, home, importSource } = yield* fixture();
-      yield* importSource("2026-10-01T00:00:00.000Z");
-      yield* fs.writeFileString(join(source, "SKILL.md"), text(false));
-      yield* importSource("2026-10-02T00:00:00.000Z");
-      const state = yield* home.durable;
-      yield* home.writeDurable({
-        ...state,
-        skills: state.skills.map((skill) => ({
-          ...skill,
-          local_version_id: skill.versions[0]!.skill_version_id,
-        })),
-      });
-      const selected = yield* home.durable;
-      const session = yield* home.owned(
-        Effect.flatMap(Library.Service, (library) => library.session.open()),
-      );
-      expect(Result.getOrThrow(session.skills[0]!.authorInvocation)["claude-code"].policy).toBe(
-        "explicit",
-      );
-      expect(yield* home.durable).toEqual(selected);
-    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-);
-
-it.effect(
-  "declared invocation is read from the selected descriptor and changed retained bytes are unavailable",
-  () =>
-    Effect.gen(function* () {
-      const { fs, source, home } = yield* fixture();
-      yield* fs.writeFileString(
-        join(source, "agents/openai.yaml"),
-        "policy:\n  allow_implicit_invocation: false\n",
-      );
-      yield* fs.writeFileString(
-        join(source, "README.md"),
-        `---
-skit: 1
-slug: tools
-skills:
-  - name: review
-    path: .
-    default_enabled: false
-    invocation: explicit
----
-Tools
-`,
-      );
-      yield* home.owned(
-        writingTo(
-          home.home,
-          Effect.flatMap(Library.Service, (library) =>
-            library.import.authored({
-              root: source,
-              source: { type: "local", path: source },
-              input: source,
-              importedAt: "2026-10-01T00:00:00.000Z",
-            }),
-          ),
-        ),
-      );
-      const session = yield* home.owned(
-        Effect.flatMap(Library.Service, (library) => library.session.open()),
-      );
-      expect(
-        Object.values(Result.getOrThrow(session.skills[0]!.authorInvocation)).every(
-          (agent) => agent.source.kind === "skit-declaration",
-        ),
-      ).toBe(true);
-      expect(
-        Object.values(
-          Result.getOrThrow(libraryPolicyAfter(session.skills[0]!, "declared")).agents,
-        ).every((agent) => agent.effectivePolicy === "explicit"),
-      ).toBe(true);
-      const state = yield* home.durable;
-      const imported = originalTreePath(home.originals, state.collection_versions[0]!.hash);
-      yield* fs.writeFileString(join(imported, "agents", "openai.yaml"), "policy: [\n");
-      const broken = yield* home.owned(
-        Effect.flatMap(Library.Service, (library) => library.session.open()),
-      );
-      expect(Result.isFailure(broken.skills[0]!.authorInvocation)).toBe(true);
-      expect(broken.skills[0]?.invocationFailure).toMatchObject({
-        _tag: "ImportContentInvalid",
-        reason: { _tag: "ContentChanged", kind: "collection", skillName: "review" },
-      });
-      expect(yield* home.durable).toEqual(state);
-    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-);
-
-it.effect("a declared Skill's shared native metadata participates in its session policy", () =>
+it.effect("installed native invocation metadata supports preview and disable", () =>
   Effect.gen(function* () {
-    const { fs, source, home } = yield* fixture();
-    yield* fs.rename(join(source, "agents"), join(source, "codex-metadata"));
-    yield* fs.writeFileString(
-      join(source, "README.md"),
-      `---
-skit: 1
-slug: tools
-skills:
-  - name: review
-    path: skill
-    default_enabled: false
-    shared:
-      - from: codex-metadata
-        to: agents
----
-Tools
-`,
-    );
-    yield* fs.makeDirectory(join(source, "skill"));
-    yield* fs.rename(join(source, "SKILL.md"), join(source, "skill", "SKILL.md"));
-    yield* home.owned(
-      writingTo(
-        home.home,
-        Effect.flatMap(Library.Service, (library) =>
-          library.import.authored({
-            root: source,
-            source: { type: "local", path: source },
-            input: source,
-            importedAt: "2026-10-01T00:00:00.000Z",
-          }),
-        ),
-      ),
-    );
+    const { fs, source, home, importSource } = yield* fixture();
+
+    yield* importSource("2026-10-01T00:00:00.000Z");
+
+    // The working source is not the authority for a Library row.
+    yield* fs.writeFileString(join(source, "SKILL.md"), text(false));
+
     const session = yield* home.owned(
       Effect.flatMap(Library.Service, (library) => library.session.open()),
     );
-    expect(Result.getOrThrow(session.skills[0]!.authorInvocation).codex.policy).toBe("implicit");
-    expect(Result.getOrThrow(session.skills[0]!.authorInvocation)["claude-code"].policy).toBe(
-      "explicit",
+
+    const row = session.skills[0]!;
+
+    const proposed = yield* home.owned(
+      proposeLibraryEnable(session, row, { scope: { kind: "global" } }),
     );
+
+    expect(proposed.pending?.plan.changes[0]?.subject_id).toBe(row.skillId);
+
+    const enabled = yield* home.owned(confirmLibraryChange(proposed));
+
+    expect(enabled.outcome?.kind).toBe("applied");
+
+    const policy = enabled.skills[0]!.scopes[0]!.policy!;
+
+    expect(policy.agents["claude-code"].effectivePolicy).toBe("explicit");
+
+    expect(policy.agents.codex.effectivePolicy).toBe("implicit");
+
+    expect(invocationRowSummary(policy)).toBe("Varies by agent");
+
+    expect(invocationBriefing(policy)).toContainEqual(
+      Block.Fields({
+        rows: [
+          { label: "Author preference", value: ["Varies by agent"] },
+          { label: "Current", value: ["Varies by agent"] },
+          { label: "Meaning", value: [invocationExplanation(policy)] },
+        ],
+      }),
+    );
+
+    expect(invocationExplanation(policy)).toContain("Codex: Automatically");
+
+    const installedSkill = (yield* home.durable).installed_skills.find(
+      (copy) => copy.destination === "agents",
+    )!;
+
+    // Inspect native output independently of SKIT's policy resolver: a shared reader/writer
+    // mistake must not make the installation appear consistent with the displayed policy.
+    const installedText = yield* fs.readFileString(join(installedSkill.path, "SKILL.md"));
+
+    const frontmatter = installedText.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+
+    expect(frontmatter).not.toBeNull();
+
+    const native = parseDocument(frontmatter?.[1] ?? "");
+
+    expect(native.errors).toEqual([]);
+
+    expect(native.get("disable-model-invocation")).toBe(true);
+
+    expect(native.getIn(["metadata", "opencode/autoinvoke"])).toBe("false");
+
+    expect(native.toJS()).toMatchObject({ triggers: ["user"] });
+
+    const codex = parseDocument(
+      yield* fs.readFileString(join(installedSkill.path, "agents/openai.yaml")),
+    );
+
+    expect(codex.errors).toEqual([]);
+
+    expect(codex.getIn(["policy", "allow_implicit_invocation"])).toBe(true);
+
+    expect(
+      Object.fromEntries(
+        Object.entries(policy.agents).map(([name, agent]) => [name, agent.effectivePolicy]),
+      ),
+    ).toEqual({
+      "claude-code": "explicit",
+      codex: "implicit",
+      opencode: "explicit",
+      devin: "explicit",
+    });
+
+    const explicit = Result.getOrThrow(libraryPolicyAfter(row, "explicit"));
+
+    expect(
+      Object.values(explicit.agents).every((agent) => agent.effectivePolicy === "explicit"),
+    ).toBe(true);
+
+    const defaults = Result.getOrThrow(libraryPolicyAfter(row, "host-policy"));
+
+    expect(defaults.agents.codex.effectivePolicy).toBe("host-policy");
+
+    expect(defaults.agents.devin.effectivePolicy).toBe("explicit");
+
+    expect(
+      Result.getOrThrow(libraryPolicyAfter(row, "declared")).agents["claude-code"].authorPolicy,
+    ).toBe("explicit");
+
+    const disabled = yield* home.owned(
+      proposeLibraryDisable(enabled, enabled.skills[0]!, enabled.skills[0]!.scopes),
+    );
+
+    expect(disabled.pending?.plan.changes[0]?.subject_id).toBe(row.skillId);
+
+    expect(disabled.pending?.facts[0]).toMatchObject({
+      action: "disable",
+      fileChange: "uninstall",
+    });
+
+    expect(renderSetEnabled(disabled.pending!.plan.changes[0]!, false)).toEqual([
+      Block.Changes({ items: [{ action: "remove", label: "Would disable review" }] }),
+    ]);
+
+    const removed = yield* home.owned(confirmLibraryChange(disabled));
+
+    expect(removed.outcome?.kind).toBe("applied");
+
+    expect(removed.skills[0]?.scopes).toEqual([]);
+
+    expect(yield* fs.exists(installedSkill.path)).toBe(false);
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
-
-for (const problem of ["missing-skill", "malformed-metadata"] as const)
-  it.effect(`an unavailable ${problem} row leaves healthy Skills and disable actions usable`, () =>
-    Effect.gen(function* () {
-      const { fs, source, home, importSource } = yield* fixture();
-      if (problem === "malformed-metadata")
-        yield* fs.writeFileString(join(source, "agents", "openai.yaml"), "policy: [\n");
-      yield* importSource("2026-10-01T00:00:00.000Z");
-      const badState = yield* home.durable;
-      if (problem === "missing-skill")
-        yield* fs.remove(
-          join(originalTreePath(home.originals, badState.collection_versions[0]!.hash), "SKILL.md"),
-        );
-      const healthy = join(source, "..", "healthy");
-      yield* fs.makeDirectory(healthy);
-      yield* fs.writeFileString(
-        join(healthy, "SKILL.md"),
-        "---\nname: healthy\ndescription: Healthy\n---\nHealthy.\n",
-      );
-      yield* home.owned(
-        writingTo(
-          home.home,
-          importCollectionIn(home.home)({
-            source: { type: "local", path: healthy },
-            input: healthy,
-            importedAt: "2026-10-02T00:00:00.000Z",
-            skills: [
-              {
-                name: "healthy",
-                sourcePath: healthy,
-                relativePath: ".",
-                currentHash: yield* deterministicTreeHash(healthy),
-              },
-            ],
-            lockFileEntries: [],
-          }),
-        ),
-      );
-      const state = yield* home.durable;
-      yield* home.writeDurable({
-        ...state,
-        enabled: [{ skill: badState.skills[0]!.skill_id }],
-      });
-      const session = yield* home.owned(
-        Effect.flatMap(Library.Service, (library) => library.session.open()),
-      );
-      const bad = session.skills.find((row) => row.name === "review")!;
-      const good = session.skills.find((row) => row.name === "healthy")!;
-      expect(Result.isFailure(bad.authorInvocation)).toBe(true);
-      expect(bad.invocationFailure).toBeDefined();
-      expect(Result.isSuccess(good.authorInvocation)).toBe(true);
-      expect(bad.scopes[0]?.policy).toBeUndefined();
-      expect(Result.isFailure(libraryPolicyAfter(bad, "declared"))).toBe(true);
-      const policyChange = yield* home.owned(
-        proposeLibraryInvocation(session, bad, bad.scopes[0]!, "explicit"),
-      );
-      expect(policyChange.outcome?.kind).toBe("failed");
-      expect(policyChange.pending).toBeUndefined();
-      const disabled = yield* home.owned(proposeLibraryDisable(session, bad, bad.scopes));
-      expect(disabled.outcome?.kind).toBe("preview");
-      const confirmed = yield* home.owned(confirmLibraryChange(disabled));
-      expect(confirmed.outcome?.kind).toBe("applied");
-      const remaining = confirmed.skills.find((row) => row.skillId === bad.skillId)!;
-      expect(remaining.scopes).toHaveLength(0);
-      const enable = yield* home.owned(
-        proposeLibraryEnable(confirmed, remaining, {
-          scope: { kind: "global" },
-        }),
-      );
-      expect(enable.outcome?.kind).toBe("preview");
-      expect(enable.pending?.policies).toEqual([]);
-    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-  );
 
 it.effect(
   "a Library read hashes a shared retained copy once and verifies it afresh on the next pass",
@@ -461,3 +286,252 @@ Tools
       expect(payloadReads).toBe(3);
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
+
+describe("skit list", () => {
+  describe("An unavailable Skill does not prevent disabling a healthy Skill.", () => {
+    for (const problem of ["missing-skill", "malformed-metadata"] as const)
+      it.effect(
+        `an unavailable ${problem} row leaves healthy Skills and disable actions usable`,
+        () =>
+          Effect.gen(function* () {
+            const { fs, source, home, importSource } = yield* fixture();
+            if (problem === "malformed-metadata")
+              yield* fs.writeFileString(join(source, "agents", "openai.yaml"), "policy: [\n");
+            yield* importSource("2026-10-01T00:00:00.000Z");
+            const badState = yield* home.durable;
+            if (problem === "missing-skill")
+              yield* fs.remove(
+                join(
+                  originalTreePath(home.originals, badState.collection_versions[0]!.hash),
+                  "SKILL.md",
+                ),
+              );
+            const healthy = join(source, "..", "healthy");
+            yield* fs.makeDirectory(healthy);
+            yield* fs.writeFileString(
+              join(healthy, "SKILL.md"),
+              "---\nname: healthy\ndescription: Healthy\n---\nHealthy.\n",
+            );
+            yield* home.owned(
+              writingTo(
+                home.home,
+                importCollectionIn(home.home)({
+                  source: { type: "local", path: healthy },
+                  input: healthy,
+                  importedAt: "2026-10-02T00:00:00.000Z",
+                  skills: [
+                    {
+                      name: "healthy",
+                      sourcePath: healthy,
+                      relativePath: ".",
+                      currentHash: yield* deterministicTreeHash(healthy),
+                    },
+                  ],
+                  lockFileEntries: [],
+                }),
+              ),
+            );
+            const state = yield* home.durable;
+            yield* home.writeDurable({
+              ...state,
+              enabled: [{ skill: badState.skills[0]!.skill_id }],
+            });
+            const session = yield* home.owned(
+              Effect.flatMap(Library.Service, (library) => library.session.open()),
+            );
+            const bad = session.skills.find((row) => row.name === "review")!;
+            const good = session.skills.find((row) => row.name === "healthy")!;
+            expect(Result.isFailure(bad.authorInvocation)).toBe(true);
+            expect(bad.invocationFailure).toBeDefined();
+            expect(Result.isSuccess(good.authorInvocation)).toBe(true);
+            expect(bad.scopes[0]?.policy).toBeUndefined();
+            expect(Result.isFailure(libraryPolicyAfter(bad, "declared"))).toBe(true);
+            const policyChange = yield* home.owned(
+              proposeLibraryInvocation(session, bad, bad.scopes[0]!, "explicit"),
+            );
+            expect(policyChange.outcome?.kind).toBe("failed");
+            expect(policyChange.pending).toBeUndefined();
+            const disabled = yield* home.owned(proposeLibraryDisable(session, bad, bad.scopes));
+            expect(disabled.outcome?.kind).toBe("preview");
+            const confirmed = yield* home.owned(confirmLibraryChange(disabled));
+            expect(confirmed.outcome?.kind).toBe("applied");
+            const remaining = confirmed.skills.find((row) => row.skillId === bad.skillId)!;
+            expect(remaining.scopes).toHaveLength(0);
+            const enable = yield* home.owned(
+              proposeLibraryEnable(confirmed, remaining, {
+                scope: { kind: "global" },
+              }),
+            );
+            expect(enable.outcome?.kind).toBe("preview");
+            expect(enable.pending?.policies).toEqual([]);
+          }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+      );
+  });
+});
+
+describe("skit list", () => {
+  describe("List shows the invocation policy of the selected Version.", () => {
+    it.effect(
+      "session invocation evidence follows the selected retained version rather than the latest acquisition",
+      () =>
+        Effect.gen(function* () {
+          const { fs, source, home, importSource } = yield* fixture();
+          yield* importSource("2026-10-01T00:00:00.000Z");
+          yield* fs.writeFileString(join(source, "SKILL.md"), text(false));
+          yield* importSource("2026-10-02T00:00:00.000Z");
+          const state = yield* home.durable;
+          yield* home.writeDurable({
+            ...state,
+            skills: state.skills.map((skill) => ({
+              ...skill,
+              local_version_id: skill.versions[0]!.skill_version_id,
+            })),
+          });
+          const selected = yield* home.durable;
+          const session = yield* home.owned(
+            Effect.flatMap(Library.Service, (library) => library.session.open()),
+          );
+          expect(Result.getOrThrow(session.skills[0]!.authorInvocation)["claude-code"].policy).toBe(
+            "explicit",
+          );
+          expect(yield* home.durable).toEqual(selected);
+        }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+    );
+
+    it.effect(
+      "declared invocation is read from the selected descriptor and changed retained bytes are unavailable",
+      () =>
+        Effect.gen(function* () {
+          const { fs, source, home } = yield* fixture();
+          yield* fs.writeFileString(
+            join(source, "agents/openai.yaml"),
+            "policy:\n  allow_implicit_invocation: false\n",
+          );
+          yield* fs.writeFileString(
+            join(source, "README.md"),
+            `---
+skit: 1
+slug: tools
+skills:
+  - name: review
+    path: .
+    default_enabled: false
+    invocation: explicit
+---
+Tools
+`,
+          );
+          yield* home.owned(
+            writingTo(
+              home.home,
+              Effect.flatMap(Library.Service, (library) =>
+                library.import.authored({
+                  root: source,
+                  source: { type: "local", path: source },
+                  input: source,
+                  importedAt: "2026-10-01T00:00:00.000Z",
+                }),
+              ),
+            ),
+          );
+          const session = yield* home.owned(
+            Effect.flatMap(Library.Service, (library) => library.session.open()),
+          );
+          expect(
+            Object.values(Result.getOrThrow(session.skills[0]!.authorInvocation)).every(
+              (agent) => agent.source.kind === "skit-declaration",
+            ),
+          ).toBe(true);
+          expect(
+            Object.values(
+              Result.getOrThrow(libraryPolicyAfter(session.skills[0]!, "declared")).agents,
+            ).every((agent) => agent.effectivePolicy === "explicit"),
+          ).toBe(true);
+          const state = yield* home.durable;
+          const imported = originalTreePath(home.originals, state.collection_versions[0]!.hash);
+          yield* fs.writeFileString(join(imported, "agents", "openai.yaml"), "policy: [\n");
+          const broken = yield* home.owned(
+            Effect.flatMap(Library.Service, (library) => library.session.open()),
+          );
+          expect(Result.isFailure(broken.skills[0]!.authorInvocation)).toBe(true);
+          expect(broken.skills[0]?.invocationFailure).toMatchObject({
+            _tag: "ImportContentInvalid",
+            reason: { _tag: "ContentChanged", kind: "collection", skillName: "review" },
+          });
+          expect(yield* home.durable).toEqual(state);
+        }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+    );
+
+    it.effect("a declared Skill's shared native metadata participates in its session policy", () =>
+      Effect.gen(function* () {
+        const { fs, source, home } = yield* fixture();
+        yield* fs.rename(join(source, "agents"), join(source, "codex-metadata"));
+        yield* fs.writeFileString(
+          join(source, "README.md"),
+          `---
+skit: 1
+slug: tools
+skills:
+  - name: review
+    path: skill
+    default_enabled: false
+    shared:
+      - from: codex-metadata
+        to: agents
+---
+Tools
+`,
+        );
+        yield* fs.makeDirectory(join(source, "skill"));
+        yield* fs.rename(join(source, "SKILL.md"), join(source, "skill", "SKILL.md"));
+        yield* home.owned(
+          writingTo(
+            home.home,
+            Effect.flatMap(Library.Service, (library) =>
+              library.import.authored({
+                root: source,
+                source: { type: "local", path: source },
+                input: source,
+                importedAt: "2026-10-01T00:00:00.000Z",
+              }),
+            ),
+          ),
+        );
+        const session = yield* home.owned(
+          Effect.flatMap(Library.Service, (library) => library.session.open()),
+        );
+        expect(Result.getOrThrow(session.skills[0]!.authorInvocation).codex.policy).toBe(
+          "implicit",
+        );
+        expect(Result.getOrThrow(session.skills[0]!.authorInvocation)["claude-code"].policy).toBe(
+          "explicit",
+        );
+      }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+    );
+
+    it.effect("a Library session reads invocation policy from the selected Version", () =>
+      Effect.gen(function* () {
+        const { fs, source, home, importSource } = yield* fixture();
+
+        yield* importSource("2026-10-01T00:00:00.000Z");
+
+        // The working source is not the authority for a Library row.
+        yield* fs.writeFileString(join(source, "SKILL.md"), text(false));
+
+        const before = yield* home.durable;
+
+        const session = yield* home.owned(
+          Effect.flatMap(Library.Service, (library) => library.session.open()),
+        );
+
+        const row = session.skills[0]!;
+
+        expect(row.skillId).toBe(before.skills[0]?.skill_id);
+
+        expect(Result.getOrThrow(row.authorInvocation)["claude-code"].policy).toBe("explicit");
+
+        expect(Result.getOrThrow(row.authorInvocation).codex.policy).toBe("implicit");
+      }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+    );
+  });
+});

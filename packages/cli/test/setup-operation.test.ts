@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import { withLibraryOwner } from "./helpers/library-owner.js";
 import { join } from "node:path";
 import { Effect, FileSystem, Option } from "effect";
@@ -81,103 +82,123 @@ const watchingSaves =
       );
     });
 
-it.effect(
-  "setup records its steps in state.json before running any, and its discovery folders under the same operation",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      let recorded: ReturnType<typeof operations> | undefined;
-      const applied = yield* f.home.owned(
-        f.apply.pipe(
-          watchingSaves(f.home.statePath, (save, next) =>
-            Effect.gen(function* () {
-              if (save !== 1) return;
-              const saved: LibraryState = JSON.parse(next);
-              recorded = operations(saved);
-              // Nothing has run yet: the copy setup manages is still the user's.
-              expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(false);
-            }).pipe(Effect.orDie),
-          ),
-        ),
+describe("skit setup", () => {
+  describe("Keeping files recoverable", () => {
+    describe("Setup moves no selected files until its recovery steps are saved.", () => {
+      it.effect(
+        "setup records its steps in state.json before running any, and its discovery folders under the same operation",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* fixture();
+            let recorded: ReturnType<typeof operations> | undefined;
+            const applied = yield* f.home.owned(
+              f.apply.pipe(
+                watchingSaves(f.home.statePath, (save, next) =>
+                  Effect.gen(function* () {
+                    if (save !== 1) return;
+                    const saved: LibraryState = JSON.parse(next);
+                    recorded = operations(saved);
+                    // Nothing has run yet: the copy setup manages is still the user's.
+                    expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(false);
+                  }).pipe(Effect.orDie),
+                ),
+              ),
+            );
+            if (!applied.operationId)
+              return yield* Effect.die(new Error("Missing setup operation"));
+            expect(recorded).toEqual([
+              {
+                _tag: "Pending",
+                operationId: applied.operationId,
+                steps: [{ tag: "Manage", status: "Pending", sources: [f.source] }],
+              },
+            ]);
+            expect(operations(yield* f.home.durable)).toEqual([
+              {
+                _tag: "Done",
+                operationId: applied.operationId,
+                steps: [{ tag: "Manage", status: "Done", sources: [f.source] }],
+              },
+            ]);
+            // Setup created this machine's identity, so it saved the discovery folders it observed.
+            const settings = yield* MachineSettings.setupRecord(f.home.home, applied.operationId);
+            expect(Option.map(settings, (record) => record.before.discoveryRoots)).toEqual(
+              Option.some([]),
+            );
+            expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain(
+              "Original bytes",
+            );
+            expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(true);
+          }).pipe(Effect.provide(skitLayer)),
       );
-      if (!applied.operationId) return yield* Effect.die(new Error("Missing setup operation"));
-      expect(recorded).toEqual([
-        {
-          _tag: "Pending",
-          operationId: applied.operationId,
-          steps: [{ tag: "Manage", status: "Pending", sources: [f.source] }],
-        },
-      ]);
-      expect(operations(yield* f.home.durable)).toEqual([
-        {
-          _tag: "Done",
-          operationId: applied.operationId,
-          steps: [{ tag: "Manage", status: "Done", sources: [f.source] }],
-        },
-      ]);
-      // Setup created this machine's identity, so it saved the discovery folders it observed.
-      const settings = yield* MachineSettings.setupRecord(f.home.home, applied.operationId);
-      expect(Option.map(settings, (record) => record.before.discoveryRoots)).toEqual(
-        Option.some([]),
-      );
-      expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain("Original bytes");
-      expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(true);
-    }).pipe(Effect.provide(skitLayer)),
-);
 
-it.effect("a refused setup record changes no skill and saves no discovery folders", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    const failure = yield* Effect.flip(
-      f.home.owned(
-        f.apply.pipe(
-          watchingSaves(f.home.statePath, () =>
-            Effect.fail(
-              systemError({
-                _tag: "PermissionDenied",
-                module: "FileSystem",
-                method: "rename",
-                pathOrDescriptor: f.home.statePath,
-              }),
+      it.effect("a refused setup record changes no skill and saves no discovery folders", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture();
+          const failure = yield* Effect.flip(
+            f.home.owned(
+              f.apply.pipe(
+                watchingSaves(f.home.statePath, () =>
+                  Effect.fail(
+                    systemError({
+                      _tag: "PermissionDenied",
+                      module: "FileSystem",
+                      method: "rename",
+                      pathOrDescriptor: f.home.statePath,
+                    }),
+                  ),
+                ),
+              ),
             ),
-          ),
-        ),
-      ),
-    );
-    expect(failure._tag).toBe("PlatformError");
-    expect(yield* f.fs.exists(join(f.home.home, "state.json"))).toBe(false);
-    expect((yield* MachineSettings.read(f.home.home)).setups).toEqual([]);
-    expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(false);
-    expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain("Original bytes");
-  }).pipe(Effect.provide(skitLayer)),
-);
+          );
+          expect(failure._tag).toBe("PlatformError");
+          expect(yield* f.fs.exists(join(f.home.home, "state.json"))).toBe(false);
+          expect((yield* MachineSettings.read(f.home.home)).setups).toEqual([]);
+          expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(false);
+          expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain(
+            "Original bytes",
+          );
+        }).pipe(Effect.provide(skitLayer)),
+      );
+    });
+  });
+});
 
-it.effect("a setup interrupted after its record is saved is finished by the next Library", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    const exit = yield* Effect.exit(
-      f.home.owned(
-        f.apply.pipe(
-          watchingSaves(f.home.statePath, (save) => (save === 2 ? Effect.interrupt : Effect.void)),
-        ),
-      ),
-    );
-    expect(exit._tag).toBe("Failure");
-    expect(yield* homeLockIsFree(f.home.home)).toBe(true);
-    // As saved: reading it through a Library would already have recovered it.
-    const saved: { operations: readonly { _tag: string; operationId: string }[] } = JSON.parse(
-      yield* f.fs.readFileString(f.home.statePath),
-    );
-    const [pending] = saved.operations;
-    expect(pending?._tag).toBe("Pending");
-    // The next command's Library finishes it at startup, routed as the setup recorded.
-    expect(operations(yield* f.home.durable)).toEqual([
-      {
-        _tag: "Done",
-        operationId: pending?.operationId,
-        steps: [{ tag: "Manage", status: "Done", sources: [f.source] }],
-      },
-    ]);
-    expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(true);
-  }).pipe(Effect.provide(skitLayer)),
-);
+describe("skit setup", () => {
+  describe("Keeping files recoverable", () => {
+    describe("An interrupted setup keeps the remaining files recoverable.", () => {
+      it.effect(
+        "a setup interrupted after its record is saved is finished by the next Library",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* fixture();
+            const exit = yield* Effect.exit(
+              f.home.owned(
+                f.apply.pipe(
+                  watchingSaves(f.home.statePath, (save) =>
+                    save === 2 ? Effect.interrupt : Effect.void,
+                  ),
+                ),
+              ),
+            );
+            expect(exit._tag).toBe("Failure");
+            expect(yield* homeLockIsFree(f.home.home)).toBe(true);
+            // As saved: reading it through a Library would already have recovered it.
+            const saved: { operations: readonly { _tag: string; operationId: string }[] } =
+              JSON.parse(yield* f.fs.readFileString(f.home.statePath));
+            const [pending] = saved.operations;
+            expect(pending?._tag).toBe("Pending");
+            // The next command's Library finishes it at startup, routed as the setup recorded.
+            expect(operations(yield* f.home.durable)).toEqual([
+              {
+                _tag: "Done",
+                operationId: pending?.operationId,
+                steps: [{ tag: "Manage", status: "Done", sources: [f.source] }],
+              },
+            ]);
+            expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(true);
+          }).pipe(Effect.provide(skitLayer)),
+      );
+    });
+  });
+});

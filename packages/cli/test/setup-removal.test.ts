@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import { LinkStat } from "@smolai/skit-core/platform";
 import { join } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";
@@ -95,211 +96,258 @@ const stepsAndPrompts = (events: ReadonlyArray<InteractionEvent>) =>
         : [],
   );
 
-it.effect(
-  "setup announces every step before its question, including steps with nothing to decide",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture;
-      const { interaction } = yield* f.setup([["remove\0copied"], false]);
-      expect(stepsAndPrompts(yield* interaction.events)).toEqual([
-        `step 1/3 ${setupStepTitles.collections}`,
-        `step 2/3 ${setupStepTitles.skills}`,
-        setupPrompts.skills,
-        `step 3/3 ${setupStepTitles.confirm}`,
-        setupPrompts.confirm,
-      ]);
-      expect(yield* f.fs.exists(f.copy)).toBe(true);
-    }).pipe(Effect.provide(skitLayer)),
-);
 
-it.effect("setup adds the repository step only when given a work dir", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    const { interaction } = yield* f.setup([["remove\0copied"], false], false, f.root);
-    expect(
-      stepsAndPrompts(yield* interaction.events).filter((item) => item.startsWith("step")),
-    ).toEqual([
-      `step 1/4 ${setupStepTitles.repositories}`,
-      `step 2/4 ${setupStepTitles.collections}`,
-      `step 3/4 ${setupStepTitles.skills}`,
-      `step 4/4 ${setupStepTitles.confirm}`,
-    ]);
-  }).pipe(Effect.provide(skitLayer)),
-);
 
-it.effect("non-interactive setup announces no steps", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    const { interaction } = yield* f.setup([], true);
-    expect(yield* interaction.events).not.toContainEqual(expect.objectContaining({ _tag: "Step" }));
-  }).pipe(Effect.provide(skitLayer)),
-);
 
-it.effect(
-  "setup previews exact installed locations, archives copies, and preserves symlink sources",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture;
-      const { interaction } = yield* f.setup([["remove\0copied", "remove\0linked"], true]);
-      const plan = (yield* interaction.steps).find(
-        (step) => step.title === setupStepTitles.confirm,
-      )!.body;
-      const removals = planRows(plan, "Remove installed copies (2)");
-      expect(removals).toContainEqual(["copied", f.copy, "move directory to recovery"]);
-      expect(removals).toContainEqual(["linked", f.link, "symlink only; source stays"]);
-      expect(removals.some((row) => row.includes(f.source))).toBe(false);
-      expect(yield* f.fs.exists(f.copy)).toBe(false);
-      expect(yield* f.fs.exists(f.link)).toBe(false);
-      expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain("Original contents");
-      const removed = join(f.home.home, "removed");
-      const directories = yield* f.fs.readDirectory(removed);
-      // Each step that moves folders aside keeps them in its own batch.
-      const [batch] = (yield* f.fs.readDirectory(join(removed, directories[0]))).filter((name) =>
-        /^step-\d+$/.test(name),
+
+
+
+
+
+
+describe("skit setup", () => {
+  describe("Finding and reviewing", () => {
+    describe("Preview leaves the proposed setup unapplied.", () => {
+      it.effect("declining removal or using dry run leaves copies and Library unchanged", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          for (const dryRun of [false, true]) {
+            yield* f.setup(dryRun ? [] : [["remove\0copied"], false], dryRun);
+            expect(yield* f.fs.exists(f.copy)).toBe(true);
+            expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);
+            expect((yield* f.home.snapshot)._tag).toBe("Absent");
+          }
+          yield* f.setup([[]]);
+          expect(yield* f.fs.exists(f.copy)).toBe(true);
+          expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);
+        }).pipe(Effect.provide(skitLayer)),
       );
-      const recovery = join(removed, directories[0], batch);
-      const moveRecord = yield* Schema.decodeEffect(
-        Schema.fromJsonString(
-          Schema.Struct({
-            entries: Schema.Array(
-              Schema.Struct({
-                path: Schema.String,
-                recoveryPath: Schema.String,
-                type: Schema.String,
+    });
+  });
+});
+
+describe("skit setup", () => {
+  describe("Finding and reviewing", () => {
+    describe("A changed setup must be reviewed again before it can change files.", () => {
+      it.effect("rejects stale consent and replaced paths before moving any copy", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          yield* f.home.owned(
+            writingTo(
+              f.home.home,
+              Effect.gen(function* () {
+                const options = { ...f.options, persistRoots: false };
+                const scan = yield* runSetup(options);
+                const candidates = scan.onboarding.candidates.filter(
+                  (item) => item.name === "copied" || item.name === "linked",
+                );
+                const paths = yield* setupRemovablePaths(options, scan);
+                const plan = yield* planSetupRemovals(scan, candidates, paths);
+                yield* f.fs.writeFileString(
+                  join(f.copy, "SKILL.md"),
+                  "---\nname: copied\ndescription: Changed after preview\n---\n",
+                );
+                expect(
+                  (yield* Effect.flip(revalidateSetupPlan(options, scan.onboarding.planId)))._tag,
+                ).toBe("SetupPlanStale");
+                yield* f.fs.rename(f.copy, `${f.copy}-original`);
+                yield* f.fs.makeDirectory(f.copy);
+                const library = yield* Library.Service;
+                const removed = yield* library.setup([{ _tag: "Remove", folders: plan.folders }], {
+                  base: yield* library.read,
+                });
+                expect(removed._tag === "Stopped" && removed.reason._tag).toBe("EvidenceDiffers");
+                expect(yield* f.fs.readLink(f.link)).toBe(f.source);
+                expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);
               }),
             ),
-          }),
-        ),
-      )(yield* f.fs.readFileString(join(recovery, "receipt.json")));
-      const directory = moveRecord.entries.find((entry) => entry.type === "Directory")!;
-      expect(yield* f.fs.readDirectory(directory.recoveryPath)).toContain("empty");
-      expect(yield* f.fs.readFileString(join(directory.recoveryPath, ".DS_Store"))).toBe(
-        "incidental bytes",
+          );
+        }).pipe(Effect.provide(skitLayer)),
       );
-      expect((yield* f.home.durable).collections).toHaveLength(0);
-      for (const entry of moveRecord.entries) yield* f.fs.rename(entry.recoveryPath, entry.path);
-      expect(yield* f.fs.readLink(f.link)).toBe(f.source);
-      expect(yield* f.fs.readFileString(join(f.copy, "SKILL.md"))).toContain("Copy contents");
-    }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect("declining removal or using dry run leaves copies and Library unchanged", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    for (const dryRun of [false, true]) {
-      yield* f.setup(dryRun ? [] : [["remove\0copied"], false], dryRun);
-      expect(yield* f.fs.exists(f.copy)).toBe(true);
-      expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);
-      expect((yield* f.home.snapshot)._tag).toBe("Absent");
-    }
-    yield* f.setup([[]]);
-    expect(yield* f.fs.exists(f.copy)).toBe(true);
-    expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);
-  }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect("can add one skill and remove another in the same approved setup plan", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    // The selected skill's source alias is preserved without a housekeeping question.
-    yield* f.setup([["remove\0copied", "linked"], true]);
-    expect(yield* f.fs.exists(f.copy)).toBe(false);
-    expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain("Original contents");
-    expect((yield* f.home.durable).skills.map((skill) => skill.name)).toEqual(["linked"]);
-  }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect("rejects stale consent and replaced paths before moving any copy", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    yield* f.home.owned(
-      writingTo(
-        f.home.home,
-        Effect.gen(function* () {
-          const options = { ...f.options, persistRoots: false };
-          const scan = yield* runSetup(options);
-          const candidates = scan.onboarding.candidates.filter(
-            (item) => item.name === "copied" || item.name === "linked",
-          );
-          const paths = yield* setupRemovablePaths(options, scan);
-          const plan = yield* planSetupRemovals(scan, candidates, paths);
-          yield* f.fs.writeFileString(
-            join(f.copy, "SKILL.md"),
-            "---\nname: copied\ndescription: Changed after preview\n---\n",
-          );
-          expect(
-            (yield* Effect.flip(revalidateSetupPlan(options, scan.onboarding.planId)))._tag,
-          ).toBe("SetupPlanStale");
-          yield* f.fs.rename(f.copy, `${f.copy}-original`);
-          yield* f.fs.makeDirectory(f.copy);
-          const library = yield* Library.Service;
-          const removed = yield* library.setup([{ _tag: "Remove", folders: plan.folders }], {
-            base: yield* library.read,
-          });
-          expect(removed._tag === "Stopped" && removed.reason._tag).toBe("EvidenceDiffers");
-          expect(yield* f.fs.readLink(f.link)).toBe(f.source);
-          expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);
-        }),
-      ),
-    );
-  }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect("does not offer source trees reached through a linked skills directory for removal", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    const shared = join(f.root, "shared-skills");
-    yield* f.fs.makeDirectory(shared);
-    yield* f.fs.rename(f.copy, join(shared, "copied"));
-    yield* f.fs.rename(f.agentRoot, `${f.agentRoot}-old`);
-    yield* f.fs.symlink(shared, f.agentRoot);
-    yield* f.home.owned(
-      writingTo(
-        f.home.home,
-        Effect.gen(function* () {
-          const scan = yield* runSetup({ ...f.options, persistRoots: false });
-          const paths = yield* setupRemovablePaths({ ...f.options, persistRoots: false }, scan);
-          expect([...paths.values()].flat()).toEqual([]);
-          expect((yield* (yield* LinkStat).lstat(join(shared, "copied"))).type).toBe("Directory");
-        }),
-      ),
-    );
-  }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect("removing one duplicate row preserves the independent copy in another agent", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    const claude = join(f.root, ".claude", "skills");
-    const otherCopy = join(claude, "copied");
-    yield* f.fs.makeDirectory(otherCopy, { recursive: true });
-    yield* f.fs.copy(f.copy, otherCopy);
-    const home = yield* libraryHome({
-      home: f.home.home,
-      inventoryHome: f.root,
-      roots: { codex: [f.agentRoot], "claude-code": [claude] },
     });
-    const path = yield* f.fs.realPath(f.copy);
-    const interaction = yield* makeScriptedInteraction([[`remove\0copied\0${path}`], true]);
-    yield* home.owned(
-      writingTo(
-        home.home,
-        setupCommand({
-          options: { ...f.options, inventory: home.inventory },
-          interactive: true,
-          dryRun: false,
-          manageOptions: { installOptions: home.installOptions },
-        }).pipe(Effect.provide(interaction.layer)),
-      ),
-    );
-    expect(yield* f.fs.exists(f.copy)).toBe(false);
-    expect(yield* f.fs.readFileString(join(otherCopy, ".DS_Store"))).toBe("incidental bytes");
-    expect(yield* f.fs.readLink(f.link)).toBe(f.source);
-    const plan = (yield* interaction.steps).find(
-      (step) => step.title === setupStepTitles.confirm,
-    )!.body;
-    const removals = planRows(plan, "Remove installed copies (1)");
-    expect(removals).toHaveLength(1);
-    expect(removals.some((row) => row.includes(otherCopy))).toBe(false);
-  }).pipe(Effect.provide(skitLayer)),
-);
+  });
+});
+
+describe("skit setup", () => {
+  describe("Finding and reviewing", () => {
+    describe("Setup announces the decisions it needs before asking for them.", () => {
+      it.effect(
+        "setup announces every step before its question, including steps with nothing to decide",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* fixture;
+            const { interaction } = yield* f.setup([["remove\0copied"], false]);
+            expect(stepsAndPrompts(yield* interaction.events)).toEqual([
+              `step 1/3 ${setupStepTitles.collections}`,
+              `step 2/3 ${setupStepTitles.skills}`,
+              setupPrompts.skills,
+              `step 3/3 ${setupStepTitles.confirm}`,
+              setupPrompts.confirm,
+            ]);
+            expect(yield* f.fs.exists(f.copy)).toBe(true);
+          }).pipe(Effect.provide(skitLayer)),
+      );
+
+      it.effect("setup adds the repository step only when given a work dir", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          const { interaction } = yield* f.setup([["remove\0copied"], false], false, f.root);
+          expect(
+            stepsAndPrompts(yield* interaction.events).filter((item) => item.startsWith("step")),
+          ).toEqual([
+            `step 1/4 ${setupStepTitles.repositories}`,
+            `step 2/4 ${setupStepTitles.collections}`,
+            `step 3/4 ${setupStepTitles.skills}`,
+            `step 4/4 ${setupStepTitles.confirm}`,
+          ]);
+        }).pipe(Effect.provide(skitLayer)),
+      );
+
+      it.effect("non-interactive setup announces no steps", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          const { interaction } = yield* f.setup([], true);
+          expect(yield* interaction.events).not.toContainEqual(
+            expect.objectContaining({ _tag: "Step" }),
+          );
+        }).pipe(Effect.provide(skitLayer)),
+      );
+    });
+  });
+});
+
+describe("skit setup", () => {
+  describe("Keeping files recoverable", () => {
+    describe("Setup saves the selected removals without deleting their original linked targets.", () => {
+      it.effect(
+        "setup previews exact installed locations, archives copies, and preserves symlink sources",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* fixture;
+            const { interaction } = yield* f.setup([["remove\0copied", "remove\0linked"], true]);
+            const plan = (yield* interaction.steps).find(
+              (step) => step.title === setupStepTitles.confirm,
+            )!.body;
+            const removals = planRows(plan, "Remove installed copies (2)");
+            expect(removals).toContainEqual(["copied", f.copy, "move directory to recovery"]);
+            expect(removals).toContainEqual(["linked", f.link, "symlink only; source stays"]);
+            expect(removals.some((row) => row.includes(f.source))).toBe(false);
+            expect(yield* f.fs.exists(f.copy)).toBe(false);
+            expect(yield* f.fs.exists(f.link)).toBe(false);
+            expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain(
+              "Original contents",
+            );
+            const removed = join(f.home.home, "removed");
+            const directories = yield* f.fs.readDirectory(removed);
+            // Each step that moves folders aside keeps them in its own batch.
+            const [batch] = (yield* f.fs.readDirectory(join(removed, directories[0]))).filter(
+              (name) => /^step-\d+$/.test(name),
+            );
+            const recovery = join(removed, directories[0], batch);
+            const moveRecord = yield* Schema.decodeEffect(
+              Schema.fromJsonString(
+                Schema.Struct({
+                  entries: Schema.Array(
+                    Schema.Struct({
+                      path: Schema.String,
+                      recoveryPath: Schema.String,
+                      type: Schema.String,
+                    }),
+                  ),
+                }),
+              ),
+            )(yield* f.fs.readFileString(join(recovery, "receipt.json")));
+            const directory = moveRecord.entries.find((entry) => entry.type === "Directory")!;
+            expect(yield* f.fs.readDirectory(directory.recoveryPath)).toContain("empty");
+            expect(yield* f.fs.readFileString(join(directory.recoveryPath, ".DS_Store"))).toBe(
+              "incidental bytes",
+            );
+            expect((yield* f.home.durable).collections).toHaveLength(0);
+            for (const entry of moveRecord.entries)
+              yield* f.fs.rename(entry.recoveryPath, entry.path);
+            expect(yield* f.fs.readLink(f.link)).toBe(f.source);
+            expect(yield* f.fs.readFileString(join(f.copy, "SKILL.md"))).toContain("Copy contents");
+          }).pipe(Effect.provide(skitLayer)),
+      );
+
+      it.effect("can add one skill and remove another in the same approved setup plan", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          // The selected skill's source alias is preserved without a housekeeping question.
+          yield* f.setup([["remove\0copied", "linked"], true]);
+          expect(yield* f.fs.exists(f.copy)).toBe(false);
+          expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain(
+            "Original contents",
+          );
+          expect((yield* f.home.durable).skills.map((skill) => skill.name)).toEqual(["linked"]);
+        }).pipe(Effect.provide(skitLayer)),
+      );
+
+      it.effect(
+        "does not offer source trees reached through a linked skills directory for removal",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* fixture;
+            const shared = join(f.root, "shared-skills");
+            yield* f.fs.makeDirectory(shared);
+            yield* f.fs.rename(f.copy, join(shared, "copied"));
+            yield* f.fs.rename(f.agentRoot, `${f.agentRoot}-old`);
+            yield* f.fs.symlink(shared, f.agentRoot);
+            yield* f.home.owned(
+              writingTo(
+                f.home.home,
+                Effect.gen(function* () {
+                  const scan = yield* runSetup({ ...f.options, persistRoots: false });
+                  const paths = yield* setupRemovablePaths(
+                    { ...f.options, persistRoots: false },
+                    scan,
+                  );
+                  expect([...paths.values()].flat()).toEqual([]);
+                  expect((yield* (yield* LinkStat).lstat(join(shared, "copied"))).type).toBe(
+                    "Directory",
+                  );
+                }),
+              ),
+            );
+          }).pipe(Effect.provide(skitLayer)),
+      );
+
+      it.effect("removing one duplicate row preserves the independent copy in another agent", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          const claude = join(f.root, ".claude", "skills");
+          const otherCopy = join(claude, "copied");
+          yield* f.fs.makeDirectory(otherCopy, { recursive: true });
+          yield* f.fs.copy(f.copy, otherCopy);
+          const home = yield* libraryHome({
+            home: f.home.home,
+            inventoryHome: f.root,
+            roots: { codex: [f.agentRoot], "claude-code": [claude] },
+          });
+          const path = yield* f.fs.realPath(f.copy);
+          const interaction = yield* makeScriptedInteraction([[`remove\0copied\0${path}`], true]);
+          yield* home.owned(
+            writingTo(
+              home.home,
+              setupCommand({
+                options: { ...f.options, inventory: home.inventory },
+                interactive: true,
+                dryRun: false,
+                manageOptions: { installOptions: home.installOptions },
+              }).pipe(Effect.provide(interaction.layer)),
+            ),
+          );
+          expect(yield* f.fs.exists(f.copy)).toBe(false);
+          expect(yield* f.fs.readFileString(join(otherCopy, ".DS_Store"))).toBe("incidental bytes");
+          expect(yield* f.fs.readLink(f.link)).toBe(f.source);
+          const plan = (yield* interaction.steps).find(
+            (step) => step.title === setupStepTitles.confirm,
+          )!.body;
+          const removals = planRows(plan, "Remove installed copies (1)");
+          expect(removals).toHaveLength(1);
+          expect(removals.some((row) => row.includes(otherCopy))).toBe(false);
+        }).pipe(Effect.provide(skitLayer)),
+      );
+    });
+  });
+});

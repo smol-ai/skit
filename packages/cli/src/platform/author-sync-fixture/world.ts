@@ -6,6 +6,7 @@ import {
   backupAuthorWorkspace,
   watchAuthorWorkspace,
   type AuthorWatchEvent,
+  type AuthorVisibility,
   initializeAuthorWorkspace,
 } from "@smolai/skit-core/author";
 import { authorRegistry, authorSyncApi } from "../../registry/author-sync.js";
@@ -96,7 +97,7 @@ export const makeAuthorSyncWorld = Effect.fn("Fixture.makeAuthorSyncWorld")(func
       Ref.get(runtime).pipe(Effect.flatMap((scope) => Scope.close(scope, Exit.void))),
     );
     const startSync = Effect.fn("Fixture.startAuthorSync")(function* (
-      first = false,
+      first: boolean | { readonly to: string; readonly visibility: AuthorVisibility } = false,
       apply = true,
       allowLargeDeletion = false,
       confirmRemovals = false,
@@ -108,7 +109,11 @@ export const makeAuthorSyncWorld = Effect.fn("Fixture.makeAuthorSyncWorld")(func
             confirmRemovals,
             allowLargeDeletion,
             home,
-            ...(first ? { to: "swyx/tools", visibility: "private" as const } : {}),
+            ...(typeof first === "object"
+              ? first
+              : first
+                ? { to: "swyx/tools", visibility: "private" as const }
+                : {}),
           }).pipe(
             // This is the command's Registry environment; the Library's home layer must not replace it.
             Effect.provide(
@@ -168,6 +173,7 @@ export const makeAuthorSyncWorld = Effect.fn("Fixture.makeAuthorSyncWorld")(func
                 ),
               ),
               Effect.provide(library),
+              Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem),
             ),
             yield* Ref.get(runtime),
           );

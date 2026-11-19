@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { join } from "node:path";
@@ -29,13 +30,19 @@ it.effect("resolves skit: shorthand against the hosted Registry when none is con
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("names the hosted Registry `smol` on first sign-in", () =>
-  Effect.sync(() => {
-    const signedIn = new RegistryAccounts({ schemaVersion: 1, servers: {} }).signedIn(
-      officialRegistryOrigin,
-      { token: "t", tokenId: "id", tokenPrefix: "t", scopes: ["library:sync"] },
-    );
-    assert.strictEqual(signedIn.alias, "smol");
-    assert.strictEqual(signedIn.config.defaultRegistry, "smol");
-  }),
-);
+describe("skit auth login", () => {
+  describe("Choosing a Registry", () => {
+    describe("Login without a configured Registry uses the hosted Registry.", () => {
+      it.effect("names the hosted Registry `smol` on first sign-in", () =>
+        Effect.sync(() => {
+          const signedIn = new RegistryAccounts({ schemaVersion: 1, servers: {} }).signedIn(
+            officialRegistryOrigin,
+            { token: "t", tokenId: "id", tokenPrefix: "t", scopes: ["library:sync"] },
+          );
+          assert.strictEqual(signedIn.alias, "smol");
+          assert.strictEqual(signedIn.config.defaultRegistry, "smol");
+        }),
+      );
+    });
+  });
+});

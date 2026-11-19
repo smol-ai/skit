@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import { testPlatformLayer } from "./helpers/platform.js";
 // What the native login owns that the promise one did not.
 //
@@ -38,38 +39,6 @@ const input = {
   password: "not-stored",
   scopes: ["library:sync"] as const,
 };
-
-it.effect("an interrupted login aborts its in-flight request and stores nothing", () =>
-  Effect.gen(function* () {
-    const home = yield* scratch("skit-login-interrupt-");
-    let aborted = false;
-    const gated = yield* Deferred.make<void>();
-    // The sign-in never answers, so the only way out is the interrupt.
-    const server: TestHttpHandler = () =>
-      Deferred.succeed(gated, undefined).pipe(
-        Effect.andThen(Effect.never),
-        Effect.onInterrupt(() =>
-          Effect.sync(() => {
-            aborted = true;
-          }),
-        ),
-      );
-
-    const fiber = yield* Effect.forkChild(
-      Effect.scoped(
-        loginEffect({ ...input, scopes: [...input.scopes], home }).pipe(
-          Effect.provide(registryHttpLayer(testHttpClientLayer(server))),
-        ),
-      ).pipe(Effect.provide(testPlatformLayer)),
-    );
-    yield* Deferred.await(gated);
-    yield* Fiber.interrupt(fiber);
-
-    // The request belongs to the workflow's Scope, so it is cancelled rather than left running.
-    expect(aborted).toBe(true);
-    expect(yield* exists(join(home, "auth.json"))).toBe(false);
-  }),
-);
 
 it.effect("the credential prompts answer from the Prompter and cancel as a typed failure", () =>
   Effect.gen(function* () {
@@ -154,33 +123,75 @@ const interruptedLogin = Effect.fn("test.interruptedLogin")(function* (gate: "mi
   return { home, seen: server.seen };
 });
 
-it.effect("interrupting while the credential is minted still signs the temporary session out", () =>
-  Effect.gen(function* () {
-    const { home, seen } = yield* interruptedLogin("mint");
+describe("skit auth login", () => {
+  describe("Browser approval", () => {
+    describe("Cancelling sign-in saves no credential locally.", () => {
+      it.effect("an interrupted login aborts its in-flight request and stores nothing", () =>
+        Effect.gen(function* () {
+          const home = yield* scratch("skit-login-interrupt-");
+          let aborted = false;
+          const gated = yield* Deferred.make<void>();
+          // The sign-in never answers, so the only way out is the interrupt.
+          const server: TestHttpHandler = () =>
+            Deferred.succeed(gated, undefined).pipe(
+              Effect.andThen(Effect.never),
+              Effect.onInterrupt(() =>
+                Effect.sync(() => {
+                  aborted = true;
+                }),
+              ),
+            );
 
-    // The promise implementation reached its sign-out because nothing could cancel it. A finalizer
-    // is what keeps that true once the workflow is interruptible.
-    expect(
-      seen.some(
-        (request) => request.url.endsWith("/api/auth/sign-out") && request.method === "POST",
-      ),
-    ).toBe(true);
-    expect(yield* exists(join(home, "auth.json"))).toBe(false);
-  }),
-);
+          const fiber = yield* Effect.forkChild(
+            Effect.scoped(
+              loginEffect({ ...input, scopes: [...input.scopes], home }).pipe(
+                Effect.provide(registryHttpLayer(testHttpClientLayer(server))),
+              ),
+            ).pipe(Effect.provide(testPlatformLayer)),
+          );
+          yield* Deferred.await(gated);
+          yield* Fiber.interrupt(fiber);
 
-it.effect(
-  "interrupting after the credential is minted revokes it, because it was never stored",
-  () =>
-    Effect.gen(function* () {
-      const { home, seen } = yield* interruptedLogin("sign-out");
+          // The request belongs to the workflow's Scope, so it is cancelled rather than left running.
+          expect(aborted).toBe(true);
+          expect(yield* exists(join(home, "auth.json"))).toBe(false);
+        }),
+      );
 
-      expect(
-        seen.some(
-          (request) => request.url.endsWith("/api/tokens/pat_one") && request.method === "DELETE",
-        ),
-      ).toBe(true);
-      // Nothing was persisted, so nothing survives that the caller could use.
-      expect(yield* exists(join(home, "auth.json"))).toBe(false);
-    }),
-);
+      it.effect(
+        "interrupting while the credential is minted still signs the temporary session out",
+        () =>
+          Effect.gen(function* () {
+            const { home, seen } = yield* interruptedLogin("mint");
+
+            // The promise implementation reached its sign-out because nothing could cancel it. A finalizer
+            // is what keeps that true once the workflow is interruptible.
+            expect(
+              seen.some(
+                (request) =>
+                  request.url.endsWith("/api/auth/sign-out") && request.method === "POST",
+              ),
+            ).toBe(true);
+            expect(yield* exists(join(home, "auth.json"))).toBe(false);
+          }),
+      );
+
+      it.effect(
+        "interrupting after the credential is minted revokes it, because it was never stored",
+        () =>
+          Effect.gen(function* () {
+            const { home, seen } = yield* interruptedLogin("sign-out");
+
+            expect(
+              seen.some(
+                (request) =>
+                  request.url.endsWith("/api/tokens/pat_one") && request.method === "DELETE",
+              ),
+            ).toBe(true);
+            // Nothing was persisted, so nothing survives that the caller could use.
+            expect(yield* exists(join(home, "auth.json"))).toBe(false);
+          }),
+      );
+    });
+  });
+});

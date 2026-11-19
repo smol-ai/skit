@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
@@ -13,25 +14,6 @@ import manifest from "./fixtures/collections/full-manifest.json" with { type: "j
 const cache = fileURLToPath(
   new URL("../../../node_modules/.cache/skit-collections/", import.meta.url),
 );
-for (const collection of manifest) {
-  it.effect(`imports the complete pinned ${collection.repository} snapshot`, () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const archive = join(cache, `${collection.commit}.tar.gz`);
-      assert.strictEqual(
-        createHash("sha256")
-          .update(yield* fs.readFile(archive))
-          .digest("hex"),
-        collection.sha256,
-      );
-      const source = yield* fs.makeTempDirectoryScoped({ prefix: "skit-full-collection-" });
-      yield* Effect.sync(() =>
-        execFileSync("tar", ["-xzf", archive, "--strip-components=1", "-C", source]),
-      );
-      yield* assertCollectionImport(source, collection.skillPaths);
-    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-  );
-}
 
 it.effect.skipIf(process.env.SKIT_COLLECTIONS_GITHUB !== "1")(
   "discovers the pinned NVIDIA collection through GitHub Git transport",
@@ -76,3 +58,27 @@ it.effect.skipIf(process.env.SKIT_COLLECTIONS_GITHUB !== "1")(
       }
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
+
+describe("skit add", () => {
+  describe("Adding a source saves its selected Skills without enabling them.", () => {
+    for (const collection of manifest) {
+      it.effect(`imports the complete pinned ${collection.repository} snapshot`, () =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const archive = join(cache, `${collection.commit}.tar.gz`);
+          assert.strictEqual(
+            createHash("sha256")
+              .update(yield* fs.readFile(archive))
+              .digest("hex"),
+            collection.sha256,
+          );
+          const source = yield* fs.makeTempDirectoryScoped({ prefix: "skit-full-collection-" });
+          yield* Effect.sync(() =>
+            execFileSync("tar", ["-xzf", archive, "--strip-components=1", "-C", source]),
+          );
+          yield* assertCollectionImport(source, collection.skillPaths);
+        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+      );
+    }
+  });
+});

@@ -15,39 +15,6 @@ const releaseContext = (http: HttpClient.HttpClient) =>
 
 const release = (version: string) => ({ kind: "release" as const, version, commit: "abc" });
 
-describe("release decisions", () => {
-  it("compares numeric prerelease identifiers and keeps channels separate", () => {
-    expect(defaultChannel("0.3.0-beta.2")).toBe("beta");
-    expect(
-      decideRelease(
-        release("0.3.0-beta.2"),
-        { beta: "0.3.0-beta.10", rc: "0.3.0-rc.1" },
-        "beta",
-        "npm",
-      ).available,
-    ).toBe("0.3.0-beta.10");
-  });
-  it("offers a newer stable release but never a prerelease on latest", () => {
-    expect(
-      decideRelease(release("0.3.0-rc.1"), { latest: "0.3.0" }, "rc", "npm").upgrade,
-    ).toContain("@latest");
-    expect(
-      decideRelease(release("0.2.0"), { latest: "0.3.0-alpha.1" }, "latest", "npm").status,
-    ).toBe("channel-unavailable");
-    expect(decideRelease(release("0.3.0-beta.1"), { latest: "0.2.5" }, "beta", "npm").status).toBe(
-      "channel-unavailable",
-    );
-  });
-  it("does not offer downgrades or compare development builds", () => {
-    expect(decideRelease(release("0.3.0"), { latest: "0.2.0" }, "latest", "npm").status).toBe(
-      "ahead",
-    );
-    expect(
-      decideRelease({ kind: "dev", version: "0.1.0" }, { latest: "1.0.0" }, "latest", "npm").status,
-    ).toBe("development-build");
-  });
-});
-
 it.effect("persists successful checks, deduplicates notices, and backs off failed refreshes", () =>
   Effect.scoped(
     Effect.gen(function* () {
@@ -81,44 +48,6 @@ it.effect("persists successful checks, deduplicates notices, and backs off faile
         yield* checkRelease(release("0.1.0"), false);
         expect(calls).toBe(2);
       }).pipe(Effect.provide(layer.pipe(Layer.provideMerge(config))));
-    }),
-  ).pipe(Effect.provide(NodeServices.layer)),
-);
-
-it.effect("records a timeout as a failed attempt and retries after the daily backoff", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const root = yield* fs.makeTempDirectoryScoped();
-      let started = yield* Deferred.make<void>();
-      let calls = 0;
-      const http = HttpClient.make(() => {
-        calls++;
-        return Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never));
-      });
-      yield* Effect.gen(function* () {
-        const pending = yield* checkRelease(release("0.1.0"), false).pipe(Effect.forkScoped);
-        yield* Deferred.await(started);
-        yield* TestClock.adjust("1500 millis");
-        expect((yield* Fiber.join(pending)).status).toBe("check-unavailable");
-        expect((yield* checkRelease(release("0.1.0"), false)).status).toBe("check-unavailable");
-        expect(calls).toBe(1);
-        yield* TestClock.adjust("24 hours");
-        started = yield* Deferred.make<void>();
-        const retry = yield* checkRelease(release("0.1.0"), false).pipe(Effect.forkScoped);
-        yield* Deferred.await(started);
-        yield* TestClock.adjust("1500 millis");
-        yield* Fiber.join(retry);
-        expect(calls).toBe(2);
-      }).pipe(
-        Effect.provide(
-          releaseContext(http).pipe(
-            Layer.provideMerge(
-              ConfigProvider.layer(ConfigProvider.fromUnknown({ XDG_STATE_HOME: root })),
-            ),
-          ),
-        ),
-      );
     }),
   ).pipe(Effect.provide(NodeServices.layer)),
 );
@@ -245,3 +174,87 @@ it.effect("uses the supplied application state directory instead of rereading XD
     }),
   ).pipe(Effect.provide(NodeServices.layer)),
 );
+
+describe("skit version", () => {
+  describe("The latest channel never offers a prerelease.", () => {
+    it("offers a newer stable release but never a prerelease on latest", () => {
+      expect(
+        decideRelease(release("0.3.0-rc.1"), { latest: "0.3.0" }, "rc", "npm").upgrade,
+      ).toContain("@latest");
+      expect(
+        decideRelease(release("0.2.0"), { latest: "0.3.0-alpha.1" }, "latest", "npm").status,
+      ).toBe("channel-unavailable");
+      expect(
+        decideRelease(release("0.3.0-beta.1"), { latest: "0.2.5" }, "beta", "npm").status,
+      ).toBe("channel-unavailable");
+    });
+  });
+});
+
+describe("skit version", () => {
+  describe("Version checks never offer a downgrade.", () => {
+    it("compares numeric prerelease identifiers and keeps channels separate", () => {
+      expect(defaultChannel("0.3.0-beta.2")).toBe("beta");
+      expect(
+        decideRelease(
+          release("0.3.0-beta.2"),
+          { beta: "0.3.0-beta.10", rc: "0.3.0-rc.1" },
+          "beta",
+          "npm",
+        ).available,
+      ).toBe("0.3.0-beta.10");
+    });
+
+    it("does not offer downgrades or compare development builds", () => {
+      expect(decideRelease(release("0.3.0"), { latest: "0.2.0" }, "latest", "npm").status).toBe(
+        "ahead",
+      );
+      expect(
+        decideRelease({ kind: "dev", version: "0.1.0" }, { latest: "1.0.0" }, "latest", "npm")
+          .status,
+      ).toBe("development-build");
+    });
+  });
+});
+
+describe("skit version", () => {
+  describe("A timed-out version check is reported as unavailable.", () => {
+    it.effect("records a timeout as a failed attempt and retries after the daily backoff", () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const root = yield* fs.makeTempDirectoryScoped();
+          let started = yield* Deferred.make<void>();
+          let calls = 0;
+          const http = HttpClient.make(() => {
+            calls++;
+            return Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never));
+          });
+          yield* Effect.gen(function* () {
+            const pending = yield* checkRelease(release("0.1.0"), false).pipe(Effect.forkScoped);
+            yield* Deferred.await(started);
+            yield* TestClock.adjust("1500 millis");
+            expect((yield* Fiber.join(pending)).status).toBe("check-unavailable");
+            expect((yield* checkRelease(release("0.1.0"), false)).status).toBe("check-unavailable");
+            expect(calls).toBe(1);
+            yield* TestClock.adjust("24 hours");
+            started = yield* Deferred.make<void>();
+            const retry = yield* checkRelease(release("0.1.0"), false).pipe(Effect.forkScoped);
+            yield* Deferred.await(started);
+            yield* TestClock.adjust("1500 millis");
+            yield* Fiber.join(retry);
+            expect(calls).toBe(2);
+          }).pipe(
+            Effect.provide(
+              releaseContext(http).pipe(
+                Layer.provideMerge(
+                  ConfigProvider.layer(ConfigProvider.fromUnknown({ XDG_STATE_HOME: root })),
+                ),
+              ),
+            ),
+          );
+        }),
+      ).pipe(Effect.provide(NodeServices.layer)),
+    );
+  });
+});

@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { Layer, Effect, FileSystem } from "effect";
@@ -26,390 +27,6 @@ const inspectSource = Effect.fn("Test.inspectSource")(function* (source: SkitSou
 
 const hash = (text: string) => createHash("sha256").update("SKILL.md").update(text).digest("hex");
 
-it.effect("checks skills.sh status against real Git history without saving Library state", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-skills-sh-check-" });
-    const upstream = join(root, "upstream");
-    const work = join(root, "work");
-    const repository = join(work, "project");
-    const installed = join(repository, ".agents", "skills", "review");
-    const upstreamSkill = join(upstream, "skills", "review");
-    yield* fs.makeDirectory(installed, { recursive: true });
-    yield* fs.makeDirectory(upstreamSkill, { recursive: true });
-    const runGit = (cwd: string, args: readonly string[]) =>
-      spawner.exitCode(ChildProcess.make("git", [...args], { cwd }));
-    expect(yield* runGit(upstream, ["init", "-q", "-b", "main"])).toBe(0);
-    expect(yield* runGit(upstream, ["config", "user.email", "test@example.com"])).toBe(0);
-    expect(yield* runGit(upstream, ["config", "user.name", "Test"])).toBe(0);
-    const original = "---\nname: review\ndescription: Review.\n---\n\n# Original\n";
-    const updated = "---\nname: review\ndescription: Review.\n---\n\n# Updated\n";
-    yield* fs.writeFileString(join(upstreamSkill, "SKILL.md"), original);
-    expect(yield* runGit(upstream, ["add", "skills/review/SKILL.md"])).toBe(0);
-    expect(yield* runGit(upstream, ["commit", "-q", "-m", "original"])).toBe(0);
-    yield* fs.writeFileString(join(upstreamSkill, "SKILL.md"), updated);
-    expect(yield* runGit(upstream, ["commit", "-qam", "updated"])).toBe(0);
-
-    yield* fs.writeFileString(join(installed, "SKILL.md"), original);
-    yield* fs.makeDirectory(repository, { recursive: true });
-    expect(yield* runGit(repository, ["init", "-q"])).toBe(0);
-    yield* fs.writeFileString(
-      join(repository, "skills-lock.json"),
-      JSON.stringify({
-        version: 1,
-        skills: {
-          review: {
-            source: "acme/skills",
-            sourceType: "github",
-            ref: "main",
-            skillPath: "skills/review/SKILL.md",
-            computedHash: hash(original),
-          },
-        },
-      }),
-    );
-    const home = join(root, "home");
-    const inventory = {
-      home: root,
-      configHome: join(root, "config"),
-      overrides: {
-        codex: [join(root, "inventory", "codex")],
-        "claude-code": [join(root, "inventory", "claude")],
-        opencode: [join(root, "inventory", "opencode")],
-        devin: [join(root, "inventory", "devin")],
-      },
-    };
-    for (const paths of Object.values(inventory.overrides))
-      for (const path of paths) yield* fs.makeDirectory(path, { recursive: true });
-    yield* Effect.gen(function* () {
-      const setup = {
-        libraryHome: home,
-        repositoryRoots: [work],
-        persistRoots: true,
-        probePath: "",
-        skillsStateHome: join(root, "state"),
-        inventory: inventory,
-      };
-      const preview = yield* runSetup(setup);
-      const candidate = preview.onboarding.candidates.find(
-        (item) => item.name === "review" && item.action === "import-observed-collection",
-      );
-      expect(candidate?.action).toBe("import-observed-collection");
-      if (!candidate || candidate.action !== "import-observed-collection") return;
-      yield* applySetupPlan(
-        { manage: { installOptions: inventory }, withStage: (_progress, stage) => stage },
-        {
-          setup,
-          planId: preview.onboarding.planId,
-          persistRoots: false,
-          imports: [{ name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey }],
-          bindings: [],
-          ownership: [],
-          removals: { entries: [], folders: [] },
-        },
-      );
-      const saved = yield* Effect.flatMap(Library.Service, (library) => library.read);
-      expect(saved._tag).toBe("Present");
-      if (saved._tag !== "Present") return;
-      const member = saved.state.skills[0]!;
-      const view = yield* openLibraryView(home);
-      expect(view.skillsShCollectionIds).toEqual([member.collection_id]);
-      const collection = {
-        ...saved.state.collections[0]!,
-        upstream: {
-          source_identity: {
-            kind: "well-known" as const,
-            locator: { value: "https://skills.example.test" },
-          },
-          tracking: { kind: "default" as const },
-          selection: { kind: "selected-skills" as const, names: [member.name] },
-          last_acquisition_id: saved.state.imports[0]!.import_id,
-        },
-      };
-      const localState = {
-        ...saved.state,
-        collections: [collection],
-        skills: [member],
-        imports: saved.state.imports.map((sourceImport) => ({
-          ...sourceImport,
-          lock_file_entries: sourceImport.lock_file_entries.map((lockFileEntry) => ({
-            ...lockFileEntry,
-            source_type: "github",
-            source_url: upstream,
-          })),
-        })),
-      };
-      const beforeState = yield* fs.readFileString(join(home, "state.json"));
-      const discoveryClient = HttpClient.make((request) => {
-        const digest = `sha256:${createHash("sha256").update(original).digest("hex")}`;
-        const body = request.url.endsWith("/.well-known/agent-skills/index.json")
-          ? JSON.stringify({
-              $schema: "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
-              skills: [
-                {
-                  name: "review",
-                  description: "Review.",
-                  type: "skill-md",
-                  url: "/review/SKILL.md",
-                  digest,
-                },
-              ],
-            })
-          : request.url.endsWith("/review/SKILL.md")
-            ? original
-            : "missing";
-        return Effect.succeed(
-          HttpClientResponse.fromWeb(
-            request,
-            new Response(body, { status: body === "missing" ? 404 : 200 }),
-          ),
-        );
-      });
-      const checked = yield* libraryView(localState, join(home, "originals"))
-        .checkSubjects(member.skill_id, {
-          inspectSource,
-        })
-        .pipe(Effect.provideService(HttpClient.HttpClient, discoveryClient));
-      expect(checked[0]?.skills_sh?.members).toEqual([
-        expect.objectContaining({
-          skill_name: "review",
-          status: "update-available",
-          baseline_commit: expect.stringMatching(/^[0-9a-f]{40}$/),
-          upstream_commit: expect.stringMatching(/^[0-9a-f]{40}$/),
-        }),
-      ]);
-      expect(checked[0]?.skills_sh?.members[0]?.baseline_commit).not.toBe(
-        checked[0]?.skills_sh?.members[0]?.upstream_commit,
-      );
-      const sourceImport = localState.imports[0]!;
-      const collectionVersion = localState.collection_versions[0]!;
-      type SavedRevision = LibraryState["imports"][number]["lock_file_entries"][number];
-      const checkLockEntry = (change: Partial<SavedRevision> = {}) => {
-        const state = {
-          ...localState,
-          imports: [
-            {
-              ...sourceImport,
-              lock_file_entries: sourceImport.lock_file_entries.map((lockFileEntry) => ({
-                ...lockFileEntry,
-                ...change,
-              })),
-            },
-          ],
-        };
-        return libraryView(state, join(home, "originals"))
-          .checkSubjects(member.skill_id, {
-            inspectSource: () => Effect.succeed({ snapshot_digest: collectionVersion.hash }),
-          })
-          .pipe(Effect.map((rows) => rows[0]?.skills_sh));
-      };
-      const process = yield* SourceProcess;
-      const inspectionFailure = systemError({
-        _tag: "PermissionDenied",
-        module: "ChildProcess",
-        method: "spawn",
-      });
-      for (const operation of ["ls-tree", "log"]) {
-        const unavailable = (yield* checkLockEntry().pipe(
-          Effect.provideService(SourceProcess, {
-            ...process,
-            output: (command, args, options) =>
-              args.includes(operation)
-                ? Effect.fail(inspectionFailure)
-                : process.output(command, args, options),
-          }),
-        ))?.members[0];
-        expect(unavailable).toMatchObject({
-          status: "unverifiable",
-          reason: {
-            _tag: "GitEvidenceUnavailable",
-            failure: {
-              _tag: "SkillsSh.GitInspectionFailed",
-              operation,
-              reason: { _tag: "ProcessFailed", failure: inspectionFailure },
-            },
-          },
-        });
-        if (
-          unavailable?.reason?._tag === "GitEvidenceUnavailable" &&
-          unavailable.reason.failure.reason._tag === "ProcessFailed"
-        )
-          expect(unavailable.reason.failure.reason.failure).toBe(inspectionFailure);
-      }
-      const nonzero = (yield* checkLockEntry().pipe(
-        Effect.provideService(SourceProcess, {
-          ...process,
-          output: (command, args, options) =>
-            args.includes("ls-tree")
-              ? Effect.succeed({
-                  exitCode: 128,
-                  stdout: new Uint8Array(),
-                  stderr: "fatal: corrupt tree",
-                })
-              : process.output(command, args, options),
-        }),
-      ))?.members[0];
-      expect(nonzero).toMatchObject({
-        status: "unverifiable",
-        reason: {
-          _tag: "GitEvidenceUnavailable",
-          failure: {
-            operation: "ls-tree",
-            reason: {
-              _tag: "ExitCode",
-              exitCode: 128,
-              stderr: "fatal: corrupt tree",
-            },
-          },
-        },
-      });
-      const retainedFolder = join(
-        collectionVersionPath(join(home, "originals"), collectionVersion.hash),
-        "skills",
-        "review",
-      );
-      const readFailure = systemError({
-        _tag: "PermissionDenied",
-        module: "FileSystem",
-        method: "readDirectory",
-        pathOrDescriptor: retainedFolder,
-      });
-      // Simulate read access disappearing after Library's initial integrity check.
-      let failRetainedReads = false;
-      const unreadable = (yield* checkLockEntry().pipe(
-        Effect.provideService(SourceProcess, {
-          ...process,
-          output: (command, args, options) => {
-            if (args.includes("ls-tree")) failRetainedReads = true;
-            return process.output(command, args, options);
-          },
-        }),
-        Effect.provideService(FileSystem.FileSystem, {
-          ...fs,
-          readDirectory: (path) =>
-            failRetainedReads && path === retainedFolder
-              ? Effect.fail(readFailure)
-              : fs.readDirectory(path),
-        }),
-      ))?.members[0];
-      expect(unreadable?.reason?._tag).toBe("OriginalBytesUnavailable");
-      if (unreadable?.reason?._tag === "OriginalBytesUnavailable")
-        expect(unreadable.reason.failures[0]).toBe(readFailure);
-      expect(
-        (yield* checkLockEntry({ source_url: undefined, source_type: "well-known" }))?.members[0],
-      ).toMatchObject({
-        status: "not-applicable",
-        reason: { _tag: "WellKnownSource" },
-      });
-      expect((yield* checkLockEntry({ source_url: undefined }))?.members[0]).toMatchObject({
-        status: "unverifiable",
-        reason: { _tag: "GitSourceMissing" },
-      });
-      const storageFailure = systemError({
-        _tag: "PermissionDenied",
-        module: "FileSystem",
-        method: "makeDirectory",
-      });
-      const mirrorUnavailable = (yield* checkLockEntry().pipe(
-        Effect.provideService(FileSystem.FileSystem, {
-          ...fs,
-          makeDirectory: () => Effect.fail(storageFailure),
-        }),
-      ))?.members[0];
-      expect(mirrorUnavailable?.reason?._tag).toBe("MirrorUnavailable");
-      if (mirrorUnavailable?.reason?._tag === "MirrorUnavailable")
-        expect(mirrorUnavailable.reason.failure).toBe(storageFailure);
-      expect((yield* checkLockEntry({ skill_path: undefined }))?.members[0]?.reason).toEqual({
-        _tag: "LockIncomplete",
-        missing: ["skill-path"],
-      });
-      expect(
-        (yield* checkLockEntry({ computed_hash: undefined, skill_folder_hash: undefined }))
-          ?.members[0]?.reason,
-      ).toEqual({
-        _tag: "LockIncomplete",
-        missing: ["hash"],
-      });
-      const originalCommit = checked[0]!.skills_sh!.members[0]!.baseline_commit!;
-      const originalTree = checked[0]!.skills_sh!.members[0]!.baseline_tree!;
-      expect((yield* checkLockEntry({ ref: originalCommit }))?.members[0]).toMatchObject({
-        status: "current",
-        baseline_commit: originalCommit,
-        baseline_verification: "lock+original-bytes",
-      });
-      const treeOnly = (yield* checkLockEntry({
-        computed_hash: undefined,
-        skill_folder_hash: originalTree,
-      }))?.members[0];
-      expect(treeOnly).toMatchObject({
-        status: "unverifiable",
-        hash_kind: "skillFolderHash",
-        baseline_commit: originalCommit,
-        baseline_verification: "lock-only",
-        reason: { _tag: "TreeHashCannotVerifyOriginalBytes" },
-      });
-      expect((yield* checkLockEntry({ computed_hash: "unknown" }))?.members[0]).toMatchObject({
-        status: "differs-from-lock-and-upstream",
-      });
-      // The next check must fetch the existing mirror, rather than inspecting its old tip.
-      yield* fs.writeFileString(join(upstreamSkill, "SKILL.md"), original);
-      expect(yield* runGit(upstream, ["commit", "-qam", "restored"])).toBe(0);
-      expect((yield* checkLockEntry({ computed_hash: "unknown" }))?.members[0]).toMatchObject({
-        status: "lock-stale",
-      });
-      expect((yield* checkLockEntry())?.members[0]).toMatchObject({
-        status: "current",
-        baseline_verification: "lock+original-bytes",
-      });
-      expect(yield* runGit(upstream, ["rm", "-q", "skills/review/SKILL.md"])).toBe(0);
-      expect(yield* runGit(upstream, ["commit", "-qm", "removed"])).toBe(0);
-      expect((yield* checkLockEntry())?.members[0]).toMatchObject({
-        status: "removed-upstream",
-        baseline_verification: "lock+original-bytes",
-      });
-      expect((yield* checkLockEntry({ computed_hash: "unknown" }))?.members[0]).toMatchObject({
-        status: "unverifiable",
-        reason: { _tag: "BaselineNotFound", hashKind: "computedHash", ref: "main" },
-      });
-      expect((yield* checkLockEntry({ ref: "missing-ref" }))?.members[0]).toMatchObject({
-        status: "unverifiable",
-        reason: {
-          _tag: "RefUnavailable",
-          ref: "missing-ref",
-          failure: {
-            _tag: "SkillsSh.GitInspectionFailed",
-            operation: "rev-parse",
-            reason: { _tag: "ExitCode" },
-          },
-        },
-      });
-      expect(
-        (yield* checkLockEntry({ source_url: join(root, "missing-source") }))?.members[0],
-      ).toMatchObject({
-        status: "unverifiable",
-        reason: {
-          _tag: "MirrorUnavailable",
-          failure: {
-            _tag: "SkillsSh.GitInspectionFailed",
-            operation: "clone",
-            reason: { _tag: "ExitCode" },
-          },
-        },
-      });
-      // Checking only reports: the Library it read is left exactly as it was.
-      expect(yield* fs.readFileString(join(home, "state.json"))).toBe(beforeState);
-      expect(yield* fs.readFileString(join(installed, "SKILL.md"))).toBe(original);
-    }).pipe(
-      Effect.provide(
-        Library.layer({ home, roots: testRoots(home) }).pipe(
-          Layer.provideMerge(skitConfigurationLayer(home)),
-        ),
-      ),
-    );
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
 it.effect("hash evidence retains native read failures instead of manufacturing a mismatch", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -432,3 +49,394 @@ it.effect("hash evidence retains native read failures instead of manufacturing a
     if (inspected._tag === "Failure") expect(inspected.failure[0]).toBe(failure);
   }).pipe(Effect.provide(skitLayer)),
 );
+
+describe("skit check", () => {
+  describe("Check compares skills.sh sources with their Git history without saving Library changes.", () => {
+    it.effect("checks skills.sh status against real Git history without saving Library state", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-skills-sh-check-" });
+        const upstream = join(root, "upstream");
+        const work = join(root, "work");
+        const repository = join(work, "project");
+        const installed = join(repository, ".agents", "skills", "review");
+        const upstreamSkill = join(upstream, "skills", "review");
+        yield* fs.makeDirectory(installed, { recursive: true });
+        yield* fs.makeDirectory(upstreamSkill, { recursive: true });
+        const runGit = (cwd: string, args: readonly string[]) =>
+          spawner.exitCode(ChildProcess.make("git", [...args], { cwd }));
+        expect(yield* runGit(upstream, ["init", "-q", "-b", "main"])).toBe(0);
+        expect(yield* runGit(upstream, ["config", "user.email", "test@example.com"])).toBe(0);
+        expect(yield* runGit(upstream, ["config", "user.name", "Test"])).toBe(0);
+        const original = "---\nname: review\ndescription: Review.\n---\n\n# Original\n";
+        const updated = "---\nname: review\ndescription: Review.\n---\n\n# Updated\n";
+        yield* fs.writeFileString(join(upstreamSkill, "SKILL.md"), original);
+        expect(yield* runGit(upstream, ["add", "skills/review/SKILL.md"])).toBe(0);
+        expect(yield* runGit(upstream, ["commit", "-q", "-m", "original"])).toBe(0);
+        yield* fs.writeFileString(join(upstreamSkill, "SKILL.md"), updated);
+        expect(yield* runGit(upstream, ["commit", "-qam", "updated"])).toBe(0);
+
+        yield* fs.writeFileString(join(installed, "SKILL.md"), original);
+        yield* fs.makeDirectory(repository, { recursive: true });
+        expect(yield* runGit(repository, ["init", "-q"])).toBe(0);
+        yield* fs.writeFileString(
+          join(repository, "skills-lock.json"),
+          JSON.stringify({
+            version: 1,
+            skills: {
+              review: {
+                source: "acme/skills",
+                sourceType: "github",
+                ref: "main",
+                skillPath: "skills/review/SKILL.md",
+                computedHash: hash(original),
+              },
+            },
+          }),
+        );
+        const home = join(root, "home");
+        const inventory = {
+          home: root,
+          configHome: join(root, "config"),
+          overrides: {
+            codex: [join(root, "inventory", "codex")],
+            "claude-code": [join(root, "inventory", "claude")],
+            opencode: [join(root, "inventory", "opencode")],
+            devin: [join(root, "inventory", "devin")],
+          },
+        };
+        for (const paths of Object.values(inventory.overrides))
+          for (const path of paths) yield* fs.makeDirectory(path, { recursive: true });
+        yield* Effect.gen(function* () {
+          const setup = {
+            libraryHome: home,
+            repositoryRoots: [work],
+            persistRoots: true,
+            probePath: "",
+            skillsStateHome: join(root, "state"),
+            inventory: inventory,
+          };
+          const preview = yield* runSetup(setup);
+          const candidate = preview.onboarding.candidates.find(
+            (item) => item.name === "review" && item.action === "import-observed-collection",
+          );
+          expect(candidate?.action).toBe("import-observed-collection");
+          if (!candidate || candidate.action !== "import-observed-collection") return;
+          yield* applySetupPlan(
+            { manage: { installOptions: inventory }, withStage: (_progress, stage) => stage },
+            {
+              setup,
+              planId: preview.onboarding.planId,
+              persistRoots: false,
+              imports: [
+                { name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey },
+              ],
+              bindings: [],
+              ownership: [],
+              removals: { entries: [], folders: [] },
+            },
+          );
+          const saved = yield* Effect.flatMap(Library.Service, (library) => library.read);
+          expect(saved._tag).toBe("Present");
+          if (saved._tag !== "Present") return;
+          const member = saved.state.skills[0]!;
+          const view = yield* openLibraryView(home);
+          expect(view.skillsShCollectionIds).toEqual([member.collection_id]);
+          const collection = {
+            ...saved.state.collections[0]!,
+            upstream: {
+              source_identity: {
+                kind: "well-known" as const,
+                locator: { value: "https://skills.example.test" },
+              },
+              tracking: { kind: "default" as const },
+              selection: { kind: "selected-skills" as const, names: [member.name] },
+              last_acquisition_id: saved.state.imports[0]!.import_id,
+            },
+          };
+          const localState = {
+            ...saved.state,
+            collections: [collection],
+            skills: [member],
+            imports: saved.state.imports.map((sourceImport) => ({
+              ...sourceImport,
+              lock_file_entries: sourceImport.lock_file_entries.map((lockFileEntry) => ({
+                ...lockFileEntry,
+                source_type: "github",
+                source_url: upstream,
+              })),
+            })),
+          };
+          const beforeState = yield* fs.readFileString(join(home, "state.json"));
+          const discoveryClient = HttpClient.make((request) => {
+            const digest = `sha256:${createHash("sha256").update(original).digest("hex")}`;
+            const body = request.url.endsWith("/.well-known/agent-skills/index.json")
+              ? JSON.stringify({
+                  $schema: "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+                  skills: [
+                    {
+                      name: "review",
+                      description: "Review.",
+                      type: "skill-md",
+                      url: "/review/SKILL.md",
+                      digest,
+                    },
+                  ],
+                })
+              : request.url.endsWith("/review/SKILL.md")
+                ? original
+                : "missing";
+            return Effect.succeed(
+              HttpClientResponse.fromWeb(
+                request,
+                new Response(body, { status: body === "missing" ? 404 : 200 }),
+              ),
+            );
+          });
+          const checked = yield* libraryView(localState, join(home, "originals"))
+            .checkSubjects(member.skill_id, {
+              inspectSource,
+            })
+            .pipe(Effect.provideService(HttpClient.HttpClient, discoveryClient));
+          expect(checked[0]?.skills_sh?.members).toEqual([
+            expect.objectContaining({
+              skill_name: "review",
+              status: "update-available",
+              baseline_commit: expect.stringMatching(/^[0-9a-f]{40}$/),
+              upstream_commit: expect.stringMatching(/^[0-9a-f]{40}$/),
+            }),
+          ]);
+          expect(checked[0]?.skills_sh?.members[0]?.baseline_commit).not.toBe(
+            checked[0]?.skills_sh?.members[0]?.upstream_commit,
+          );
+          const sourceImport = localState.imports[0]!;
+          const collectionVersion = localState.collection_versions[0]!;
+          type SavedRevision = LibraryState["imports"][number]["lock_file_entries"][number];
+          const checkLockEntry = (change: Partial<SavedRevision> = {}) => {
+            const state = {
+              ...localState,
+              imports: [
+                {
+                  ...sourceImport,
+                  lock_file_entries: sourceImport.lock_file_entries.map((lockFileEntry) => ({
+                    ...lockFileEntry,
+                    ...change,
+                  })),
+                },
+              ],
+            };
+            return libraryView(state, join(home, "originals"))
+              .checkSubjects(member.skill_id, {
+                inspectSource: () => Effect.succeed({ snapshot_digest: collectionVersion.hash }),
+              })
+              .pipe(Effect.map((rows) => rows[0]?.skills_sh));
+          };
+          const process = yield* SourceProcess;
+          const inspectionFailure = systemError({
+            _tag: "PermissionDenied",
+            module: "ChildProcess",
+            method: "spawn",
+          });
+          for (const operation of ["ls-tree", "log"]) {
+            const unavailable = (yield* checkLockEntry().pipe(
+              Effect.provideService(SourceProcess, {
+                ...process,
+                output: (command, args, options) =>
+                  args.includes(operation)
+                    ? Effect.fail(inspectionFailure)
+                    : process.output(command, args, options),
+              }),
+            ))?.members[0];
+            expect(unavailable).toMatchObject({
+              status: "unverifiable",
+              reason: {
+                _tag: "GitEvidenceUnavailable",
+                failure: {
+                  _tag: "SkillsSh.GitInspectionFailed",
+                  operation,
+                  reason: { _tag: "ProcessFailed", failure: inspectionFailure },
+                },
+              },
+            });
+            if (
+              unavailable?.reason?._tag === "GitEvidenceUnavailable" &&
+              unavailable.reason.failure.reason._tag === "ProcessFailed"
+            )
+              expect(unavailable.reason.failure.reason.failure).toBe(inspectionFailure);
+          }
+          const nonzero = (yield* checkLockEntry().pipe(
+            Effect.provideService(SourceProcess, {
+              ...process,
+              output: (command, args, options) =>
+                args.includes("ls-tree")
+                  ? Effect.succeed({
+                      exitCode: 128,
+                      stdout: new Uint8Array(),
+                      stderr: "fatal: corrupt tree",
+                    })
+                  : process.output(command, args, options),
+            }),
+          ))?.members[0];
+          expect(nonzero).toMatchObject({
+            status: "unverifiable",
+            reason: {
+              _tag: "GitEvidenceUnavailable",
+              failure: {
+                operation: "ls-tree",
+                reason: {
+                  _tag: "ExitCode",
+                  exitCode: 128,
+                  stderr: "fatal: corrupt tree",
+                },
+              },
+            },
+          });
+          const retainedFolder = join(
+            collectionVersionPath(join(home, "originals"), collectionVersion.hash),
+            "skills",
+            "review",
+          );
+          const readFailure = systemError({
+            _tag: "PermissionDenied",
+            module: "FileSystem",
+            method: "readDirectory",
+            pathOrDescriptor: retainedFolder,
+          });
+          // Simulate read access disappearing after Library's initial integrity check.
+          let failRetainedReads = false;
+          const unreadable = (yield* checkLockEntry().pipe(
+            Effect.provideService(SourceProcess, {
+              ...process,
+              output: (command, args, options) => {
+                if (args.includes("ls-tree")) failRetainedReads = true;
+                return process.output(command, args, options);
+              },
+            }),
+            Effect.provideService(FileSystem.FileSystem, {
+              ...fs,
+              readDirectory: (path) =>
+                failRetainedReads && path === retainedFolder
+                  ? Effect.fail(readFailure)
+                  : fs.readDirectory(path),
+            }),
+          ))?.members[0];
+          expect(unreadable?.reason?._tag).toBe("OriginalBytesUnavailable");
+          if (unreadable?.reason?._tag === "OriginalBytesUnavailable")
+            expect(unreadable.reason.failures[0]).toBe(readFailure);
+          expect(
+            (yield* checkLockEntry({ source_url: undefined, source_type: "well-known" }))
+              ?.members[0],
+          ).toMatchObject({
+            status: "not-applicable",
+            reason: { _tag: "WellKnownSource" },
+          });
+          expect((yield* checkLockEntry({ source_url: undefined }))?.members[0]).toMatchObject({
+            status: "unverifiable",
+            reason: { _tag: "GitSourceMissing" },
+          });
+          const storageFailure = systemError({
+            _tag: "PermissionDenied",
+            module: "FileSystem",
+            method: "makeDirectory",
+          });
+          const mirrorUnavailable = (yield* checkLockEntry().pipe(
+            Effect.provideService(FileSystem.FileSystem, {
+              ...fs,
+              makeDirectory: () => Effect.fail(storageFailure),
+            }),
+          ))?.members[0];
+          expect(mirrorUnavailable?.reason?._tag).toBe("MirrorUnavailable");
+          if (mirrorUnavailable?.reason?._tag === "MirrorUnavailable")
+            expect(mirrorUnavailable.reason.failure).toBe(storageFailure);
+          expect((yield* checkLockEntry({ skill_path: undefined }))?.members[0]?.reason).toEqual({
+            _tag: "LockIncomplete",
+            missing: ["skill-path"],
+          });
+          expect(
+            (yield* checkLockEntry({ computed_hash: undefined, skill_folder_hash: undefined }))
+              ?.members[0]?.reason,
+          ).toEqual({
+            _tag: "LockIncomplete",
+            missing: ["hash"],
+          });
+          const originalCommit = checked[0]!.skills_sh!.members[0]!.baseline_commit!;
+          const originalTree = checked[0]!.skills_sh!.members[0]!.baseline_tree!;
+          expect((yield* checkLockEntry({ ref: originalCommit }))?.members[0]).toMatchObject({
+            status: "current",
+            baseline_commit: originalCommit,
+            baseline_verification: "lock+original-bytes",
+          });
+          const treeOnly = (yield* checkLockEntry({
+            computed_hash: undefined,
+            skill_folder_hash: originalTree,
+          }))?.members[0];
+          expect(treeOnly).toMatchObject({
+            status: "unverifiable",
+            hash_kind: "skillFolderHash",
+            baseline_commit: originalCommit,
+            baseline_verification: "lock-only",
+            reason: { _tag: "TreeHashCannotVerifyOriginalBytes" },
+          });
+          expect((yield* checkLockEntry({ computed_hash: "unknown" }))?.members[0]).toMatchObject({
+            status: "differs-from-lock-and-upstream",
+          });
+          // The next check must fetch the existing mirror, rather than inspecting its old tip.
+          yield* fs.writeFileString(join(upstreamSkill, "SKILL.md"), original);
+          expect(yield* runGit(upstream, ["commit", "-qam", "restored"])).toBe(0);
+          expect((yield* checkLockEntry({ computed_hash: "unknown" }))?.members[0]).toMatchObject({
+            status: "lock-stale",
+          });
+          expect((yield* checkLockEntry())?.members[0]).toMatchObject({
+            status: "current",
+            baseline_verification: "lock+original-bytes",
+          });
+          expect(yield* runGit(upstream, ["rm", "-q", "skills/review/SKILL.md"])).toBe(0);
+          expect(yield* runGit(upstream, ["commit", "-qm", "removed"])).toBe(0);
+          expect((yield* checkLockEntry())?.members[0]).toMatchObject({
+            status: "removed-upstream",
+            baseline_verification: "lock+original-bytes",
+          });
+          expect((yield* checkLockEntry({ computed_hash: "unknown" }))?.members[0]).toMatchObject({
+            status: "unverifiable",
+            reason: { _tag: "BaselineNotFound", hashKind: "computedHash", ref: "main" },
+          });
+          expect((yield* checkLockEntry({ ref: "missing-ref" }))?.members[0]).toMatchObject({
+            status: "unverifiable",
+            reason: {
+              _tag: "RefUnavailable",
+              ref: "missing-ref",
+              failure: {
+                _tag: "SkillsSh.GitInspectionFailed",
+                operation: "rev-parse",
+                reason: { _tag: "ExitCode" },
+              },
+            },
+          });
+          expect(
+            (yield* checkLockEntry({ source_url: join(root, "missing-source") }))?.members[0],
+          ).toMatchObject({
+            status: "unverifiable",
+            reason: {
+              _tag: "MirrorUnavailable",
+              failure: {
+                _tag: "SkillsSh.GitInspectionFailed",
+                operation: "clone",
+                reason: { _tag: "ExitCode" },
+              },
+            },
+          });
+          // Checking only reports: the Library it read is left exactly as it was.
+          expect(yield* fs.readFileString(join(home, "state.json"))).toBe(beforeState);
+          expect(yield* fs.readFileString(join(installed, "SKILL.md"))).toBe(original);
+        }).pipe(
+          Effect.provide(
+            Library.layer({ home, roots: testRoots(home) }).pipe(
+              Layer.provideMerge(skitConfigurationLayer(home)),
+            ),
+          ),
+        );
+      }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    );
+  });
+});

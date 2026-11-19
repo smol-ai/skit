@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import { assert, it } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Option, Schema } from "effect";
 import { join } from "node:path";
@@ -292,82 +293,6 @@ it.effect(
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
-for (const readable of [true, false])
-  it.effect(
-    `approved duplicates ${readable ? "move to the previewed recovery directory" : "stay when their harness cannot read the replacement"}`,
-    () =>
-      Effect.gen(function* () {
-        const f = yield* fixture;
-        const legacy = join(f.root, "opencode-skills");
-        const duplicate = join(legacy, "review");
-        yield* f.fs.makeDirectory(duplicate, { recursive: true });
-        yield* f.fs.writeFileString(join(duplicate, "SKILL.md"), f.bytes);
-        const observed = yield* readPathEvidence(duplicate);
-        if (Option.isNone(observed) || observed.value._tag !== "Directory")
-          return yield* Effect.die("Expected duplicate");
-        const copy = observed.value;
-        const intent: Library.ManageIntent = {
-          _tag: "Manage",
-          mode: "new",
-          selections: [
-            {
-              ...f.intent.selections[0],
-              mode: "new",
-              importFrom: { _tag: "Import", request: f.request },
-              currentHash: Option.some(f.source.treeHash),
-              equalCopies: [],
-              ownership: Option.some({
-                harnesses: ["codex"],
-                machineId: Option.some(makeMachineId()),
-              }),
-              duplicates: Option.some("preserve-duplicates"),
-              approvedCopies: [copy],
-            },
-          ],
-        };
-        const config: Library.Config = {
-          home: f.home,
-          roots: {
-            home: f.root,
-            configHome: join(f.root, "config"),
-            overrides: { codex: [f.agents], opencode: readable ? [f.agents, legacy] : [legacy] },
-          },
-        };
-        yield* Effect.gen(function* () {
-          const library = yield* Library.Service;
-          const plan = yield* library.plan(intent, { base: yield* library.read });
-          const backup = plan.change.selections[0].backup;
-          if (Option.isNone(backup)) return yield* Effect.die("Expected backup preview");
-          assert.isFalse(yield* f.fs.exists(backup.value.recoveryDirectory));
-          assert.strictEqual(yield* f.fs.readFileString(join(duplicate, "SKILL.md")), f.bytes);
-          const outcome = yield* library.apply({ _tag: "Apply", plan: yield* portable(plan) });
-          if (readable) {
-            assert.deepStrictEqual(outcome.result.recoveryDirectories, [
-              backup.value.recoveryDirectory,
-            ]);
-            assert.isFalse(yield* f.fs.exists(duplicate));
-            assert.strictEqual(
-              yield* f.fs.readFileString(
-                join(backup.value.recoveryDirectory, "1-review", "SKILL.md"),
-              ),
-              f.bytes,
-            );
-          } else {
-            assert.deepStrictEqual(outcome.result.recoveryDirectories, []);
-            assert.isTrue(
-              outcome.result.warnings.some(
-                (warning) => warning.reason._tag === "ReplacementUnreadable",
-              ),
-            );
-            assert.isFalse(yield* f.fs.exists(backup.value.recoveryDirectory));
-            assert.strictEqual(yield* f.fs.readFileString(join(duplicate, "SKILL.md")), f.bytes);
-          }
-          assert.strictEqual(yield* f.fs.readFileString(join(f.copy, "SKILL.md")), f.bytes);
-          assert.isTrue(yield* f.fs.exists(join(f.copy, ".skit-ownership.json")));
-        }).pipe(Effect.provide(Library.layer(config)));
-      }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-  );
-
 it.effect(
   "a failure after recording returns the operation id and leaves completed imports inspectable",
   () =>
@@ -503,3 +428,97 @@ it.effect("a newly introduced duplicate invalidates Manage without moving either
     }).pipe(Effect.provide(Library.layer(config)));
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
+
+describe("skit setup", () => {
+  describe("Managing selected copies", () => {
+    describe("Setup saves a recoverable copy before replacing an approved duplicate.", () => {
+      for (const readable of [true, false])
+        it.effect(
+          `approved duplicates ${readable ? "move to the previewed recovery directory" : "stay when their harness cannot read the replacement"}`,
+          () =>
+            Effect.gen(function* () {
+              const f = yield* fixture;
+              const legacy = join(f.root, "opencode-skills");
+              const duplicate = join(legacy, "review");
+              yield* f.fs.makeDirectory(duplicate, { recursive: true });
+              yield* f.fs.writeFileString(join(duplicate, "SKILL.md"), f.bytes);
+              const observed = yield* readPathEvidence(duplicate);
+              if (Option.isNone(observed) || observed.value._tag !== "Directory")
+                return yield* Effect.die("Expected duplicate");
+              const copy = observed.value;
+              const intent: Library.ManageIntent = {
+                _tag: "Manage",
+                mode: "new",
+                selections: [
+                  {
+                    ...f.intent.selections[0],
+                    mode: "new",
+                    importFrom: { _tag: "Import", request: f.request },
+                    currentHash: Option.some(f.source.treeHash),
+                    equalCopies: [],
+                    ownership: Option.some({
+                      harnesses: ["codex"],
+                      machineId: Option.some(makeMachineId()),
+                    }),
+                    duplicates: Option.some("preserve-duplicates"),
+                    approvedCopies: [copy],
+                  },
+                ],
+              };
+              const config: Library.Config = {
+                home: f.home,
+                roots: {
+                  home: f.root,
+                  configHome: join(f.root, "config"),
+                  overrides: {
+                    codex: [f.agents],
+                    opencode: readable ? [f.agents, legacy] : [legacy],
+                  },
+                },
+              };
+              yield* Effect.gen(function* () {
+                const library = yield* Library.Service;
+                const plan = yield* library.plan(intent, { base: yield* library.read });
+                const backup = plan.change.selections[0].backup;
+                if (Option.isNone(backup)) return yield* Effect.die("Expected backup preview");
+                assert.isFalse(yield* f.fs.exists(backup.value.recoveryDirectory));
+                assert.strictEqual(
+                  yield* f.fs.readFileString(join(duplicate, "SKILL.md")),
+                  f.bytes,
+                );
+                const outcome = yield* library.apply({
+                  _tag: "Apply",
+                  plan: yield* portable(plan),
+                });
+                if (readable) {
+                  assert.deepStrictEqual(outcome.result.recoveryDirectories, [
+                    backup.value.recoveryDirectory,
+                  ]);
+                  assert.isFalse(yield* f.fs.exists(duplicate));
+                  assert.strictEqual(
+                    yield* f.fs.readFileString(
+                      join(backup.value.recoveryDirectory, "1-review", "SKILL.md"),
+                    ),
+                    f.bytes,
+                  );
+                } else {
+                  assert.deepStrictEqual(outcome.result.recoveryDirectories, []);
+                  assert.isTrue(
+                    outcome.result.warnings.some(
+                      (warning) => warning.reason._tag === "ReplacementUnreadable",
+                    ),
+                  );
+                  assert.isFalse(yield* f.fs.exists(backup.value.recoveryDirectory));
+                  assert.strictEqual(
+                    yield* f.fs.readFileString(join(duplicate, "SKILL.md")),
+                    f.bytes,
+                  );
+                }
+                assert.strictEqual(yield* f.fs.readFileString(join(f.copy, "SKILL.md")), f.bytes);
+                assert.isTrue(yield* f.fs.exists(join(f.copy, ".skit-ownership.json")));
+              }).pipe(Effect.provide(Library.layer(config)));
+            }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+        );
+    });
+  });
+});

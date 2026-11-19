@@ -1,4 +1,4 @@
-import { expect, it } from "@effect/vitest";
+import { describe, expect, it } from "@effect/vitest";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -37,30 +37,6 @@ it.effect("ignored edits neither enter raw history nor record a new revision", (
       expect(versions).toHaveLength(1);
       expect(versions[0]?.tree.some((entry) => entry.path === "private.local")).toBe(false);
     }).pipe(Effect.provide(authorLayer(world.a.home)));
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
-
-it.effect("backs up invalid descriptor bytes locally and online without refusing sync", () =>
-  Effect.gen(function* () {
-    const world = yield* makeAuthorSyncWorld();
-    yield* world.connect();
-    const remoteBefore = (yield* world.server.currentHistory()).length;
-    yield* world.a.edit("skit.json", "{unfinished descriptor", "remote");
-    expect((yield* world.a.sync()).status).toBe("pushed");
-    expect(yield* world.missing(yield* world.copies())).toEqual([]);
-    expect((yield* world.server.currentHistory()).length).toBe(remoteBefore + 1);
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
-
-it.effect("a preview saves what it observed but sends nothing", () =>
-  Effect.gen(function* () {
-    const world = yield* makeAuthorSyncWorld();
-    yield* world.connect();
-    const remoteBefore = yield* world.server.revisions();
-    yield* world.a.edit("notes/a.txt", "preview only\n", "local-history");
-    expect(yield* world.a.preview()).toMatchObject({ status: "ready", action: "push" });
-    expect(yield* world.missing(yield* world.copies())).toEqual([]);
-    expect(yield* world.server.revisions()).toEqual(remoteBefore);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
@@ -171,17 +147,6 @@ it.effect(
     }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("storage failure stops sync before contacting the remote", () =>
-  Effect.gen(function* () {
-    const world = yield* makeAuthorSyncWorld();
-    const fs = yield* FileSystem.FileSystem;
-    yield* fs.writeFileString(join(world.a.home, "history"), "occupied");
-    expect(Result.isFailure(yield* Effect.result(world.a.sync(true)))).toBe(true);
-    expect(yield* world.server.events()).toEqual([]);
-    expect(yield* world.server.revisions()).toEqual([]);
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
-
 it.effect("rejects a history home inside its workspace before creating it", () =>
   Effect.gen(function* () {
     const world = yield* makeAuthorSyncWorld();
@@ -191,7 +156,10 @@ it.effect("rejects a history home inside its workspace before creating it", () =
       yield* Effect.flip(refreshWorkspace(world.a.workspace)).pipe(
         Effect.provide(authorLayer(home)),
       ),
-    ).toMatchObject({ _tag: "AuthorHistoryInvalid" });
+    ).toMatchObject({
+      _tag: "AuthorHistoryInvalid",
+      reason: { _tag: "HistoryInsideWorkspace", workspace: world.a.workspace, resolved: false },
+    });
     expect(yield* fs.exists(home)).toBe(false);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
@@ -206,7 +174,10 @@ it.effect("rejects a history directory symlink into its workspace", () =>
       yield* Effect.flip(refreshWorkspace(world.a.workspace)).pipe(
         Effect.provide(authorLayer(world.a.home)),
       ),
-    ).toMatchObject({ _tag: "AuthorHistoryInvalid" });
+    ).toMatchObject({
+      _tag: "AuthorHistoryInvalid",
+      reason: { _tag: "HistoryInsideWorkspace", workspace: world.a.workspace, resolved: true },
+    });
     expect((yield* fs.readDirectory(world.a.workspace)).sort()).toEqual(before);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
@@ -223,7 +194,7 @@ it.effect(
       yield* fs.symlink(target, join(directory, "journal.sqlite"));
       expect(
         yield* Effect.flip(refreshWorkspace(a.workspace)).pipe(Effect.provide(authorLayer(a.home))),
-      ).toMatchObject({ _tag: "AuthorHistoryInvalid" });
+      ).toMatchObject({ _tag: "AuthorHistoryInvalid", reason: { _tag: "JournalRedirected" } });
       expect(yield* fs.exists(target)).toBe(false);
     }).pipe(Effect.provide(testPlatformLayer)),
 );
@@ -291,3 +262,48 @@ it.effect("capture reports shared HomeBusy when machine identity cannot be writt
     expect(yield* fs.exists(join(home, "state.json"))).toBe(false);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
+
+describe("skit author sync", () => {
+  describe("Connecting and previewing", () => {
+    describe("Preview leaves the proposed sync unapplied.", () => {
+      it.effect("a preview saves what it observed but sends nothing", () =>
+        Effect.gen(function* () {
+          const world = yield* makeAuthorSyncWorld();
+          yield* world.connect();
+          const remoteBefore = yield* world.server.revisions();
+          yield* world.a.edit("notes/a.txt", "preview only\n", "local-history");
+          expect(yield* world.a.preview()).toMatchObject({ status: "ready", action: "push" });
+          expect(yield* world.missing(yield* world.copies())).toEqual([]);
+          expect(yield* world.server.revisions()).toEqual(remoteBefore);
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+    });
+  });
+  describe("Keeping saved work", () => {
+    describe("Invalid skill content can still sync.", () => {
+      it.effect("backs up invalid descriptor bytes locally and online without refusing sync", () =>
+        Effect.gen(function* () {
+          const world = yield* makeAuthorSyncWorld();
+          yield* world.connect();
+          const remoteBefore = (yield* world.server.currentHistory()).length;
+          yield* world.a.edit("skit.json", "{unfinished descriptor", "remote");
+          expect((yield* world.a.sync()).status).toBe("pushed");
+          expect(yield* world.missing(yield* world.copies())).toEqual([]);
+          expect((yield* world.server.currentHistory()).length).toBe(remoteBefore + 1);
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+    });
+    describe("Sync leaves the Registry’s current revision unchanged if it cannot save its progress on this device.", () => {
+      it.effect("storage failure stops sync before contacting the remote", () =>
+        Effect.gen(function* () {
+          const world = yield* makeAuthorSyncWorld();
+          const fs = yield* FileSystem.FileSystem;
+          yield* fs.writeFileString(join(world.a.home, "history"), "occupied");
+          expect(Result.isFailure(yield* Effect.result(world.a.sync(true)))).toBe(true);
+          expect(yield* world.server.events()).toEqual([]);
+          expect(yield* world.server.revisions()).toEqual([]);
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+    });
+  });
+});

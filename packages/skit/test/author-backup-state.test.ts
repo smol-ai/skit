@@ -4,6 +4,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Option } from "effect";
 import { systemError } from "effect/PlatformError";
 import { join } from "node:path";
+import { backupAuthorHistory, backupAuthorWorkspace } from "../src/author/backup.js";
 import { AuthorHistory } from "../src/author/history.js";
 import { AuthorWorkspace, WorkspaceId, type WorkspaceLease } from "../src/author/workspace.js";
 import * as Sync from "../src/sync/sync.js";
@@ -70,7 +71,10 @@ it.effect("backup checkpoints advance contiguous A-B-A observations and preserve
       const before = yield* f.fs.readFileString(f.bindings);
       expect(
         yield* Effect.flip(history.backupState.save(lease, key, { from: null, to: b.id })),
-      ).toMatchObject({ _tag: "AuthorHistoryInvalid" });
+      ).toMatchObject({
+        _tag: "AuthorHistoryInvalid",
+        reason: { _tag: "BackupParentMismatch", expected: null, actual: [a.id] },
+      });
       expect(yield* f.fs.readFileString(f.bindings)).toBe(before);
       yield* history.backupState.save(lease, key, { from: null, to: a.id });
       yield* history.backupState.save(lease, key, { from: a.id, to: b.id });
@@ -286,3 +290,66 @@ test("sync checkpoint types exclude null-base completion and caller-selected rec
     };
   }>();
 });
+
+it.effect("backup refuses BackupDisconnected without uploading or saving an acknowledgement", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const posts: string[] = [];
+    yield* Effect.gen(function* () {
+      expect(
+        yield* Effect.flip(
+          backupAuthorWorkspace(f.workspace, {
+            post: (id) =>
+              Effect.sync(() => {
+                posts.push(id);
+              }),
+          }),
+        ),
+      ).toMatchObject({
+        _tag: "AuthorHistoryInvalid",
+        reason: { _tag: "BackupDisconnected" },
+      });
+      expect(posts).toEqual([]);
+      expect(yield* f.fs.exists(f.bindings)).toBe(false);
+      expect(yield* f.fs.readFileString(join(f.workspace, "notes.txt"))).toBe("A");
+    }).pipe(Effect.provide(ownerLayer(f.home)));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("backup refuses BackupNotAncestor before posting an older observation", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    yield* Effect.gen(function* () {
+      const history = yield* AuthorHistory;
+      const workspaces = yield* AuthorWorkspace;
+      const root = yield* workspaces.resolveRoot(f.workspace);
+      const lease = yield* workspaces.acquire(root);
+      const { workspaceId } = yield* register(lease);
+      const key = { workspaceId, locator };
+      const first = yield* history.refresh(root);
+      yield* f.fs.writeFileString(join(root, "notes.txt"), "B");
+      const second = yield* history.refresh(root);
+      yield* history.backupState.save(lease, key, { from: null, to: first.id });
+      yield* history.backupState.save(lease, key, { from: first.id, to: second.id });
+      const before = yield* f.fs.readFileString(f.bindings);
+      const posts: string[] = [];
+      expect(
+        yield* Effect.flip(
+          backupAuthorHistory(lease, key, first, {
+            post: (id) =>
+              Effect.sync(() => {
+                posts.push(id);
+              }),
+          }),
+        ),
+      ).toMatchObject({
+        _tag: "AuthorHistoryInvalid",
+        reason: { _tag: "BackupNotAncestor", acknowledged: second.id, observation: first.id },
+      });
+      expect(posts).toEqual([]);
+      expect(yield* f.fs.readFileString(f.bindings)).toBe(before);
+      expect(yield* history.backupState.read(key)).toBe(second.id);
+      expect(yield* f.fs.readFileString(join(root, "notes.txt"))).toBe("B");
+    }).pipe(Effect.provide(ownerLayer(f.home)));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);

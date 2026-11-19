@@ -1,4 +1,4 @@
-import { expect, it } from "@effect/vitest";
+import { describe, expect, it } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, FileSystem } from "effect";
 import { TestClock } from "effect/testing";
 import { dirname, join } from "node:path";
@@ -84,44 +84,6 @@ it.effect("unchanged concurrent observations add no duplicate events", () =>
       expect(yield* storedTreesAt(a.home)).toHaveLength(1);
     }).pipe(Effect.provide(authorLayer(a.home)));
   }).pipe(Effect.provide(testPlatformLayer)),
-);
-
-it.effect(
-  "sync records its own remote applications so A → B → A retains all three observations",
-  () =>
-    Effect.gen(function* () {
-      const world = yield* makeAuthorSyncWorld();
-      yield* world.connect();
-      const before = yield* capture(world.a.workspace, world.a.home);
-      yield* world.a.edit("notes/a.txt", "A");
-      yield* world.a.sync();
-      yield* world.b.sync();
-      yield* world.b.edit("notes/a.txt", "B");
-      yield* world.b.sync();
-      yield* world.a.sync();
-      yield* world.b.edit("notes/a.txt", "A");
-      yield* world.b.sync();
-      yield* world.a.sync();
-      const after = yield* capture(world.a.workspace, world.a.home);
-      const ids = yield* lineage(after.id, world.a.home);
-      const since = ids.slice(0, ids.indexOf(before.id)).reverse();
-      expect(since).toHaveLength(3);
-      yield* Effect.gen(function* () {
-        const revisions = yield* Effect.forEach(since, (id) =>
-          readAuthorRevision(world.a.home, id),
-        );
-        expect(revisions[0]?.tree).toBe(revisions[2]?.tree);
-        const contents: Array<string | undefined> = [];
-        for (const revision of revisions)
-          contents.push(
-            fileText(
-              yield* readAuthorTree({ treeHash: revision.tree }, world.a.home),
-              "notes/a.txt",
-            ),
-          );
-        expect(contents).toEqual(["A", "B", "A"]);
-      }).pipe(Effect.provide(authorLayer(world.a.home)));
-    }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("a pending B observation cannot be overtaken by an unchanged A scan", () =>
@@ -349,3 +311,47 @@ it.effect("existing stored trees stay available without inventing a pre-journal 
     }).pipe(Effect.provide(authorLayer(a.home)));
   }).pipe(Effect.provide(testPlatformLayer)),
 );
+
+describe("skit author sync", () => {
+  describe("Keeping saved work", () => {
+    describe("Versions recorded by SKIT remain recoverable after sync.", () => {
+      it.effect(
+        "sync records its own remote applications so A → B → A retains all three observations",
+        () =>
+          Effect.gen(function* () {
+            const world = yield* makeAuthorSyncWorld();
+            yield* world.connect();
+            const before = yield* capture(world.a.workspace, world.a.home);
+            yield* world.a.edit("notes/a.txt", "A");
+            yield* world.a.sync();
+            yield* world.b.sync();
+            yield* world.b.edit("notes/a.txt", "B");
+            yield* world.b.sync();
+            yield* world.a.sync();
+            yield* world.b.edit("notes/a.txt", "A");
+            yield* world.b.sync();
+            yield* world.a.sync();
+            const after = yield* capture(world.a.workspace, world.a.home);
+            const ids = yield* lineage(after.id, world.a.home);
+            const since = ids.slice(0, ids.indexOf(before.id)).reverse();
+            expect(since).toHaveLength(3);
+            yield* Effect.gen(function* () {
+              const revisions = yield* Effect.forEach(since, (id) =>
+                readAuthorRevision(world.a.home, id),
+              );
+              expect(revisions[0]?.tree).toBe(revisions[2]?.tree);
+              const contents: Array<string | undefined> = [];
+              for (const revision of revisions)
+                contents.push(
+                  fileText(
+                    yield* readAuthorTree({ treeHash: revision.tree }, world.a.home),
+                    "notes/a.txt",
+                  ),
+                );
+              expect(contents).toEqual(["A", "B", "A"]);
+            }).pipe(Effect.provide(authorLayer(world.a.home)));
+          }).pipe(Effect.provide(testPlatformLayer)),
+      );
+    });
+  });
+});

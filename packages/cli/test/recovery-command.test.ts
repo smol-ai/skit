@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import { resultExitCode } from "../src/commands/exit-code.js";
 import { basename, join } from "node:path";
 import { Effect, FileSystem } from "effect";
@@ -21,96 +22,155 @@ const invoke = Effect.fn("Test.recoveryCommand")(function* (argv: readonly strin
   return results[0];
 });
 
-it.effect("a client follows returned actions through the real grammar to restore files", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const root = yield* scratch("skit-recovery-command-");
-    const home = join(root, "chosen home");
-    const source = join(root, "installed");
-    yield* fs.makeDirectory(source);
-    yield* fs.writeFileString(join(source, "SKILL.md"), "preserve me");
-    const plan = yield* saveRecoveryFiles(home, [source]);
-    let response = yield* invoke(["skit", "library", "recovery", "list", "--json", "--home", home]);
-    if (response.contract !== "recoveryList")
-      return yield* Effect.die(new Error("Expected a recovery list"));
-    expect(response.data.operations[0].operationId).toBe(basename(plan.operationDirectory));
-    let action = response.data.operations[0].actions[0];
-    const followed: string[] = [];
-    for (let step = 0; step < 3; step++) {
-      followed.push(action.rel);
-      expect(action.argv).toContain(home);
-      response = yield* invoke(action.argv);
-      if (response.contract !== "recovery")
-        return yield* Effect.die(new Error("Expected recovery facts"));
-      const data = response.data;
-      expect(renderRecovery(data)[0]).toEqual(
-        Block.Fields({
-          rows: [
-            {
-              label: "File recovery",
-              value: [data.phase, { dim: " (enabled Skills and settings are unchanged)" }],
-            },
-          ],
-        }),
-      );
-      const next = data.actions.find(
-        (candidate) =>
-          candidate.rel === (data.phase === "inspection" ? "preview-restore" : "apply-restore"),
-      );
-      if (step < 2) {
-        if (!next) return yield* Effect.die(new Error("Missing continuation"));
-        action = next;
-      }
-    }
-    expect(followed).toEqual(["inspect", "preview-restore", "apply-restore"]);
-    expect(response.contract === "recovery" && response.data.phase).toBe("restored");
-    expect(yield* fs.readFileString(join(source, "SKILL.md"))).toBe("preserve me");
-    expect(yield* fs.exists(join(home, "state.json"))).toBe(true);
-  }).pipe(Effect.provide(skitLayer)),
-);
+for (const restoreFiles of [false, true]) {
+  describe(restoreFiles ? "skit library recovery restore" : "skit library recovery inspect", () => {
+    describe(
+      restoreFiles
+        ? "Restore returns saved files to their original free paths."
+        : "Recovery inspection provides the next safe restore action.",
+      () => {
+        it.effect(
+          "a client follows returned actions through the real grammar to restore files",
+          () =>
+            Effect.gen(function* () {
+              const fs = yield* FileSystem.FileSystem;
 
-it.effect(
-  "a stale argv cannot apply and an occupied destination has no advertised apply action",
-  () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const root = yield* scratch("skit-recovery-stale-command-");
-      const home = join(root, "library");
-      const source = join(root, "installed");
-      yield* fs.makeDirectory(source);
-      yield* fs.writeFileString(join(source, "SKILL.md"), "old bytes");
-      const plan = yield* saveRecoveryFiles(home, [source]);
-      const preview = yield* invoke([
-        "skit",
-        "library",
-        "recovery",
-        "restore",
-        basename(plan.operationDirectory),
-        "--home",
-        home,
-        "--json",
-      ]);
-      if (preview.contract !== "recovery") return yield* Effect.die(new Error("Expected preview"));
-      const apply = preview.data.actions.find((action) => action.rel === "apply-restore");
-      if (!apply) return yield* Effect.die(new Error("Expected apply"));
-      yield* fs.makeDirectory(source);
-      yield* fs.writeFileString(join(source, "SKILL.md"), "new user edit");
-      const stale = yield* invoke(apply.argv);
-      if (stale.contract !== "recovery")
-        return yield* Effect.die(new Error("Expected stale result"));
-      expect(resultExitCode(stale)).toBe(1);
-      expect(stale.data.phase).toBe("stale");
-      expect(stale.data.actions.map((action) => action.rel)).toEqual([
-        "inspect",
-        "preview-restore",
-      ]);
-      const refreshed = yield* invoke(stale.data.actions[1].argv);
-      if (refreshed.contract !== "recovery")
-        return yield* Effect.die(new Error("Expected refreshed preview"));
-      expect(refreshed.data.actions.some((action) => action.effect === "write")).toBe(false);
-      expect(yield* fs.readFileString(join(source, "SKILL.md"))).toBe("new user edit");
-      expect(
-        yield* fs.readFileString(join(refreshed.data.entries[0].recoveryPath, "SKILL.md")),
-      ).toBe("old bytes");
-    }).pipe(Effect.provide(skitLayer)),
-);
+              const root = yield* scratch("skit-recovery-command-");
+
+              const home = join(root, "chosen home");
+
+              const source = join(root, "installed");
+
+              yield* fs.makeDirectory(source);
+
+              yield* fs.writeFileString(join(source, "SKILL.md"), "preserve me");
+
+              const plan = yield* saveRecoveryFiles(home, [source]);
+
+              let response = yield* invoke([
+                "skit",
+                "library",
+                "recovery",
+                "list",
+                "--json",
+                "--home",
+                home,
+              ]);
+
+              if (response.contract !== "recoveryList")
+                return yield* Effect.die(new Error("Expected a recovery list"));
+              if (!restoreFiles) {
+                expect(response.data.operations[0].operationId).toBe(
+                  basename(plan.operationDirectory),
+                );
+              }
+
+              let action = response.data.operations[0].actions[0];
+
+              const followed: string[] = [];
+              for (let step = 0; step < 3; step++) {
+                followed.push(action.rel);
+                if (!restoreFiles || step > 0) {
+                  expect(action.argv).toContain(home);
+                }
+
+                response = yield* invoke(action.argv);
+
+                if (response.contract !== "recovery")
+                  return yield* Effect.die(new Error("Expected recovery facts"));
+
+                const data = response.data;
+                if (!restoreFiles || step > 0) {
+                  expect(renderRecovery(data)[0]).toEqual(
+                    Block.Fields({
+                      rows: [
+                        {
+                          label: "File recovery",
+                          value: [
+                            data.phase,
+                            { dim: " (enabled Skills and settings are unchanged)" },
+                          ],
+                        },
+                      ],
+                    }),
+                  );
+                }
+
+                const next = data.actions.find(
+                  (candidate) =>
+                    candidate.rel ===
+                    (data.phase === "inspection" ? "preview-restore" : "apply-restore"),
+                );
+
+                if (step < 2) {
+                  if (!next) return yield* Effect.die(new Error("Missing continuation"));
+                  action = next;
+                }
+                if (!restoreFiles) break;
+              }
+              if (restoreFiles) {
+                expect(followed).toEqual(["inspect", "preview-restore", "apply-restore"]);
+
+                expect(response.contract === "recovery" && response.data.phase).toBe("restored");
+
+                expect(yield* fs.readFileString(join(source, "SKILL.md"))).toBe("preserve me");
+
+                expect(yield* fs.exists(join(home, "state.json"))).toBe(true);
+              }
+            }).pipe(Effect.provide(skitLayer)),
+        );
+      },
+    );
+  });
+}
+
+describe("skit library recovery restore", () => {
+  describe("Restore refuses an approval whose destination has changed.", () => {
+    it.effect(
+      "a stale argv cannot apply and an occupied destination has no advertised apply action",
+      () =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const root = yield* scratch("skit-recovery-stale-command-");
+          const home = join(root, "library");
+          const source = join(root, "installed");
+          yield* fs.makeDirectory(source);
+          yield* fs.writeFileString(join(source, "SKILL.md"), "old bytes");
+          const plan = yield* saveRecoveryFiles(home, [source]);
+          const preview = yield* invoke([
+            "skit",
+            "library",
+            "recovery",
+            "restore",
+            basename(plan.operationDirectory),
+            "--home",
+            home,
+            "--json",
+          ]);
+          if (preview.contract !== "recovery")
+            return yield* Effect.die(new Error("Expected preview"));
+          const apply = preview.data.actions.find((action) => action.rel === "apply-restore");
+          if (!apply) return yield* Effect.die(new Error("Expected apply"));
+          yield* fs.makeDirectory(source);
+          yield* fs.writeFileString(join(source, "SKILL.md"), "new user edit");
+          const stale = yield* invoke(apply.argv);
+          if (stale.contract !== "recovery")
+            return yield* Effect.die(new Error("Expected stale result"));
+          expect(resultExitCode(stale)).toBe(1);
+          expect(stale.data.phase).toBe("stale");
+          expect(stale.data.actions.map((action) => action.rel)).toEqual([
+            "inspect",
+            "preview-restore",
+          ]);
+          const refreshed = yield* invoke(stale.data.actions[1].argv);
+          if (refreshed.contract !== "recovery")
+            return yield* Effect.die(new Error("Expected refreshed preview"));
+          expect(refreshed.data.actions.some((action) => action.effect === "write")).toBe(false);
+          expect(yield* fs.readFileString(join(source, "SKILL.md"))).toBe("new user edit");
+          expect(
+            yield* fs.readFileString(join(refreshed.data.entries[0].recoveryPath, "SKILL.md")),
+          ).toBe("old bytes");
+        }).pipe(Effect.provide(skitLayer)),
+    );
+  });
+});

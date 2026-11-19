@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import { sourceUpdateOutput } from "../src/library/update/output.js";
 import { commandFailure } from "../src/commands/failure-classification.js";
 import { emptyLibraryFixture } from "./helpers/library-home.js";
@@ -90,199 +91,6 @@ const fixture = Effect.gen(function* () {
   return { fs, root, home, urls, bodies, requests, before, run, load, options, archive };
 });
 
-it.effect("stops the batch when shared machine settings cannot be read", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "after"));
-    yield* f.fs.writeFileString(join(f.home, "machine.json"), "invalid machine settings");
-    const before = yield* f.fs.readFileString(join(f.home, "state.json"));
-    const error = yield* f
-      .run(
-        Effect.flatMap(Library.Service, (library) =>
-          Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
-        ),
-      )
-      .pipe(Effect.flip);
-    assert.strictEqual(error._tag, "MachineSettingsUnusable");
-    assert.deepStrictEqual(f.requests, [f.urls[0]]);
-    assert.strictEqual(yield* f.fs.readFileString(join(f.home, "state.json")), before);
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-);
-
-it.effect(
-  "continues after invalid imports and cleanup failures, preserving successful updates",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture;
-      const cleanup = systemError({
-        _tag: "PermissionDenied",
-        module: "FileSystem",
-        method: "makeTempDirectoryScoped",
-        syscall: "unlink",
-        pathOrDescriptor: join(f.root, "source-temp"),
-      });
-      const outcomes = yield* f.run(
-        Effect.flatMap(Library.Service, (library) =>
-          Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
-        ).pipe(
-          Effect.provide(
-            rendererTestLayer({
-              withStatus: (status, operation) =>
-                typeof status !== "string" &&
-                status.pending.startsWith(f.before.collections[0]!.label)
-                  ? operation.pipe(Effect.ensuring(Effect.die(cleanup)))
-                  : operation,
-            }),
-          ),
-        ),
-      );
-      assert.strictEqual(outcomes.length, 2);
-      assert.isTrue("status" in outcomes[0]!);
-      if (!("status" in outcomes[0]!)) return;
-      assert.strictEqual(commandFailure(outcomes[0].error).code, "VALIDATION_FAILED");
-      assert.include(commandFailure(outcomes[0].error).message, 'duplicate Skill name "collision"');
-      assert.include(
-        commandFailure(outcomes[0].error).message,
-        "Additional failure: PermissionDenied",
-      );
-      assert.strictEqual(outcomes[0].source, f.urls[0]);
-      assert.isTrue("changed" in outcomes[1]! && outcomes[1].changed);
-      const after = yield* f.load;
-      assert.strictEqual(after.skills.find((s) => s.name === "broken")!.versions.length, 1);
-      assert.strictEqual(after.skills.find((s) => s.name === "healthy")!.versions.length, 2);
-      assert.strictEqual(resultExitCode(result("update", sourceUpdateOutput(outcomes))), 1);
-      assert.strictEqual(resultExitCode(result("update", sourceUpdateOutput([outcomes[0]]))), 1);
-      const commandResult = result("update", sourceUpdateOutput(outcomes));
-      const human = renderResultFrame(commandResult, defaultTerminalEnvironment);
-      assert.strictEqual(human.exitCode, 1);
-      const json = renderResultFrame(commandResult, {
-        ...defaultTerminalEnvironment,
-        format: "json",
-      });
-      assert.strictEqual(JSON.parse(json.stdout).data[0].status, "failed");
-      assert.strictEqual(json.exitCode, 1);
-    }).pipe(Effect.provide(testPlatformLayer)),
-);
-
-for (const failurePhase of ["install", "source-cleanup"] as const) {
-  it.effect(
-    `repairs bound installed skills after ${failurePhase} failure with a current Source`,
-    () =>
-      Effect.gen(function* () {
-        const f = yield* fixture;
-        const roots = { ...f.options.roots, overrides: { codex: [join(f.root, "codex")] } };
-        const options = { ...f.options, roots };
-        /** This test's device installs into its codex folder: its Library routes there. */
-        const run = <A, E, R>(operation: Effect.Effect<A, E, R>) =>
-          f.run(operation.pipe(Effect.provide(Library.layer({ home: f.home, roots }))));
-        const collection = f.before.collections[0]!;
-        yield* writingTo(
-          f.home,
-          run(
-            setLibraryEnabled({
-              query: collection.collection_id,
-              all: true,
-              roots,
-              variantsPath: options.variantsPath,
-              invocation: {
-                scope: { kind: "global" },
-                enabled: true,
-                dryRun: false,
-              },
-            }),
-          ),
-        );
-        const installedSkillPath = join(f.root, "codex", "broken", "SKILL.md");
-        const original = yield* f.fs.readFileString(installedSkillPath);
-        f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "after"));
-        let failed = false;
-        const outcomes = yield* f.run(
-          Effect.flatMap(Library.Service, (library) =>
-            Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
-          ).pipe(
-            // The owner is built under this test's faulting filesystem.
-            Effect.provide(
-              Library.layer({ home: f.home, roots }).pipe(
-                Layer.provideMerge(
-                  rendererTestLayer({
-                    withStatus: (status, operation) =>
-                      failurePhase === "source-cleanup" &&
-                      typeof status !== "string" &&
-                      status.pending === `${collection.label} | Fetching and inspecting Source`
-                        ? operation.pipe(
-                            Effect.ensuring(
-                              Effect.gen(function* () {
-                                failed = true;
-                                return yield* Effect.die(
-                                  systemError({
-                                    _tag: "PermissionDenied",
-                                    module: "FileSystem",
-                                    method: "makeTempDirectoryScoped",
-                                    pathOrDescriptor: join(f.root, "source-temp"),
-                                  }),
-                                );
-                              }),
-                            ),
-                          )
-                        : operation,
-                  }),
-                ),
-              ),
-            ),
-            Effect.provideService(FileSystem.FileSystem, {
-              ...f.fs,
-              makeTempDirectoryScoped: (input) =>
-                failurePhase === "install" && input?.prefix === ".skit-stage-" && !failed
-                  ? Effect.gen(function* () {
-                      failed = true;
-                      return yield* systemError({
-                        _tag: "PermissionDenied",
-                        module: "FileSystem",
-                        method: "makeTempDirectoryScoped",
-                        pathOrDescriptor: join(f.root, "install-stage"),
-                      });
-                    })
-                  : f.fs.makeTempDirectoryScoped(input),
-            }),
-          ),
-        );
-        assert.isTrue(failed);
-        assert.isTrue("status" in outcomes[0]!);
-        if (!("status" in outcomes[0]!)) return;
-        assert.strictEqual(outcomes[0].phase, failurePhase === "install" ? "install" : "source");
-        assert.strictEqual(outcomes[0].source_imported, true);
-        assert.isTrue("changed" in outcomes[1]! && outcomes[1].changed);
-        // Another Collection's update touches only its own copies: this one waits for its retry.
-        assert.strictEqual(yield* f.fs.readFileString(installedSkillPath), original);
-        const imported = yield* f.load;
-        const retry = yield* writingTo(
-          f.home,
-          run(
-            Effect.flatMap(Library.Service, (library) =>
-              Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
-            ).pipe(Effect.provide(rendererTestLayer())),
-          ),
-        );
-        // The Source is current, so nothing changed; its retained snapshot installs this time.
-        assert.isTrue("changed" in retry[0]! && !retry[0].changed && retry[0].installed === 1);
-        assert.include(yield* f.fs.readFileString(installedSkillPath), "after");
-        const after = yield* f.load;
-        assert.strictEqual(after.imports.length, imported.imports.length);
-        const unchanged = yield* writingTo(
-          f.home,
-          run(
-            Effect.flatMap(Library.Service, (library) =>
-              Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
-            ).pipe(Effect.provide(rendererTestLayer())),
-          ),
-        );
-        assert.isTrue(
-          unchanged.every((item) => "changed" in item && !item.changed && item.installed === 0),
-        );
-      }).pipe(Effect.provide(testPlatformLayer)),
-  );
-}
-
 for (const kind of ["defect", "interrupt"] as const) {
   it.effect(`does not recover ${kind} failures as Collection failures`, () =>
     Effect.gen(function* () {
@@ -303,177 +111,6 @@ for (const kind of ["defect", "interrupt"] as const) {
     }).pipe(Effect.provide(testPlatformLayer)),
   );
 }
-
-it.effect("stops on typed filesystem errors in shared Library storage", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    const alias = join(f.root, "library-alias");
-    yield* f.fs.symlink(f.home, alias);
-    const denied = systemError({
-      _tag: "PermissionDenied",
-      module: "FileSystem",
-      method: "writeFile",
-      pathOrDescriptor: join(alias, "state.json"),
-    });
-    const exit = yield* Effect.exit(
-      f
-        .run(
-          Effect.flatMap(Library.Service, (library) =>
-            Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
-          ).pipe(Effect.provide(rendererTestLayer())),
-        )
-        .pipe(
-          Effect.provideService(FileSystem.FileSystem, {
-            ...f.fs,
-            readFileString: (path, options) =>
-              path.includes("skit-source-")
-                ? Effect.fail(denied)
-                : f.fs.readFileString(path, options),
-          }),
-        ),
-    );
-    assert.isTrue(Exit.isFailure(exit));
-    assert.deepStrictEqual(f.requests, [f.urls[0]]);
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
-
-it.effect("keeps candidate manifest validation failures local to their Collection", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    // The old path keeps its historical name, while a new path declares that same name.
-    // The observed names are distinct, but the candidate portable manifest is invalid.
-    yield* f.fs.remove(join(f.root, "broken", "c"), { recursive: true });
-    yield* f.fs.writeFileString(
-      join(f.root, "broken", "b", "SKILL.md"),
-      "---\nname: broken\ndescription: Test Skill\n---\n\nafter\n",
-    );
-    yield* f.fs.writeFileString(
-      join(f.root, "broken", "a", "SKILL.md"),
-      "---\nname: renamed\ndescription: Test Skill\n---\n\nafter\n",
-    );
-    const archivePath = join(f.root, "candidate.tar");
-    yield* Effect.sync(() =>
-      execFileSync("tar", ["-cf", archivePath, "-C", join(f.root, "broken"), "."]),
-    );
-    f.bodies.set(f.urls[0]!, yield* f.fs.readFile(archivePath));
-    const outcomes = yield* f.run(
-      Effect.flatMap(Library.Service, (library) =>
-        Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
-      ).pipe(Effect.provide(rendererTestLayer())),
-    );
-    assert.isTrue("status" in outcomes[0]!);
-    if (!("status" in outcomes[0]!)) return;
-    assert.strictEqual(commandFailure(outcomes[0].error).code, "VALIDATION_FAILED");
-    assert.include(commandFailure(outcomes[0].error).message, "portable manifest");
-    assert.isTrue("changed" in outcomes[1]! && outcomes[1].changed);
-    const after = yield* f.load;
-    assert.strictEqual(after.skills.find((s) => s.name === "broken")!.versions.length, 1);
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
-
-it.effect("aborts the batch on typed shared state failures", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    const statePath = join(f.home, "state.json");
-    const exit = yield* Effect.exit(
-      f
-        .run(
-          Effect.flatMap(Library.Service, (library) =>
-            Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
-          ).pipe(Effect.provide(rendererTestLayer())),
-        )
-        .pipe(
-          Effect.provideService(FileSystem.FileSystem, {
-            ...f.fs,
-            readFileString: (path, options) =>
-              path === statePath && f.requests.length > 0
-                ? Effect.as(
-                    f.fs.writeFileString(statePath, "invalid state bytes\n"),
-                    "invalid state bytes\n",
-                  )
-                : f.fs.readFileString(path, options),
-          }),
-        ),
-    );
-    assert.isTrue(Exit.isFailure(exit));
-    if (Exit.isFailure(exit))
-      assert.isTrue(
-        exit.cause.reasons.some(
-          (r) => Cause.isFailReason(r) && r.error._tag === "InvalidLibraryState",
-        ),
-      );
-    // Corruption arrives after the first fetch, inside the owner batch; no later Source runs.
-    assert.deepStrictEqual(f.requests, [f.urls[0]]);
-    assert.strictEqual(yield* f.fs.readFileString(statePath), "invalid state bytes\n");
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
-
-it.effect("a stale installed-copy plan aborts before fetching the next Source", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "after"));
-    const statePath = join(f.home, "state.json");
-    const library = yield* f.run(Effect.service(Library.Service));
-    let changed: string | undefined;
-    const failure = yield* Effect.flip(
-      f.run(
-        Effect.flatMap(Library.Service, (library) =>
-          Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
-        ).pipe(
-          Effect.provide(
-            rendererTestLayer({
-              withStatus: (status, operation) =>
-                typeof status !== "string" && status.pending.endsWith("Updating installed skills")
-                  ? Effect.gen(function* () {
-                      const current = yield* library.read;
-                      if (current._tag !== "Present")
-                        return yield* Effect.die("Expected a Library");
-                      changed = JSON.stringify({
-                        ...current.state,
-                        repositories: [{ root: join(f.root, "later-project"), enabled: [] }],
-                      });
-                      yield* f.fs.writeFileString(statePath, changed);
-                    }).pipe(Effect.orDie, Effect.andThen(operation))
-                  : operation,
-            }),
-          ),
-        ),
-      ),
-    );
-    assert.strictEqual(failure._tag, "Library.StalePlan");
-    assert.deepStrictEqual(f.requests, [f.urls[0]]);
-    assert.strictEqual(yield* f.fs.readFileString(statePath), changed);
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-);
-
-it.effect("stops on corruption of an existing retained object", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    const copy = f.before.collection_versions.find(
-      (copy) => copy.collection_version_id === f.before.imports[0]!.collection_version_id,
-    )!;
-    yield* f.fs.writeFileString(
-      join(originalTreePath(join(f.home, "originals"), copy.hash), "a", "SKILL.md"),
-      "corrupted",
-    );
-    f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "before"));
-    const exit = yield* Effect.exit(
-      f.run(
-        Effect.flatMap(Library.Service, (library) =>
-          Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
-        ).pipe(Effect.provide(rendererTestLayer())),
-      ),
-    );
-    assert.isTrue(Exit.isFailure(exit));
-    if (Exit.isFailure(exit))
-      assert.isTrue(
-        exit.cause.reasons.some(
-          (r) => Cause.isFailReason(r) && r.error._tag === "ContentAddressCollision",
-        ),
-      );
-    assert.deepStrictEqual(f.requests, [f.urls[0]]);
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
 
 it.effect("several successful source updates are one composed history action", () =>
   Effect.gen(function* () {
@@ -536,3 +173,398 @@ it.effect(
       assert.isDefined(data.installation_error);
     }).pipe(Effect.provide(testPlatformLayer)),
 );
+
+describe("skit update", () => {
+  describe("Updating imported Collections", () => {
+    describe("One invalid source does not stop unrelated source updates.", () => {
+      it.effect(
+        "continues after invalid imports and cleanup failures, preserving successful updates",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* fixture;
+            const cleanup = systemError({
+              _tag: "PermissionDenied",
+              module: "FileSystem",
+              method: "makeTempDirectoryScoped",
+              syscall: "unlink",
+              pathOrDescriptor: join(f.root, "source-temp"),
+            });
+            const outcomes = yield* f.run(
+              Effect.flatMap(Library.Service, (library) =>
+                Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+              ).pipe(
+                Effect.provide(
+                  rendererTestLayer({
+                    withStatus: (status, operation) =>
+                      typeof status !== "string" &&
+                      status.pending.startsWith(f.before.collections[0]!.label)
+                        ? operation.pipe(Effect.ensuring(Effect.die(cleanup)))
+                        : operation,
+                  }),
+                ),
+              ),
+            );
+            assert.strictEqual(outcomes.length, 2);
+            assert.isTrue("status" in outcomes[0]!);
+            if (!("status" in outcomes[0]!)) return;
+            assert.strictEqual(commandFailure(outcomes[0].error).code, "VALIDATION_FAILED");
+            assert.include(
+              commandFailure(outcomes[0].error).message,
+              'duplicate Skill name "collision"',
+            );
+            assert.include(
+              commandFailure(outcomes[0].error).message,
+              "Additional failure: PermissionDenied",
+            );
+            assert.strictEqual(outcomes[0].source, f.urls[0]);
+            assert.isTrue("changed" in outcomes[1]! && outcomes[1].changed);
+            const after = yield* f.load;
+            assert.strictEqual(after.skills.find((s) => s.name === "broken")!.versions.length, 1);
+            assert.strictEqual(after.skills.find((s) => s.name === "healthy")!.versions.length, 2);
+            assert.strictEqual(resultExitCode(result("update", sourceUpdateOutput(outcomes))), 1);
+            assert.strictEqual(
+              resultExitCode(result("update", sourceUpdateOutput([outcomes[0]]))),
+              1,
+            );
+            const commandResult = result("update", sourceUpdateOutput(outcomes));
+            const human = renderResultFrame(commandResult, defaultTerminalEnvironment);
+            assert.strictEqual(human.exitCode, 1);
+            const json = renderResultFrame(commandResult, {
+              ...defaultTerminalEnvironment,
+              format: "json",
+            });
+            assert.strictEqual(JSON.parse(json.stdout).data[0].status, "failed");
+            assert.strictEqual(json.exitCode, 1);
+          }).pipe(Effect.provide(testPlatformLayer)),
+      );
+
+      for (const failurePhase of ["install", "source-cleanup"] as const) {
+        it.effect(
+          `repairs bound installed skills after ${failurePhase} failure with a current Source`,
+          () =>
+            Effect.gen(function* () {
+              const f = yield* fixture;
+              const roots = { ...f.options.roots, overrides: { codex: [join(f.root, "codex")] } };
+              const options = { ...f.options, roots };
+              /** This test's device installs into its codex folder: its Library routes there. */
+              const run = <A, E, R>(operation: Effect.Effect<A, E, R>) =>
+                f.run(operation.pipe(Effect.provide(Library.layer({ home: f.home, roots }))));
+              const collection = f.before.collections[0]!;
+              yield* writingTo(
+                f.home,
+                run(
+                  setLibraryEnabled({
+                    query: collection.collection_id,
+                    all: true,
+                    roots,
+                    variantsPath: options.variantsPath,
+                    invocation: {
+                      scope: { kind: "global" },
+                      enabled: true,
+                      dryRun: false,
+                    },
+                  }),
+                ),
+              );
+              const installedSkillPath = join(f.root, "codex", "broken", "SKILL.md");
+              const original = yield* f.fs.readFileString(installedSkillPath);
+              f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "after"));
+              let failed = false;
+              const outcomes = yield* f.run(
+                Effect.flatMap(Library.Service, (library) =>
+                  Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+                ).pipe(
+                  // The owner is built under this test's faulting filesystem.
+                  Effect.provide(
+                    Library.layer({ home: f.home, roots }).pipe(
+                      Layer.provideMerge(
+                        rendererTestLayer({
+                          withStatus: (status, operation) =>
+                            failurePhase === "source-cleanup" &&
+                            typeof status !== "string" &&
+                            status.pending ===
+                              `${collection.label} | Fetching and inspecting Source`
+                              ? operation.pipe(
+                                  Effect.ensuring(
+                                    Effect.gen(function* () {
+                                      failed = true;
+                                      return yield* Effect.die(
+                                        systemError({
+                                          _tag: "PermissionDenied",
+                                          module: "FileSystem",
+                                          method: "makeTempDirectoryScoped",
+                                          pathOrDescriptor: join(f.root, "source-temp"),
+                                        }),
+                                      );
+                                    }),
+                                  ),
+                                )
+                              : operation,
+                        }),
+                      ),
+                    ),
+                  ),
+                  Effect.provideService(FileSystem.FileSystem, {
+                    ...f.fs,
+                    makeTempDirectoryScoped: (input) =>
+                      failurePhase === "install" && input?.prefix === ".skit-stage-" && !failed
+                        ? Effect.gen(function* () {
+                            failed = true;
+                            return yield* systemError({
+                              _tag: "PermissionDenied",
+                              module: "FileSystem",
+                              method: "makeTempDirectoryScoped",
+                              pathOrDescriptor: join(f.root, "install-stage"),
+                            });
+                          })
+                        : f.fs.makeTempDirectoryScoped(input),
+                  }),
+                ),
+              );
+              assert.isTrue(failed);
+              assert.isTrue("status" in outcomes[0]!);
+              if (!("status" in outcomes[0]!)) return;
+              assert.strictEqual(
+                outcomes[0].phase,
+                failurePhase === "install" ? "install" : "source",
+              );
+              assert.strictEqual(outcomes[0].source_imported, true);
+              assert.isTrue("changed" in outcomes[1]! && outcomes[1].changed);
+              // Another Collection's update touches only its own copies: this one waits for its retry.
+              assert.strictEqual(yield* f.fs.readFileString(installedSkillPath), original);
+              const imported = yield* f.load;
+              const retry = yield* writingTo(
+                f.home,
+                run(
+                  Effect.flatMap(Library.Service, (library) =>
+                    Effect.flatMap(updateAdapters, (adapters) =>
+                      library.update(undefined, adapters),
+                    ),
+                  ).pipe(Effect.provide(rendererTestLayer())),
+                ),
+              );
+              // The Source is current, so nothing changed; its retained snapshot installs this time.
+              assert.isTrue(
+                "changed" in retry[0]! && !retry[0].changed && retry[0].installed === 1,
+              );
+              assert.include(yield* f.fs.readFileString(installedSkillPath), "after");
+              const after = yield* f.load;
+              assert.strictEqual(after.imports.length, imported.imports.length);
+              const unchanged = yield* writingTo(
+                f.home,
+                run(
+                  Effect.flatMap(Library.Service, (library) =>
+                    Effect.flatMap(updateAdapters, (adapters) =>
+                      library.update(undefined, adapters),
+                    ),
+                  ).pipe(Effect.provide(rendererTestLayer())),
+                ),
+              );
+              assert.isTrue(
+                unchanged.every(
+                  (item) => "changed" in item && !item.changed && item.installed === 0,
+                ),
+              );
+            }).pipe(Effect.provide(testPlatformLayer)),
+        );
+      }
+
+      it.effect("keeps candidate manifest validation failures local to their Collection", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          // The old path keeps its historical name, while a new path declares that same name.
+          // The observed names are distinct, but the candidate portable manifest is invalid.
+          yield* f.fs.remove(join(f.root, "broken", "c"), { recursive: true });
+          yield* f.fs.writeFileString(
+            join(f.root, "broken", "b", "SKILL.md"),
+            "---\nname: broken\ndescription: Test Skill\n---\n\nafter\n",
+          );
+          yield* f.fs.writeFileString(
+            join(f.root, "broken", "a", "SKILL.md"),
+            "---\nname: renamed\ndescription: Test Skill\n---\n\nafter\n",
+          );
+          const archivePath = join(f.root, "candidate.tar");
+          yield* Effect.sync(() =>
+            execFileSync("tar", ["-cf", archivePath, "-C", join(f.root, "broken"), "."]),
+          );
+          f.bodies.set(f.urls[0]!, yield* f.fs.readFile(archivePath));
+          const outcomes = yield* f.run(
+            Effect.flatMap(Library.Service, (library) =>
+              Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+            ).pipe(Effect.provide(rendererTestLayer())),
+          );
+          assert.isTrue("status" in outcomes[0]!);
+          if (!("status" in outcomes[0]!)) return;
+          assert.strictEqual(commandFailure(outcomes[0].error).code, "VALIDATION_FAILED");
+          assert.include(commandFailure(outcomes[0].error).message, "portable manifest");
+          assert.isTrue("changed" in outcomes[1]! && outcomes[1].changed);
+          const after = yield* f.load;
+          assert.strictEqual(after.skills.find((s) => s.name === "broken")!.versions.length, 1);
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+    });
+  });
+});
+
+describe("skit update", () => {
+  describe("Updating imported Collections", () => {
+    describe("Update stops when shared Library data cannot be trusted.", () => {
+      it.effect("stops the batch when shared machine settings cannot be read", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "after"));
+          yield* f.fs.writeFileString(join(f.home, "machine.json"), "invalid machine settings");
+          const before = yield* f.fs.readFileString(join(f.home, "state.json"));
+          const error = yield* f
+            .run(
+              Effect.flatMap(Library.Service, (library) =>
+                Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+              ),
+            )
+            .pipe(Effect.flip);
+          assert.strictEqual(error._tag, "MachineSettingsUnusable");
+          assert.deepStrictEqual(f.requests, [f.urls[0]]);
+          assert.strictEqual(yield* f.fs.readFileString(join(f.home, "state.json")), before);
+        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+      );
+
+      it.effect("stops on typed filesystem errors in shared Library storage", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          const alias = join(f.root, "library-alias");
+          yield* f.fs.symlink(f.home, alias);
+          const denied = systemError({
+            _tag: "PermissionDenied",
+            module: "FileSystem",
+            method: "writeFile",
+            pathOrDescriptor: join(alias, "state.json"),
+          });
+          const exit = yield* Effect.exit(
+            f
+              .run(
+                Effect.flatMap(Library.Service, (library) =>
+                  Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+                ).pipe(Effect.provide(rendererTestLayer())),
+              )
+              .pipe(
+                Effect.provideService(FileSystem.FileSystem, {
+                  ...f.fs,
+                  readFileString: (path, options) =>
+                    path.includes("skit-source-")
+                      ? Effect.fail(denied)
+                      : f.fs.readFileString(path, options),
+                }),
+              ),
+          );
+          assert.isTrue(Exit.isFailure(exit));
+          assert.deepStrictEqual(f.requests, [f.urls[0]]);
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+
+      it.effect("aborts the batch on typed shared state failures", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          const statePath = join(f.home, "state.json");
+          const exit = yield* Effect.exit(
+            f
+              .run(
+                Effect.flatMap(Library.Service, (library) =>
+                  Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+                ).pipe(Effect.provide(rendererTestLayer())),
+              )
+              .pipe(
+                Effect.provideService(FileSystem.FileSystem, {
+                  ...f.fs,
+                  readFileString: (path, options) =>
+                    path === statePath && f.requests.length > 0
+                      ? Effect.as(
+                          f.fs.writeFileString(statePath, "invalid state bytes\n"),
+                          "invalid state bytes\n",
+                        )
+                      : f.fs.readFileString(path, options),
+                }),
+              ),
+          );
+          assert.isTrue(Exit.isFailure(exit));
+          if (Exit.isFailure(exit))
+            assert.isTrue(
+              exit.cause.reasons.some(
+                (r) => Cause.isFailReason(r) && r.error._tag === "InvalidLibraryState",
+              ),
+            );
+          // Corruption arrives after the first fetch, inside the owner batch; no later Source runs.
+          assert.deepStrictEqual(f.requests, [f.urls[0]]);
+          assert.strictEqual(yield* f.fs.readFileString(statePath), "invalid state bytes\n");
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+
+      it.effect("a stale installed-copy plan aborts before fetching the next Source", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "after"));
+          const statePath = join(f.home, "state.json");
+          const library = yield* f.run(Effect.service(Library.Service));
+          let changed: string | undefined;
+          const failure = yield* Effect.flip(
+            f.run(
+              Effect.flatMap(Library.Service, (library) =>
+                Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+              ).pipe(
+                Effect.provide(
+                  rendererTestLayer({
+                    withStatus: (status, operation) =>
+                      typeof status !== "string" &&
+                      status.pending.endsWith("Updating installed skills")
+                        ? Effect.gen(function* () {
+                            const current = yield* library.read;
+                            if (current._tag !== "Present")
+                              return yield* Effect.die("Expected a Library");
+                            changed = JSON.stringify({
+                              ...current.state,
+                              repositories: [{ root: join(f.root, "later-project"), enabled: [] }],
+                            });
+                            yield* f.fs.writeFileString(statePath, changed);
+                          }).pipe(Effect.orDie, Effect.andThen(operation))
+                        : operation,
+                  }),
+                ),
+              ),
+            ),
+          );
+          assert.strictEqual(failure._tag, "Library.StalePlan");
+          assert.deepStrictEqual(f.requests, [f.urls[0]]);
+          assert.strictEqual(yield* f.fs.readFileString(statePath), changed);
+        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+      );
+
+      it.effect("stops on corruption of an existing retained object", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          const copy = f.before.collection_versions.find(
+            (copy) => copy.collection_version_id === f.before.imports[0]!.collection_version_id,
+          )!;
+          yield* f.fs.writeFileString(
+            join(originalTreePath(join(f.home, "originals"), copy.hash), "a", "SKILL.md"),
+            "corrupted",
+          );
+          f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "before"));
+          const exit = yield* Effect.exit(
+            f.run(
+              Effect.flatMap(Library.Service, (library) =>
+                Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+              ).pipe(Effect.provide(rendererTestLayer())),
+            ),
+          );
+          assert.isTrue(Exit.isFailure(exit));
+          if (Exit.isFailure(exit))
+            assert.isTrue(
+              exit.cause.reasons.some(
+                (r) => Cause.isFailReason(r) && r.error._tag === "ContentAddressCollision",
+              ),
+            );
+          assert.deepStrictEqual(f.requests, [f.urls[0]]);
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+    });
+  });
+});

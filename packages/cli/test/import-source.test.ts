@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
@@ -7,11 +8,15 @@ import { expect, test } from "vitest";
 
 const bin = join(process.cwd(), "bin", "skit.js");
 
-test("previews, adds, and projects a descriptorless skill collection", async () => {
+test("listing reports the enabled descriptorless Collection identities", async () => {
   const workspace = await mkdtemp(join(tmpdir(), "skit-source-e2e-"));
+
   const source = join(workspace, "skills");
+
   const home = join(workspace, "home");
+
   const codexRoot = join(workspace, "codex");
+
   for (const [directory, name] of [
     ["code-review", "code-review"],
     ["release-notes", "release-notes"],
@@ -22,6 +27,7 @@ test("previews, adds, and projects a descriptorless skill collection", async () 
       `---\nname: ${name}\ndescription: A realistic descriptorless Agent Skill fixture.\n---\n\n# ${name}\n`,
     );
   }
+
   const run = (...args: string[]) =>
     spawnSync(
       process.execPath,
@@ -29,74 +35,103 @@ test("previews, adds, and projects a descriptorless skill collection", async () 
       { encoding: "utf8" },
     );
 
-  const preview = run("add", source, "--list");
-  expect(preview.status, preview.stderr).toBe(0);
-  const previewData = JSON.parse(preview.stdout).data;
-  expect(previewData.kind).toBe("plain");
-  expect(previewData.skills).toHaveLength(2);
-  expect(existsSync(join(home, "state.json"))).toBe(false);
-
   const added = run("add", source);
-  expect(added.status, added.stderr).toBe(0);
-  const sourceData = JSON.parse(added.stdout).data;
-  expect(sourceData.skills).toHaveLength(2);
-  expect(sourceData).toMatchObject({
-    collection_id: expect.any(String),
-    collection_version_id: expect.any(String),
-    snapshot_digest: expect.stringMatching(/^sha256:/),
-  });
 
-  const enabledCollection = run("enable", sourceData.collection_id, "--all");
-  expect(enabledCollection.status, enabledCollection.stderr).toBe(0);
-  const enabledCollectionData = JSON.parse(enabledCollection.stdout).data;
-  expect(enabledCollectionData.skills).toEqual(["code-review", "release-notes"]);
-  // `--all` follows the whole Collection rather than freezing today's Skills.
-  expect(enabledCollectionData.enabled).toEqual([{ collection: sourceData.collection_id }]);
-  expect(await readFile(join(codexRoot, "release-notes", "SKILL.md"), "utf8")).toContain(
-    "# release-notes",
-  );
+  const sourceData = JSON.parse(added.stdout).data;
+  run("enable", sourceData.collection_id, "--all");
 
   const listed = run("list");
+
   expect(listed.status, listed.stderr).toBe(0);
+
   const listing = JSON.parse(listed.stdout).data;
+
   const collection = listing.subjects.find(
     (entry: { subject_id: string }) => entry.subject_id === sourceData.collection_id,
   );
+
   expect(collection).toBeDefined();
+
   expect(listing.enabled).toEqual([
     { collection: sourceData.collection_id, label: collection.label },
   ]);
+
   expect(listing.enabled_skills).toEqual(
     collection.skills.map((skill: { skill_id: string }) => skill.skill_id),
   );
+});
+
+test("disabling the descriptorless Collection clears its selected installed files", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "skit-source-e2e-"));
+
+  const source = join(workspace, "skills");
+
+  const home = join(workspace, "home");
+
+  const codexRoot = join(workspace, "codex");
+
+  for (const [directory, name] of [
+    ["code-review", "code-review"],
+    ["release-notes", "release-notes"],
+  ]) {
+    await mkdir(join(source, directory), { recursive: true });
+    await writeFile(
+      join(source, directory, "SKILL.md"),
+      `---\nname: ${name}\ndescription: A realistic descriptorless Agent Skill fixture.\n---\n\n# ${name}\n`,
+    );
+  }
+
+  const run = (...args: string[]) =>
+    spawnSync(
+      process.execPath,
+      [bin, ...args, "--home", home, "--codex-root", codexRoot, "--json"],
+      { encoding: "utf8" },
+    );
+
+  const added = run("add", source);
+
+  const sourceData = JSON.parse(added.stdout).data;
+  run("enable", sourceData.collection_id, "--all");
 
   const disabledCollection = run("disable", sourceData.collection_id, "--all");
+
   expect(disabledCollection.status, disabledCollection.stderr).toBe(0);
+
   const disabledCollectionData = JSON.parse(disabledCollection.stdout).data;
+
   expect(disabledCollectionData.skills).toEqual(["code-review", "release-notes"]);
+
   expect(disabledCollectionData.enabled).toEqual([]);
+
   expect(existsSync(join(codexRoot, "code-review"))).toBe(false);
+
   expect(existsSync(join(codexRoot, "release-notes"))).toBe(false);
 });
 
-test("retains GitHub collection identity through add, enable, and list", async () => {
+test("GitHub Collection enable accepts the saved identity", async () => {
   const workspace = await mkdtemp(join(tmpdir(), "skit-github-identity-e2e-"));
+
   const fixture = join(workspace, "fixture");
+
   const home = join(workspace, "home");
+
   const codexRoot = join(workspace, "codex");
+
   await mkdir(join(fixture, "code-review"), { recursive: true });
+
   await writeFile(
     join(fixture, "code-review", "SKILL.md"),
     "---\nname: code-review\ndescription: Review code.\n---\n\n# Code Review\n",
   );
+
   for (const args of [
     ["init", "-q"],
     ["add", "."],
     ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "fixture"],
   ]) {
-    const committed = spawnSync("git", args, { cwd: fixture, encoding: "utf8" });
-    expect(committed.status, committed.stderr).toBe(0);
+    spawnSync("git", args, { cwd: fixture, encoding: "utf8" });
   }
+
   const run = (...args: string[]) =>
     spawnSync(
       process.execPath,
@@ -115,31 +150,289 @@ test("retains GitHub collection identity through add, enable, and list", async (
     );
 
   const added = run("add", "https://github.com/mattpocock/skills");
-  expect(added.status, added.stderr).toBe(0);
+
   const addedCollection = JSON.parse(added.stdout).data;
-  expect(addedCollection.collection_id).toEqual(expect.any(String));
 
   const enabled = run("enable", addedCollection.collection_id, "--all");
+
   expect(enabled.status, enabled.stderr).toBe(0);
+});
+
+test("GitHub listing and ownership retain the selected Skill identity", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "skit-github-identity-e2e-"));
+
+  const fixture = join(workspace, "fixture");
+
+  const home = join(workspace, "home");
+
+  const codexRoot = join(workspace, "codex");
+
+  await mkdir(join(fixture, "code-review"), { recursive: true });
+
+  await writeFile(
+    join(fixture, "code-review", "SKILL.md"),
+    "---\nname: code-review\ndescription: Review code.\n---\n\n# Code Review\n",
+  );
+
+  for (const args of [
+    ["init", "-q"],
+    ["add", "."],
+    ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "fixture"],
+  ]) {
+    spawnSync("git", args, { cwd: fixture, encoding: "utf8" });
+  }
+
+  const run = (...args: string[]) =>
+    spawnSync(
+      process.execPath,
+      [bin, ...args, "--home", home, "--codex-root", codexRoot, "--json"],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          GIT_CONFIG_NOSYSTEM: "1",
+          GIT_CONFIG_GLOBAL: "/dev/null",
+          GIT_CONFIG_COUNT: "1",
+          GIT_CONFIG_KEY_0: `url.${fixture}.insteadOf`,
+          GIT_CONFIG_VALUE_0: "https://github.com/mattpocock/skills",
+        },
+      },
+    );
+
+  const added = run("add", "https://github.com/mattpocock/skills");
+
+  const addedCollection = JSON.parse(added.stdout).data;
+  run("enable", addedCollection.collection_id, "--all");
+
   const listed = run("list");
+
   expect(listed.status, listed.stderr).toBe(0);
+
   const listing = JSON.parse(listed.stdout).data;
+
   const collection = listing.subjects.find(
     (entry: { label?: string }) => entry.label === "mattpocock/skills",
   );
+
   expect(collection).toBeDefined();
+
   const codeReview = collection.skills.find(
     (skill: { name: string }) => skill.name === "code-review",
   );
+
   expect(codeReview).toBeDefined();
+
   expect(listing.enabled_skills).toEqual([codeReview!.skill_id]);
 
-  const persisted = await readFile(join(home, "state.json"), "utf8");
   const ownership = await readFile(join(codexRoot, "code-review", ".skit-ownership.json"), "utf8");
-  expect(
-    JSON.parse(persisted).collections.some(
-      (entry: { label?: string }) => entry.label === "mattpocock/skills",
-    ),
-  ).toBe(true);
+
   expect(ownership).toContain(codeReview!.skill_id);
+});
+
+describe("skit add", () => {
+  describe("Preview leaves the Library unchanged.", () => {
+    test("descriptorless source preview does not create a Library", async () => {
+      const workspace = await mkdtemp(join(tmpdir(), "skit-source-e2e-"));
+
+      const source = join(workspace, "skills");
+
+      const home = join(workspace, "home");
+
+      const codexRoot = join(workspace, "codex");
+
+      for (const [directory, name] of [
+        ["code-review", "code-review"],
+        ["release-notes", "release-notes"],
+      ]) {
+        await mkdir(join(source, directory), { recursive: true });
+        await writeFile(
+          join(source, directory, "SKILL.md"),
+          `---\nname: ${name}\ndescription: A realistic descriptorless Agent Skill fixture.\n---\n\n# ${name}\n`,
+        );
+      }
+
+      const run = (...args: string[]) =>
+        spawnSync(
+          process.execPath,
+          [bin, ...args, "--home", home, "--codex-root", codexRoot, "--json"],
+          { encoding: "utf8" },
+        );
+
+      const preview = run("add", source, "--list");
+
+      expect(preview.status, preview.stderr).toBe(0);
+
+      const previewData = JSON.parse(preview.stdout).data;
+
+      expect(previewData.kind).toBe("plain");
+
+      expect(previewData.skills).toHaveLength(2);
+
+      expect(existsSync(join(home, "state.json"))).toBe(false);
+    });
+  });
+});
+
+describe("skit add", () => {
+  describe("Adding a source saves its selected Skills without enabling them.", () => {
+    test("adding a descriptorless source saves the discovered Skill identities", async () => {
+      const workspace = await mkdtemp(join(tmpdir(), "skit-source-e2e-"));
+
+      const source = join(workspace, "skills");
+
+      const home = join(workspace, "home");
+
+      const codexRoot = join(workspace, "codex");
+
+      for (const [directory, name] of [
+        ["code-review", "code-review"],
+        ["release-notes", "release-notes"],
+      ]) {
+        await mkdir(join(source, directory), { recursive: true });
+        await writeFile(
+          join(source, directory, "SKILL.md"),
+          `---\nname: ${name}\ndescription: A realistic descriptorless Agent Skill fixture.\n---\n\n# ${name}\n`,
+        );
+      }
+
+      const run = (...args: string[]) =>
+        spawnSync(
+          process.execPath,
+          [bin, ...args, "--home", home, "--codex-root", codexRoot, "--json"],
+          { encoding: "utf8" },
+        );
+
+      const added = run("add", source);
+
+      expect(added.status, added.stderr).toBe(0);
+
+      const sourceData = JSON.parse(added.stdout).data;
+
+      expect(sourceData.skills).toHaveLength(2);
+
+      expect(sourceData).toMatchObject({
+        collection_id: expect.any(String),
+        collection_version_id: expect.any(String),
+        snapshot_digest: expect.stringMatching(/^sha256:/),
+      });
+    });
+
+    test("GitHub add retains the Collection identity and label", async () => {
+      const workspace = await mkdtemp(join(tmpdir(), "skit-github-identity-e2e-"));
+
+      const fixture = join(workspace, "fixture");
+
+      const home = join(workspace, "home");
+
+      const codexRoot = join(workspace, "codex");
+
+      await mkdir(join(fixture, "code-review"), { recursive: true });
+
+      await writeFile(
+        join(fixture, "code-review", "SKILL.md"),
+        "---\nname: code-review\ndescription: Review code.\n---\n\n# Code Review\n",
+      );
+
+      for (const args of [
+        ["init", "-q"],
+        ["add", "."],
+        [
+          "-c",
+          "user.name=Test",
+          "-c",
+          "user.email=test@example.invalid",
+          "commit",
+          "-qm",
+          "fixture",
+        ],
+      ]) {
+        const committed = spawnSync("git", args, { cwd: fixture, encoding: "utf8" });
+        expect(committed.status, committed.stderr).toBe(0);
+      }
+
+      const run = (...args: string[]) =>
+        spawnSync(
+          process.execPath,
+          [bin, ...args, "--home", home, "--codex-root", codexRoot, "--json"],
+          {
+            encoding: "utf8",
+            env: {
+              ...process.env,
+              GIT_CONFIG_NOSYSTEM: "1",
+              GIT_CONFIG_GLOBAL: "/dev/null",
+              GIT_CONFIG_COUNT: "1",
+              GIT_CONFIG_KEY_0: `url.${fixture}.insteadOf`,
+              GIT_CONFIG_VALUE_0: "https://github.com/mattpocock/skills",
+            },
+          },
+        );
+
+      const added = run("add", "https://github.com/mattpocock/skills");
+
+      expect(added.status, added.stderr).toBe(0);
+
+      const addedCollection = JSON.parse(added.stdout).data;
+
+      expect(addedCollection.collection_id).toEqual(expect.any(String));
+
+      const persisted = await readFile(join(home, "state.json"), "utf8");
+
+      expect(
+        JSON.parse(persisted).collections.some(
+          (entry: { label?: string }) => entry.label === "mattpocock/skills",
+        ),
+      ).toBe(true);
+    });
+  });
+});
+
+describe("skit enable", () => {
+  describe("Enabling a Collection includes all of its Skills.", () => {
+    test("enabling a descriptorless Collection installs all selected Skills", async () => {
+      const workspace = await mkdtemp(join(tmpdir(), "skit-source-e2e-"));
+
+      const source = join(workspace, "skills");
+
+      const home = join(workspace, "home");
+
+      const codexRoot = join(workspace, "codex");
+
+      for (const [directory, name] of [
+        ["code-review", "code-review"],
+        ["release-notes", "release-notes"],
+      ]) {
+        await mkdir(join(source, directory), { recursive: true });
+        await writeFile(
+          join(source, directory, "SKILL.md"),
+          `---\nname: ${name}\ndescription: A realistic descriptorless Agent Skill fixture.\n---\n\n# ${name}\n`,
+        );
+      }
+
+      const run = (...args: string[]) =>
+        spawnSync(
+          process.execPath,
+          [bin, ...args, "--home", home, "--codex-root", codexRoot, "--json"],
+          { encoding: "utf8" },
+        );
+
+      const added = run("add", source);
+
+      const sourceData = JSON.parse(added.stdout).data;
+
+      const enabledCollection = run("enable", sourceData.collection_id, "--all");
+
+      expect(enabledCollection.status, enabledCollection.stderr).toBe(0);
+
+      const enabledCollectionData = JSON.parse(enabledCollection.stdout).data;
+
+      expect(enabledCollectionData.skills).toEqual(["code-review", "release-notes"]);
+
+      // `--all` follows the whole Collection rather than freezing today's Skills.
+      expect(enabledCollectionData.enabled).toEqual([{ collection: sourceData.collection_id }]);
+
+      expect(await readFile(join(codexRoot, "release-notes", "SKILL.md"), "utf8")).toContain(
+        "# release-notes",
+      );
+    });
+  });
 });

@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import { assert, it } from "@effect/vitest";
 import { Context, Effect, FileSystem, Layer, Option, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
@@ -108,57 +109,6 @@ const startup = (home: string) =>
     (built) => Context.get(built, Library.Service).startup,
   );
 
-// A one-folder removal commits the record, the receipt, the move, the Done mark, then Done.
-for (const [commits, after] of [
-  [1, "the record"],
-  [3, "the move"],
-  [4, "the Done mark"],
-] as const)
-  it.effect(`a setup killed after ${after} is finished when the layer is next built`, () =>
-    Effect.gen(function* () {
-      const { fs, home, folder } = yield* fixture;
-      yield* killedAfter(home, folder, commits);
-      const [operation] = yield* recordedOperations(home);
-      if (operation?._tag !== "Pending") return assert.fail("setup is not Pending");
-
-      assert.deepStrictEqual(yield* startup(home), {
-        finished: [operation.operationId],
-        stopped: [],
-      });
-      assert.isFalse(yield* fs.exists(folder));
-      assert.isTrue(
-        yield* fs.exists(join(home, "removed", operation.operationId, "step-1", "1-review")),
-      );
-      assert.deepStrictEqual(
-        (yield* recordedOperations(home)).map(({ _tag, operationId }) => ({ _tag, operationId })),
-        [{ _tag: "Done", operationId: operation.operationId }],
-      );
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
-  );
-
-it.effect(
-  "a setup whose folder changed after it was killed stops, and the layer still builds",
-  () =>
-    Effect.gen(function* () {
-      const { fs, home, folder } = yield* fixture;
-      yield* killedAfter(home, folder, 2);
-      yield* fs.writeFileString(join(folder, "notes.md"), "the user's edit\n");
-      const [operation] = yield* recordedOperations(home);
-      if (operation?._tag !== "Pending") return assert.fail("setup is not Pending");
-
-      const recovered = yield* startup(home);
-
-      assert.deepStrictEqual(recovered.finished, []);
-      const [stopped] = recovered.stopped;
-      assert.strictEqual(stopped?.operationId, operation.operationId);
-      assert.strictEqual(stopped?.reason._tag, "EvidenceDiffers");
-      assert.deepStrictEqual(yield* recordedOperations(home), recovered.stopped);
-      assert.strictEqual(yield* fs.readFileString(join(folder, "notes.md")), "the user's edit\n");
-      // Stopped is settled: the next build finds nothing to recover.
-      assert.deepStrictEqual(yield* startup(home), { finished: [], stopped: [] });
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
 it.effect("with nothing Pending, building the layer takes no lock and writes nothing", () =>
   Effect.gen(function* () {
     const { fs, home, folder } = yield* fixture;
@@ -183,3 +133,66 @@ it.effect("with nothing Pending, building the layer takes no lock and writes not
     assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), before);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+describe("skit setup", () => {
+  describe("Keeping files recoverable", () => {
+    describe("An interrupted setup keeps the remaining files recoverable.", () => {
+      // A one-folder removal commits the record, the receipt, the move, the Done mark, then Done.
+      for (const [commits, after] of [
+        [1, "the record"],
+        [3, "the move"],
+        [4, "the Done mark"],
+      ] as const)
+        it.effect(`a setup killed after ${after} is finished when the layer is next built`, () =>
+          Effect.gen(function* () {
+            const { fs, home, folder } = yield* fixture;
+            yield* killedAfter(home, folder, commits);
+            const [operation] = yield* recordedOperations(home);
+            if (operation?._tag !== "Pending") return assert.fail("setup is not Pending");
+
+            assert.deepStrictEqual(yield* startup(home), {
+              finished: [operation.operationId],
+              stopped: [],
+            });
+            assert.isFalse(yield* fs.exists(folder));
+            assert.isTrue(
+              yield* fs.exists(join(home, "removed", operation.operationId, "step-1", "1-review")),
+            );
+            assert.deepStrictEqual(
+              (yield* recordedOperations(home)).map(({ _tag, operationId }) => ({
+                _tag,
+                operationId,
+              })),
+              [{ _tag: "Done", operationId: operation.operationId }],
+            );
+          }).pipe(Effect.provide(skitLayer), Effect.scoped),
+        );
+
+      it.effect(
+        "a setup whose folder changed after it was killed stops, and the layer still builds",
+        () =>
+          Effect.gen(function* () {
+            const { fs, home, folder } = yield* fixture;
+            yield* killedAfter(home, folder, 2);
+            yield* fs.writeFileString(join(folder, "notes.md"), "the user's edit\n");
+            const [operation] = yield* recordedOperations(home);
+            if (operation?._tag !== "Pending") return assert.fail("setup is not Pending");
+
+            const recovered = yield* startup(home);
+
+            assert.deepStrictEqual(recovered.finished, []);
+            const [stopped] = recovered.stopped;
+            assert.strictEqual(stopped?.operationId, operation.operationId);
+            assert.strictEqual(stopped?.reason._tag, "EvidenceDiffers");
+            assert.deepStrictEqual(yield* recordedOperations(home), recovered.stopped);
+            assert.strictEqual(
+              yield* fs.readFileString(join(folder, "notes.md")),
+              "the user's edit\n",
+            );
+            // Stopped is settled: the next build finds nothing to recover.
+            assert.deepStrictEqual(yield* startup(home), { finished: [], stopped: [] });
+          }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      );
+    });
+  });
+});

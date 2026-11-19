@@ -62,98 +62,99 @@ const sourcePolicyReasonTag = (exit: Exit.Exit<unknown, unknown>): string | unde
   const failure = first.error as { _tag?: string; reason?: { _tag?: string } };
   return failure._tag === "SourcePolicyViolation" ? failure.reason?._tag : undefined;
 };
+// Real time: the fetch and the stalled read only progress on the live clock.
+it.live("is cancelled when the operation is interrupted mid-body", () =>
+  Effect.gen(function* () {
+    const body = observableBody([new Uint8Array(8)], { stall: true });
+    const client = clientFromResponse(
+      () => new Response(body.stream, { headers: { "content-type": "application/zip" } }),
+    );
 
-describe("the source download body", () => {
-  // Real time: the fetch and the stalled read only progress on the live clock.
-  it.live("is cancelled when the operation is interrupted mid-body", () =>
-    Effect.gen(function* () {
-      const body = observableBody([new Uint8Array(8)], { stall: true });
-      const client = clientFromResponse(
-        () => new Response(body.stream, { headers: { "content-type": "application/zip" } }),
-      );
+    const fiber = yield* Effect.forkChild(resolve(URL_ARCHIVE, client));
+    // Wait until the body is actually being read, so headers have already arrived.
+    yield* Effect.sleep(50);
+    yield* Fiber.interrupt(fiber);
 
-      const fiber = yield* Effect.forkChild(resolve(URL_ARCHIVE, client));
-      // Wait until the body is actually being read, so headers have already arrived.
-      yield* Effect.sleep(50);
-      yield* Fiber.interrupt(fiber);
+    assert.isTrue(body.state.cancelled, "the body must be cancelled, not left streaming");
+  }),
+);
 
-      assert.isTrue(body.state.cancelled, "the body must be cancelled, not left streaming");
-    }),
-  );
+it.effect("rejects the status before reading the body", () =>
+  Effect.gen(function* () {
+    const body = observableBody([new Uint8Array(8)], { stall: true });
+    const client = clientFromResponse(() => new Response(body.stream, { status: 404 }));
 
-  it.effect("rejects the status before reading the body", () =>
-    Effect.gen(function* () {
-      const body = observableBody([new Uint8Array(8)], { stall: true });
-      const client = clientFromResponse(() => new Response(body.stream, { status: 404 }));
+    const exit = yield* Effect.exit(resolve(URL_ARCHIVE, client));
+    assert.strictEqual(failureTag(exit), "SourceNotFound");
+    assert.strictEqual(body.state.pulls, 0, "a rejected response body must not be consumed");
+  }),
+);
 
-      const exit = yield* Effect.exit(resolve(URL_ARCHIVE, client));
-      assert.strictEqual(failureTag(exit), "SourceNotFound");
-      assert.strictEqual(body.state.pulls, 0, "a rejected response body must not be consumed");
-    }),
-  );
+it.effect("lets a defect in our own code stay a defect", () =>
+  Effect.gen(function* () {
+    const client = HttpClient.make(() =>
+      Effect.die(new ReferenceError("undefinedHelper is not defined")),
+    );
 
-  it.effect("stops reading an archive that outgrows the limit despite its Content-Length", () =>
-    Effect.gen(function* () {
-      // The header understates the body by three orders of magnitude.
-      const chunk = new Uint8Array(8 * 1024 * 1024);
-      const body = observableBody(Array.from({ length: 40 }, () => chunk));
-      const client = clientFromResponse(
-        () =>
-          new Response(body.stream, {
-            headers: { "content-type": "application/zip", "content-length": "128" },
-          }),
-      );
+    const exit = yield* Effect.exit(resolve(URL_ARCHIVE, client));
+    assert.strictEqual(failureTag(exit), "Die(ReferenceError)");
+  }),
+);
 
-      const exit = yield* Effect.exit(resolve(URL_ARCHIVE, client));
-      assert.strictEqual(failureTag(exit), "SourcePolicyViolation");
-      assert.strictEqual(sourcePolicyReasonTag(exit), "LimitExceeded");
-      // 256 MiB is 32 chunks; stopping there proves the cap is enforced during the read.
-      assert.isBelow(body.state.pulls, 40, "the read must stop at the limit, not at the end");
-    }),
-  );
+it.effect("still reports an ordinary transport failure as a source failure", () =>
+  Effect.gen(function* () {
+    const client = HttpClient.make((request) =>
+      Effect.fail(
+        new HttpClientError.HttpClientError({
+          reason: new HttpClientError.TransportError({ request, cause: new TypeError("failed") }),
+        }),
+      ),
+    );
 
-  it.effect("stops reading a direct Skill that outgrows its smaller limit", () =>
-    Effect.gen(function* () {
-      const chunk = new Uint8Array(512 * 1024);
-      const body = observableBody(Array.from({ length: 10 }, () => chunk));
-      const client = clientFromResponse(
-        () =>
-          new Response(body.stream, {
-            headers: { "content-type": "text/plain" },
-          }),
-      );
+    const exit = yield* Effect.exit(resolve(URL_ARCHIVE, client));
+    assert.strictEqual(failureTag(exit), "SourcePolicyViolation");
+    assert.strictEqual(sourcePolicyReasonTag(exit), "TransportFailure");
+  }),
+);
 
-      const exit = yield* Effect.exit(resolve(URL_SKILL, client));
-      assert.strictEqual(failureTag(exit), "SourcePolicyViolation");
-      assert.strictEqual(sourcePolicyReasonTag(exit), "LimitExceeded");
-      assert.isBelow(body.state.pulls, 10, "2 MiB is four chunks, not ten");
-    }),
-  );
+describe("skit add", () => {
+  describe("Add refuses content beyond its import limits.", () => {
+    it.effect("stops reading an archive that outgrows the limit despite its Content-Length", () =>
+      Effect.gen(function* () {
+        // The header understates the body by three orders of magnitude.
+        const chunk = new Uint8Array(8 * 1024 * 1024);
+        const body = observableBody(Array.from({ length: 40 }, () => chunk));
+        const client = clientFromResponse(
+          () =>
+            new Response(body.stream, {
+              headers: { "content-type": "application/zip", "content-length": "128" },
+            }),
+        );
 
-  it.effect("lets a defect in our own code stay a defect", () =>
-    Effect.gen(function* () {
-      const client = HttpClient.make(() =>
-        Effect.die(new ReferenceError("undefinedHelper is not defined")),
-      );
+        const exit = yield* Effect.exit(resolve(URL_ARCHIVE, client));
+        assert.strictEqual(failureTag(exit), "SourcePolicyViolation");
+        assert.strictEqual(sourcePolicyReasonTag(exit), "LimitExceeded");
+        // 256 MiB is 32 chunks; stopping there proves the cap is enforced during the read.
+        assert.isBelow(body.state.pulls, 40, "the read must stop at the limit, not at the end");
+      }),
+    );
 
-      const exit = yield* Effect.exit(resolve(URL_ARCHIVE, client));
-      assert.strictEqual(failureTag(exit), "Die(ReferenceError)");
-    }),
-  );
+    it.effect("stops reading a direct Skill that outgrows its smaller limit", () =>
+      Effect.gen(function* () {
+        const chunk = new Uint8Array(512 * 1024);
+        const body = observableBody(Array.from({ length: 10 }, () => chunk));
+        const client = clientFromResponse(
+          () =>
+            new Response(body.stream, {
+              headers: { "content-type": "text/plain" },
+            }),
+        );
 
-  it.effect("still reports an ordinary transport failure as a source failure", () =>
-    Effect.gen(function* () {
-      const client = HttpClient.make((request) =>
-        Effect.fail(
-          new HttpClientError.HttpClientError({
-            reason: new HttpClientError.TransportError({ request, cause: new TypeError("failed") }),
-          }),
-        ),
-      );
-
-      const exit = yield* Effect.exit(resolve(URL_ARCHIVE, client));
-      assert.strictEqual(failureTag(exit), "SourcePolicyViolation");
-      assert.strictEqual(sourcePolicyReasonTag(exit), "TransportFailure");
-    }),
-  );
+        const exit = yield* Effect.exit(resolve(URL_SKILL, client));
+        assert.strictEqual(failureTag(exit), "SourcePolicyViolation");
+        assert.strictEqual(sourcePolicyReasonTag(exit), "LimitExceeded");
+        assert.isBelow(body.state.pulls, 10, "2 MiB is four chunks, not ten");
+      }),
+    );
+  });
 });

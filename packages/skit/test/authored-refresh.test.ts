@@ -1,3 +1,4 @@
+import { describe } from "vitest";
 import { assert, it } from "@effect/vitest";
 import {
   Clock,
@@ -121,366 +122,348 @@ const enable = Effect.fn("Test.enableAuthoredCollection")(function* (root: strin
   return imported.entry.collection.collection_id;
 });
 
-it.effect(
-  "saved offline edits update enabled copies; unchanged passes add no versions or imports",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture;
-      yield* Effect.gen(function* () {
-        yield* enable(f.root, f.home);
-        const library = yield* Library.Service;
-        const expected = content("review", "Local edit without Registry access");
-        yield* f.fs.writeFileString(join(f.root, "skills/review/SKILL.md"), expected);
-        assert.strictEqual((yield* updateAuthoredSkills(f.root)).status, "updated");
-        assert.strictEqual(yield* f.fs.readFileString(join(f.agents, "review/SKILL.md")), expected);
-        const before = yield* library.read;
-        assert.strictEqual((yield* updateAuthoredSkills(f.root)).status, "unchanged");
-        const after = yield* library.read;
-        assert.strictEqual(after.revision, before.revision);
-      }).pipe(Effect.provide(f.layer));
-    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-);
-
-it.live(
-  "the foreground watcher installs an atomic save with the Registry offline",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture;
-      yield* Effect.gen(function* () {
-        yield* enable(f.root, f.home);
-        yield* f.fs.writeFileString(
-          join(f.root, "skit.remote.json"),
-          JSON.stringify({
-            schema: "skit.remote.v1",
-            origin: "https://registry.example",
-            namespace: "tim",
-            skit: "tools",
-          }),
-        );
-        const library = yield* Library.Service;
-        let installationPasses = 0;
-        const ready = yield* Deferred.make<void>();
-        const events = yield* Ref.make<readonly AuthorWatchEvent[]>([]);
-        yield* watchAuthorWorkspace(
-          f.root,
-          { home: f.home },
-          {
-            origin: Effect.succeed("https://registry.example"),
-            connect: () => Effect.fail(new Error("Registry is offline")),
-          },
-          (event) =>
-            Ref.update(events, (items) => [...items, event]).pipe(
-              Effect.andThen(
-                event.event === "installation" ? Deferred.succeed(ready, undefined) : Effect.void,
+describe("skit author watch", () => {
+  describe("Watch installs an offline atomic save without repeating installation work while idle.", () => {
+    it.live(
+      "the foreground watcher installs an atomic save with the Registry offline",
+      () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          yield* Effect.gen(function* () {
+            yield* enable(f.root, f.home);
+            yield* f.fs.writeFileString(
+              join(f.root, "skit.remote.json"),
+              JSON.stringify({
+                schema: "skit.remote.v1",
+                origin: "https://registry.example",
+                namespace: "tim",
+                skit: "tools",
+              }),
+            );
+            const library = yield* Library.Service;
+            let installationPasses = 0;
+            const ready = yield* Deferred.make<void>();
+            const events = yield* Ref.make<readonly AuthorWatchEvent[]>([]);
+            yield* watchAuthorWorkspace(
+              f.root,
+              { home: f.home },
+              {
+                origin: Effect.succeed("https://registry.example"),
+                connect: () => Effect.fail(new Error("Registry is offline")),
+              },
+              (event) =>
+                Ref.update(events, (items) => [...items, event]).pipe(
+                  Effect.andThen(
+                    event.event === "installation"
+                      ? Deferred.succeed(ready, undefined)
+                      : Effect.void,
+                  ),
+                  Effect.asVoid,
+                ),
+            ).pipe(
+              Effect.provideService(Library.Service, {
+                ...library,
+                updateAuthoredSkills: (request) => {
+                  installationPasses++;
+                  return library.updateAuthoredSkills(request);
+                },
+              }),
+              Effect.forkScoped,
+            );
+            yield* Deferred.await(ready);
+            const expected = content("review", "Watched atomic save while offline");
+            const path = join(f.root, "skills/review/SKILL.md");
+            yield* f.fs.writeFileString(`${path}.tmp`, expected);
+            yield* f.fs.rename(`${path}.tmp`, path);
+            yield* f.fs.readFileString(join(f.agents, "review/SKILL.md")).pipe(
+              Effect.filterOrFail(
+                (value) => value === expected,
+                () => new Error("Installed copy has not advanced"),
               ),
-              Effect.asVoid,
-            ),
-        ).pipe(
-          Effect.provideService(Library.Service, {
-            ...library,
-            updateAuthoredSkills: (request) => {
-              installationPasses++;
-              return library.updateAuthoredSkills(request);
-            },
-          }),
-          Effect.forkScoped,
-        );
-        yield* Deferred.await(ready);
-        const expected = content("review", "Watched atomic save while offline");
-        const path = join(f.root, "skills/review/SKILL.md");
-        yield* f.fs.writeFileString(`${path}.tmp`, expected);
-        yield* f.fs.rename(`${path}.tmp`, path);
-        yield* f.fs.readFileString(join(f.agents, "review/SKILL.md")).pipe(
-          Effect.filterOrFail(
-            (value) => value === expected,
-            () => new Error("Installed copy has not advanced"),
-          ),
-          Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 100 }),
-        );
-        yield* Ref.get(events).pipe(
-          Effect.filterOrFail(
-            (trace) =>
+              Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 100 }),
+            );
+            yield* Ref.get(events).pipe(
+              Effect.filterOrFail(
+                (trace) =>
+                  trace.some(
+                    (event) =>
+                      event.event === "installation" &&
+                      event.installed_copies.some(
+                        (copy) => copy.skill === "review" && copy.path === join(f.agents, "review"),
+                      ),
+                  ),
+                () => new Error("Installed copy event has not arrived"),
+              ),
+              Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 30 }),
+            );
+            yield* Effect.sleep("3500 millis");
+            const passesBeforeIdle = installationPasses;
+            const beforeIdle = yield* Ref.get(events);
+            yield* Effect.sleep("6500 millis");
+            const trace = yield* Ref.get(events);
+            assert.strictEqual(installationPasses, passesBeforeIdle);
+            assert.isTrue(
               trace.some(
                 (event) =>
-                  event.event === "installation" &&
-                  event.installed_copies.some(
-                    (copy) => copy.skill === "review" && copy.path === join(f.agents, "review"),
-                  ),
+                  event.event === "saved_locally" && event.paths.includes("skills/review/SKILL.md"),
               ),
-            () => new Error("Installed copy event has not arrived"),
-          ),
-          Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 30 }),
-        );
-        yield* Effect.sleep("3500 millis");
-        const passesBeforeIdle = installationPasses;
-        const beforeIdle = yield* Ref.get(events);
-        yield* Effect.sleep("6500 millis");
-        const trace = yield* Ref.get(events);
-        assert.strictEqual(installationPasses, passesBeforeIdle);
-        const base = yield* library.read;
-        if (base._tag !== "Present") return assert.fail("Expected authored Library");
-        const disabled = yield* library.planEnabled(
-          [
-            {
-              subject: base.state.collections[0]!.collection_id,
-              enabled: false,
-              members: "whole",
-              where: [{ kind: "global" }],
-            },
-          ],
-          { base },
-        );
-        yield* library.apply({ _tag: "Apply", plan: disabled.plan });
-        yield* Ref.get(events).pipe(
-          Effect.filterOrFail(
-            (items) =>
-              items.some(
+            );
+            assert.strictEqual(
+              trace.filter((event) => event.event === "installation").length,
+              beforeIdle.filter((event) => event.event === "installation").length,
+            );
+            assert.strictEqual(
+              trace.filter((event) => event.event === "retrying" && event.operation === "sync")
+                .length,
+              1,
+            );
+            assert.isFalse(
+              trace.some(
                 (event) =>
-                  event.event === "installation" &&
-                  event.reason === "configuration-changed" &&
-                  event.context?.disabled_skills.includes("review"),
+                  event.event === "saved_locally" &&
+                  event.paths.some((path) => path.startsWith(".skit/")),
               ),
-            () => new Error("Library change did not invalidate the idle installation"),
-          ),
-          Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 50 }),
-        );
-        assert.isTrue(
-          trace.some(
-            (event) =>
-              event.event === "saved_locally" && event.paths.includes("skills/review/SKILL.md"),
-          ),
-        );
-        assert.strictEqual(
-          trace.filter((event) => event.event === "installation").length,
-          beforeIdle.filter((event) => event.event === "installation").length,
-        );
-        assert.strictEqual(
-          trace.filter((event) => event.event === "retrying" && event.operation === "sync").length,
-          1,
-        );
-        assert.isFalse(
-          trace.some(
-            (event) =>
-              event.event === "saved_locally" &&
-              event.paths.some((path) => path.startsWith(".skit/")),
-          ),
-        );
-      }).pipe(Effect.provide(f.layer));
-    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-  { timeout: 30_000 },
-);
+            );
+          }).pipe(Effect.provide(f.layer));
+        }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+      { timeout: 30_000 },
+    );
+  });
+});
 
-it.effect(
-  "an invalid member holds its exact shared inputs while another advances; malformed declarations freeze membership only",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture;
-      yield* Effect.gen(function* () {
-        yield* enable(f.root, f.home);
-        const library = yield* Library.Service;
-        const original = (yield* library.skills()).find((row) => row.name === "review")!;
-        assert.isNull(original.revision);
-        assert.isUndefined(original.saved_at);
-        yield* TestClock.setTime(new Date("2026-11-08T21:17:28.100Z").getTime());
-        for (const name of ["review", "explain"])
-          yield* f.fs.writeFileString(
-            join(f.root, "skills", name, "SKILL.md"),
-            content(name, "Saved baseline"),
-          );
-        yield* updateAuthoredSkills(f.root);
-        const baseline = (yield* library.skills()).find((row) => row.name === "review")!;
-        assert.isNotNull(baseline.revision);
-        assert.strictEqual(baseline.saved_at, "2026-11-08T21:17:28.100Z");
-        yield* TestClock.adjust("1 second");
-        const oldReview = yield* f.fs.readFileString(join(f.agents, "review/SKILL.md"));
-        yield* f.fs.remove(join(f.root, "skills/review/SKILL.md"));
-        yield* f.fs.writeFileString(join(f.root, "shared/rules.txt"), "shared v2\n");
-        const expected = content("explain", "Valid member advances");
-        yield* f.fs.writeFileString(join(f.root, "skills/explain/SKILL.md"), expected);
-        const result = yield* updateAuthoredSkills(f.root);
-        assert.isTrue(
-          result.issues.some(
-            (issue) => issue._tag === "InputRemovalPending" && issue.skill === "review",
-          ),
-        );
-        assert.strictEqual(
-          yield* f.fs.readFileString(join(f.agents, "review/SKILL.md")),
-          oldReview,
-        );
-        assert.strictEqual(
-          yield* f.fs.readFileString(join(f.agents, "review/context/rules.txt")),
-          "shared v1\n",
-        );
-        assert.strictEqual(
-          yield* f.fs.readFileString(join(f.agents, "explain/context/rules.txt")),
-          "shared v2\n",
-        );
-        assert.strictEqual(
-          yield* f.fs.readFileString(join(f.agents, "explain/SKILL.md")),
-          expected,
-        );
-        const rows = yield* library.skills();
-        const held = rows.find((row) => row.name === "review")!;
-        const advanced = rows.find((row) => row.name === "explain")!;
-        assert.strictEqual(held.revision, baseline.revision);
-        assert.strictEqual(held.saved_at, baseline.saved_at);
-        assert.strictEqual(held.imported_at, baseline.imported_at);
-        assert.notStrictEqual(advanced.revision, baseline.revision);
-        assert.strictEqual(advanced.saved_at, "2026-11-08T21:17:29.100Z");
-        const before = yield* library.read;
-        yield* f.fs.writeFileString(join(f.root, "skills/review/SKILL.md"), "");
-        yield* updateAuthoredSkills(f.root);
-        assert.strictEqual((yield* library.read).revision, before.revision);
-        assert.strictEqual(
-          yield* f.fs.readFileString(join(f.agents, "review/SKILL.md")),
-          oldReview,
-        );
-        yield* f.fs.writeFileString(join(f.root, "skit.json"), "{");
-        const next = content("explain", "Known member advances with broken root descriptor");
-        yield* f.fs.writeFileString(join(f.root, "skills/explain/SKILL.md"), next);
-        yield* updateAuthoredSkills(f.root);
-        assert.strictEqual(yield* f.fs.readFileString(join(f.agents, "explain/SKILL.md")), next);
-        assert.strictEqual(
-          yield* f.fs.readFileString(join(f.agents, "review/context/rules.txt")),
-          "shared v1\n",
-        );
-      }).pipe(Effect.provide(f.layer));
-    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-);
+describe("skit author watch", () => {
+  describe("Watch reports when a skill is disabled.", () => {
+    it.live(
+      "the foreground watcher reports configuration-changed after a skill is disabled",
+      () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          yield* Effect.gen(function* () {
+            yield* enable(f.root, f.home);
+            yield* f.fs.writeFileString(
+              join(f.root, "skit.remote.json"),
+              JSON.stringify({
+                schema: "skit.remote.v1",
+                origin: "https://registry.example",
+                namespace: "tim",
+                skit: "tools",
+              }),
+            );
+            const library = yield* Library.Service;
+            const ready = yield* Deferred.make<void>();
+            const events = yield* Ref.make<readonly AuthorWatchEvent[]>([]);
+            yield* watchAuthorWorkspace(
+              f.root,
+              { home: f.home },
+              {
+                origin: Effect.succeed("https://registry.example"),
+                connect: () => Effect.fail(new Error("Registry is offline")),
+              },
+              (event) =>
+                Ref.update(events, (items) => [...items, event]).pipe(
+                  Effect.andThen(
+                    event.event === "installation"
+                      ? Deferred.succeed(ready, undefined)
+                      : Effect.void,
+                  ),
+                  Effect.asVoid,
+                ),
+            ).pipe(Effect.forkScoped);
+            yield* Deferred.await(ready);
+            const base = yield* library.read;
+            if (base._tag !== "Present") return assert.fail("Expected authored Library");
+            const disabled = yield* library.planEnabled(
+              [
+                {
+                  subject: base.state.collections[0]!.collection_id,
+                  enabled: false,
+                  members: "whole",
+                  where: [{ kind: "global" }],
+                },
+              ],
+              { base },
+            );
+            yield* library.apply({ _tag: "Apply", plan: disabled.plan });
+            yield* Ref.get(events).pipe(
+              Effect.filterOrFail(
+                (items) =>
+                  items.some(
+                    (event) =>
+                      event.event === "installation" &&
+                      event.reason === "configuration-changed" &&
+                      event.context?.disabled_skills.includes("review"),
+                  ),
+                () => new Error("Disablement did not report a configuration change"),
+              ),
+              Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 50 }),
+            );
+          }).pipe(Effect.provide(f.layer));
+        }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+      { timeout: 30_000 },
+    );
+  });
+});
 
-it.effect("an installed-side edit survives while another skill advances", () =>
+it.effect("a healthy authored member advances its shared files and saved revision", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
     yield* Effect.gen(function* () {
       yield* enable(f.root, f.home);
-      const edited = content("review", "Agent's installed edit");
-      yield* f.fs.writeFileString(join(f.agents, "review/SKILL.md"), edited);
-      yield* f.fs.writeFileString(
-        join(f.root, "skills/review/SKILL.md"),
-        content("review", "Authored change"),
-      );
-      const expected = content("explain", "Independent authored change");
-      yield* f.fs.writeFileString(join(f.root, "skills/explain/SKILL.md"), expected);
+
+      const library = yield* Library.Service;
+
+      (yield* library.skills()).find((row) => row.name === "review")!;
+
+      yield* TestClock.setTime(new Date("2026-11-08T21:17:28.100Z").getTime());
+
+      for (const name of ["review", "explain"])
+        yield* f.fs.writeFileString(
+          join(f.root, "skills", name, "SKILL.md"),
+          content(name, "Saved baseline"),
+        );
+
       yield* updateAuthoredSkills(f.root);
-      assert.strictEqual(yield* f.fs.readFileString(join(f.agents, "review/SKILL.md")), edited);
+
+      const baseline = (yield* library.skills()).find((row) => row.name === "review")!;
+
+      yield* TestClock.adjust("1 second");
+
+      yield* f.fs.readFileString(join(f.agents, "review/SKILL.md"));
+
+      yield* f.fs.remove(join(f.root, "skills/review/SKILL.md"));
+
+      yield* f.fs.writeFileString(join(f.root, "shared/rules.txt"), "shared v2\n");
+
+      const expected = content("explain", "Valid member advances");
+
+      yield* f.fs.writeFileString(join(f.root, "skills/explain/SKILL.md"), expected);
+
+      yield* updateAuthoredSkills(f.root);
+
+      assert.strictEqual(
+        yield* f.fs.readFileString(join(f.agents, "explain/context/rules.txt")),
+        "shared v2\n",
+      );
+
       assert.strictEqual(yield* f.fs.readFileString(join(f.agents, "explain/SKILL.md")), expected);
+
+      const rows = yield* library.skills();
+
+      const advanced = rows.find((row) => row.name === "explain")!;
+
+      assert.notStrictEqual(advanced.revision, baseline.revision);
+
+      assert.strictEqual(advanced.saved_at, "2026-11-08T21:17:29.100Z");
     }).pipe(Effect.provide(f.layer));
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
-it.effect("observation respects disabled skills and never reimports a removed Collection", () =>
+it.effect("malformed declarations freeze membership while known healthy content advances", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    yield* Effect.gen(function* () {
+      yield* enable(f.root, f.home);
+
+      const library = yield* Library.Service;
+
+      (yield* library.skills()).find((row) => row.name === "review")!;
+
+      yield* TestClock.setTime(new Date("2026-11-08T21:17:28.100Z").getTime());
+
+      for (const name of ["review", "explain"])
+        yield* f.fs.writeFileString(
+          join(f.root, "skills", name, "SKILL.md"),
+          content(name, "Saved baseline"),
+        );
+
+      yield* updateAuthoredSkills(f.root);
+
+      (yield* library.skills()).find((row) => row.name === "review")!;
+
+      yield* TestClock.adjust("1 second");
+
+      yield* f.fs.readFileString(join(f.agents, "review/SKILL.md"));
+
+      yield* f.fs.remove(join(f.root, "skills/review/SKILL.md"));
+
+      yield* f.fs.writeFileString(join(f.root, "shared/rules.txt"), "shared v2\n");
+
+      const expected = content("explain", "Valid member advances");
+
+      yield* f.fs.writeFileString(join(f.root, "skills/explain/SKILL.md"), expected);
+
+      yield* updateAuthoredSkills(f.root);
+
+      yield* f.fs.writeFileString(join(f.root, "skit.json"), "{");
+
+      const next = content("explain", "Known member advances with broken root descriptor");
+
+      yield* f.fs.writeFileString(join(f.root, "skills/explain/SKILL.md"), next);
+
+      yield* updateAuthoredSkills(f.root);
+
+      assert.strictEqual(yield* f.fs.readFileString(join(f.agents, "explain/SKILL.md")), next);
+
+      assert.strictEqual(
+        yield* f.fs.readFileString(join(f.agents, "review/context/rules.txt")),
+        "shared v1\n",
+      );
+    }).pipe(Effect.provide(f.layer));
+  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+);
+
+it.effect("observing a removed Collection does not import it again", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
     yield* Effect.gen(function* () {
       const imported = yield* initializeAuthorWorkspace(f.root, f.home);
+
       const library = yield* Library.Service;
+
       yield* f.fs.writeFileString(
         join(f.root, "skills/review/SKILL.md"),
         content("review", "Still disabled"),
       );
+
       yield* updateAuthoredSkills(f.root);
-      assert.isFalse(yield* f.fs.exists(join(f.agents, "review")));
+
       yield* library.remove({ query: imported.entry.collection.collection_id, dryRun: false });
+
       const before = yield* library.read;
+
       assert.strictEqual((yield* updateAuthoredSkills(f.root)).status, "unregistered");
+
       assert.strictEqual((yield* library.read).revision, before.revision);
     }).pipe(Effect.provide(f.layer));
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
-it.effect(
-  "new valid members follow enablement, invalid members stay absent, and repeated scans do not bypass removal grace",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture;
-      yield* Effect.gen(function* () {
-        yield* enable(f.root, f.home);
-        yield* updateAuthoredSkills(f.root);
-        const configPath = join(f.root, "skit.json");
-        const config = JSON.parse(yield* f.fs.readFileString(configPath));
-        config.skills.push({ name: "new-skill", path: "skills/new-skill" });
-        config.skills.push({ name: "invalid-skill", path: "skills/invalid-skill" });
-        yield* f.fs.makeDirectory(join(f.root, "skills/new-skill"));
-        yield* f.fs.writeFileString(
-          join(f.root, "skills/new-skill/SKILL.md"),
-          content("new-skill", "New valid member"),
-        );
-        yield* f.fs.writeFileString(configPath, JSON.stringify(config));
-        yield* updateAuthoredSkills(f.root);
-        assert.isTrue(yield* f.fs.exists(join(f.agents, "new-skill/SKILL.md")));
-        assert.isFalse(yield* f.fs.exists(join(f.agents, "invalid-skill")));
-        config.skills = config.skills.filter(
-          (member: { name: string }) => member.name !== "review",
-        );
-        yield* f.fs.writeFileString(configPath, JSON.stringify(config));
-        yield* f.fs.remove(join(f.root, "skills/review"), { recursive: true });
-        for (let pass = 0; pass < 3; pass++) {
-          yield* updateAuthoredSkills(f.root);
-          assert.strictEqual(
-            yield* f.fs.readFileString(join(f.agents, "review/SKILL.md")),
-            content("review", "Initial"),
-          );
-        }
-      }).pipe(Effect.provide(f.layer));
-    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-);
-
-it.effect("a supporting-file disappearance is held while unrelated valid input advances", () =>
+it.effect("unrelated valid authored input advances during supporting-file removal grace", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
     yield* Effect.gen(function* () {
       yield* enable(f.root, f.home);
+
       yield* updateAuthoredSkills(f.root);
+
       yield* f.fs.remove(join(f.root, "skills/review/notes.txt"));
+
       yield* f.fs.writeFileString(
         join(f.root, "skills/review/SKILL.md"),
         content("review", "Changed while supporting input disappeared"),
       );
+
       const expected = content("explain", "Unrelated valid edit");
+
       yield* f.fs.writeFileString(join(f.root, "skills/explain/SKILL.md"), expected);
       for (let pass = 0; pass < 2; pass++) {
         yield* updateAuthoredSkills(f.root);
-        assert.strictEqual(
-          yield* f.fs.readFileString(join(f.agents, "review/notes.txt")),
-          "last valid supporting input\n",
-        );
-        assert.strictEqual(
-          yield* f.fs.readFileString(join(f.agents, "review/SKILL.md")),
-          content("review", "Initial"),
-        );
+
         assert.strictEqual(
           yield* f.fs.readFileString(join(f.agents, "explain/SKILL.md")),
           expected,
         );
       }
-    }).pipe(Effect.provide(f.layer));
-  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-);
-
-it.effect("confirmed membership removal uninstalls followed copies after the grace", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    yield* Effect.gen(function* () {
-      yield* enable(f.root, f.home);
-      yield* updateAuthoredSkills(f.root);
-      const path = join(f.root, "skit.json");
-      const config = JSON.parse(yield* f.fs.readFileString(path));
-      config.skills = config.skills.filter((member: { name: string }) => member.name !== "review");
-      yield* f.fs.writeFileString(path, JSON.stringify(config));
-      yield* f.fs.remove(join(f.root, "skills/review"), { recursive: true });
-      yield* updateAuthoredSkills(f.root);
-      assert.isTrue(yield* f.fs.exists(join(f.agents, "review/SKILL.md")));
-      yield* TestClock.adjust("10 seconds");
-      yield* updateAuthoredSkills(f.root);
-      assert.isFalse(yield* f.fs.exists(join(f.agents, "review")));
-      assert.strictEqual(
-        yield* f.fs.readFileString(join(f.agents, "explain/SKILL.md")),
-        content("explain", "Initial"),
-      );
-      const library = yield* Library.Service;
-      const before = yield* library.read;
-      yield* updateAuthoredSkills(f.root);
-      assert.strictEqual((yield* library.read).revision, before.revision);
     }).pipe(Effect.provide(f.layer));
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
@@ -551,527 +534,1015 @@ it.effect(
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
-it.effect(
-  "raw history never approves removal and a fresh runtime restarts pending grace from the saved baseline",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture;
-      yield* Effect.gen(function* () {
-        yield* enable(f.root, f.home);
-        yield* updateAuthoredSkills(f.root);
-        yield* f.fs.remove(join(f.root, "skills/review/notes.txt"));
-        yield* updateAuthoredSkills(f.root);
-        yield* TestClock.adjust("20 seconds");
-        yield* Effect.gen(function* () {
-          const workspaces = yield* AuthorWorkspace;
-          const history = yield* AuthorHistory;
-          yield* history.refresh(yield* workspaces.resolveRoot(f.root));
-          yield* updateAuthoredSkills(f.root);
-          assert.isTrue(yield* f.fs.exists(join(f.agents, "review/notes.txt")));
-          yield* TestClock.adjust("10 seconds");
-          yield* updateAuthoredSkills(f.root);
-          assert.isFalse(yield* f.fs.exists(join(f.agents, "review/notes.txt")));
-        }).pipe(Effect.provide(Layer.fresh(authorLayer({ home: f.home }))));
-      }).pipe(Effect.provide(f.layer));
-    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-);
-
-it.effect("confirmed removal keeps installed edits while an unrelated valid skill advances", () =>
+it.effect("an independent valid authored Skill advances beside a refused removal", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
     yield* Effect.gen(function* () {
       yield* enable(f.root, f.home);
+
       yield* updateAuthoredSkills(f.root);
+
       const edited = content("review", "Agent edit to keep");
+
       yield* f.fs.writeFileString(join(f.agents, "review/SKILL.md"), edited);
+
       const configPath = join(f.root, "skit.json");
+
       const config = JSON.parse(yield* f.fs.readFileString(configPath));
+
       config.skills = config.skills.filter((member: { name: string }) => member.name !== "review");
+
       yield* f.fs.writeFileString(configPath, JSON.stringify(config));
+
       yield* f.fs.remove(join(f.root, "skills/review"), { recursive: true });
+
       yield* updateAuthoredSkills(f.root);
+
       yield* TestClock.adjust("10 seconds");
+
       const expected = content("explain", "Independent valid update");
+
       yield* f.fs.writeFileString(join(f.root, "skills/explain/SKILL.md"), expected);
+
       yield* updateAuthoredSkills(f.root);
-      assert.strictEqual(yield* f.fs.readFileString(join(f.agents, "review/SKILL.md")), edited);
+
       assert.strictEqual(yield* f.fs.readFileString(join(f.agents, "explain/SKILL.md")), expected);
     }).pipe(Effect.provide(f.layer));
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
-it.effect("manual update waits for workspace ownership and installs the latest saved edit", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    yield* Effect.gen(function* () {
-      yield* enable(f.root, f.home);
-      const workspaces = yield* AuthorWorkspace;
-      const root = yield* workspaces.resolveRoot(f.root);
-      const hold = yield* Scope.make();
-      yield* workspaces.acquire(root).pipe(Scope.provide(hold));
-      yield* Effect.addFinalizer(() => Scope.close(hold, Exit.void));
-      const attempted = yield* Deferred.make<void>();
-      const history = yield* AuthorHistory;
-      yield* f.fs.writeFileString(
-        join(root, "skills/review/SKILL.md"),
-        content("review", "First edit"),
-      );
-      const first = yield* history.refresh(root);
-      const pending = yield* updateAuthorWorkspace(
-        root,
-        { home: f.home },
-        {
-          origin: Effect.die("Unconnected workspace needs no Registry"),
-          connect: () => Effect.die("Unconnected workspace needs no Registry"),
-        },
-      ).pipe(
-        Effect.provideService(AuthorWorkspace, {
-          ...workspaces,
-          acquire: (root) =>
-            workspaces
-              .acquire(root)
-              .pipe(Effect.tapError(() => Deferred.succeed(attempted, undefined))),
-        }),
-        Effect.forkScoped,
-      );
-      yield* Deferred.await(attempted);
-      const expected = content("review", "Latest edit while manual update waits");
-      yield* f.fs.writeFileString(join(root, "skills/review/SKILL.md"), expected);
-      const latest = yield* history.refresh(root);
-      assert.notStrictEqual(latest.id, first.id);
-      yield* Scope.close(hold, Exit.void);
-      yield* TestClock.adjust("100 millis");
-      const outcome = yield* Fiber.join(pending);
-      assert.strictEqual(outcome.installation._tag, "Success");
-      assert.strictEqual(yield* f.fs.readFileString(join(f.agents, "review/SKILL.md")), expected);
-      const library = yield* Library.Service;
-      const before = yield* library.read;
-      yield* updateAuthoredSkills(root);
-      assert.strictEqual((yield* library.read).revision, before.revision);
-      assert.strictEqual((yield* history.refresh(root)).id, latest.id);
-    }).pipe(Effect.provide(f.layer));
-  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-);
+describe("skit author watch", () => {
+  describe("Watch installation events can report an unregistered workspace.", () => {
+    it.effect("an unregistered observation encodes as a watch installation event", () =>
+      Effect.gen(function* () {
+        const f = yield* fixture;
+        yield* Effect.gen(function* () {
+          const observed = yield* updateAuthoredSkills(f.root);
+          assert.strictEqual(observed.status, "unregistered");
+          assert.isFalse(Object.hasOwn(observed, "context"));
+          yield* Schema.encodeEffect(AuthorWatchEvent)({
+            event: "installation",
+            path: f.root,
+            reason: "startup",
+            ...observed,
+          });
+        }).pipe(Effect.provide(f.layer));
+      }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+    );
+  });
+});
 
-it.effect(
-  "a missing inventory baseline never authorizes disappearance from the installed version",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture;
-      yield* Effect.gen(function* () {
-        yield* enable(f.root, f.home);
-        yield* updateAuthoredSkills(f.root);
-        const statePath = join(f.home, "author-sync.json");
-        const state = JSON.parse(yield* f.fs.readFileString(statePath));
-        delete state.inventories;
-        yield* f.fs.writeFileString(statePath, JSON.stringify(state));
-        yield* f.fs.remove(join(f.root, "skills/review/notes.txt"));
-        yield* updateAuthoredSkills(f.root);
-        yield* TestClock.adjust("1 hour");
-        yield* updateAuthoredSkills(f.root);
-        assert.strictEqual(
-          yield* f.fs.readFileString(join(f.agents, "review/notes.txt")),
-          "last valid supporting input\n",
-        );
-        yield* f.fs.writeFileString(
-          join(f.root, "skills/review/notes.txt"),
-          "last valid supporting input\n",
-        );
-        yield* updateAuthoredSkills(f.root);
-        yield* f.fs.remove(join(f.root, "skills/review/notes.txt"));
-        yield* updateAuthoredSkills(f.root);
-        yield* TestClock.adjust("10 seconds");
-        yield* updateAuthoredSkills(f.root);
-        assert.isFalse(yield* f.fs.exists(join(f.agents, "review/notes.txt")));
-      }).pipe(Effect.provide(f.layer));
-    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-);
-
-it.effect(
-  "a pushed sync's newly confirmed removal reaches installed copies before manual update returns",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture;
-      yield* Effect.gen(function* () {
-        yield* enable(f.root, f.home);
-        yield* f.fs.writeFileString(
-          join(f.root, "skit.remote.json"),
-          JSON.stringify({
-            schema: "skit.remote.v1",
-            origin: "https://registry.example",
-            namespace: "tim",
-            skit: "tools",
-          }),
-        );
-        const workspaces = yield* AuthorWorkspace;
-        const history = yield* AuthorHistory;
-        const root = yield* workspaces.resolveRoot(f.root);
-        const identity = yield* workspaces.readIdentity(root);
-        if (identity._tag === "None") return assert.fail("Expected registered identity");
-        const { store, current, remote } = yield* makeRemote;
-        const api = { remote, requireAvailable: Effect.void, create: () => Effect.void };
-        yield* updateAuthorWorkspace(
-          root,
-          { home: f.home },
-          {
-            origin: Effect.succeed("https://registry.example"),
-            connect: () => Effect.succeed(api),
-          },
-        );
-        let heldLease: Parameters<typeof history.inventory.refresh>[0] | undefined;
-        const waiting = yield* Deferred.make<void>();
-        const pending = yield* updateAuthorWorkspace(
-          root,
-          { home: f.home },
-          {
-            origin: Effect.succeed("https://registry.example"),
-            connect: () =>
-              Effect.gen(function* () {
-                // An input disappears after initial installation. Start the shared grace with a
-                // stable observation, then let a slow connection elapse before sync observes it again.
-                yield* f.fs.remove(join(root, "skills/review/notes.txt"));
-                const saved = yield* history.refresh(root);
-                const tree = yield* history.engineStore.tree(saved.treeHash);
-                assert.isDefined(heldLease);
-                yield* history.inventory.refresh(heldLease!, identity.value.workspaceId, tree);
-                yield* Deferred.succeed(waiting, undefined);
-                yield* Effect.sleep("11 seconds");
-                return api;
-              }),
-          },
-        ).pipe(
-          Effect.provideService(AuthorWorkspace, {
-            ...workspaces,
-            acquire: (input) =>
-              workspaces.acquire(input).pipe(
-                Effect.tap((lease) =>
-                  Effect.sync(() => {
-                    heldLease = lease;
+describe("skit author sync", () => {
+  describe("Choosing what changes", () => {
+    describe("Removing most or all synced files requires explicit approval.", () => {
+      it.effect(
+        "inventory approval against a larger baseline cannot bypass sync bulk protection",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* fixture;
+            yield* Effect.gen(function* () {
+              yield* enable(f.root, f.home);
+              for (let i = 0; i < 5; i++)
+                yield* f.fs.writeFileString(join(f.root, `base-${i}.txt`), "base");
+              const { remote } = yield* makeRemote;
+              const registry = {
+                origin: Effect.succeed("https://registry.example"),
+                connect: () =>
+                  Effect.succeed({
+                    remote,
+                    requireAvailable: Effect.void,
+                    create: () => Effect.void,
                   }),
-                ),
+              };
+              yield* syncAuthorWorkspace(
+                f.root,
+                { home: f.home, apply: true, to: "tim/tools", visibility: "private" },
+                registry,
+              );
+              for (let i = 0; i < 30; i++)
+                yield* f.fs.writeFileString(join(f.root, `new-${i}.txt`), "unpublished");
+              yield* updateAuthoredSkills(f.root);
+              for (let i = 0; i < 5; i++) yield* f.fs.remove(join(f.root, `base-${i}.txt`));
+              yield* f.fs.remove(join(f.root, "skills/review/notes.txt"));
+              yield* updateAuthoredSkills(f.root);
+              yield* TestClock.adjust("10 seconds");
+              yield* updateAuthoredSkills(f.root);
+              const blocked = yield* syncAuthorWorkspace(
+                f.root,
+                { home: f.home, apply: true },
+                registry,
+              );
+              assert.strictEqual(blocked.status, "blocked");
+              if (blocked.status === "blocked") assert.strictEqual(blocked.deleting, 6);
+              assert.strictEqual(
+                (yield* syncAuthorWorkspace(
+                  f.root,
+                  { home: f.home, apply: true, allowLargeDeletion: true },
+                  registry,
+                )).status,
+                "pushed",
+              );
+            }).pipe(Effect.provide(f.layer));
+          }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+      );
+    });
+    describe("Sync gives missing files a confirmation period before sending their removal.", () => {
+      it.effect(
+        "foreground sync confirms a small removal in one invocation and rescans edits made while waiting",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* fixture;
+            yield* Effect.gen(function* () {
+              yield* enable(f.root, f.home);
+              const { remote } = yield* makeRemote;
+              const registry = {
+                origin: Effect.succeed("https://registry.example"),
+                connect: () =>
+                  Effect.succeed({
+                    remote,
+                    requireAvailable: Effect.void,
+                    create: () => Effect.void,
+                  }),
+              };
+              yield* syncAuthorWorkspace(
+                f.root,
+                { home: f.home, apply: true, to: "tim/tools", visibility: "private" },
+                registry,
+              );
+              yield* f.fs.remove(join(f.root, "skills/review/notes.txt"));
+              assert.strictEqual(
+                (yield* syncAuthorWorkspace(f.root, { home: f.home, apply: false }, registry))
+                  .status,
+                "ready",
+              );
+              const clock = yield* Clock.Clock;
+              const waiting = yield* Deferred.make<void>();
+              const pending = yield* syncAuthorWorkspace(
+                f.root,
+                { home: f.home, apply: true },
+                registry,
+              ).pipe(
+                Effect.provideService(Clock.Clock, {
+                  currentTimeMillisUnsafe: () => clock.currentTimeMillisUnsafe(),
+                  currentTimeNanosUnsafe: () => clock.currentTimeNanosUnsafe(),
+                  monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+                  currentTimeMillis: clock.currentTimeMillis,
+                  currentTimeNanos: clock.currentTimeNanos,
+                  monotonicTimeNanos: clock.monotonicTimeNanos,
+                  sleep: (duration) =>
+                    (Duration.toMillis(duration) === 10_000
+                      ? Deferred.succeed(waiting, undefined)
+                      : Effect.void
+                    ).pipe(Effect.andThen(clock.sleep(duration))),
+                }),
+                Effect.forkScoped,
+              );
+              yield* Deferred.await(waiting);
+              yield* f.fs.writeFileString(join(f.root, "during-wait.txt"), "latest input");
+              yield* TestClock.adjust("10 seconds");
+              assert.strictEqual((yield* Fiber.join(pending)).status, "pushed");
+              const head = yield* remote.current;
+              assert.isNotNull(head);
+              const { tree } = yield* remote.revision(head!);
+              assert.isFalse(tree.some((entry) => entry.path === "skills/review/notes.txt"));
+              assert.isTrue(tree.some((entry) => entry.path === "during-wait.txt"));
+            }).pipe(Effect.provide(f.layer));
+          }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+      );
+    });
+  });
+});
+
+describe("skit update", () => {
+  describe("Updating authored Skills", () => {
+    describe("Update can install valid authored edits while the Registry is offline.", () => {
+      it.effect(
+        "saved offline edits update enabled copies; unchanged passes add no versions or imports",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* fixture;
+            yield* Effect.gen(function* () {
+              yield* enable(f.root, f.home);
+              const library = yield* Library.Service;
+              const expected = content("review", "Local edit without Registry access");
+              yield* f.fs.writeFileString(join(f.root, "skills/review/SKILL.md"), expected);
+              assert.strictEqual((yield* updateAuthoredSkills(f.root)).status, "updated");
+              assert.strictEqual(
+                yield* f.fs.readFileString(join(f.agents, "review/SKILL.md")),
+                expected,
+              );
+              const before = yield* library.read;
+              assert.strictEqual((yield* updateAuthoredSkills(f.root)).status, "unchanged");
+              const after = yield* library.read;
+              assert.strictEqual(after.revision, before.revision);
+            }).pipe(Effect.provide(f.layer));
+          }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+      );
+    });
+  });
+});
+
+describe("skit update", () => {
+  describe("Updating authored Skills", () => {
+    describe("Update waits for a confirmed authored removal before removing an installed Skill.", () => {
+      it.effect(
+        "raw history never approves removal and a fresh runtime restarts pending grace from the saved baseline",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* fixture;
+            yield* Effect.gen(function* () {
+              yield* enable(f.root, f.home);
+              yield* updateAuthoredSkills(f.root);
+              yield* f.fs.remove(join(f.root, "skills/review/notes.txt"));
+              yield* updateAuthoredSkills(f.root);
+              yield* TestClock.adjust("20 seconds");
+              yield* Effect.gen(function* () {
+                const workspaces = yield* AuthorWorkspace;
+                const history = yield* AuthorHistory;
+                yield* history.refresh(yield* workspaces.resolveRoot(f.root));
+                yield* updateAuthoredSkills(f.root);
+                assert.isTrue(yield* f.fs.exists(join(f.agents, "review/notes.txt")));
+                yield* TestClock.adjust("10 seconds");
+                yield* updateAuthoredSkills(f.root);
+                assert.isFalse(yield* f.fs.exists(join(f.agents, "review/notes.txt")));
+              }).pipe(Effect.provide(Layer.fresh(authorLayer({ home: f.home }))));
+            }).pipe(Effect.provide(f.layer));
+          }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+      );
+    });
+  });
+});
+
+describe("skit update", () => {
+  describe("Updating authored Skills", () => {
+    describe("Invalid authored edits leave their last valid installed files in place.", () => {
+      it.effect("invalid renamed members retain their last valid name and files until valid", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          yield* Effect.gen(function* () {
+            yield* enable(f.root, f.home);
+            yield* updateAuthoredSkills(f.root);
+            const config = JSON.parse(yield* f.fs.readFileString(join(f.root, "skit.json")));
+            config.skills[0].name = "review-next";
+            yield* f.fs.writeFileString(join(f.root, "skit.json"), JSON.stringify(config));
+            yield* f.fs.writeFileString(
+              join(f.root, "skills/review/SKILL.md"),
+              "---\nname: [broken\n---\n",
+            );
+            const held = yield* updateAuthoredSkills(f.root);
+            assert.isTrue(held.issues.length > 0, JSON.stringify(held));
+            assert.strictEqual(
+              yield* f.fs.readFileString(join(f.agents, "review/SKILL.md")),
+              content("review", "Initial"),
+            );
+            assert.isFalse(yield* f.fs.exists(join(f.agents, "review-next")));
+            yield* f.fs.writeFileString(
+              join(f.root, "skills/review/SKILL.md"),
+              content("review-next", "Valid rename"),
+            );
+            yield* updateAuthoredSkills(f.root);
+            assert.isTrue(yield* f.fs.exists(join(f.agents, "review-next/SKILL.md")));
+          }).pipe(Effect.provide(f.layer));
+        }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+      );
+
+      it.effect("invalid authored members retain their exact saved files and revision", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          yield* Effect.gen(function* () {
+            yield* enable(f.root, f.home);
+
+            const library = yield* Library.Service;
+
+            const original = (yield* library.skills()).find((row) => row.name === "review")!;
+
+            assert.isNull(original.revision);
+
+            assert.isUndefined(original.saved_at);
+
+            yield* TestClock.setTime(new Date("2026-11-08T21:17:28.100Z").getTime());
+
+            for (const name of ["review", "explain"])
+              yield* f.fs.writeFileString(
+                join(f.root, "skills", name, "SKILL.md"),
+                content(name, "Saved baseline"),
+              );
+
+            yield* updateAuthoredSkills(f.root);
+
+            const baseline = (yield* library.skills()).find((row) => row.name === "review")!;
+
+            assert.isNotNull(baseline.revision);
+
+            assert.strictEqual(baseline.saved_at, "2026-11-08T21:17:28.100Z");
+
+            yield* TestClock.adjust("1 second");
+
+            const oldReview = yield* f.fs.readFileString(join(f.agents, "review/SKILL.md"));
+
+            yield* f.fs.remove(join(f.root, "skills/review/SKILL.md"));
+
+            yield* f.fs.writeFileString(join(f.root, "shared/rules.txt"), "shared v2\n");
+
+            const expected = content("explain", "Valid member advances");
+
+            yield* f.fs.writeFileString(join(f.root, "skills/explain/SKILL.md"), expected);
+
+            const result = yield* updateAuthoredSkills(f.root);
+
+            assert.isTrue(
+              result.issues.some(
+                (issue) => issue._tag === "InputRemovalPending" && issue.skill === "review",
               ),
-          }),
-          Effect.forkScoped,
-        );
-        yield* Deferred.await(waiting);
-        assert.isTrue(yield* f.fs.exists(join(f.agents, "review/notes.txt")));
-        yield* TestClock.adjust("11 seconds");
-        const outcome = yield* Fiber.join(pending);
-        assert.strictEqual(outcome.sync?._tag, "Success");
-        if (outcome.sync?._tag === "Success")
-          assert.strictEqual(outcome.sync.success.status, "pushed");
-        assert.strictEqual(outcome.installation._tag, "Success");
-        const id = yield* Ref.get(current);
-        assert.isNotNull(id);
-        const revision = yield* store.revision(id!);
-        assert.isFalse(
-          (yield* store.tree(revision.tree)).some(
-            (entry) => entry.path === "skills/review/notes.txt",
-          ),
-        );
-        assert.isFalse(yield* f.fs.exists(join(f.agents, "review/notes.txt")));
-      }).pipe(Effect.provide(f.layer));
-    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-);
+            );
 
-it.effect("interrupting manual confirmation releases its lease and restarts removal grace", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    yield* Effect.gen(function* () {
-      yield* enable(f.root, f.home);
-      yield* f.fs.remove(join(f.root, "skills/review/notes.txt"));
-      const clock = yield* Clock.Clock;
-      const waiting = yield* Deferred.make<void>();
-      const pending = yield* updateAuthorWorkspace(
-        f.root,
-        { home: f.home },
-        {
-          origin: Effect.die("Unconnected workspace needs no Registry"),
-          connect: () => Effect.die("Unconnected workspace needs no Registry"),
-        },
-      ).pipe(
-        Effect.provideService(Clock.Clock, {
-          currentTimeMillisUnsafe: () => clock.currentTimeMillisUnsafe(),
-          currentTimeNanosUnsafe: () => clock.currentTimeNanosUnsafe(),
-          monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
-          currentTimeMillis: clock.currentTimeMillis,
-          currentTimeNanos: clock.currentTimeNanos,
-          monotonicTimeNanos: clock.monotonicTimeNanos,
-          sleep: (duration) =>
-            (Duration.toMillis(duration) === 10_000
-              ? Deferred.succeed(waiting, undefined)
-              : Effect.void
-            ).pipe(Effect.andThen(clock.sleep(duration))),
-        }),
-        Effect.forkScoped,
-      );
-      yield* Deferred.await(waiting);
-      yield* Fiber.interrupt(pending);
-      const workspaces = yield* AuthorWorkspace;
-      yield* workspaces.acquire(yield* workspaces.resolveRoot(f.root)).pipe(Effect.scoped);
-      assert.strictEqual(
-        yield* f.fs.readFileString(join(f.agents, "review/notes.txt")),
-        "last valid supporting input\n",
-      );
-      yield* TestClock.adjust("10 seconds");
-      yield* updateAuthoredSkills(f.root);
-      assert.isTrue(yield* f.fs.exists(join(f.agents, "review/notes.txt")));
-      yield* TestClock.adjust("10 seconds");
-      yield* updateAuthoredSkills(f.root);
-      assert.isFalse(yield* f.fs.exists(join(f.agents, "review/notes.txt")));
-    }).pipe(Effect.provide(f.layer));
-  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-);
+            assert.strictEqual(
+              yield* f.fs.readFileString(join(f.agents, "review/SKILL.md")),
+              oldReview,
+            );
 
-it.effect("invalid renamed members retain their last valid name and files until valid", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    yield* Effect.gen(function* () {
-      yield* enable(f.root, f.home);
-      yield* updateAuthoredSkills(f.root);
-      const config = JSON.parse(yield* f.fs.readFileString(join(f.root, "skit.json")));
-      config.skills[0].name = "review-next";
-      yield* f.fs.writeFileString(join(f.root, "skit.json"), JSON.stringify(config));
-      yield* f.fs.writeFileString(
-        join(f.root, "skills/review/SKILL.md"),
-        "---\nname: [broken\n---\n",
-      );
-      const held = yield* updateAuthoredSkills(f.root);
-      assert.isTrue(held.issues.length > 0, JSON.stringify(held));
-      assert.strictEqual(
-        yield* f.fs.readFileString(join(f.agents, "review/SKILL.md")),
-        content("review", "Initial"),
-      );
-      assert.isFalse(yield* f.fs.exists(join(f.agents, "review-next")));
-      yield* f.fs.writeFileString(
-        join(f.root, "skills/review/SKILL.md"),
-        content("review-next", "Valid rename"),
-      );
-      yield* updateAuthoredSkills(f.root);
-      assert.isTrue(yield* f.fs.exists(join(f.agents, "review-next/SKILL.md")));
-    }).pipe(Effect.provide(f.layer));
-  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-);
+            assert.strictEqual(
+              yield* f.fs.readFileString(join(f.agents, "review/context/rules.txt")),
+              "shared v1\n",
+            );
 
-it.effect("an unregistered observation encodes as a watch installation event", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    yield* Effect.gen(function* () {
-      const observed = yield* updateAuthoredSkills(f.root);
-      assert.strictEqual(observed.status, "unregistered");
-      assert.isFalse(Object.hasOwn(observed, "context"));
-      yield* Schema.encodeEffect(AuthorWatchEvent)({
-        event: "installation",
-        path: f.root,
-        reason: "startup",
-        ...observed,
-      });
-    }).pipe(Effect.provide(f.layer));
-  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-);
+            const rows = yield* library.skills();
 
-it.effect("a failed second installation keeps earlier installed copies and reports its error", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    yield* Effect.gen(function* () {
-      yield* enable(f.root, f.home);
-      yield* f.fs.writeFileString(
-        join(f.root, "skills/review/SKILL.md"),
-        content("review", "Installed before sync"),
-      );
-      yield* f.fs.writeFileString(
-        join(f.root, "skit.remote.json"),
-        JSON.stringify({
-          schema: "skit.remote.v1",
-          origin: "https://registry.example",
-          namespace: "tim",
-          skit: "tools",
-        }),
-      );
-      const library = yield* Library.Service;
-      let calls = 0;
-      const failure = new LibraryChanged({ path: f.home });
-      const outcome = yield* updateAuthorWorkspace(
-        f.root,
-        { home: f.home },
-        {
-          origin: Effect.succeed("https://registry.example"),
-          connect: () => Effect.fail("offline"),
-        },
-      ).pipe(
-        Effect.provideService(Library.Service, {
-          ...library,
-          updateAuthoredSkills: (request) =>
-            ++calls === 2 ? Effect.fail(failure) : library.updateAuthoredSkills(request),
-        }),
-      );
-      assert.strictEqual(outcome.installation._tag, "Success");
-      if (outcome.installation._tag === "Success")
-        assert.strictEqual(outcome.installation.success.installed, 1);
-      assert.strictEqual(outcome.installation_error, failure);
-      assert.strictEqual(
-        yield* f.fs.readFileString(join(f.agents, "review/SKILL.md")),
-        content("review", "Installed before sync"),
-      );
-    }).pipe(Effect.provide(f.layer));
-  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-);
+            const held = rows.find((row) => row.name === "review")!;
 
-it.effect(
-  "authored updates reject a stale selected import before installation or Registry access",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture;
-      yield* Effect.gen(function* () {
-        yield* enable(f.root, f.home);
-        const library = yield* Library.Service;
-        const before = yield* library.read;
-        yield* f.fs.writeFileString(
-          join(f.root, "skills/review/SKILL.md"),
-          content("review", "New input"),
-        );
-        const outcome = yield* updateAuthorWorkspace(
-          f.root,
-          { home: f.home, expectedImportId: "stale" },
-          {
-            origin: Effect.die("Must not sync a stale selection"),
-            connect: () => Effect.die("Must not connect"),
-          },
-        );
-        assert.strictEqual(outcome.installation._tag, "Failure");
-        if (outcome.installation._tag === "Failure")
-          assert.strictEqual(outcome.installation.failure._tag, "LibraryChanged");
-        assert.strictEqual((yield* library.read).revision, before.revision);
-      }).pipe(Effect.provide(f.layer));
-    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-);
+            assert.strictEqual(held.revision, baseline.revision);
 
-it.effect(
-  "failed installation through a symlink restarts removal grace for the canonical root",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture;
-      yield* Effect.gen(function* () {
-        yield* enable(f.root, f.home);
-        yield* updateAuthoredSkills(f.root);
-        const alias = `${f.root}-link`;
-        yield* f.fs.symlink(f.root, alias);
-        yield* f.fs.remove(join(f.root, "skills/review/notes.txt"));
-        yield* updateAuthoredSkills(alias);
-        yield* TestClock.adjust("5 seconds");
-        const library = yield* Library.Service;
-        yield* updateAuthoredSkills(alias).pipe(
-          Effect.provideService(Library.Service, {
-            ...library,
-            updateAuthoredSkills: () => Effect.fail(new LibraryChanged({ path: f.home })),
-          }),
-          Effect.result,
-        );
-        yield* TestClock.adjust("6 seconds");
-        yield* updateAuthoredSkills(alias);
-        assert.isTrue(yield* f.fs.exists(join(f.agents, "review/notes.txt")));
-        yield* TestClock.adjust("10 seconds");
-        yield* updateAuthoredSkills(alias);
-        assert.isFalse(yield* f.fs.exists(join(f.agents, "review/notes.txt")));
-      }).pipe(Effect.provide(f.layer));
-    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-);
+            assert.strictEqual(held.saved_at, baseline.saved_at);
 
-it.effect("inventory approval against a larger baseline cannot bypass sync bulk protection", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    yield* Effect.gen(function* () {
-      yield* enable(f.root, f.home);
-      for (let i = 0; i < 5; i++)
-        yield* f.fs.writeFileString(join(f.root, `base-${i}.txt`), "base");
-      const { remote } = yield* makeRemote;
-      const registry = {
-        origin: Effect.succeed("https://registry.example"),
-        connect: () =>
-          Effect.succeed({ remote, requireAvailable: Effect.void, create: () => Effect.void }),
-      };
-      yield* syncAuthorWorkspace(
-        f.root,
-        { home: f.home, apply: true, to: "tim/tools", visibility: "private" },
-        registry,
+            assert.strictEqual(held.imported_at, baseline.imported_at);
+
+            const before = yield* library.read;
+
+            yield* f.fs.writeFileString(join(f.root, "skills/review/SKILL.md"), "");
+
+            yield* updateAuthoredSkills(f.root);
+
+            assert.strictEqual((yield* library.read).revision, before.revision);
+
+            assert.strictEqual(
+              yield* f.fs.readFileString(join(f.agents, "review/SKILL.md")),
+              oldReview,
+            );
+          }).pipe(Effect.provide(f.layer));
+        }).pipe(Effect.scoped, Effect.provide(skitLayer)),
       );
-      for (let i = 0; i < 30; i++)
-        yield* f.fs.writeFileString(join(f.root, `new-${i}.txt`), "unpublished");
-      yield* updateAuthoredSkills(f.root);
-      for (let i = 0; i < 5; i++) yield* f.fs.remove(join(f.root, `base-${i}.txt`));
-      yield* f.fs.remove(join(f.root, "skills/review/notes.txt"));
-      yield* updateAuthoredSkills(f.root);
-      yield* TestClock.adjust("10 seconds");
-      yield* updateAuthoredSkills(f.root);
-      const blocked = yield* syncAuthorWorkspace(f.root, { home: f.home, apply: true }, registry);
-      assert.strictEqual(blocked.status, "blocked");
-      if (blocked.status === "blocked") assert.strictEqual(blocked.deleting, 6);
-      assert.strictEqual(
-        (yield* syncAuthorWorkspace(
-          f.root,
-          { home: f.home, apply: true, allowLargeDeletion: true },
-          registry,
-        )).status,
-        "pushed",
-      );
-    }).pipe(Effect.provide(f.layer));
-  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-);
 
-it.effect(
-  "foreground sync confirms a small removal in one invocation and rescans edits made while waiting",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture;
-      yield* Effect.gen(function* () {
-        yield* enable(f.root, f.home);
-        const { remote } = yield* makeRemote;
-        const registry = {
-          origin: Effect.succeed("https://registry.example"),
-          connect: () =>
-            Effect.succeed({ remote, requireAvailable: Effect.void, create: () => Effect.void }),
-        };
-        yield* syncAuthorWorkspace(
-          f.root,
-          { home: f.home, apply: true, to: "tim/tools", visibility: "private" },
-          registry,
-        );
-        yield* f.fs.remove(join(f.root, "skills/review/notes.txt"));
-        assert.strictEqual(
-          (yield* syncAuthorWorkspace(f.root, { home: f.home, apply: false }, registry)).status,
-          "ready",
-        );
-        const clock = yield* Clock.Clock;
-        const waiting = yield* Deferred.make<void>();
-        const pending = yield* syncAuthorWorkspace(
-          f.root,
-          { home: f.home, apply: true },
-          registry,
-        ).pipe(
-          Effect.provideService(Clock.Clock, {
-            currentTimeMillisUnsafe: () => clock.currentTimeMillisUnsafe(),
-            currentTimeNanosUnsafe: () => clock.currentTimeNanosUnsafe(),
-            monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
-            currentTimeMillis: clock.currentTimeMillis,
-            currentTimeNanos: clock.currentTimeNanos,
-            monotonicTimeNanos: clock.monotonicTimeNanos,
-            sleep: (duration) =>
-              (Duration.toMillis(duration) === 10_000
-                ? Deferred.succeed(waiting, undefined)
-                : Effect.void
-              ).pipe(Effect.andThen(clock.sleep(duration))),
-          }),
-          Effect.forkScoped,
-        );
-        yield* Deferred.await(waiting);
-        yield* f.fs.writeFileString(join(f.root, "during-wait.txt"), "latest input");
-        yield* TestClock.adjust("10 seconds");
-        assert.strictEqual((yield* Fiber.join(pending)).status, "pushed");
-        const head = yield* remote.current;
-        assert.isNotNull(head);
-        const { tree } = yield* remote.revision(head!);
-        assert.isFalse(tree.some((entry) => entry.path === "skills/review/notes.txt"));
-        assert.isTrue(tree.some((entry) => entry.path === "during-wait.txt"));
-      }).pipe(Effect.provide(f.layer));
-    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-);
+      it.effect("invalid new authored members have no installed copy", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          yield* Effect.gen(function* () {
+            yield* enable(f.root, f.home);
+
+            yield* updateAuthoredSkills(f.root);
+
+            const configPath = join(f.root, "skit.json");
+
+            const config = JSON.parse(yield* f.fs.readFileString(configPath));
+
+            config.skills.push({ name: "new-skill", path: "skills/new-skill" });
+
+            config.skills.push({ name: "invalid-skill", path: "skills/invalid-skill" });
+
+            yield* f.fs.makeDirectory(join(f.root, "skills/new-skill"));
+
+            yield* f.fs.writeFileString(
+              join(f.root, "skills/new-skill/SKILL.md"),
+              content("new-skill", "New valid member"),
+            );
+
+            yield* f.fs.writeFileString(configPath, JSON.stringify(config));
+
+            yield* updateAuthoredSkills(f.root);
+
+            assert.isFalse(yield* f.fs.exists(join(f.agents, "invalid-skill")));
+          }).pipe(Effect.provide(f.layer));
+        }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+      );
+    });
+  });
+});
+
+describe("skit update", () => {
+  describe("Updating authored Skills", () => {
+    describe("An installed edit cannot be silently replaced by an authored edit.", () => {
+      it.effect("an installed-side edit survives while another skill advances", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          yield* Effect.gen(function* () {
+            yield* enable(f.root, f.home);
+            const edited = content("review", "Agent's installed edit");
+            yield* f.fs.writeFileString(join(f.agents, "review/SKILL.md"), edited);
+            yield* f.fs.writeFileString(
+              join(f.root, "skills/review/SKILL.md"),
+              content("review", "Authored change"),
+            );
+            const expected = content("explain", "Independent authored change");
+            yield* f.fs.writeFileString(join(f.root, "skills/explain/SKILL.md"), expected);
+            yield* updateAuthoredSkills(f.root);
+            assert.strictEqual(
+              yield* f.fs.readFileString(join(f.agents, "review/SKILL.md")),
+              edited,
+            );
+            assert.strictEqual(
+              yield* f.fs.readFileString(join(f.agents, "explain/SKILL.md")),
+              expected,
+            );
+          }).pipe(Effect.provide(f.layer));
+        }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+      );
+
+      it.effect("a confirmed authored removal keeps an edited installed Skill", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          yield* Effect.gen(function* () {
+            yield* enable(f.root, f.home);
+
+            yield* updateAuthoredSkills(f.root);
+
+            const edited = content("review", "Agent edit to keep");
+
+            yield* f.fs.writeFileString(join(f.agents, "review/SKILL.md"), edited);
+
+            const configPath = join(f.root, "skit.json");
+
+            const config = JSON.parse(yield* f.fs.readFileString(configPath));
+
+            config.skills = config.skills.filter(
+              (member: { name: string }) => member.name !== "review",
+            );
+
+            yield* f.fs.writeFileString(configPath, JSON.stringify(config));
+
+            yield* f.fs.remove(join(f.root, "skills/review"), { recursive: true });
+
+            yield* updateAuthoredSkills(f.root);
+
+            yield* TestClock.adjust("10 seconds");
+
+            const expected = content("explain", "Independent valid update");
+
+            yield* f.fs.writeFileString(join(f.root, "skills/explain/SKILL.md"), expected);
+
+            yield* updateAuthoredSkills(f.root);
+
+            assert.strictEqual(
+              yield* f.fs.readFileString(join(f.agents, "review/SKILL.md")),
+              edited,
+            );
+          }).pipe(Effect.provide(f.layer));
+        }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+      );
+    });
+  });
+});
+
+describe("skit update", () => {
+  describe("Updating authored Skills", () => {
+    describe("Update uses the latest authored files after waiting for its workspace.", () => {
+      it.effect(
+        "manual update waits for workspace ownership and installs the latest saved edit",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* fixture;
+            yield* Effect.gen(function* () {
+              yield* enable(f.root, f.home);
+              const workspaces = yield* AuthorWorkspace;
+              const root = yield* workspaces.resolveRoot(f.root);
+              const hold = yield* Scope.make();
+              yield* workspaces.acquire(root).pipe(Scope.provide(hold));
+              yield* Effect.addFinalizer(() => Scope.close(hold, Exit.void));
+              const attempted = yield* Deferred.make<void>();
+              const history = yield* AuthorHistory;
+              yield* f.fs.writeFileString(
+                join(root, "skills/review/SKILL.md"),
+                content("review", "First edit"),
+              );
+              const first = yield* history.refresh(root);
+              const pending = yield* updateAuthorWorkspace(
+                root,
+                { home: f.home },
+                {
+                  origin: Effect.die("Unconnected workspace needs no Registry"),
+                  connect: () => Effect.die("Unconnected workspace needs no Registry"),
+                },
+              ).pipe(
+                Effect.provideService(AuthorWorkspace, {
+                  ...workspaces,
+                  acquire: (root) =>
+                    workspaces
+                      .acquire(root)
+                      .pipe(Effect.tapError(() => Deferred.succeed(attempted, undefined))),
+                }),
+                Effect.forkScoped,
+              );
+              yield* Deferred.await(attempted);
+              const expected = content("review", "Latest edit while manual update waits");
+              yield* f.fs.writeFileString(join(root, "skills/review/SKILL.md"), expected);
+              const latest = yield* history.refresh(root);
+              assert.notStrictEqual(latest.id, first.id);
+              yield* Scope.close(hold, Exit.void);
+              yield* TestClock.adjust("100 millis");
+              const outcome = yield* Fiber.join(pending);
+              assert.strictEqual(outcome.installation._tag, "Success");
+              assert.strictEqual(
+                yield* f.fs.readFileString(join(f.agents, "review/SKILL.md")),
+                expected,
+              );
+              const library = yield* Library.Service;
+              const before = yield* library.read;
+              yield* updateAuthoredSkills(root);
+              assert.strictEqual((yield* library.read).revision, before.revision);
+              assert.strictEqual((yield* history.refresh(root)).id, latest.id);
+            }).pipe(Effect.provide(f.layer));
+          }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+      );
+    });
+  });
+});
+
+describe("skit update", () => {
+  describe("Updating authored Skills", () => {
+    describe("Update leaves an authored removal pending until its safety check completes.", () => {
+      it.effect("confirmed membership removal uninstalls followed copies after the grace", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          yield* Effect.gen(function* () {
+            yield* enable(f.root, f.home);
+            yield* updateAuthoredSkills(f.root);
+            const path = join(f.root, "skit.json");
+            const config = JSON.parse(yield* f.fs.readFileString(path));
+            config.skills = config.skills.filter(
+              (member: { name: string }) => member.name !== "review",
+            );
+            yield* f.fs.writeFileString(path, JSON.stringify(config));
+            yield* f.fs.remove(join(f.root, "skills/review"), { recursive: true });
+            yield* updateAuthoredSkills(f.root);
+            assert.isTrue(yield* f.fs.exists(join(f.agents, "review/SKILL.md")));
+            yield* TestClock.adjust("10 seconds");
+            yield* updateAuthoredSkills(f.root);
+            assert.isFalse(yield* f.fs.exists(join(f.agents, "review")));
+            assert.strictEqual(
+              yield* f.fs.readFileString(join(f.agents, "explain/SKILL.md")),
+              content("explain", "Initial"),
+            );
+            const library = yield* Library.Service;
+            const before = yield* library.read;
+            yield* updateAuthoredSkills(f.root);
+            assert.strictEqual((yield* library.read).revision, before.revision);
+          }).pipe(Effect.provide(f.layer));
+        }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+      );
+
+      it.effect(
+        "a missing inventory baseline never authorizes disappearance from the installed version",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* fixture;
+            yield* Effect.gen(function* () {
+              yield* enable(f.root, f.home);
+              yield* updateAuthoredSkills(f.root);
+              const statePath = join(f.home, "author-sync.json");
+              const state = JSON.parse(yield* f.fs.readFileString(statePath));
+              delete state.inventories;
+              yield* f.fs.writeFileString(statePath, JSON.stringify(state));
+              yield* f.fs.remove(join(f.root, "skills/review/notes.txt"));
+              yield* updateAuthoredSkills(f.root);
+              yield* TestClock.adjust("1 hour");
+              yield* updateAuthoredSkills(f.root);
+              assert.strictEqual(
+                yield* f.fs.readFileString(join(f.agents, "review/notes.txt")),
+                "last valid supporting input\n",
+              );
+              yield* f.fs.writeFileString(
+                join(f.root, "skills/review/notes.txt"),
+                "last valid supporting input\n",
+              );
+              yield* updateAuthoredSkills(f.root);
+              yield* f.fs.remove(join(f.root, "skills/review/notes.txt"));
+              yield* updateAuthoredSkills(f.root);
+              yield* TestClock.adjust("10 seconds");
+              yield* updateAuthoredSkills(f.root);
+              assert.isFalse(yield* f.fs.exists(join(f.agents, "review/notes.txt")));
+            }).pipe(Effect.provide(f.layer));
+          }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+      );
+
+      it.effect(
+        "interrupting manual confirmation releases its lease and restarts removal grace",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* fixture;
+            yield* Effect.gen(function* () {
+              yield* enable(f.root, f.home);
+              yield* f.fs.remove(join(f.root, "skills/review/notes.txt"));
+              const clock = yield* Clock.Clock;
+              const waiting = yield* Deferred.make<void>();
+              const pending = yield* updateAuthorWorkspace(
+                f.root,
+                { home: f.home },
+                {
+                  origin: Effect.die("Unconnected workspace needs no Registry"),
+                  connect: () => Effect.die("Unconnected workspace needs no Registry"),
+                },
+              ).pipe(
+                Effect.provideService(Clock.Clock, {
+                  currentTimeMillisUnsafe: () => clock.currentTimeMillisUnsafe(),
+                  currentTimeNanosUnsafe: () => clock.currentTimeNanosUnsafe(),
+                  monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+                  currentTimeMillis: clock.currentTimeMillis,
+                  currentTimeNanos: clock.currentTimeNanos,
+                  monotonicTimeNanos: clock.monotonicTimeNanos,
+                  sleep: (duration) =>
+                    (Duration.toMillis(duration) === 10_000
+                      ? Deferred.succeed(waiting, undefined)
+                      : Effect.void
+                    ).pipe(Effect.andThen(clock.sleep(duration))),
+                }),
+                Effect.forkScoped,
+              );
+              yield* Deferred.await(waiting);
+              yield* Fiber.interrupt(pending);
+              const workspaces = yield* AuthorWorkspace;
+              yield* workspaces.acquire(yield* workspaces.resolveRoot(f.root)).pipe(Effect.scoped);
+              assert.strictEqual(
+                yield* f.fs.readFileString(join(f.agents, "review/notes.txt")),
+                "last valid supporting input\n",
+              );
+              yield* TestClock.adjust("10 seconds");
+              yield* updateAuthoredSkills(f.root);
+              assert.isTrue(yield* f.fs.exists(join(f.agents, "review/notes.txt")));
+              yield* TestClock.adjust("10 seconds");
+              yield* updateAuthoredSkills(f.root);
+              assert.isFalse(yield* f.fs.exists(join(f.agents, "review/notes.txt")));
+            }).pipe(Effect.provide(f.layer));
+          }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+      );
+
+      it.effect(
+        "failed installation through a symlink restarts removal grace for the canonical root",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* fixture;
+            yield* Effect.gen(function* () {
+              yield* enable(f.root, f.home);
+              yield* updateAuthoredSkills(f.root);
+              const alias = `${f.root}-link`;
+              yield* f.fs.symlink(f.root, alias);
+              yield* f.fs.remove(join(f.root, "skills/review/notes.txt"));
+              yield* updateAuthoredSkills(alias);
+              yield* TestClock.adjust("5 seconds");
+              const library = yield* Library.Service;
+              yield* updateAuthoredSkills(alias).pipe(
+                Effect.provideService(Library.Service, {
+                  ...library,
+                  updateAuthoredSkills: () => Effect.fail(new LibraryChanged({ path: f.home })),
+                }),
+                Effect.result,
+              );
+              yield* TestClock.adjust("6 seconds");
+              yield* updateAuthoredSkills(alias);
+              assert.isTrue(yield* f.fs.exists(join(f.agents, "review/notes.txt")));
+              yield* TestClock.adjust("10 seconds");
+              yield* updateAuthoredSkills(alias);
+              assert.isFalse(yield* f.fs.exists(join(f.agents, "review/notes.txt")));
+            }).pipe(Effect.provide(f.layer));
+          }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+      );
+    });
+  });
+});
+
+describe("skit update", () => {
+  describe("Updating authored Skills", () => {
+    describe("A failed later installation leaves earlier installed edits in place.", () => {
+      it.effect(
+        "a failed second installation keeps earlier installed copies and reports its error",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* fixture;
+            yield* Effect.gen(function* () {
+              yield* enable(f.root, f.home);
+              yield* f.fs.writeFileString(
+                join(f.root, "skills/review/SKILL.md"),
+                content("review", "Installed before sync"),
+              );
+              yield* f.fs.writeFileString(
+                join(f.root, "skit.remote.json"),
+                JSON.stringify({
+                  schema: "skit.remote.v1",
+                  origin: "https://registry.example",
+                  namespace: "tim",
+                  skit: "tools",
+                }),
+              );
+              const library = yield* Library.Service;
+              let calls = 0;
+              const failure = new LibraryChanged({ path: f.home });
+              const outcome = yield* updateAuthorWorkspace(
+                f.root,
+                { home: f.home },
+                {
+                  origin: Effect.succeed("https://registry.example"),
+                  connect: () => Effect.fail("offline"),
+                },
+              ).pipe(
+                Effect.provideService(Library.Service, {
+                  ...library,
+                  updateAuthoredSkills: (request) =>
+                    ++calls === 2 ? Effect.fail(failure) : library.updateAuthoredSkills(request),
+                }),
+              );
+              assert.strictEqual(outcome.installation._tag, "Success");
+              if (outcome.installation._tag === "Success")
+                assert.strictEqual(outcome.installation.success.installed, 1);
+              assert.strictEqual(outcome.installation_error, failure);
+              assert.strictEqual(
+                yield* f.fs.readFileString(join(f.agents, "review/SKILL.md")),
+                content("review", "Installed before sync"),
+              );
+            }).pipe(Effect.provide(f.layer));
+          }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+      );
+    });
+  });
+});
+
+describe("skit update", () => {
+  describe("Updating authored Skills", () => {
+    describe("A stale authored selection stops before Registry access.", () => {
+      it.effect(
+        "authored updates reject a stale selected import before installation or Registry access",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* fixture;
+            yield* Effect.gen(function* () {
+              yield* enable(f.root, f.home);
+              const library = yield* Library.Service;
+              const before = yield* library.read;
+              yield* f.fs.writeFileString(
+                join(f.root, "skills/review/SKILL.md"),
+                content("review", "New input"),
+              );
+              const outcome = yield* updateAuthorWorkspace(
+                f.root,
+                { home: f.home, expectedImportId: "stale" },
+                {
+                  origin: Effect.die("Must not sync a stale selection"),
+                  connect: () => Effect.die("Must not connect"),
+                },
+              );
+              assert.strictEqual(outcome.installation._tag, "Failure");
+              if (outcome.installation._tag === "Failure")
+                assert.strictEqual(outcome.installation.failure._tag, "LibraryChanged");
+              assert.strictEqual((yield* library.read).revision, before.revision);
+            }).pipe(Effect.provide(f.layer));
+          }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+      );
+    });
+  });
+});
+
+describe("skit update", () => {
+  describe("Updating authored Skills", () => {
+    describe("Update leaves an authored removal pending until its safety check completes.", () => {
+      it.effect(
+        "a pushed sync's newly confirmed removal reaches installed copies before manual update returns",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* fixture;
+            yield* Effect.gen(function* () {
+              yield* enable(f.root, f.home);
+              yield* f.fs.writeFileString(
+                join(f.root, "skit.remote.json"),
+                JSON.stringify({
+                  schema: "skit.remote.v1",
+                  origin: "https://registry.example",
+                  namespace: "tim",
+                  skit: "tools",
+                }),
+              );
+              const workspaces = yield* AuthorWorkspace;
+              const history = yield* AuthorHistory;
+              const root = yield* workspaces.resolveRoot(f.root);
+              const identity = yield* workspaces.readIdentity(root);
+              if (identity._tag === "None") return assert.fail("Expected registered identity");
+              const { store, current, remote } = yield* makeRemote;
+              const api = { remote, requireAvailable: Effect.void, create: () => Effect.void };
+              yield* updateAuthorWorkspace(
+                root,
+                { home: f.home },
+                {
+                  origin: Effect.succeed("https://registry.example"),
+                  connect: () => Effect.succeed(api),
+                },
+              );
+              let heldLease: Parameters<typeof history.inventory.refresh>[0] | undefined;
+              const waiting = yield* Deferred.make<void>();
+              const pending = yield* updateAuthorWorkspace(
+                root,
+                { home: f.home },
+                {
+                  origin: Effect.succeed("https://registry.example"),
+                  connect: () =>
+                    Effect.gen(function* () {
+                      // An input disappears after initial installation. Start the shared grace with a
+                      // stable observation, then let a slow connection elapse before sync observes it again.
+                      yield* f.fs.remove(join(root, "skills/review/notes.txt"));
+                      const saved = yield* history.refresh(root);
+                      const tree = yield* history.engineStore.tree(saved.treeHash);
+                      assert.isDefined(heldLease);
+                      yield* history.inventory.refresh(
+                        heldLease!,
+                        identity.value.workspaceId,
+                        tree,
+                      );
+                      yield* Deferred.succeed(waiting, undefined);
+                      yield* Effect.sleep("11 seconds");
+                      return api;
+                    }),
+                },
+              ).pipe(
+                Effect.provideService(AuthorWorkspace, {
+                  ...workspaces,
+                  acquire: (input) =>
+                    workspaces.acquire(input).pipe(
+                      Effect.tap((lease) =>
+                        Effect.sync(() => {
+                          heldLease = lease;
+                        }),
+                      ),
+                    ),
+                }),
+                Effect.forkScoped,
+              );
+              yield* Deferred.await(waiting);
+              assert.isTrue(yield* f.fs.exists(join(f.agents, "review/notes.txt")));
+              yield* TestClock.adjust("11 seconds");
+              const outcome = yield* Fiber.join(pending);
+              assert.strictEqual(outcome.sync?._tag, "Success");
+              if (outcome.sync?._tag === "Success")
+                assert.strictEqual(outcome.sync.success.status, "pushed");
+              assert.strictEqual(outcome.installation._tag, "Success");
+              const id = yield* Ref.get(current);
+              assert.isNotNull(id);
+              const revision = yield* store.revision(id!);
+              assert.isFalse(
+                (yield* store.tree(revision.tree)).some(
+                  (entry) => entry.path === "skills/review/notes.txt",
+                ),
+              );
+              assert.isFalse(yield* f.fs.exists(join(f.agents, "review/notes.txt")));
+            }).pipe(Effect.provide(f.layer));
+          }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+      );
+
+      it.effect("repeated scans do not bypass authored member removal grace", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          yield* Effect.gen(function* () {
+            yield* enable(f.root, f.home);
+
+            yield* updateAuthoredSkills(f.root);
+
+            const configPath = join(f.root, "skit.json");
+
+            const config = JSON.parse(yield* f.fs.readFileString(configPath));
+
+            config.skills.push({ name: "new-skill", path: "skills/new-skill" });
+
+            config.skills.push({ name: "invalid-skill", path: "skills/invalid-skill" });
+
+            yield* f.fs.makeDirectory(join(f.root, "skills/new-skill"));
+
+            yield* f.fs.writeFileString(
+              join(f.root, "skills/new-skill/SKILL.md"),
+              content("new-skill", "New valid member"),
+            );
+
+            yield* f.fs.writeFileString(configPath, JSON.stringify(config));
+
+            yield* updateAuthoredSkills(f.root);
+
+            config.skills = config.skills.filter(
+              (member: { name: string }) => member.name !== "review",
+            );
+
+            yield* f.fs.writeFileString(configPath, JSON.stringify(config));
+
+            yield* f.fs.remove(join(f.root, "skills/review"), { recursive: true });
+
+            for (let pass = 0; pass < 3; pass++) {
+              yield* updateAuthoredSkills(f.root);
+              assert.strictEqual(
+                yield* f.fs.readFileString(join(f.agents, "review/SKILL.md")),
+                content("review", "Initial"),
+              );
+            }
+          }).pipe(Effect.provide(f.layer));
+        }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+      );
+
+      it.effect("supporting-file disappearance retains the last valid installed inputs", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          yield* Effect.gen(function* () {
+            yield* enable(f.root, f.home);
+
+            yield* updateAuthoredSkills(f.root);
+
+            yield* f.fs.remove(join(f.root, "skills/review/notes.txt"));
+
+            yield* f.fs.writeFileString(
+              join(f.root, "skills/review/SKILL.md"),
+              content("review", "Changed while supporting input disappeared"),
+            );
+
+            const expected = content("explain", "Unrelated valid edit");
+
+            yield* f.fs.writeFileString(join(f.root, "skills/explain/SKILL.md"), expected);
+            for (let pass = 0; pass < 2; pass++) {
+              yield* updateAuthoredSkills(f.root);
+              assert.strictEqual(
+                yield* f.fs.readFileString(join(f.agents, "review/notes.txt")),
+                "last valid supporting input\n",
+              );
+              assert.strictEqual(
+                yield* f.fs.readFileString(join(f.agents, "review/SKILL.md")),
+                content("review", "Initial"),
+              );
+            }
+          }).pipe(Effect.provide(f.layer));
+        }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+      );
+    });
+  });
+});
+
+describe("skit update", () => {
+  describe("Updating authored Skills", () => {
+    describe("Update does not reinstall a disabled Skill.", () => {
+      it.effect("disabled authored Skills do not gain installed copies", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          yield* Effect.gen(function* () {
+            yield* initializeAuthorWorkspace(f.root, f.home);
+
+            yield* Library.Service;
+
+            yield* f.fs.writeFileString(
+              join(f.root, "skills/review/SKILL.md"),
+              content("review", "Still disabled"),
+            );
+
+            yield* updateAuthoredSkills(f.root);
+
+            assert.isFalse(yield* f.fs.exists(join(f.agents, "review")));
+          }).pipe(Effect.provide(f.layer));
+        }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+      );
+    });
+  });
+});
+
+describe("skit update", () => {
+  describe("Updating authored Skills", () => {
+    describe("New valid authored Skills follow an enabled Collection.", () => {
+      it.effect("new valid authored members follow whole-Collection enablement", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture;
+          yield* Effect.gen(function* () {
+            yield* enable(f.root, f.home);
+
+            yield* updateAuthoredSkills(f.root);
+
+            const configPath = join(f.root, "skit.json");
+
+            const config = JSON.parse(yield* f.fs.readFileString(configPath));
+
+            config.skills.push({ name: "new-skill", path: "skills/new-skill" });
+
+            config.skills.push({ name: "invalid-skill", path: "skills/invalid-skill" });
+
+            yield* f.fs.makeDirectory(join(f.root, "skills/new-skill"));
+
+            yield* f.fs.writeFileString(
+              join(f.root, "skills/new-skill/SKILL.md"),
+              content("new-skill", "New valid member"),
+            );
+
+            yield* f.fs.writeFileString(configPath, JSON.stringify(config));
+
+            yield* updateAuthoredSkills(f.root);
+
+            assert.isTrue(yield* f.fs.exists(join(f.agents, "new-skill/SKILL.md")));
+          }).pipe(Effect.provide(f.layer));
+        }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+      );
+    });
+  });
+});

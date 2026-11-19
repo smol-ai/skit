@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import { renderBlocks } from "../src/terminal/blocks.js";
 import { classifyFailure } from "../src/commands/failure-classification.js";
 import * as Library from "@smolai/skit-core/library";
@@ -25,16 +26,23 @@ import type { CommandResult } from "../src/commands/types.js";
 import { renderSetEnabled } from "../src/library/enable/present.js";
 import { presentSetEnabled } from "../src/library/enable.js";
 
-it.effect("lists a retained Collection without Release-shaped fields", () =>
+it.effect("browsing requires fresh confirmation and consumes the selected detail path", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
+
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-portable-commands-" });
+
     const home = yield* libraryHome({ home: join(root, "home") });
+
     yield* initializeLibraryMachine(home.home);
+
     const installed = join(root, "installed", "review");
+
     yield* fs.makeDirectory(installed, { recursive: true });
+
     yield* fs.writeFileString(join(installed, "SKILL.md"), "local Skill\n");
-    const collection = yield* home.owned(
+
+    yield* home.owned(
       writingTo(
         home.home,
         importCollectionIn(home.home)({
@@ -58,51 +66,33 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
         }),
       ),
     );
-    const rendered: CommandResult[] = [];
-    yield* home.owned(
-      presentListCommand().pipe(
-        Effect.provide(
-          rendererTestLayer({
-            result: (value) =>
-              Effect.sync(() => {
-                rendered.push(value);
-              }),
-          }),
-        ),
-      ),
-    );
-    assert.strictEqual(rendered[0]?.schema, "skit.list.v7");
-    const listing = yield* Schema.decodeUnknownEffect(ListResult)(rendered[0]?.data);
-    assert.strictEqual(listing.subjects[0]?.subject_id, collection.collection?.collection_id);
-    assert.strictEqual(listing.subjects[0]?.label, "tim/skills");
-    assert.containSubset(renderLibraryList(listing)[0], {
-      _tag: "Group",
-      title: "tim/skills (Registry release)",
-    });
-    assert.deepStrictEqual(
-      listing.subjects[0]?.skills.map((skill) => skill.name),
-      ["review"],
-    );
-    assert.deepStrictEqual(listing.enabled, []);
-    assert.strictEqual(JSON.stringify(listing).includes("release"), false);
 
     const session = yield* home.owned(
       Effect.flatMap(Library.Service, (library) => library.session.open()),
     );
+
     const row = session.skills[0];
+
     assert.ok(row);
+
     const proposed = yield* home.owned(
       proposeLibraryEnable(session, row, { scope: { kind: "global" } }),
     );
+
     const beforeStaleChange = yield* home.durable;
+
     yield* home.writeDurable({
       ...beforeStaleChange,
       ownershipIssues: beforeStaleChange.ownershipIssues ?? [],
     });
+
     const stale = yield* home.owned(confirmLibraryChange(proposed));
+
     assert.strictEqual(stale.outcome?.kind, "failed");
+
     if (stale.outcome?.kind === "failed")
       assert.strictEqual(classifyFailure(stale.outcome.failure).code, "CONFLICT");
+
     yield* home.writeDurable(beforeStaleChange);
 
     const interaction = yield* makeScriptedInteraction([
@@ -110,445 +100,547 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
       row.skillVersionId,
       "done",
     ]);
+
     yield* home.owned(
       browseLibrary(
         yield* home.owned(Effect.flatMap(Library.Service, (library) => library.session.open())),
       ).pipe(Effect.provide(interaction.layer)),
     );
+
     assert.strictEqual((yield* interaction.prompts)[0]?.message, "Select a collection");
+
     assert.strictEqual(yield* interaction.remaining, 0);
+
     const detail = (yield* interaction.notes).find((note) => note.title === row.name);
+
     assert.ok(detail);
+
     assert.strictEqual(renderBlocks(detail.body, { color: false }).includes("\u001b"), false);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("offers only enabled Skills and identifies their Binding location", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-disable-choices-" });
-    const home = yield* libraryHome({ home: join(root, "home") });
-    yield* initializeLibraryMachine(home.home);
-    const installed = join(root, "installed");
-    const review = join(installed, "review");
-    const effect = join(installed, "effect");
-    for (const path of [review, effect]) yield* fs.makeDirectory(path, { recursive: true });
-    yield* fs.writeFileString(join(review, "SKILL.md"), "review\n");
-    yield* fs.writeFileString(join(effect, "SKILL.md"), "effect\n");
-    const collection = yield* home.owned(
-      writingTo(
-        home.home,
-        importCollectionIn(home.home)({
-          source: { type: "local", path: installed },
-          input: installed,
-          importedAt: "2026-09-17T00:00:00.000Z",
-          skills: [
-            {
-              name: "review",
-              sourcePath: review,
-              relativePath: "review",
-              currentHash: yield* deterministicTreeHash(review),
-            },
-            {
-              name: "effect",
-              sourcePath: effect,
-              relativePath: "effect",
-              currentHash: yield* deterministicTreeHash(effect),
-            },
-          ],
-          lockFileEntries: [],
-        }),
-      ),
-    );
-    const state = yield* home.durable;
-    const reviewId = state.skills.find((skill) => skill.name === "review")?.skill_id;
-    assert.ok(reviewId);
-    yield* home.writeDurable({
-      ...state,
-      enabled: [{ skill: reviewId }],
-      repositories: [{ root, enabled: [{ skill: reviewId }] }],
-    });
-
-    const interaction = yield* makeScriptedInteraction([
-      `all:${collection.collection?.collection_id}`,
-      "skills",
-      ["review"],
-    ]);
-    yield* home.owned(
-      presentSetEnabled({
-        action: "disable",
-        enabled: false,
-        cwd: root,
-        all: false,
-        dryRun: false,
-        interactive: true,
-      }).pipe(Effect.provide(interaction.layer)),
-    );
-    const prompts = yield* interaction.prompts;
-    assert.strictEqual(prompts.length, 3);
-    assert.strictEqual(prompts[0]?.message, "Select where to disable Skills");
-    assert.deepStrictEqual(prompts[0]?.choices[0], {
-      value: `all:${collection.collection?.collection_id}`,
-      label: `${collection.collection?.label} (Local directory: ${join(root, "installed")}) — everywhere enabled`,
-      hint: `global, repository ${root}`,
-    });
-    assert.strictEqual(prompts[2]?.message, "Select Skills to disable");
-    assert.deepStrictEqual(prompts[2]?.choices, [
-      {
-        value: "review",
-        label: "review",
-        hint: `${collection.collection?.label} (Local directory: ${join(root, "installed")}) | global, ${collection.collection?.label} (Local directory: ${join(root, "installed")}) | repository ${root}`,
-      },
-    ]);
-    assert.strictEqual((yield* interaction.results).length, 2);
-    const disabled = yield* home.durable;
-    assert.deepStrictEqual(disabled.enabled, []);
-    assert.deepStrictEqual(disabled.repositories, []);
-    for (const result of yield* interaction.results) {
-      assert.strictEqual(result.schema, "skit.disable.v8");
-      const [headline] = renderSetEnabled(
-        result.data as Parameters<typeof renderSetEnabled>[0],
-        true,
-      ).filter((block) => block._tag === "Status");
-      assert.strictEqual(headline?.tone, "ok");
-      assert.match(
-        headline?.text.find((part) => typeof part === "string") ?? "",
-        /^Disabled review/,
-      );
-    }
-
-    const collectionId = collection.collection!.collection_id;
-    const enable = yield* makeScriptedInteraction([collectionId, "collection"]);
-    yield* home.owned(
-      presentSetEnabled({
-        action: "enable",
-        enabled: true,
-        cwd: root,
-        all: false,
-        dryRun: false,
-        interactive: true,
-        scope: { kind: "global" },
-      }).pipe(Effect.provide(enable.layer)),
-    );
-    assert.deepStrictEqual((yield* home.durable).enabled, [{ collection: collectionId }]);
-    assert.ok(!(yield* enable.prompts).some((prompt) => prompt.kind === "multiselect"));
-
-    const unchangedBrowse = yield* makeScriptedInteraction([
-      collectionId,
-      "Enable whole collection",
-      "global",
-      "Back to collections",
-      "Done",
-    ]);
-    yield* home.owned(
-      browseLibrary(
-        yield* home.owned(Effect.flatMap(Library.Service, (library) => library.session.open())),
-      ).pipe(Effect.provide(unchangedBrowse.layer)),
-    );
-    assert.ok(!(yield* unchangedBrowse.prompts).some((prompt) => prompt.kind === "confirm"));
-    assert.ok((yield* unchangedBrowse.notes).some((note) => note.title === "No change"));
-    const beforeCancel = yield* home.durable;
-    yield* home.owned(
-      presentSetEnabled({
-        action: "disable",
-        enabled: false,
-        subject: collectionId,
-        cwd: root,
-        all: false,
-        dryRun: false,
-        interactive: true,
-        scope: { kind: "global" },
-      }).pipe(Effect.provide((yield* makeScriptedInteraction(["cancel"])).layer)),
-    );
-    assert.deepStrictEqual(yield* home.durable, beforeCancel);
-
-    const browseCancel = yield* makeScriptedInteraction([
-      collectionId,
-      "Disable whole collection",
-      false,
-      "Back to collections",
-      "Done",
-    ]);
-    yield* home.owned(
-      browseLibrary(
-        yield* home.owned(Effect.flatMap(Library.Service, (library) => library.session.open())),
-      ).pipe(Effect.provide(browseCancel.layer)),
-    );
-    assert.deepStrictEqual(yield* home.durable, beforeCancel);
-    const browseDisable = yield* makeScriptedInteraction([
-      collectionId,
-      "Disable whole collection",
-      true,
-      "Back to collections",
-      "Done",
-    ]);
-    yield* home.owned(
-      browseLibrary(
-        yield* home.owned(Effect.flatMap(Library.Service, (library) => library.session.open())),
-      ).pipe(Effect.provide(browseDisable.layer)),
-    );
-    assert.deepStrictEqual((yield* home.durable).enabled, []);
-    yield* home.owned(
-      presentSetEnabled({
-        action: "enable",
-        enabled: true,
-        subject: collectionId,
-        cwd: root,
-        all: true,
-        dryRun: false,
-        interactive: false,
-        scope: { kind: "repository", root },
-      }).pipe(Effect.provide((yield* makeScriptedInteraction([])).layer)),
-    );
-    const directDisable = yield* makeScriptedInteraction(["collection"]);
-    yield* home.owned(
-      presentSetEnabled({
-        action: "disable",
-        enabled: false,
-        subject: collectionId,
-        cwd: home.home,
-        all: false,
-        dryRun: false,
-        interactive: true,
-      }).pipe(Effect.provide(directDisable.layer)),
-    );
-    assert.deepStrictEqual((yield* home.durable).repositories, []);
-    assert.strictEqual(yield* directDisable.remaining, 0);
-    assert.strictEqual((yield* directDisable.prompts).length, 1);
-    for (const scope of [{ kind: "global" } as const, { kind: "repository", root } as const]) {
-      yield* home.owned(
-        presentSetEnabled({
-          action: "enable",
-          enabled: true,
-          subject: collectionId,
-          cwd: root,
-          all: true,
-          dryRun: false,
-          interactive: false,
-          scope,
-        }).pipe(Effect.provide((yield* makeScriptedInteraction([])).layer)),
-      );
-    }
-    const disableEverywhere = yield* makeScriptedInteraction(["collection", "all"]);
-    yield* home.owned(
-      presentSetEnabled({
-        action: "disable",
-        subject: collectionId,
-        enabled: false,
-        cwd: root,
-        all: false,
-        dryRun: false,
-        interactive: true,
-      }).pipe(Effect.provide(disableEverywhere.layer)),
-    );
-    assert.deepStrictEqual((yield* home.durable).enabled, []);
-    assert.deepStrictEqual((yield* home.durable).repositories, []);
-    assert.strictEqual(yield* disableEverywhere.remaining, 0);
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-);
-
-it.effect("bare disable asks before changing a global Binding spanning Collections", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-disable-single-" });
-    const home = yield* libraryHome({ home: join(root, "home") });
-    yield* initializeLibraryMachine(home.home);
-    const source = join(root, "show-me");
-    yield* fs.makeDirectory(source);
-    yield* fs.writeFileString(join(source, "SKILL.md"), "Show the current topic visually.\n");
-    yield* home.owned(
-      writingTo(
-        home.home,
-        importCollectionIn(home.home)({
-          source: { type: "local", path: source },
-          input: source,
-          importedAt: "2026-10-06T00:00:00.000Z",
-          skills: [
-            {
-              name: "show-me",
-              sourcePath: source,
-              relativePath: ".",
-              currentHash: yield* deterministicTreeHash(source),
-            },
-          ],
-          lockFileEntries: [],
-        }),
-      ),
-    );
-    const other = join(root, "effect");
-    yield* fs.makeDirectory(other);
-    yield* fs.writeFileString(join(other, "SKILL.md"), "Effect reference.\n");
-    yield* home.owned(
-      writingTo(
-        home.home,
-        importCollectionIn(home.home)({
-          source: { type: "local", path: other },
-          input: other,
-          importedAt: "2026-10-06T00:00:00.000Z",
-          skills: [
-            {
-              name: "effect",
-              sourcePath: other,
-              relativePath: ".",
-              currentHash: yield* deterministicTreeHash(other),
-            },
-          ],
-          lockFileEntries: [],
-        }),
-      ),
-    );
-    const imported = yield* home.durable;
-    const state = {
-      ...imported,
-      enabled: imported.skills.map((skill) => ({ skill: skill.skill_id })),
-    };
-    yield* home.writeDurable(state);
-
-    const interaction = yield* makeScriptedInteraction(["cancel"]);
-    yield* home.owned(
-      presentSetEnabled({
-        action: "disable",
-        enabled: false,
-        cwd: root,
-        all: false,
-        dryRun: false,
-        interactive: true,
-      }).pipe(Effect.provide(interaction.layer)),
-    );
-    const prompts = yield* interaction.prompts;
-    assert.strictEqual(prompts.length, 1);
-    assert.strictEqual(prompts[0]?.message, "Select where to disable Skills");
-    assert.ok(prompts[0]?.choices.some((choice) => choice.hint?.includes("show-me")));
-    assert.deepStrictEqual(yield* home.durable, state);
-    assert.strictEqual((yield* interaction.results).length, 0);
-    assert.strictEqual(prompts[0]?.choices.length, 2);
-    const effectChoice = prompts[0]?.choices.find((choice) => choice.hint === "effect");
-    assert.ok(effectChoice);
-    const selection = yield* makeScriptedInteraction([effectChoice.value, "skills", ["effect"]]);
-    yield* home.owned(
-      presentSetEnabled({
-        action: "disable",
-        enabled: false,
-        cwd: root,
-        all: false,
-        dryRun: false,
-        interactive: true,
-      }).pipe(Effect.provide(selection.layer)),
-    );
-    const after = yield* home.durable;
-    const showMe = imported.skills.find((skill) => skill.name === "show-me");
-    assert.ok(showMe);
-    assert.deepStrictEqual(after.enabled, [{ skill: showMe.skill_id }]);
-    const single = yield* makeScriptedInteraction(["cancel"]);
-    yield* home.owned(
-      presentSetEnabled({
-        action: "disable",
-        enabled: false,
-        cwd: root,
-        all: false,
-        dryRun: false,
-        interactive: true,
-      }).pipe(Effect.provide(single.layer)),
-    );
-    assert.strictEqual((yield* single.prompts).length, 1);
-    assert.deepStrictEqual(yield* home.durable, after);
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-);
-
-it.effect("rejects a stale multi-destination disable before changing any Binding", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-disable-stale-" });
-    const home = yield* libraryHome({ home: join(root, "home") });
-    yield* initializeLibraryMachine(home.home);
-    const installed = join(root, "installed");
-    const review = join(installed, "review");
-    const effect = join(installed, "effect");
-    for (const path of [review, effect]) yield* fs.makeDirectory(path, { recursive: true });
-    yield* fs.writeFileString(join(review, "SKILL.md"), "review\n");
-    yield* fs.writeFileString(join(effect, "SKILL.md"), "effect\n");
-    const collection = yield* home.owned(
-      writingTo(
-        home.home,
-        importCollectionIn(home.home)({
-          source: { type: "local", path: installed },
-          input: installed,
-          importedAt: "2026-09-17T00:00:00.000Z",
-          skills: [
-            {
-              name: "review",
-              sourcePath: review,
-              relativePath: "review",
-              currentHash: yield* deterministicTreeHash(review),
-            },
-            {
-              name: "effect",
-              sourcePath: effect,
-              relativePath: "effect",
-              currentHash: yield* deterministicTreeHash(effect),
-            },
-          ],
-          lockFileEntries: [],
-        }),
-      ),
-    );
-    const state = yield* home.durable;
-    const reviewId = state.skills.find((skill) => skill.name === "review")?.skill_id;
-    assert.ok(reviewId);
-    yield* home.writeDurable({
-      ...state,
-      enabled: [{ skill: reviewId }],
-      repositories: [{ root, enabled: [{ skill: reviewId }] }],
-    });
-
-    const interaction = yield* makeScriptedInteraction([
-      `all:${collection.collection?.collection_id}`,
-      "collection",
-    ]);
-    const ready = yield* Deferred.make<void>();
-    const resume = yield* Deferred.make<void>();
-    const results: CommandResult[] = [];
-    const command = yield* home
-      .owned(
-        presentSetEnabled({
-          action: "disable",
-          enabled: false,
-          cwd: root,
-          all: false,
-          dryRun: false,
-          interactive: true,
-        }).pipe(
-          Effect.provide(
-            rendererTestLayer({
-              withStatus: (_status, operation) =>
-                Deferred.succeed(ready, undefined).pipe(
-                  Effect.andThen(Deferred.await(resume)),
-                  Effect.andThen(operation),
-                ),
-              result: (value) =>
-                Effect.sync(() => {
-                  results.push(value);
-                }),
-            }).pipe(Layer.provideMerge(interaction.layer)),
+describe("skit disable", () => {
+  describe("Disable asks before changing a selection that spans Collections.", () => {
+    it.effect("offers only enabled Skills and identifies their Binding location", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-disable-choices-" });
+        const home = yield* libraryHome({ home: join(root, "home") });
+        yield* initializeLibraryMachine(home.home);
+        const installed = join(root, "installed");
+        const review = join(installed, "review");
+        const effect = join(installed, "effect");
+        for (const path of [review, effect]) yield* fs.makeDirectory(path, { recursive: true });
+        yield* fs.writeFileString(join(review, "SKILL.md"), "review\n");
+        yield* fs.writeFileString(join(effect, "SKILL.md"), "effect\n");
+        const collection = yield* home.owned(
+          writingTo(
+            home.home,
+            importCollectionIn(home.home)({
+              source: { type: "local", path: installed },
+              input: installed,
+              importedAt: "2026-09-17T00:00:00.000Z",
+              skills: [
+                {
+                  name: "review",
+                  sourcePath: review,
+                  relativePath: "review",
+                  currentHash: yield* deterministicTreeHash(review),
+                },
+                {
+                  name: "effect",
+                  sourcePath: effect,
+                  relativePath: "effect",
+                  currentHash: yield* deterministicTreeHash(effect),
+                },
+              ],
+              lockFileEntries: [],
+            }),
           ),
-        ),
-      )
-      .pipe(Effect.result, Effect.forkScoped);
-    yield* Effect.raceFirst(
-      Deferred.await(ready),
-      Fiber.join(command).pipe(
-        Effect.andThen(Effect.die("Disable finished before the writer gate")),
-      ),
+        );
+        const state = yield* home.durable;
+        const reviewId = state.skills.find((skill) => skill.name === "review")?.skill_id;
+        assert.ok(reviewId);
+        yield* home.writeDurable({
+          ...state,
+          enabled: [{ skill: reviewId }],
+          repositories: [{ root, enabled: [{ skill: reviewId }] }],
+        });
+
+        const interaction = yield* makeScriptedInteraction([
+          `all:${collection.collection?.collection_id}`,
+          "skills",
+          ["review"],
+        ]);
+        yield* home.owned(
+          presentSetEnabled({
+            action: "disable",
+            enabled: false,
+            cwd: root,
+            all: false,
+            dryRun: false,
+            interactive: true,
+          }).pipe(Effect.provide(interaction.layer)),
+        );
+        const prompts = yield* interaction.prompts;
+        assert.strictEqual(prompts.length, 3);
+        assert.strictEqual(prompts[0]?.message, "Select where to disable Skills");
+        assert.deepStrictEqual(prompts[0]?.choices[0], {
+          value: `all:${collection.collection?.collection_id}`,
+          label: `${collection.collection?.label} (Local directory: ${join(root, "installed")}) — everywhere enabled`,
+          hint: `global, repository ${root}`,
+        });
+        assert.strictEqual(prompts[2]?.message, "Select Skills to disable");
+        assert.deepStrictEqual(prompts[2]?.choices, [
+          {
+            value: "review",
+            label: "review",
+            hint: `${collection.collection?.label} (Local directory: ${join(root, "installed")}) | global, ${collection.collection?.label} (Local directory: ${join(root, "installed")}) | repository ${root}`,
+          },
+        ]);
+        assert.strictEqual((yield* interaction.results).length, 2);
+        const disabled = yield* home.durable;
+        assert.deepStrictEqual(disabled.enabled, []);
+        assert.deepStrictEqual(disabled.repositories, []);
+        for (const result of yield* interaction.results) {
+          assert.strictEqual(result.schema, "skit.disable.v8");
+          const [headline] = renderSetEnabled(
+            result.data as Parameters<typeof renderSetEnabled>[0],
+            true,
+          ).filter((block) => block._tag === "Status");
+          assert.strictEqual(headline?.tone, "ok");
+          assert.match(
+            headline?.text.find((part) => typeof part === "string") ?? "",
+            /^Disabled review/,
+          );
+        }
+
+        const collectionId = collection.collection!.collection_id;
+        const enable = yield* makeScriptedInteraction([collectionId, "collection"]);
+        yield* home.owned(
+          presentSetEnabled({
+            action: "enable",
+            enabled: true,
+            cwd: root,
+            all: false,
+            dryRun: false,
+            interactive: true,
+            scope: { kind: "global" },
+          }).pipe(Effect.provide(enable.layer)),
+        );
+        assert.deepStrictEqual((yield* home.durable).enabled, [{ collection: collectionId }]);
+        assert.ok(!(yield* enable.prompts).some((prompt) => prompt.kind === "multiselect"));
+
+        const unchangedBrowse = yield* makeScriptedInteraction([
+          collectionId,
+          "Enable whole collection",
+          "global",
+          "Back to collections",
+          "Done",
+        ]);
+        yield* home.owned(
+          browseLibrary(
+            yield* home.owned(Effect.flatMap(Library.Service, (library) => library.session.open())),
+          ).pipe(Effect.provide(unchangedBrowse.layer)),
+        );
+        assert.ok(!(yield* unchangedBrowse.prompts).some((prompt) => prompt.kind === "confirm"));
+        assert.ok((yield* unchangedBrowse.notes).some((note) => note.title === "No change"));
+        const beforeCancel = yield* home.durable;
+        yield* home.owned(
+          presentSetEnabled({
+            action: "disable",
+            enabled: false,
+            subject: collectionId,
+            cwd: root,
+            all: false,
+            dryRun: false,
+            interactive: true,
+            scope: { kind: "global" },
+          }).pipe(Effect.provide((yield* makeScriptedInteraction(["cancel"])).layer)),
+        );
+        assert.deepStrictEqual(yield* home.durable, beforeCancel);
+
+        const browseCancel = yield* makeScriptedInteraction([
+          collectionId,
+          "Disable whole collection",
+          false,
+          "Back to collections",
+          "Done",
+        ]);
+        yield* home.owned(
+          browseLibrary(
+            yield* home.owned(Effect.flatMap(Library.Service, (library) => library.session.open())),
+          ).pipe(Effect.provide(browseCancel.layer)),
+        );
+        assert.deepStrictEqual(yield* home.durable, beforeCancel);
+        const browseDisable = yield* makeScriptedInteraction([
+          collectionId,
+          "Disable whole collection",
+          true,
+          "Back to collections",
+          "Done",
+        ]);
+        yield* home.owned(
+          browseLibrary(
+            yield* home.owned(Effect.flatMap(Library.Service, (library) => library.session.open())),
+          ).pipe(Effect.provide(browseDisable.layer)),
+        );
+        assert.deepStrictEqual((yield* home.durable).enabled, []);
+        yield* home.owned(
+          presentSetEnabled({
+            action: "enable",
+            enabled: true,
+            subject: collectionId,
+            cwd: root,
+            all: true,
+            dryRun: false,
+            interactive: false,
+            scope: { kind: "repository", root },
+          }).pipe(Effect.provide((yield* makeScriptedInteraction([])).layer)),
+        );
+        const directDisable = yield* makeScriptedInteraction(["collection"]);
+        yield* home.owned(
+          presentSetEnabled({
+            action: "disable",
+            enabled: false,
+            subject: collectionId,
+            cwd: home.home,
+            all: false,
+            dryRun: false,
+            interactive: true,
+          }).pipe(Effect.provide(directDisable.layer)),
+        );
+        assert.deepStrictEqual((yield* home.durable).repositories, []);
+        assert.strictEqual(yield* directDisable.remaining, 0);
+        assert.strictEqual((yield* directDisable.prompts).length, 1);
+        for (const scope of [{ kind: "global" } as const, { kind: "repository", root } as const]) {
+          yield* home.owned(
+            presentSetEnabled({
+              action: "enable",
+              enabled: true,
+              subject: collectionId,
+              cwd: root,
+              all: true,
+              dryRun: false,
+              interactive: false,
+              scope,
+            }).pipe(Effect.provide((yield* makeScriptedInteraction([])).layer)),
+          );
+        }
+        const disableEverywhere = yield* makeScriptedInteraction(["collection", "all"]);
+        yield* home.owned(
+          presentSetEnabled({
+            action: "disable",
+            subject: collectionId,
+            enabled: false,
+            cwd: root,
+            all: false,
+            dryRun: false,
+            interactive: true,
+          }).pipe(Effect.provide(disableEverywhere.layer)),
+        );
+        assert.deepStrictEqual((yield* home.durable).enabled, []);
+        assert.deepStrictEqual((yield* home.durable).repositories, []);
+        assert.strictEqual(yield* disableEverywhere.remaining, 0);
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
     );
-    const current = yield* home.durable;
-    const concurrent = { ...current, enabled: [] };
-    yield* home.writeDurable(concurrent);
-    yield* Deferred.succeed(resume, undefined);
-    const outcome = yield* Fiber.join(command);
-    assert.isTrue(Result.isFailure(outcome));
-    if (Result.isFailure(outcome)) assert.instanceOf(outcome.failure, Library.StalePlan);
-    assert.deepStrictEqual(yield* home.durable, concurrent);
-    assert.deepStrictEqual(results, []);
-    assert.isTrue(yield* homeLockIsFree(home.home));
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-);
+
+    it.effect("bare disable asks before changing a global Binding spanning Collections", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-disable-single-" });
+        const home = yield* libraryHome({ home: join(root, "home") });
+        yield* initializeLibraryMachine(home.home);
+        const source = join(root, "show-me");
+        yield* fs.makeDirectory(source);
+        yield* fs.writeFileString(join(source, "SKILL.md"), "Show the current topic visually.\n");
+        yield* home.owned(
+          writingTo(
+            home.home,
+            importCollectionIn(home.home)({
+              source: { type: "local", path: source },
+              input: source,
+              importedAt: "2026-10-06T00:00:00.000Z",
+              skills: [
+                {
+                  name: "show-me",
+                  sourcePath: source,
+                  relativePath: ".",
+                  currentHash: yield* deterministicTreeHash(source),
+                },
+              ],
+              lockFileEntries: [],
+            }),
+          ),
+        );
+        const other = join(root, "effect");
+        yield* fs.makeDirectory(other);
+        yield* fs.writeFileString(join(other, "SKILL.md"), "Effect reference.\n");
+        yield* home.owned(
+          writingTo(
+            home.home,
+            importCollectionIn(home.home)({
+              source: { type: "local", path: other },
+              input: other,
+              importedAt: "2026-10-06T00:00:00.000Z",
+              skills: [
+                {
+                  name: "effect",
+                  sourcePath: other,
+                  relativePath: ".",
+                  currentHash: yield* deterministicTreeHash(other),
+                },
+              ],
+              lockFileEntries: [],
+            }),
+          ),
+        );
+        const imported = yield* home.durable;
+        const state = {
+          ...imported,
+          enabled: imported.skills.map((skill) => ({ skill: skill.skill_id })),
+        };
+        yield* home.writeDurable(state);
+
+        const interaction = yield* makeScriptedInteraction(["cancel"]);
+        yield* home.owned(
+          presentSetEnabled({
+            action: "disable",
+            enabled: false,
+            cwd: root,
+            all: false,
+            dryRun: false,
+            interactive: true,
+          }).pipe(Effect.provide(interaction.layer)),
+        );
+        const prompts = yield* interaction.prompts;
+        assert.strictEqual(prompts.length, 1);
+        assert.strictEqual(prompts[0]?.message, "Select where to disable Skills");
+        assert.ok(prompts[0]?.choices.some((choice) => choice.hint?.includes("show-me")));
+        assert.deepStrictEqual(yield* home.durable, state);
+        assert.strictEqual((yield* interaction.results).length, 0);
+        assert.strictEqual(prompts[0]?.choices.length, 2);
+        const effectChoice = prompts[0]?.choices.find((choice) => choice.hint === "effect");
+        assert.ok(effectChoice);
+        const selection = yield* makeScriptedInteraction([
+          effectChoice.value,
+          "skills",
+          ["effect"],
+        ]);
+        yield* home.owned(
+          presentSetEnabled({
+            action: "disable",
+            enabled: false,
+            cwd: root,
+            all: false,
+            dryRun: false,
+            interactive: true,
+          }).pipe(Effect.provide(selection.layer)),
+        );
+        const after = yield* home.durable;
+        const showMe = imported.skills.find((skill) => skill.name === "show-me");
+        assert.ok(showMe);
+        assert.deepStrictEqual(after.enabled, [{ skill: showMe.skill_id }]);
+        const single = yield* makeScriptedInteraction(["cancel"]);
+        yield* home.owned(
+          presentSetEnabled({
+            action: "disable",
+            enabled: false,
+            cwd: root,
+            all: false,
+            dryRun: false,
+            interactive: true,
+          }).pipe(Effect.provide(single.layer)),
+        );
+        assert.strictEqual((yield* single.prompts).length, 1);
+        assert.deepStrictEqual(yield* home.durable, after);
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+    );
+  });
+});
+
+describe("skit disable", () => {
+  describe("A changed selection must be reviewed again before disabling Skills.", () => {
+    it.effect("rejects a stale multi-destination disable before changing any Binding", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-disable-stale-" });
+        const home = yield* libraryHome({ home: join(root, "home") });
+        yield* initializeLibraryMachine(home.home);
+        const installed = join(root, "installed");
+        const review = join(installed, "review");
+        const effect = join(installed, "effect");
+        for (const path of [review, effect]) yield* fs.makeDirectory(path, { recursive: true });
+        yield* fs.writeFileString(join(review, "SKILL.md"), "review\n");
+        yield* fs.writeFileString(join(effect, "SKILL.md"), "effect\n");
+        const collection = yield* home.owned(
+          writingTo(
+            home.home,
+            importCollectionIn(home.home)({
+              source: { type: "local", path: installed },
+              input: installed,
+              importedAt: "2026-09-17T00:00:00.000Z",
+              skills: [
+                {
+                  name: "review",
+                  sourcePath: review,
+                  relativePath: "review",
+                  currentHash: yield* deterministicTreeHash(review),
+                },
+                {
+                  name: "effect",
+                  sourcePath: effect,
+                  relativePath: "effect",
+                  currentHash: yield* deterministicTreeHash(effect),
+                },
+              ],
+              lockFileEntries: [],
+            }),
+          ),
+        );
+        const state = yield* home.durable;
+        const reviewId = state.skills.find((skill) => skill.name === "review")?.skill_id;
+        assert.ok(reviewId);
+        yield* home.writeDurable({
+          ...state,
+          enabled: [{ skill: reviewId }],
+          repositories: [{ root, enabled: [{ skill: reviewId }] }],
+        });
+
+        const interaction = yield* makeScriptedInteraction([
+          `all:${collection.collection?.collection_id}`,
+          "collection",
+        ]);
+        const ready = yield* Deferred.make<void>();
+        const resume = yield* Deferred.make<void>();
+        const results: CommandResult[] = [];
+        const command = yield* home
+          .owned(
+            presentSetEnabled({
+              action: "disable",
+              enabled: false,
+              cwd: root,
+              all: false,
+              dryRun: false,
+              interactive: true,
+            }).pipe(
+              Effect.provide(
+                rendererTestLayer({
+                  withStatus: (_status, operation) =>
+                    Deferred.succeed(ready, undefined).pipe(
+                      Effect.andThen(Deferred.await(resume)),
+                      Effect.andThen(operation),
+                    ),
+                  result: (value) =>
+                    Effect.sync(() => {
+                      results.push(value);
+                    }),
+                }).pipe(Layer.provideMerge(interaction.layer)),
+              ),
+            ),
+          )
+          .pipe(Effect.result, Effect.forkScoped);
+        yield* Effect.raceFirst(
+          Deferred.await(ready),
+          Fiber.join(command).pipe(
+            Effect.andThen(Effect.die("Disable finished before the writer gate")),
+          ),
+        );
+        const current = yield* home.durable;
+        const concurrent = { ...current, enabled: [] };
+        yield* home.writeDurable(concurrent);
+        yield* Deferred.succeed(resume, undefined);
+        const outcome = yield* Fiber.join(command);
+        assert.isTrue(Result.isFailure(outcome));
+        if (Result.isFailure(outcome)) assert.instanceOf(outcome.failure, Library.StalePlan);
+        assert.deepStrictEqual(yield* home.durable, concurrent);
+        assert.deepStrictEqual(results, []);
+        assert.isTrue(yield* homeLockIsFree(home.home));
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+    );
+  });
+});
+
+describe("skit list", () => {
+  describe("List reads saved Collections without treating them as Releases.", () => {
+    it.effect("list presents a saved Collection without Release fields", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-portable-commands-" });
+
+        const home = yield* libraryHome({ home: join(root, "home") });
+
+        yield* initializeLibraryMachine(home.home);
+
+        const installed = join(root, "installed", "review");
+
+        yield* fs.makeDirectory(installed, { recursive: true });
+
+        yield* fs.writeFileString(join(installed, "SKILL.md"), "local Skill\n");
+
+        const collection = yield* home.owned(
+          writingTo(
+            home.home,
+            importCollectionIn(home.home)({
+              source: {
+                type: "registry",
+                namespace: "tim",
+                slug: "skills",
+                authority: "https://skit.example.com",
+              },
+              input: installed,
+              importedAt: "2026-09-16T00:00:00.000Z",
+              skills: [
+                {
+                  name: "review",
+                  sourcePath: installed,
+                  relativePath: "review",
+                  currentHash: yield* deterministicTreeHash(installed),
+                },
+              ],
+              lockFileEntries: [],
+            }),
+          ),
+        );
+
+        const rendered: CommandResult[] = [];
+
+        yield* home.owned(
+          presentListCommand().pipe(
+            Effect.provide(
+              rendererTestLayer({
+                result: (value) =>
+                  Effect.sync(() => {
+                    rendered.push(value);
+                  }),
+              }),
+            ),
+          ),
+        );
+
+        assert.strictEqual(rendered[0]?.schema, "skit.list.v7");
+
+        const listing = yield* Schema.decodeUnknownEffect(ListResult)(rendered[0]?.data);
+
+        assert.strictEqual(listing.subjects[0]?.subject_id, collection.collection?.collection_id);
+
+        assert.strictEqual(listing.subjects[0]?.label, "tim/skills");
+
+        assert.containSubset(renderLibraryList(listing)[0], {
+          _tag: "Group",
+          title: "tim/skills (Registry release)",
+        });
+
+        assert.deepStrictEqual(
+          listing.subjects[0]?.skills.map((skill) => skill.name),
+          ["review"],
+        );
+
+        assert.deepStrictEqual(listing.enabled, []);
+
+        assert.strictEqual(JSON.stringify(listing).includes("release"), false);
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+    );
+  });
+});

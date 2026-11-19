@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import { largeListingEntries } from "@smolai/skit-core/harnesses";
 import { it } from "@effect/vitest";
 import { spawnSync } from "node:child_process";
@@ -125,18 +126,23 @@ require('node:readline').createInterface({input: process.stdin}).on('line', line
   );
 }
 
-it.effect.each([true, false])(
-  "built doctor reports a symlink plus SKIT copy (native returns canonical paths: %s)",
-  (canonical) => doctorJourney(undefined, canonical),
-);
-
 // Opt-in acceptance against an installed Codex binary, still with an isolated HOME and no model turns.
 // SKIT_TEST_CODEX_EXECUTABLE=/absolute/path/to/codex pnpm exec vitest run --config vitest.subprocess.config.ts test/doctor-symlinks-cli.test.ts
 const liveCodex = process.env.SKIT_TEST_CODEX_EXECUTABLE;
-if (liveCodex) {
-  it.effect("built doctor reports the duplicate discovered by real Codex", () =>
-    doctorJourney(liveCodex),
-  );
-} else {
-  test.skip("built doctor reports the duplicate discovered by real Codex", () => {});
-}
+
+describe("skit doctor", () => {
+  describe("Doctor reports installed copies that need attention.", () => {
+    it.effect.each([true, false])(
+      "built doctor reports a symlink plus SKIT copy (native returns canonical paths: %s)",
+      (canonical) => doctorJourney(undefined, canonical),
+    );
+
+    if (liveCodex) {
+      it.effect("built doctor reports the duplicate discovered by real Codex", () =>
+        doctorJourney(liveCodex),
+      );
+    } else {
+      test.skip("built doctor reports the duplicate discovered by real Codex", () => {});
+    }
+  });
+});

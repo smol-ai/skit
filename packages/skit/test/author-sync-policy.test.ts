@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 import { DateTime, Option } from "effect";
 import type * as History from "../src/history/history.js";
 import * as Merge from "../src/sync/merge.js";
@@ -28,71 +28,84 @@ const merge = (
 const paths = (result: Merge.Clean<History.Tree>) =>
   Option.map(result.value, (tree) => tree.map((item) => item.path).sort());
 
-test("excluded local content cannot influence the merged tree or replace its remote counterpart", () => {
-  const result = merge(
-    [entry(".env", "old remote"), entry("notes.md", "base")],
-    [entry(".env", "private local"), entry("notes.md", "local edit")],
-    [entry(".env", "new remote"), entry("notes.md", "base")],
-    { excluded: [".env"] },
-  );
-  expect(result.value).toEqual(
-    Option.some([entry("notes.md", "local edit"), entry(".env", "new remote")]),
-  );
-  expect(result.choices).toEqual([]);
-});
+describe("skit author sync", () => {
+  describe("Choosing what changes", () => {
+    describe("Changing ignore rules does not turn excluded files into deletions.", () => {
+      test("excluded local content cannot influence the merged tree or replace its remote counterpart", () => {
+        const result = merge(
+          [entry(".env", "old remote"), entry("notes.md", "base")],
+          [entry(".env", "private local"), entry("notes.md", "local edit")],
+          [entry(".env", "new remote"), entry("notes.md", "base")],
+          { excluded: [".env"] },
+        );
+        expect(result.value).toEqual(
+          Option.some([entry("notes.md", "local edit"), entry(".env", "new remote")]),
+        );
+        expect(result.choices).toEqual([]);
+      });
 
-test("newly excluded paths do not count as local deletions and absent remote exclusions stay absent", () => {
-  const result = merge(
-    [entry("p.txt", "old"), entry("q.txt", "old q")],
-    [],
-    [entry("p.txt", "remote")],
-    { excluded: ["p.txt", "q.txt"] },
-  );
-  expect(result.value).toEqual(Option.some([entry("p.txt", "remote")]));
-});
+      test("newly excluded paths do not count as local deletions and absent remote exclusions stay absent", () => {
+        const result = merge(
+          [entry("p.txt", "old"), entry("q.txt", "old q")],
+          [],
+          [entry("p.txt", "remote")],
+          { excluded: ["p.txt", "q.txt"] },
+        );
+        expect(result.value).toEqual(Option.some([entry("p.txt", "remote")]));
+      });
 
-test("a previously excluded, never-materialized path becomes a remote addition when unignored", () => {
-  const remote = [entry("p.txt", "remote")];
-  const result = merge(remote, [], remote, { previouslyExcluded: ["p.txt"] });
-  expect(result.value).toEqual(Option.some(remote));
-});
+      test("a previously excluded, never-materialized path becomes a remote addition when unignored", () => {
+        const remote = [entry("p.txt", "remote")];
+        const result = merge(remote, [], remote, { previouslyExcluded: ["p.txt"] });
+        expect(result.value).toEqual(Option.some(remote));
+      });
 
-test("unignored private content and unseen remote content are both additions; ours wins a tie", () => {
-  const result = merge(
-    [entry("p.txt", "remote")],
-    [entry("p.txt", "formerly private")],
-    [entry("p.txt", "remote")],
-    { previouslyExcluded: ["p.txt"] },
-  );
-  expect(result.value).toEqual(Option.some([entry("p.txt", "formerly private")]));
-  expect(result.choices.map(({ conflict, kept }) => [conflict.at[0], kept])).toEqual([
-    ["p.txt", "ours"],
-  ]);
-});
+      test("unignored private content and unseen remote content are both additions; ours wins a tie", () => {
+        const result = merge(
+          [entry("p.txt", "remote")],
+          [entry("p.txt", "formerly private")],
+          [entry("p.txt", "remote")],
+          { previouslyExcluded: ["p.txt"] },
+        );
+        expect(result.value).toEqual(Option.some([entry("p.txt", "formerly private")]));
+        expect(result.choices.map(({ conflict, kept }) => [conflict.at[0], kept])).toEqual([
+          ["p.txt", "ours"],
+        ]);
+      });
 
-test("a formerly excluded remote deletion cannot delete newly visible local content", () => {
-  const result = merge([entry("p.txt", "remote")], [entry("p.txt", "formerly private")], [], {
-    previouslyExcluded: ["p.txt"],
+      test("a formerly excluded remote deletion cannot delete newly visible local content", () => {
+        const result = merge([entry("p.txt", "remote")], [entry("p.txt", "formerly private")], [], {
+          previouslyExcluded: ["p.txt"],
+        });
+        expect(paths(result)).toEqual(Option.some(["p.txt"]));
+        expect(result.choices).toEqual([]);
+      });
+    });
   });
-  expect(paths(result)).toEqual(Option.some(["p.txt"]));
-  expect(result.choices).toEqual([]);
-});
-
-test("an overlap keeps the later edit, and an edit beats a deletion", () => {
-  const later = merge(
-    [entry("a.md", "base")],
-    [entry("a.md", "ours")],
-    [entry("a.md", "theirs")],
-    {},
-    { ours: DateTime.makeUnsafe(1), theirs: DateTime.makeUnsafe(2) },
-  );
-  expect(later.value).toEqual(Option.some([entry("a.md", "theirs")]));
-  const deleted = merge(
-    [entry("a.md", "base")],
-    [],
-    [entry("a.md", "theirs")],
-    {},
-    { ours: DateTime.makeUnsafe(5), theirs: DateTime.makeUnsafe(2) },
-  );
-  expect(deleted.value).toEqual(Option.some([entry("a.md", "theirs")]));
+  describe("Combining edits", () => {
+    describe("For overlapping edits, the version observed later wins.", () => {
+      test("an overlap keeps the later observed edit", () => {
+        const later = merge(
+          [entry("a.md", "base")],
+          [entry("a.md", "ours")],
+          [entry("a.md", "theirs")],
+          {},
+          { ours: DateTime.makeUnsafe(1), theirs: DateTime.makeUnsafe(2) },
+        );
+        expect(later.value).toEqual(Option.some([entry("a.md", "theirs")]));
+      });
+    });
+    describe("An edit wins over a conflicting deletion.", () => {
+      test("an edit beats a deletion", () => {
+        const deleted = merge(
+          [entry("a.md", "base")],
+          [],
+          [entry("a.md", "theirs")],
+          {},
+          { ours: DateTime.makeUnsafe(5), theirs: DateTime.makeUnsafe(2) },
+        );
+        expect(deleted.value).toEqual(Option.some([entry("a.md", "theirs")]));
+      });
+    });
+  });
 });

@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import { emptyLibraryFixture } from "./helpers/library-home.js";
 import { readLibraryManifest } from "./helpers/library-manifest.js";
 import { originalArchive, originalTreePath } from "./helpers/original-tree.js";
@@ -728,51 +729,6 @@ const cases = [
   ) => Effect.Effect<void, unknown, Layer.Success<typeof testPlatformLayer> | Scope.Scope>;
 }[];
 
-for (const scenario of cases)
-  it.effect(`oracle row: ${scenario.row}`, () =>
-    Effect.gen(function* () {
-      yield* scenario.run(yield* devices);
-    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-  );
-
-// The commit order stated once in syncLibrary: snapshots are uploaded, then the head is written
-// on exactly the revision this sync read, and only then is local state saved.
-it.effect("oracle: every applying path commits remote before local, on the revision it read", () =>
-  Effect.gen(function* () {
-    const { a, b, events, server } = yield* devices;
-    const committed = <A, E, R>(sync: Effect.Effect<A, E, R>) =>
-      Effect.gen(function* () {
-        events.length = 0;
-        const exit = yield* Effect.exit(sync);
-        // A stopped operation must not pass merely because its writes happened in order.
-        assert.isTrue(Exit.isSuccess(exit), events.join(","));
-        return [...events];
-      });
-    const ordered = (
-      recorded: readonly string[],
-      device: "a" | "b",
-      remoteEvents: readonly string[],
-    ) => {
-      const firstSave = recorded.findIndex((event) => event === `save ${device}`);
-      assert.isAtLeast(firstSave, 0, "Sync must durably record its local result");
-      assert.deepStrictEqual(recorded.slice(0, firstSave), remoteEvents);
-      assert.isTrue(
-        recorded.slice(firstSave).every((event) => event === `save ${device}`),
-        recorded.join(","),
-      );
-    };
-    yield* a.importSource("first");
-    ordered(yield* committed(a.sync()), "a", ["upload", "write on null"]);
-    const pushed = server.remote!.revision_id;
-    ordered(yield* committed(b.sync()), "b", []);
-    yield* b.importSource("second");
-    ordered(yield* committed(b.sync()), "b", ["upload", `write on ${pushed}`]);
-    const merged = server.remote!.revision_id;
-    yield* a.importSource("third");
-    ordered(yield* committed(a.sync()), "a", ["upload", `write on ${merged}`]);
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-);
-
 // A `--take-remote` key names a merge conflict to take remotely. A push or a pull has none, so the
 // key is refused before installed-skill collisions are checked, as it is on every other path.
 it.effect("a --take-remote key is refused before collision checks on a push and a pull", () =>
@@ -803,63 +759,6 @@ it.effect("a --take-remote key is refused before collision checks on a push and 
     assert.isFalse(yield* fs.exists(join(b.home, "state.json")));
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
-
-// A head another SKIT wrote in a newer manifest schema is refused before sync plans, uploads, writes
-// or saves anything. Only loader maintenance may touch the home: the writer lock creates an
-// absent home, and opening a legacy state.json migrates it and keeps the pre-migration file.
-for (const home of ["current", "legacy", "absent"] as const)
-  for (const apply of [false, true])
-    it.effect(
-      `oracle row: Preflight: a newer remote manifest is refused (${home} home, ${apply ? "apply" : "preview"})`,
-      () =>
-        Effect.gen(function* () {
-          const { fs, a, inject, server } = yield* devices;
-          if (home !== "absent") {
-            yield* a.importSource("first");
-            yield* a.edit((state) => ({
-              ...state,
-              enabled: [{ skill: state.skills[0]!.skill_id }],
-            }));
-          }
-          if (home === "legacy")
-            yield* fs.writeFileString(
-              join(a.home, "state.json"),
-              JSON.stringify(asV7(yield* a.state)),
-            );
-          const before = yield* captureDisk(a.disk);
-          const stored = server.stored;
-          const saves = a.saves;
-          const writeRequests = server.writeRequests;
-          inject({
-            _tag: "ServeHead",
-            body: JSON.parse(
-              yield* fs.readFileString(
-                join(import.meta.dirname, "../../skit/test/fixtures/library-wire/portable-v9.json"),
-              ),
-            ),
-          });
-          const failure = yield* Effect.flip(a.sync({ apply }));
-          assert.instanceOf(failure, LibraryManifestTooNew);
-          assert.strictEqual(failure.code, "VALIDATION_FAILED");
-          assert.strictEqual(a.saves, saves);
-          // Snapshot uploads and Library writes are both write requests.
-          assert.strictEqual(server.writeRequests, writeRequests);
-          assert.deepStrictEqual(server.stored, stored);
-          const changes = yield* diskChanges(before);
-          const paths = (items: readonly { path: readonly string[] }[]) =>
-            items.map((item) => item.path.slice(1).join("/"));
-          assert.deepStrictEqual(paths(changes.deleted), []);
-          if (home === "current") assert.deepStrictEqual(changes, noDiskChanges);
-          if (home === "absent") {
-            assert.deepStrictEqual(changes, noDiskChanges);
-          }
-          if (home === "legacy") {
-            assert.deepStrictEqual(paths(changes.changed), ["state.json"]);
-            assert.strictEqual(changes.created.length, 1);
-            assert.match(paths(changes.created)[0]!, /^state\.json\.v7\.backup-/);
-          }
-        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-    );
 
 it.effect(
   "fresh-device sync reports completed transfers after the plan and before restoration",
@@ -905,36 +804,6 @@ it.effect(
       assert.deepStrictEqual(ticks, [0, 1, 2]);
       assert.strictEqual((yield* b.state).collections.length, 2);
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-);
-
-it.effect("a failed snapshot download retains nothing and leaves the remote unchanged", () =>
-  Effect.gen(function* () {
-    const { a, b, fs, inject, server } = yield* devices;
-    yield* a.importSource("first");
-    yield* a.importSource("second");
-    yield* a.sync();
-    const before = server.stored;
-    inject({ _tag: "FailDownload", hash: server.remote!.manifest.snapshot_digests[1]! });
-    const progress: string[] = [];
-    const failure = yield* Effect.flip(
-      b.sync({
-        restoreProgress: {
-          around: (phase, operation) =>
-            Effect.sync(() => {
-              progress.push(phase.kind);
-            }).pipe(Effect.andThen(operation)),
-          tick: () => Effect.void,
-        },
-      }),
-    );
-    assert.strictEqual(failure._tag, "Library.LibraryApiRejected");
-    assert.notInclude(progress, "retain");
-    assert.isFalse(yield* fs.exists(join(b.home, "originals")));
-    assert.isFalse(yield* fs.exists(join(b.home, "state.json")));
-    assert.strictEqual(b.saves, 0);
-    assert.deepStrictEqual(server.stored, before);
-    assert.strictEqual((yield* b.sync()).status, "pulled");
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 /** Prepare through the owner; the resulting plan contains no writer callbacks. */
@@ -1001,30 +870,6 @@ it.effect("a Sync plan cannot save into another Library home", () =>
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("sync reuses an orphan retained snapshot without downloading it", () =>
-  Effect.gen(function* () {
-    const { a, b, c, fs, inject, server } = yield* devices;
-    yield* a.importSource("first");
-    yield* a.sync();
-    const hash = server.remote!.manifest.snapshot_digests[0]!;
-    const destination = originalTreePath(join(b.home, "originals"), hash);
-    yield* fs.makeDirectory(join(destination, ".."), { recursive: true });
-    yield* fs.copy(originalTreePath(join(a.home, "originals"), hash), destination);
-    inject({ _tag: "FailDownload", hash });
-    const before = yield* captureDisk(b.disk);
-    const preview = yield* b.sync({ apply: false });
-    assert.strictEqual(preview.status, "pull_ready");
-    assert.strictEqual("snapshots" in preview ? preview.snapshots : undefined, 0);
-    yield* assertDiskUnchanged(before);
-    const applied = yield* b.sync();
-    assert.strictEqual(applied.status, "pulled");
-    assert.strictEqual("snapshots" in applied ? applied.snapshots : undefined, 0);
-    assert.strictEqual((yield* b.state).collections.length, 1);
-    // The unused fault still rejects a fresh device, proving b made no download request.
-    assert.strictEqual((yield* c.sync().pipe(Effect.flip))._tag, "Library.LibraryApiRejected");
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-);
-
 it.effect("sync exposes bounded completed phases in transfer and save order", () =>
   Effect.gen(function* () {
     const { a, b } = yield* devices;
@@ -1079,3 +924,336 @@ it.effect("sync exposes bounded completed phases in transfer and save order", ()
     assert.strictEqual(completed.at(-1), "save-local");
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
+
+describe("skit sync", () => {
+  describe("Connecting and previewing", () => {
+    describe("Preview leaves the proposed Library sync unapplied.", () => {
+      for (const scenario of cases.filter((scenario) =>
+        [
+          "Different Library: preview merges from an empty base",
+          "First connection: add-only preview writes nothing",
+          "Merge: merge_ready writes nothing",
+        ].includes(scenario.row),
+      ))
+        it.effect(`oracle row: ${scenario.row}`, () =>
+          Effect.gen(function* () {
+            yield* scenario.run(yield* devices);
+          }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+        );
+    });
+  });
+});
+
+describe("skit sync", () => {
+  describe("Connecting and previewing", () => {
+    describe("Sync refuses a newer Registry format before uploading changes.", () => {
+      // A head another SKIT wrote in a newer manifest schema is refused before sync plans, uploads, writes
+      // or saves anything. Only loader maintenance may touch the home: the writer lock creates an
+      // absent home, and opening a legacy state.json migrates it and keeps the pre-migration file.
+      for (const home of ["current", "legacy", "absent"] as const)
+        for (const apply of [false, true])
+          it.effect(
+            `oracle row: Preflight: a newer remote manifest is refused (${home} home, ${apply ? "apply" : "preview"})`,
+            () =>
+              Effect.gen(function* () {
+                const { fs, a, inject, server } = yield* devices;
+                if (home !== "absent") {
+                  yield* a.importSource("first");
+                  yield* a.edit((state) => ({
+                    ...state,
+                    enabled: [{ skill: state.skills[0]!.skill_id }],
+                  }));
+                }
+                if (home === "legacy")
+                  yield* fs.writeFileString(
+                    join(a.home, "state.json"),
+                    JSON.stringify(asV7(yield* a.state)),
+                  );
+                const before = yield* captureDisk(a.disk);
+                const stored = server.stored;
+                const saves = a.saves;
+                const writeRequests = server.writeRequests;
+                inject({
+                  _tag: "ServeHead",
+                  body: JSON.parse(
+                    yield* fs.readFileString(
+                      join(
+                        import.meta.dirname,
+                        "../../skit/test/fixtures/library-wire/portable-v9.json",
+                      ),
+                    ),
+                  ),
+                });
+                const failure = yield* Effect.flip(a.sync({ apply }));
+                assert.instanceOf(failure, LibraryManifestTooNew);
+                assert.strictEqual(failure.code, "VALIDATION_FAILED");
+                assert.strictEqual(a.saves, saves);
+                // Snapshot uploads and Library writes are both write requests.
+                assert.strictEqual(server.writeRequests, writeRequests);
+                assert.deepStrictEqual(server.stored, stored);
+                const changes = yield* diskChanges(before);
+                const paths = (items: readonly { path: readonly string[] }[]) =>
+                  items.map((item) => item.path.slice(1).join("/"));
+                assert.deepStrictEqual(paths(changes.deleted), []);
+                if (home === "current") assert.deepStrictEqual(changes, noDiskChanges);
+                if (home === "absent") {
+                  assert.deepStrictEqual(changes, noDiskChanges);
+                }
+                if (home === "legacy") {
+                  assert.deepStrictEqual(paths(changes.changed), ["state.json"]);
+                  assert.strictEqual(changes.created.length, 1);
+                  assert.match(paths(changes.created)[0]!, /^state\.json\.v7\.backup-/);
+                }
+              }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+          );
+    });
+  });
+});
+
+describe("skit sync", () => {
+  describe("Choosing between changes", () => {
+    describe("Conflicts leave both Libraries unchanged.", () => {
+      for (const scenario of cases.filter((scenario) =>
+        ["Merge: conflicted writes nothing", "Merge: resolution_invalid writes nothing"].includes(
+          scenario.row,
+        ),
+      ))
+        it.effect(`oracle row: ${scenario.row}`, () =>
+          Effect.gen(function* () {
+            yield* scenario.run(yield* devices);
+          }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+        );
+    });
+  });
+});
+
+describe("skit sync", () => {
+  describe("Choosing between changes", () => {
+    describe("A retried conflict still requires the selected Registry choice.", () => {
+      for (const scenario of cases.filter((scenario) =>
+        ["Merge: after M5 before M7 (--take-remote must be repeated)"].includes(scenario.row),
+      ))
+        it.effect(`oracle row: ${scenario.row}`, () =>
+          Effect.gen(function* () {
+            yield* scenario.run(yield* devices);
+          }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+        );
+    });
+  });
+});
+
+describe("skit sync", () => {
+  describe("Recovering interrupted work", () => {
+    describe("A refused Library sync leaves the saved Library records unchanged.", () => {
+      for (const scenario of cases.filter((scenario) =>
+        [
+          "Push: before P2 (failed upload)",
+          "Push: P2 loses the CAS on the first push",
+          "Pull: U3 finds a concurrent local write (SyncLocalChanged)",
+          "Merge: M3 finds a concurrent local write (SyncLocalChanged)",
+          "Merge: M3 stops a merge that would upload and write before either",
+          "Pull: U3 stops before writing a --keep-enabled choice",
+          "Merge: M5 loses the CAS (L, B, projections unchanged)",
+          "Merge: before M5 (failed upload after retaining remote originals)",
+        ].includes(scenario.row),
+      ))
+        it.effect(`oracle row: ${scenario.row}`, () =>
+          Effect.gen(function* () {
+            yield* scenario.run(yield* devices);
+          }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+        );
+    });
+  });
+});
+
+describe("skit sync", () => {
+  describe("Recovering interrupted work", () => {
+    describe("Sync reports changed saved files instead of replacing them.", () => {
+      for (const scenario of cases.filter((scenario) =>
+        ["Preflight: local_bytes_changed preserves every store"].includes(scenario.row),
+      ))
+        it.effect(`oracle row: ${scenario.row}`, () =>
+          Effect.gen(function* () {
+            yield* scenario.run(yield* devices);
+          }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+        );
+    });
+  });
+});
+
+describe("skit sync", () => {
+  describe("Recovering interrupted work", () => {
+    describe("A failed Library sync can be retried without losing a Registry change already accepted.", () => {
+      for (const scenario of cases.filter((scenario) =>
+        [
+          "Push: accepted remotely, refused locally, then local enabled intent changes",
+          "Push: collision choice survives refused publication with subsequent compatible edits",
+          "Push: HTTP 500 after commit differs from a lost transport response",
+          "Push: P2 response lost before P4",
+          "Push: after P2 before P4 (failed local publish)",
+          "Push: P2 response lost, then another home writes before retry",
+          "Pull: before U4 (failed local publish)",
+          "Merge: after M5 before M7 (failed local publish)",
+        ].includes(scenario.row),
+      ))
+        it.effect(`oracle row: ${scenario.row}`, () =>
+          Effect.gen(function* () {
+            yield* scenario.run(yield* devices);
+          }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+        );
+    });
+  });
+});
+
+describe("skit sync", () => {
+  describe("Recovering interrupted work", () => {
+    describe("A failed download does not save a partial fresh Library.", () => {
+      it.effect("a failed snapshot download retains nothing and leaves the remote unchanged", () =>
+        Effect.gen(function* () {
+          const { a, b, fs, inject, server } = yield* devices;
+          yield* a.importSource("first");
+          yield* a.importSource("second");
+          yield* a.sync();
+          const before = server.stored;
+          inject({ _tag: "FailDownload", hash: server.remote!.manifest.snapshot_digests[1]! });
+          const progress: string[] = [];
+          const failure = yield* Effect.flip(
+            b.sync({
+              restoreProgress: {
+                around: (phase, operation) =>
+                  Effect.sync(() => {
+                    progress.push(phase.kind);
+                  }).pipe(Effect.andThen(operation)),
+                tick: () => Effect.void,
+              },
+            }),
+          );
+          assert.strictEqual(failure._tag, "Library.LibraryApiRejected");
+          assert.notInclude(progress, "retain");
+          assert.isFalse(yield* fs.exists(join(b.home, "originals")));
+          assert.isFalse(yield* fs.exists(join(b.home, "state.json")));
+          assert.strictEqual(b.saves, 0);
+          assert.deepStrictEqual(server.stored, before);
+          assert.strictEqual((yield* b.sync()).status, "pulled");
+        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+      );
+    });
+  });
+});
+
+describe("skit sync", () => {
+  describe("Recovering interrupted work", () => {
+    describe("Sync reuses a verified saved download.", () => {
+      it.effect("sync reuses an orphan retained snapshot without downloading it", () =>
+        Effect.gen(function* () {
+          const { a, b, c, fs, inject, server } = yield* devices;
+          yield* a.importSource("first");
+          yield* a.sync();
+          const hash = server.remote!.manifest.snapshot_digests[0]!;
+          const destination = originalTreePath(join(b.home, "originals"), hash);
+          yield* fs.makeDirectory(join(destination, ".."), { recursive: true });
+          yield* fs.copy(originalTreePath(join(a.home, "originals"), hash), destination);
+          inject({ _tag: "FailDownload", hash });
+          const before = yield* captureDisk(b.disk);
+          const preview = yield* b.sync({ apply: false });
+          assert.strictEqual(preview.status, "pull_ready");
+          assert.strictEqual("snapshots" in preview ? preview.snapshots : undefined, 0);
+          yield* assertDiskUnchanged(before);
+          const applied = yield* b.sync();
+          assert.strictEqual(applied.status, "pulled");
+          assert.strictEqual("snapshots" in applied ? applied.snapshots : undefined, 0);
+          assert.strictEqual((yield* b.state).collections.length, 1);
+          // The unused fault still rejects a fresh device, proving b made no download request.
+          assert.strictEqual(
+            (yield* c.sync().pipe(Effect.flip))._tag,
+            "Library.LibraryApiRejected",
+          );
+        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+      );
+    });
+  });
+});
+
+describe("skit sync", () => {
+  describe("Recovering interrupted work", () => {
+    describe("Sync remembers which Registry changes its saved Library includes.", () => {
+      // The commit order stated once in syncLibrary: snapshots are uploaded, then the head is written
+      // on exactly the revision this sync read, and only then is local state saved.
+      it.effect(
+        "oracle: every applying path commits remote before local, on the revision it read",
+        () =>
+          Effect.gen(function* () {
+            const { a, b, events, server } = yield* devices;
+            const committed = <A, E, R>(sync: Effect.Effect<A, E, R>) =>
+              Effect.gen(function* () {
+                events.length = 0;
+                const exit = yield* Effect.exit(sync);
+                // A stopped operation must not pass merely because its writes happened in order.
+                assert.isTrue(Exit.isSuccess(exit), events.join(","));
+                return [...events];
+              });
+            const ordered = (
+              recorded: readonly string[],
+              device: "a" | "b",
+              remoteEvents: readonly string[],
+            ) => {
+              const firstSave = recorded.findIndex((event) => event === `save ${device}`);
+              assert.isAtLeast(firstSave, 0, "Sync must durably record its local result");
+              assert.deepStrictEqual(recorded.slice(0, firstSave), remoteEvents);
+              assert.isTrue(
+                recorded.slice(firstSave).every((event) => event === `save ${device}`),
+                recorded.join(","),
+              );
+            };
+            yield* a.importSource("first");
+            ordered(yield* committed(a.sync()), "a", ["upload", "write on null"]);
+            const pushed = server.remote!.revision_id;
+            ordered(yield* committed(b.sync()), "b", []);
+            yield* b.importSource("second");
+            ordered(yield* committed(b.sync()), "b", ["upload", `write on ${pushed}`]);
+            const merged = server.remote!.revision_id;
+            yield* a.importSource("third");
+            ordered(yield* committed(a.sync()), "a", ["upload", `write on ${merged}`]);
+          }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+      );
+    });
+  });
+});
+
+describe("skit sync", () => {
+  describe("Keeping device choices", () => {
+    describe("An installed-copy failure does not undo an already completed Library sync.", () => {
+      for (const scenario of cases.filter((scenario) =>
+        [
+          "Push: after P4 before P5",
+          "Pull: after U4 before U5",
+          "Merge: after M7 before M8",
+          "Clean: after anchoring before reconciliation",
+        ].includes(scenario.row),
+      ))
+        it.effect(`oracle row: ${scenario.row}`, () =>
+          Effect.gen(function* () {
+            yield* scenario.run(yield* devices);
+          }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+        );
+    });
+  });
+});
+
+describe("skit sync", () => {
+  describe("Keeping device choices", () => {
+    describe("Sync leaves an unapproved edit to an installed Skill unchanged.", () => {
+      for (const scenario of cases.filter((scenario) =>
+        [
+          "Push: an edited copy is recorded with its observed bytes before reconciliation",
+          "Merge: an edited copy is recorded with its observed bytes before reconciliation",
+        ].includes(scenario.row),
+      ))
+        it.effect(`oracle row: ${scenario.row}`, () =>
+          Effect.gen(function* () {
+            yield* scenario.run(yield* devices);
+          }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+        );
+    });
+  });
+});

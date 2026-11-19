@@ -1,71 +1,80 @@
+import { describe } from "@effect/vitest";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { registryStatus } from "../src/registry/auth.js";
 
-it.effect("returns every stored authentication record", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-auth-status-" });
-    yield* fs.writeFileString(
-      join(home, "auth.json"),
-      JSON.stringify({
-        schemaVersion: 1,
-        defaultRegistry: "work",
-        registryAliases: { work: "https://one.example", mirror: "https://two.example" },
-        servers: {
-          "https://one.example": {
-            token: "secret-one",
-            tokenId: "one",
-            tokenPrefix: "secret-one",
-            scopes: ["authoring:write"],
-          },
-          "https://two.example": {
-            token: "secret-two",
-            tokenId: "two",
-            tokenPrefix: "secret-two",
-            scopes: ["library:sync"],
-          },
-        },
-      }),
+describe("skit auth status", () => {
+  describe("Status distinguishes environment credentials from saved credentials.", () => {
+    it.effect("returns every stored authentication record", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-auth-status-" });
+        yield* fs.writeFileString(
+          join(home, "auth.json"),
+          JSON.stringify({
+            schemaVersion: 1,
+            defaultRegistry: "work",
+            registryAliases: { work: "https://one.example", mirror: "https://two.example" },
+            servers: {
+              "https://one.example": {
+                token: "secret-one",
+                tokenId: "one",
+                tokenPrefix: "secret-one",
+                scopes: ["authoring:write"],
+              },
+              "https://two.example": {
+                token: "secret-two",
+                tokenId: "two",
+                tokenPrefix: "secret-two",
+                scopes: ["library:sync"],
+              },
+            },
+          }),
+        );
+        const value = yield* registryStatus(home);
+        assert.deepStrictEqual(value, {
+          credentials: [
+            {
+              aliases: ["work"],
+              expired: false,
+              expiry: "unknown",
+              isDefault: true,
+              origin: "https://one.example",
+              scopes: ["authoring:write"],
+              source: "stored",
+              storage: "file",
+              tokenPrefix: "secret-one",
+            },
+            {
+              aliases: ["mirror"],
+              expired: false,
+              expiry: "unknown",
+              isDefault: false,
+              origin: "https://two.example",
+              scopes: ["library:sync"],
+              source: "stored",
+              storage: "file",
+              tokenPrefix: "secret-two",
+            },
+          ],
+        });
+      }).pipe(Effect.provide(testPlatformLayer)),
     );
-    const value = yield* registryStatus(home);
-    assert.deepStrictEqual(value, {
-      credentials: [
-        {
-          aliases: ["work"],
-          expired: false,
-          expiry: "unknown",
-          isDefault: true,
-          origin: "https://one.example",
-          scopes: ["authoring:write"],
-          source: "stored",
-          storage: "file",
-          tokenPrefix: "secret-one",
-        },
-        {
-          aliases: ["mirror"],
-          expired: false,
-          expiry: "unknown",
-          isDefault: false,
-          origin: "https://two.example",
-          scopes: ["library:sync"],
-          source: "stored",
-          storage: "file",
-          tokenPrefix: "secret-two",
-        },
-      ],
-    });
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
+  });
+});
 
-it.effect("preserves an invalid credential-file failure", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-auth-status-invalid-" });
-    yield* fs.writeFileString(join(home, "auth.json"), "{");
-    const actual = yield* Effect.flip(registryStatus(home));
-    assert.strictEqual(actual._tag, "CredentialsUnusable");
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
+describe("skit auth status", () => {
+  describe("Status reports unreadable credentials rather than showing an empty account.", () => {
+    it.effect("preserves an invalid credential-file failure", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-auth-status-invalid-" });
+        yield* fs.writeFileString(join(home, "auth.json"), "{");
+        const actual = yield* Effect.flip(registryStatus(home));
+        assert.strictEqual(actual._tag, "CredentialsUnusable");
+      }).pipe(Effect.provide(testPlatformLayer)),
+    );
+  });
+});
