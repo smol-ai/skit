@@ -5,6 +5,9 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
+import { Effect } from "effect";
+import { savedLibrary } from "./helpers/saved-library.js";
+import { testPlatformLayer } from "./helpers/platform.js";
 
 const bin = join(process.cwd(), "bin", "skit.js");
 
@@ -375,10 +378,12 @@ describe("skit add", () => {
 
       expect(addedCollection.collection_id).toEqual(expect.any(String));
 
-      const persisted = await readFile(join(home, "state.json"), "utf8");
+      const persisted = await Effect.runPromise(
+        savedLibrary(home).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+      );
 
       expect(
-        JSON.parse(persisted).collections.some(
+        persisted.state.collections.some(
           (entry: { label?: string }) => entry.label === "mattpocock/skills",
         ),
       ).toBe(true);

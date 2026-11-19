@@ -87,8 +87,23 @@ syncBuiltinESMExports();
         expect(await exited).toEqual({ code: 130, signal: null });
         expect(stdout).toBe("");
         expect(stderr).toBe("");
-        // Only the home lock, which never holds data and is never unlinked, remains.
-        expect(await readdir(home)).toEqual(["lock.sqlite"]);
+        // SQLite preparation can finish before the interrupted compatibility-file write.
+        // Its database and lock files remain; the unfinished state output must not.
+        const remaining = await readdir(home);
+        expect(remaining).toContain("library.sqlite");
+        expect(remaining).toContain("lock.sqlite");
+        expect(
+          remaining.filter(
+            (name) =>
+              ![
+                ".lock",
+                "library.sqlite",
+                "library.sqlite-shm",
+                "library.sqlite-wal",
+                "lock.sqlite",
+              ].includes(name),
+          ),
+        ).toEqual([]);
       } finally {
         if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
         await exited;
