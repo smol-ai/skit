@@ -8080,6 +8080,28 @@
                 "actual"
               ],
               "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "EditTimesMismatch"
+                  ]
+                },
+                "paths": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "_tag",
+                "paths"
+              ],
+              "additionalProperties": true
             }
           ]
         }
@@ -9281,6 +9303,21 @@
                   "type": "string",
                   "enum": [
                     "ControlNotDirectory"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "FileReplacementNeedsRecovery"
                   ]
                 }
               },

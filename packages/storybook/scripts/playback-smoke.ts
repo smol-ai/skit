@@ -117,7 +117,7 @@ try {
   assert.equal(app.state().status, undefined);
   harness.mockInput.pressKey("f", { ctrl: true });
   await settle();
-  assert.equal(app.state().count, 2, "JSON replay should contain only ready and result");
+  assert.equal(app.state().count, 1, "JSON replay should contain only the result");
   assert.match(harness.captureCharFrame(), /skit.library.sync.v11/);
   assert.doesNotMatch(harness.captureCharFrame(), /Downloading/);
   harness.mockInput.pressKey("f", { ctrl: true });

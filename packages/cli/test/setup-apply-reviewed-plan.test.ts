@@ -223,7 +223,13 @@ describe("skit setup", () => {
             const changes = yield* diskChanges(before);
             assert.deepStrictEqual(
               changes.created.map(({ path }) => join(...path)).sort(),
-              ["library.sqlite", "state.json"].map((name) => join(f.home.home, name)).sort(),
+              ["library.sqlite", "machine.json", "state.json"]
+                .map((name) => join(f.home.home, name))
+                .sort(),
+            );
+            assert.strictEqual(
+              yield* fs.readFileString(join(f.home.home, "machine.json")),
+              '{"schemaVersion":6}\n',
             );
             assert.deepStrictEqual(changes.changed, []);
             assert.deepStrictEqual(changes.deleted, []);

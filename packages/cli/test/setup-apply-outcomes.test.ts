@@ -424,10 +424,14 @@ describe("skit setup", () => {
           const changes = yield* diskChanges(before);
           assert.isFalse(holds(changes, changed));
           assert.deepStrictEqual(changedPaths(f.root, changes), {
-            created: ["library/library.sqlite"],
+            created: ["library/library.sqlite", "library/machine.json"],
             deleted: [],
             changed: [".codex/skills/alpha/SKILL.md"],
           });
+          assert.strictEqual(
+            yield* f.fs.readFileString(join(f.home.home, "machine.json")),
+            '{"schemaVersion":6}\n',
+          );
         }).pipe(Effect.provide(skitLayer), Effect.scoped),
       );
 
@@ -698,7 +702,11 @@ describe("skit setup", () => {
           assert.deepStrictEqual(paths.deleted, []);
           assert.deepStrictEqual(
             [...new Set(paths.created.map((path) => path.split("/").slice(0, 2).join("/")))],
-            ["library/library.sqlite", "library/state.json"],
+            ["library/library.sqlite", "library/machine.json", "library/state.json"],
+          );
+          assert.strictEqual(
+            yield* f.fs.readFileString(join(f.home.home, "machine.json")),
+            '{"schemaVersion":6}\n',
           );
           assert.deepStrictEqual((yield* f.home.durable).skills, []);
           assert.isTrue(yield* f.fs.exists(join(f.path("gamma"), "SKILL.md")));
