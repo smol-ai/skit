@@ -58,6 +58,11 @@ it.effect(
       );
       expect(upgrade()).toHaveLength(1);
       yield* host(() => applyD1Migrations(env.DB, upgrade()));
+      expect(
+        (yield* host(() =>
+          env.DB.prepare("PRAGMA table_info(revisions)").all<{ name: string }>(),
+        )).results.map(({ name }) => name),
+      ).not.toContain("edits_json");
       for (const [index, { name }] of tables.results.entries()) {
         expect(
           (yield* host(() => env.DB.prepare(`SELECT * FROM "${name}"`).all())).results,
@@ -76,6 +81,7 @@ it.effect(
         updated_at: "updated",
         creation_request_id: null,
       });
+
       expect(
         (yield* host(() =>
           env.DB.prepare(
@@ -97,8 +103,8 @@ it.effect(
             "INSERT INTO revision_tree_entries VALUES ('tree_fixture', 'skills/review/SKILL.md', 'file', 420, 'blob_fixture', 12, NULL)",
           ),
           env.DB.prepare(`INSERT INTO revisions VALUES
-        ('alice', 'tools', 'rev_one', 'tree_fixture', 'device_fixture', 1, '{}', 'null', '[]', 'pat_fixture', 'first'),
-        ('alice', 'tools', 'rev_two', 'tree_fixture', 'device_fixture', 2, '{}', 'null', '[]', 'pat_fixture', 'second')`),
+        ('alice', 'tools', 'rev_one', 'tree_fixture', 'device_fixture', 1, 'null', '[]', 'pat_fixture', 'first'),
+        ('alice', 'tools', 'rev_two', 'tree_fixture', 'device_fixture', 2, 'null', '[]', 'pat_fixture', 'second')`),
           env.DB.prepare(
             "INSERT INTO revision_parents VALUES ('alice', 'tools', 'rev_two', 0, 'rev_one')",
           ),
@@ -178,3 +184,123 @@ it.effect("the dev upgrade discards legacy Draft content and keeps the SKIT row"
     );
   }),
 );
+
+for (const fullChain of [false, true]) {
+  it.effect(
+    fullChain
+      ? "the full migration chain creates strict revision edit times"
+      : "0011 to 0012 discards old revisions and clears their references without changing Library data",
+    () =>
+      Effect.gen(function* () {
+        yield* host(() => reset());
+        const before = env.TEST_MIGRATIONS.filter((entry) => entry.name < "0012_");
+        const next = env.TEST_MIGRATIONS.filter((entry) => entry.name.startsWith("0012_"));
+        expect(next).toHaveLength(1);
+
+        if (fullChain) {
+          yield* host(() => applyD1Migrations(env.DB, env.TEST_MIGRATIONS));
+        } else {
+          yield* host(() => applyD1Migrations(env.DB, before));
+          yield* host(() =>
+            env.DB.batch([
+              env.DB.prepare(
+                "INSERT INTO skits VALUES ('alice','tools','private','rev_two','created','updated',NULL)",
+              ),
+              env.DB.prepare("INSERT INTO revision_trees VALUES ('tree'),('orphan')"),
+              env.DB.prepare(
+                "INSERT INTO revision_tree_entries VALUES ('tree','file','file',420,'blob',4,NULL),('orphan','dir','directory',NULL,NULL,NULL,NULL)",
+              ),
+              env.DB.prepare(
+                "INSERT INTO revisions VALUES ('alice','tools','rev_one','tree','device',1,'null','[]',NULL,'first'),('alice','tools','rev_two','tree','device',2,'null','[]',NULL,'second')",
+              ),
+              env.DB.prepare(
+                "INSERT INTO revision_parents VALUES ('alice','tools','rev_two',0,'rev_one')",
+              ),
+              env.DB.prepare(
+                "INSERT INTO releases (owner_slug,skit_slug,version,release_id,source_revision,archive_digest,archive_bytes,archive_object_key,published_at,visibility) VALUES ('alice','tools','1.0.0','release','rev_two','hash',4,'archive','then','public')",
+              ),
+              env.DB.prepare(
+                "INSERT INTO libraries VALUES ('library','principal','owner','library_rev','created','updated')",
+              ),
+              env.DB.prepare(
+                "INSERT INTO library_revisions VALUES ('library_rev','library',NULL,'{}','created')",
+              ),
+            ]),
+          );
+          const release = yield* host(() => env.DB.prepare("SELECT * FROM releases").first());
+          const libraries = yield* host(() => env.DB.prepare("SELECT * FROM libraries").all());
+          const libraryRevisions = yield* host(() =>
+            env.DB.prepare("SELECT * FROM library_revisions").all(),
+          );
+          yield* host(() => applyD1Migrations(env.DB, next));
+          expect(yield* host(() => env.DB.prepare("SELECT * FROM releases").first())).toEqual({
+            ...release,
+            source_revision: null,
+          });
+          expect(
+            (yield* host(() => env.DB.prepare("SELECT * FROM libraries").all())).results,
+          ).toEqual(libraries.results);
+          expect(
+            (yield* host(() => env.DB.prepare("SELECT * FROM library_revisions").all())).results,
+          ).toEqual(libraryRevisions.results);
+          expect(
+            yield* host(() => env.DB.prepare("SELECT current_revision_id FROM skits").first()),
+          ).toEqual({ current_revision_id: null });
+        }
+
+        for (const table of [
+          "revisions",
+          "revision_parents",
+          "revision_trees",
+          "revision_tree_entries",
+        ]) {
+          expect(
+            (yield* host(() => env.DB.prepare(`SELECT * FROM ${table}`).all())).results,
+          ).toEqual([]);
+        }
+
+        const columns = yield* host(() =>
+          env.DB.prepare("PRAGMA table_info(revisions)").all<{
+            name: string;
+            notnull: number;
+            dflt_value: string | null;
+          }>(),
+        );
+        expect(columns.results.find(({ name }) => name === "edits_json")).toMatchObject({
+          notnull: 1,
+          dflt_value: null,
+        });
+        if (fullChain)
+          yield* host(() =>
+            env.DB.prepare(
+              "INSERT INTO skits VALUES ('alice','tools','private',NULL,'created','updated',NULL)",
+            ).run(),
+          );
+        yield* host(() => env.DB.prepare("INSERT INTO revision_trees VALUES ('new_tree')").run());
+        for (const edits of [null, "invalid JSON"]) {
+          const failed = yield* Effect.exit(
+            host(() =>
+              env.DB.prepare(
+                "INSERT INTO revisions (owner_slug,skit_slug,revision_id,tree_hash,author_device,author_at,edits_json,descriptor_json,diagnostics_json,created_at) VALUES ('alice','tools','invalid','new_tree','device',3,?,'null','[]','now')",
+              )
+                .bind(edits)
+                .run(),
+            ),
+          );
+          expect(failed._tag).toBe("Failure");
+        }
+        yield* host(() =>
+          env.DB.prepare(
+            "INSERT INTO revisions (owner_slug,skit_slug,revision_id,tree_hash,author_device,author_at,edits_json,descriptor_json,diagnostics_json,created_at) VALUES ('alice','tools','new_rev','new_tree','device',3,'{}','null','[]','now')",
+          ).run(),
+        );
+        expect(
+          (yield* host(() => env.DB.prepare("PRAGMA foreign_key_check").all())).results,
+        ).toEqual([]);
+
+        expect((yield* host(() => env.DB.prepare("PRAGMA quick_check").all())).results).toEqual([
+          { quick_check: "ok" },
+        ]);
+      }),
+  );
+}

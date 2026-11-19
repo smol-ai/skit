@@ -12,5 +12,11 @@
     "skipLibCheck": true,
     "types": ["node", "@cloudflare/vitest-plugin/types"]
   },
-  "include": ["worker-configuration.d.ts", "src/**/*.ts", "test/**/*.ts", "web/src/**/*.d.ts"]
+  "include": [
+    "worker-configuration.d.ts",
+    "src/**/*.ts",
+    "scripts/check-frozen-migrations.ts",
+    "test/**/*.ts",
+    "web/src/**/*.d.ts"
+  ]
 }

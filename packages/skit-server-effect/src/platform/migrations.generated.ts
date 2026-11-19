@@ -12,4 +12,5 @@ export const expectedMigrations = [
   "0009_feedback.sql",
   "0010_owner_schema.sql",
   "0011_better_auth_account_keys.sql",
+  "0012_revision_edit_times.sql",
 ] as const;

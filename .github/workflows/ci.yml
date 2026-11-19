@@ -26,6 +26,12 @@ jobs:
           node-version: 24.22.1
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Keep existing D1 migrations unchanged
+        run: node packages/skit-server-effect/scripts/check-frozen-migrations.ts "$MIGRATION_BASE" "$MIGRATION_HEAD"
+        env:
+          MIGRATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          MIGRATION_HEAD: ${{ github.sha }}
+      - run: pnpm --filter @smolai/skit-server-effect exec vitest run --config vitest.scripts.config.ts
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck

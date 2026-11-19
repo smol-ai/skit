@@ -44,7 +44,6 @@ CREATE TABLE revisions (
   tree_hash TEXT NOT NULL REFERENCES revision_trees(tree_hash),
   author_device TEXT NOT NULL,
   author_at INTEGER NOT NULL,
-  edits_json TEXT NOT NULL CHECK (json_valid(edits_json)),
   descriptor_json TEXT NOT NULL CHECK (json_valid(descriptor_json)),
   diagnostics_json TEXT NOT NULL CHECK (json_valid(diagnostics_json)),
   credential_id TEXT,
