@@ -1,13 +1,19 @@
-import { describe } from "@effect/vitest";
+import { libraryDatabasePath } from "../src/library/store/database.js";
+import {
+  LibraryWriter,
+  writeLibrary,
+  loadOperations,
+  loadLibrary,
+} from "../src/library/store/library-store.js";
+import { describe, assert, it } from "@effect/vitest";
 import { stepRouting } from "../src/library/routing/step.js";
-import { assert, it } from "@effect/vitest";
-import { Cause, Effect, FileSystem, Layer, Schema, Option } from "effect";
+
+import { Cause, Effect, FileSystem, Layer, Option } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import * as Library from "../src/library/library.js";
-import { LibraryState } from "../src/library/library-state.js";
+
 import { openSetupReview } from "../src/library/setup.js";
-import { OperationStatus } from "../src/library/store/state-schema.js";
 import { inspectLibrary, saveLibrary } from "./helpers/library-store.js";
 import { skitLayer } from "../src/platform/layer.js";
 
@@ -117,13 +123,36 @@ describe("skit update", () => {
             const beta = join(agents, "beta");
             const betaBytes = yield* fs.readFileString(join(beta, "SKILL.md"));
             const betaMarker = yield* fs.readFileString(join(beta, ".skit-ownership.json"));
-            const before = yield* Schema.decodeEffect(Schema.fromJsonString(LibraryState))(
-              yield* fs.readFileString(join(home, "state.json")),
-            );
+            const before = yield* loadLibrary(home);
             let stopped = false;
             let backedUpAlpha: string | undefined;
             const files: FileSystem.FileSystem = {
               ...fs,
+              chmod: (path, mode) =>
+                Effect.gen(function* () {
+                  if (
+                    !stopped &&
+                    interruption === "recorded" &&
+                    path === libraryDatabasePath(home)
+                  ) {
+                    if (
+                      (yield* loadOperations(home).pipe(
+                        Effect.provideService(FileSystem.FileSystem, fs),
+                        Effect.orDie,
+                      )).some(
+                        (operation) =>
+                          operation._tag === "Pending" &&
+                          operation.steps.some(
+                            (step) => step.step._tag === "Update" && step.status === "Pending",
+                          ),
+                      )
+                    ) {
+                      stopped = true;
+                      return yield* Effect.die("interrupted selected update");
+                    }
+                  }
+                  yield* fs.chmod(path, mode);
+                }),
               rename: (from, to) =>
                 Effect.gen(function* () {
                   yield* fs.rename(from, to);
@@ -138,18 +167,6 @@ describe("skit update", () => {
                     interruption === "successor" &&
                     from.includes(".skit-stage-") &&
                     to === join(agents, "alpha");
-                  if (interruption === "recorded" && to === join(home, "state.json")) {
-                    const state = yield* Schema.decodeEffect(Schema.fromJsonString(LibraryState))(
-                      yield* fs.readFileString(to),
-                    ).pipe(Effect.orDie);
-                    stop ||= state.operations.some(
-                      (operation) =>
-                        operation._tag === "Pending" &&
-                        operation.steps.some(
-                          (step) => step.step._tag === "Update" && step.status === "Pending",
-                        ),
-                    );
-                  }
                   if (stop) {
                     stopped = true;
                     return yield* Effect.die("interrupted selected update");
@@ -234,25 +251,26 @@ describe("skit update", () => {
             if (boundary === "occupied" && result._tag === "Failure")
               assert.include(Cause.pretty(result.cause), "protected installed destination");
             if (legacy) {
-              const state = yield* Schema.decodeEffect(Schema.fromJsonString(LibraryState))(
-                yield* fs.readFileString(join(home, "state.json")),
-              );
-              const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
-                state.operations,
-              );
-              const old = operations.map((operation) => ({
-                ...operation,
-                steps: operation.steps.map(({ updateSelection: _selection, ...saved }) => saved),
-              }));
-              const encoded = yield* Schema.encodeEffect(Schema.Array(OperationStatus))(old);
-              // An independent pre-fix disk record: keep its batches and progress, remove the new marker.
-              const raw = yield* Schema.decodeEffect(
-                Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
-              )(yield* fs.readFileString(join(home, "state.json")));
-              yield* fs.writeFileString(
-                join(home, "state.json"),
-                JSON.stringify({ ...raw, operations: encoded }),
-              );
+              const operations = yield* loadOperations(home);
+              // A pre-fix Pending record keeps batches and progress but lacks the selection marker.
+              for (const operation of operations) {
+                if (operation._tag !== "Pending") continue;
+                yield* writeLibrary(
+                  home,
+                  Effect.gen(function* () {
+                    yield* (yield* LibraryWriter).saveOperation(
+                      {
+                        ...operation,
+                        steps: operation.steps.map(
+                          ({ updateSelection: _selection, ...saved }) => saved,
+                        ),
+                      },
+                      operation,
+                    );
+                  }),
+                  { resume: operation.operationId },
+                );
+              }
             }
             for (let attempt = 0; attempt < 2; attempt++) {
               yield* Effect.gen(function* () {

@@ -27,6 +27,7 @@ const UndoChange = Schema.Struct({
       toSnapshot: Hash,
     }),
   ),
+  settingsChanged: Schema.Boolean,
   intentChanged: Schema.Boolean,
   next: LibraryState,
 });

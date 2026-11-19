@@ -108,31 +108,33 @@ it.effect("propagates discovery interruption", () =>
 describe("skit setup", () => {
   describe("Finding and reviewing", () => {
     describe("Preview leaves the proposed setup unapplied.", () => {
-      it.effect("evidence collection never writes machine settings even with save intent", () =>
-        Effect.gen(function* () {
-          const f = yield* discoveryFixture();
-          const path = join(f.home.home, "machine.json");
-          const legacy = JSON.stringify({ schemaVersion: 1, repositoryRoots: [f.projects] });
-          yield* f.fs.writeFileString(path, legacy);
-          const options = {
-            ...f.options,
-            persistRoots: true,
-            machineDisplayName: "Requested name",
-            repositoryDecisions: [{ path: f.projects, status: "watched" as const }],
-          };
-          const evidence = yield* f.home.owned(
-            Effect.flatMap(Library.Service, (library) => collectSetupEvidence(library, options)),
-          );
-          expect(evidence.existingDecisions.get(f.projects)).toBe("watched");
-          expect(evidence.machineConfig.machineId).toBeUndefined();
-          expect(yield* f.fs.readFileString(path)).toBe(legacy);
-          const preview = yield* f.home.owned(runSetup(options));
-          expect(preview.machineConfig.persisted).toBe(false);
-          expect(preview.machineConfig.machineId).toBeUndefined();
-          expect(yield* f.fs.readFileString(path)).toBe(legacy);
-          const repeated = yield* f.home.owned(runSetup({ ...options, persistRoots: false }));
-          expect(repeated.onboarding.planId).toBe(preview.onboarding.planId);
-        }).pipe(Effect.provide(skitLayer)),
+      it.effect(
+        "evidence collection imports saved settings without applying the proposed changes",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* discoveryFixture();
+            const path = join(f.home.home, "machine.json");
+            const legacy = JSON.stringify({ schemaVersion: 1, repositoryRoots: [f.projects] });
+            yield* f.fs.writeFileString(path, legacy);
+            const options = {
+              ...f.options,
+              persistRoots: true,
+              machineDisplayName: "Requested name",
+              repositoryDecisions: [{ path: f.projects, status: "watched" as const }],
+            };
+            const evidence = yield* f.home.owned(
+              Effect.flatMap(Library.Service, (library) => collectSetupEvidence(library, options)),
+            );
+            expect(evidence.existingDecisions.get(f.projects)).toBe("watched");
+            expect(evidence.machineConfig.machineId).toBeUndefined();
+            expect(yield* f.fs.readFileString(`${path}.backup-database`)).toBe(legacy);
+            const preview = yield* f.home.owned(runSetup(options));
+            expect(preview.machineConfig.persisted).toBe(false);
+            expect(preview.machineConfig.machineId).toBeUndefined();
+            expect(yield* f.fs.readFileString(`${path}.backup-database`)).toBe(legacy);
+            const repeated = yield* f.home.owned(runSetup({ ...options, persistRoots: false }));
+            expect(repeated.onboarding.planId).toBe(preview.onboarding.planId);
+          }).pipe(Effect.provide(skitLayer)),
       );
     });
   });
@@ -339,9 +341,9 @@ describe("skit setup", () => {
           if (!candidate || candidate.action !== "import-observed-collection")
             // oxlint-disable-next-line skit/no-throw-in-effect -- This assertion guard fails the test and narrows the candidate.
             throw new Error("Expected import candidate");
-          expect(JSON.parse(yield* fs.readFileString(machinePath)).repositoryRoots).toEqual([
-            savedRoot,
-          ]);
+          expect(
+            JSON.parse(yield* fs.readFileString(`${machinePath}.backup-database`)).repositoryRoots,
+          ).toEqual([savedRoot]);
           expect(preview.machineConfig.machineId).toBeUndefined();
           expect(preview.repositories).toEqual([]);
           const interaction = yield* makeScriptedInteraction([[candidate.groupKey], true, false]);
@@ -357,7 +359,7 @@ describe("skit setup", () => {
             ),
           );
           expect((yield* home.durable).collections).toHaveLength(1);
-          const persisted = JSON.parse(yield* fs.readFileString(machinePath));
+          const persisted = yield* MachineSettings.read(home.home);
           expect(persisted.machineId).toBeDefined();
           expect(persisted.discoveryRoots).toEqual([savedRoot]);
         }).pipe(Effect.provide(skitLayer)),

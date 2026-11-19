@@ -233,14 +233,21 @@ describe("skit sync", () => {
             const result = yield* b.sync();
             assert.strictEqual(result.status, "merged");
             const state = yield* b.state;
-            assert.deepStrictEqual(state.device_skill_selection, {
+            const selection = state.device_skill_selection;
+            assert.strictEqual(selection?.mode, "choose");
+            if (selection?.mode !== "choose") return yield* Effect.die("Missing device selection");
+            const { enabled, ...settings } = selection;
+            assert.deepStrictEqual(settings, {
               mode: "choose",
-              enabled: [
-                { skill: publishedSkill.skill_id },
-                { collection: published.collection.collection_id },
-              ],
               invocation_policies: { [publishedSkill.skill_id]: "explicit" },
             });
+            assert.deepStrictEqual(
+              new Set(enabled.map((item) => JSON.stringify(item))),
+              new Set([
+                JSON.stringify({ skill: publishedSkill.skill_id }),
+                JSON.stringify({ collection: published.collection.collection_id }),
+              ]),
+            );
             assert.deepStrictEqual((yield* remote)?.manifest.enabled, account);
             assert.isTrue(yield* fs.exists(join(b.root, "first", "SKILL.md")));
           }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),

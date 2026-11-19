@@ -79,12 +79,7 @@ it.effect("browsing requires fresh confirmation and consumes the selected detail
       proposeLibraryEnable(session, row, { scope: { kind: "global" } }),
     );
 
-    const beforeStaleChange = yield* home.durable;
-
-    yield* home.writeDurable({
-      ...beforeStaleChange,
-      ownershipIssues: beforeStaleChange.ownershipIssues ?? [],
-    });
+    yield* home.owned(Effect.flatMap(Library.Service, (library) => library.inventory.refresh));
 
     const stale = yield* home.owned(confirmLibraryChange(proposed));
 
@@ -92,8 +87,6 @@ it.effect("browsing requires fresh confirmation and consumes the selected detail
 
     if (stale.outcome?.kind === "failed")
       assert.strictEqual(classifyFailure(stale.outcome.failure).code, "CONFLICT");
-
-    yield* home.writeDurable(beforeStaleChange);
 
     const interaction = yield* makeScriptedInteraction([
       row.collectionId,
@@ -161,11 +154,10 @@ describe("skit disable", () => {
         const state = yield* home.durable;
         const reviewId = state.skills.find((skill) => skill.name === "review")?.skill_id;
         assert.ok(reviewId);
-        yield* home.writeDurable({
-          ...state,
-          enabled: [{ skill: reviewId }],
-          repositories: [{ root, enabled: [{ skill: reviewId }] }],
-        });
+        yield* home.enable(
+          [{ skill: reviewId }],
+          [{ kind: "global" }, { kind: "repository", root }],
+        );
 
         const interaction = yield* makeScriptedInteraction([
           `all:${collection.collection?.collection_id}`,
@@ -400,7 +392,8 @@ describe("skit disable", () => {
           ...imported,
           enabled: imported.skills.map((skill) => ({ skill: skill.skill_id })),
         };
-        yield* home.writeDurable(state);
+        yield* home.enable(state.enabled);
+        const saved = yield* home.durable;
 
         const interaction = yield* makeScriptedInteraction(["cancel"]);
         yield* home.owned(
@@ -417,7 +410,7 @@ describe("skit disable", () => {
         assert.strictEqual(prompts.length, 1);
         assert.strictEqual(prompts[0]?.message, "Select where to disable Skills");
         assert.ok(prompts[0]?.choices.some((choice) => choice.hint?.includes("show-me")));
-        assert.deepStrictEqual(yield* home.durable, state);
+        assert.deepStrictEqual(yield* home.durable, saved);
         assert.strictEqual((yield* interaction.results).length, 0);
         assert.strictEqual(prompts[0]?.choices.length, 2);
         const effectChoice = prompts[0]?.choices.find((choice) => choice.hint === "effect");
@@ -501,11 +494,10 @@ describe("skit disable", () => {
         const state = yield* home.durable;
         const reviewId = state.skills.find((skill) => skill.name === "review")?.skill_id;
         assert.ok(reviewId);
-        yield* home.writeDurable({
-          ...state,
-          enabled: [{ skill: reviewId }],
-          repositories: [{ root, enabled: [{ skill: reviewId }] }],
-        });
+        yield* home.enable(
+          [{ skill: reviewId }],
+          [{ kind: "global" }, { kind: "repository", root }],
+        );
 
         const interaction = yield* makeScriptedInteraction([
           `all:${collection.collection?.collection_id}`,
@@ -546,9 +538,27 @@ describe("skit disable", () => {
             Effect.andThen(Effect.die("Disable finished before the writer gate")),
           ),
         );
-        const current = yield* home.durable;
-        const concurrent = { ...current, enabled: [] };
-        yield* home.writeDurable(concurrent);
+
+        yield* home.owned(
+          Effect.gen(function* () {
+            const owner = yield* Library.Service;
+            const plan = yield* owner.plan(
+              {
+                _tag: "Enabled",
+                changes: [
+                  {
+                    _tag: "Disable",
+                    subject: { _tag: "Skill", id: reviewId },
+                    where: [{ kind: "global" }],
+                  },
+                ],
+              },
+              { base: yield* owner.read },
+            );
+            yield* owner.apply({ _tag: "Apply", plan });
+          }),
+        );
+        const concurrent = yield* home.durable;
         yield* Deferred.succeed(resume, undefined);
         const outcome = yield* Fiber.join(command);
         assert.isTrue(Result.isFailure(outcome));

@@ -206,3 +206,56 @@ it.effect("downloads a literal snapshot archive with files, modes, directories a
     assert.deepStrictEqual(result, archive);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
+
+it.effect("refuses unknown portable head fields before a decoder can project them away", () =>
+  Effect.gen(function* () {
+    const head = yield* wire("portable-v8.json");
+    head.library.manifest.future = { preserve: [null, false, false] };
+    const error = yield* Effect.flip(
+      exchange(
+        () => Response.json(head),
+        (api) => api.read,
+      ),
+    );
+    assert.strictEqual(error._tag, "Library.LibraryApiInvalidResponse");
+  }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.effect("refuses a nested portable head field before writing the head back", () =>
+  Effect.gen(function* () {
+    const head = yield* wire("portable-v8.json");
+    head.library.manifest.collections[0].upstream.tracking.future = true;
+    const { result, sent } = yield* exchange(
+      () => Response.json(head),
+      (api) =>
+        api.read.pipe(
+          Effect.flatMap((current) =>
+            current === null
+              ? Effect.die("Expected a Library head")
+              : api.write(current.revision_id, current.manifest),
+          ),
+          Effect.flip,
+        ),
+    );
+    assert.strictEqual(result._tag, "Library.LibraryApiInvalidResponse");
+    assert.deepStrictEqual(
+      sent.map((request) => request.method),
+      ["GET"],
+    );
+  }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.effect("refuses an unknown portable field in a write receipt before acknowledging it", () =>
+  Effect.gen(function* () {
+    const head = yield* wire("portable-v8.json");
+    const target = structuredClone(head.library.manifest);
+    head.library.manifest.future = { preserve: true };
+    const error = yield* Effect.flip(
+      exchange(
+        () => Response.json(head),
+        (api) => api.write("revision_6", target),
+      ),
+    );
+    assert.strictEqual(error._tag, "Library.LibraryApiInvalidResponse");
+  }).pipe(Effect.provide(testPlatformLayer)),
+);

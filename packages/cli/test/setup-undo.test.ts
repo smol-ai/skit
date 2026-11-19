@@ -11,7 +11,7 @@ import * as Library from "@smolai/skit-core/library";
 import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { skitLayer } from "@smolai/skit-core/platform";
 
-import { prepareSetupUndo } from "../src/library/setup/undo.js";
+import { prepareSetupUndo } from "@smolai/skit-core/library/setup";
 import { setupResultActions } from "../src/library/setup/actions.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
@@ -220,9 +220,9 @@ describe("skit library undo", () => {
             Effect.gen(function* () {
               const installed = yield* f.home.durable;
               yield* (yield* prepareSetupUndo(f.operationId)).apply();
-              const undone = yield* f.home.durable;
-              const later = { ...undone, enabled: installed.enabled };
-              yield* f.home.writeDurable(later);
+
+              yield* f.home.enable(installed.enabled);
+              const later = yield* f.home.durable;
               const repeat = yield* prepareSetupUndo(f.operationId);
               expect(repeat.summary.status).toBe("already-undone");
               expect((yield* repeat.apply()).status).toBe("already-undone");
@@ -406,25 +406,30 @@ describe("skit library undo", () => {
                   withLibraryOwner(f.home.inventory),
                   Effect.provideService(FileSystem.FileSystem, {
                     ...f.fs,
-                    rename: (from, to) =>
+                    chmod: (path, mode) =>
                       Effect.gen(function* () {
-                        if (to === f.home.statePath) {
-                          const next = JSON.parse(yield* f.fs.readFileString(from));
-                          if (next.enabled.length === 0) {
-                            interrupted = true;
-                            return yield* Effect.die("Process exited before Undo publication");
-                          }
+                        if (
+                          path === join(f.home.home, "library.sqlite") &&
+                          !(yield* f.fs.exists(f.successor)) &&
+                          !(yield* f.fs.exists(join(f.source, ".skit-ownership.json")))
+                        ) {
+                          interrupted = true;
+                          return yield* Effect.die("Process exited before Undo publication");
                         }
-                        yield* f.fs.rename(from, to);
+                        yield* f.fs.chmod(path, mode);
                       }),
                   }),
                 ),
               );
               expect(exit._tag).toBe("Failure");
               expect(interrupted).toBe(true);
-              const pending = JSON.parse(yield* f.fs.readFileString(f.home.statePath));
-              expect(pending.enabled).toEqual(before.enabled);
-              expect(pending.operations.at(-1)._tag).toBe("Pending");
+              const pending = yield* (yield* Library.Service).read;
+              expect(pending._tag === "Present" ? pending.state.enabled : undefined).toEqual(
+                before.enabled,
+              );
+              expect((yield* (yield* Library.Service).history).operations.at(-1)?._tag).toBe(
+                "Pending",
+              );
               expect(yield* f.fs.exists(f.successor)).toBe(false);
               expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(false);
             }),
@@ -435,7 +440,7 @@ describe("skit library undo", () => {
               expect(owner.startup.finished.length).toBe(1);
               const repeated = yield* prepareSetupUndo(f.operationId);
               expect(repeated.summary.intentChanged).toBe(false);
-              expect((yield* repeated.apply()).status).toBe("undone");
+              expect((yield* repeated.apply()).status).toBe("already-undone");
               expect((yield* f.home.durable).enabled).toEqual([]);
               expect((yield* MachineSettings.read(f.home.home)).discoveryRoots).toEqual([]);
             }),
@@ -443,56 +448,33 @@ describe("skit library undo", () => {
         }).pipe(Effect.provide(skitLayer)),
     );
 
-    it.effect(
-      "failed settings restoration leaves a fresh inverse that completes after Library publication",
-      () =>
-        Effect.gen(function* () {
-          const f = yield* fixture();
-          yield* f.home.owned(
-            Effect.gen(function* () {
-              const plan = yield* prepareSetupUndo(f.operationId);
-              const failure = yield* Effect.flip(
-                plan.apply().pipe(
-                  Effect.provideService(FileSystem.FileSystem, {
-                    ...f.fs,
-                    rename: (from, to) =>
-                      to === join(f.home.home, "machine.json")
-                        ? refusedPublication(to)
-                        : f.fs.rename(from, to),
-                  }),
-                ),
-              );
-              expect(failure._tag).toBe("PlatformError");
-              expect((yield* f.home.durable).enabled).toEqual([]);
-              // Library completed independently. Retrying settings must preserve new file edits and
-              // later repository choices, without creating another Library inverse attempt.
-              const recorded = (yield* f.home.durable).operations;
-              expect(
-                recorded.some(
-                  (operation) =>
-                    operation._tag === "Done" &&
-                    operation.steps.some(({ step }) => step._tag === "Undo"),
-                ),
-              ).toBe(true);
-              yield* f.fs.writeFileString(
-                join(f.source, "SKILL.md"),
-                "Independent edit after Library undo",
-              );
-              yield* MachineSettings.setRepositoryDecision(f.home.home, "/later/repo", "watched");
-              const refreshed = yield* prepareSetupUndo(f.operationId);
-              expect(refreshed.summary.intentChanged).toBe(false);
-              expect(refreshed.summary.settingsChanged).toBe(true);
-              expect((yield* refreshed.apply()).status).toBe("undone");
-              expect((yield* f.home.durable).operations).toEqual(recorded);
-              expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe(
-                "Independent edit after Library undo",
-              );
-              expect((yield* MachineSettings.read(f.home.home)).repositories).toEqual([
-                { path: "/later/repo", status: "watched" },
-              ]);
-            }),
-          );
-        }).pipe(Effect.provide(skitLayer)),
+    it.effect("a complete inverse keeps later file edits and settings when reviewed again", () =>
+      Effect.gen(function* () {
+        const f = yield* fixture();
+        yield* f.home.owned(
+          Effect.gen(function* () {
+            const plan = yield* prepareSetupUndo(f.operationId);
+            expect((yield* plan.apply()).status).toBe("undone");
+            const records = (yield* (yield* Library.Service).history).operations;
+            expect(
+              records.some((row) => row.operationId === f.operationId && row._tag === "Undone"),
+            ).toBe(true);
+            expect(records.some((row) => row.steps.some(({ step }) => step._tag === "Undo"))).toBe(
+              false,
+            );
+            yield* f.fs.writeFileString(join(f.source, "SKILL.md"), "Independent edit after Undo");
+            yield* MachineSettings.setRepositoryDecision(f.home.home, "/later/repo", "watched");
+            const settings = yield* MachineSettings.read(f.home.home);
+            const repeated = yield* prepareSetupUndo(f.operationId);
+            expect((yield* repeated.apply()).status).toBe("already-undone");
+            expect(yield* MachineSettings.read(f.home.home)).toEqual(settings);
+            expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe(
+              "Independent edit after Undo",
+            );
+            expect((yield* (yield* Library.Service).history).operations).toEqual(records);
+          }),
+        );
+      }).pipe(Effect.provide(skitLayer)),
     );
   });
 });
@@ -507,8 +489,10 @@ describe("skit library undo", () => {
             const state = yield* f.home.durable;
             const faultFs: typeof f.fs = {
               ...f.fs,
-              rename: (from, to) =>
-                to === f.home.statePath ? refusedPublication(to) : f.fs.rename(from, to),
+              chmod: (path, mode) =>
+                path === join(f.home.home, "library.sqlite")
+                  ? refusedPublication(path)
+                  : f.fs.chmod(path, mode),
             };
             const plan = yield* prepareSetupUndo(f.operationId);
             expect(

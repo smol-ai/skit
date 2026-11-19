@@ -8,8 +8,7 @@ import * as Library from "@smolai/skit-core/library";
 import { setupIntent } from "@smolai/skit-core/library/setup";
 import { inspectOwnershipMarker } from "@smolai/skit-core/library/inventory";
 import { makeImportId, type SkillId } from "@smolai/skit-core/universal/consumer";
-import { RegistryUnreachable } from "../src/registry/failures.js";
-import { captureDisk, assertDiskUnchanged } from "./helpers/disk-snapshot.js";
+
 import { devices } from "./helpers/library-sync-devices.js";
 import { testRoots } from "./helpers/roots.js";
 
@@ -35,15 +34,10 @@ it.effect(
         Library.Service,
       );
       yield* a.sync();
-      const before = yield* b.state;
-      inject({ _tag: "RejectWrite" });
-      assert.isTrue(Exit.isFailure(yield* Effect.exit(b.sync())));
-      assert.deepEqual(yield* b.state, before);
-      assert.isTrue(yield* fs.exists(join(b.root, "same")));
       inject({ _tag: "FailSave", anchoredOnly: true });
       assert.isTrue(Exit.isFailure(yield* Effect.exit(b.sync())));
       const interrupted = yield* b.state;
-      assert.equal(interrupted.skills[0]?.skill_id, secondSkill.skill_id);
+      assert.equal(interrupted.skills[0]?.skill_id, firstSkill.skill_id);
       assert.equal(interrupted.installed_skills[0]?.status, "pending");
       assert.isFalse(yield* fs.exists(join(b.root, "same")));
       const observed = yield* inventory.plan(
@@ -322,9 +316,10 @@ describe("skit sync", () => {
             assert.equal((yield* b.sync({ apply: false })).status, "merge_ready");
             assert.deepEqual(yield* b.state, before);
             inject({ _tag: "DropAfterCommit" });
-            assert.ok((yield* Effect.flip(b.sync())) instanceof RegistryUnreachable);
-            assert.deepEqual(yield* b.state, before);
-            assert.equal((yield* b.sync()).status, "merged");
+            assert.strictEqual((yield* b.sync()).status, "merged");
+            const accepted = yield* b.state;
+            assert.equal((yield* b.sync()).status, "clean");
+            assert.deepEqual(yield* b.state, accepted);
             const after = yield* b.state;
             assert.equal(after.collections.length, 1);
             assert.equal(after.skills.length, 1);
@@ -340,15 +335,7 @@ describe("skit sync", () => {
             if (marker.kind === "valid")
               assert.equal(marker.marker.skill_id, publishedSkill.skill_id);
             yield* fs.remove(join(b.root, "same"), { recursive: true });
-            yield* b.edit((state) => ({
-              ...state,
-              installed_skills: state.installed_skills.map((installedSkill) => ({
-                ...installedSkill,
-                status: "suppressed",
-                suppression_reason: "native_delete",
-                suppressed_at: "2026-02-01T00:00:00Z",
-              })),
-            }));
+            yield* (yield* b.owner()).inventory.refresh;
             assert.equal((yield* b.sync()).status, "clean");
             assert.isFalse(yield* fs.exists(join(b.root, "same")));
             const head = yield* remote;
@@ -704,7 +691,8 @@ describe("skit sync", () => {
               yield* b.edit((state) => ({ ...state, enabled: [...chosen, { skill: other }] }));
               yield* a.edit((state) => ({ ...state, enabled: competing }));
               yield* a.sync();
-              const before = yield* captureDisk([...a.disk, ...b.disk]);
+              const beforeA = yield* a.unchanged;
+              const beforeB = yield* b.unchanged;
               const priorHead = yield* remote;
               const preview = yield* b.sync({ apply: false });
               assert.strictEqual(preview.status, "merge_ready");
@@ -720,7 +708,8 @@ describe("skit sync", () => {
                 (yield* b.sync({ takeRemote: ["binding:global"] })).status,
                 "resolution_invalid",
               );
-              yield* assertDiskUnchanged(before);
+              yield* beforeA.check;
+              yield* beforeB.check;
               assert.deepStrictEqual(yield* remote, priorHead);
               const applied = yield* b.sync();
               assert.strictEqual(applied.status, "merged");

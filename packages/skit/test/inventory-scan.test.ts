@@ -1,3 +1,4 @@
+import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
@@ -80,7 +81,7 @@ it.effect(
       expect(libraryDoctorReport(observed).issues).toEqual([
         expect.objectContaining({ code: "UNREADABLE_PATH", path: denied }),
       ]);
-      expect(yield* fs.exists(join(f.home, "state.json"))).toBe(false);
+      expect((yield* inspectLocalLibraryState(join(f.home))).present).toBe(false);
       expect(yield* fs.readFileString(join(skill, "SKILL.md"))).toBe("review");
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );

@@ -12,7 +12,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 describe("skit sync", () => {
   describe("Recovering interrupted work", () => {
     describe("Sync reports changed saved files instead of replacing them.", () => {
-      it.effect("characterizes local_bytes_changed as a stopped sync with exit 0", () =>
+      it.effect("reports local_bytes_changed as a stopped sync with exit 1", () =>
         Effect.gen(function* () {
           const { a } = yield* devices;
           yield* a.importSource("local");
@@ -36,8 +36,7 @@ describe("skit sync", () => {
           );
           assert.strictEqual(result.error, undefined);
           assert.strictEqual(JSON.parse(result.stdout).data.status, "local_bytes_changed");
-          // BUG: local_bytes_changed must exit non-zero. Flip this characterization when fixed.
-          assert.strictEqual(result.status, 0);
+          assert.strictEqual(result.status, 1);
           yield* assertDiskUnchanged(unchanged);
         }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
       );
@@ -80,10 +79,8 @@ describe("skit sync", () => {
             const address = server.address();
             assert.ok(address && typeof address !== "string");
             const origin = `http://127.0.0.1:${address.port}`;
-            yield* b.edit((state) => ({
-              ...state,
-              sync_ancestry: { ...state.sync_ancestry!, origin },
-            }));
+            // Accept the test Registry origin through sync rather than editing accepted ancestry.
+            yield* b.sync({ origin });
             const output = yield* Effect.callback<{ code: number | null; stdout: string }, Error>(
               (resume) => {
                 const child = spawn(

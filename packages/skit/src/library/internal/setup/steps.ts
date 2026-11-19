@@ -21,12 +21,16 @@ import {
   updateInstalledSkills,
   type ReviewedChange,
 } from "../../installed-update.js";
-import type { LibraryState } from "../../library-state.js";
+import { emptyLibraryState, type LibraryState } from "../../library-state.js";
 import { setEnabledResults, type SetEnabledResult } from "../session/set-enabled-contract.js";
 import { incompleteManageWarning, planManage } from "../../manage-plan.js";
 import { planIntent } from "../../plan-changes.js";
 import { moveAside, recoveryDirectory } from "./moves.js";
-import { libraryStatePath, loadLibrary } from "../../store/library-store.js";
+import {
+  inspectLocalLibraryState,
+  libraryStatePath,
+  loadLibrary,
+} from "../../store/library-store.js";
 import type {
   FolderEvidence,
   LinkEvidence,
@@ -146,6 +150,7 @@ export const planManageEnable = Effect.fn("Library.planManageEnable")(function* 
     readonly currentHash: string;
   },
   state: LibraryState,
+  revision?: number,
 ) {
   const resolved = yield* resolveLibrarySubject(state, subjectId);
   const subject =
@@ -185,7 +190,7 @@ export const planManageEnable = Effect.fn("Library.planManageEnable")(function* 
     },
     {
       home,
-      base: snapshotOf({ present: true, state }),
+      base: snapshotOf({ present: true, state, revision }),
       approvals: [
         {
           _tag: "Manage",
@@ -213,8 +218,16 @@ const enable = Effect.fn("Library.setup.enable")(function* (
   },
 ) {
   const { home } = scope;
-  const state = yield* loadLibrary(home);
-  const plan = yield* planManageEnable(home, selection, subjectId, manage, state);
+  const inspected = yield* inspectLocalLibraryState(home);
+  const state = inspected.present ? inspected.state : emptyLibraryState();
+  const plan = yield* planManageEnable(
+    home,
+    selection,
+    subjectId,
+    manage,
+    state,
+    inspected.present ? inspected.revision : undefined,
+  );
   const outcome = yield* scope.apply(key, plan);
   if (outcome._tag === "Applied") return { results: setEnabledResults(outcome), warnings: [] };
   // Setup keeps the managed copy while other differing copies stay where agents read them.

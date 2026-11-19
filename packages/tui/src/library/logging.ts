@@ -17,8 +17,6 @@ const logValue = (value: unknown): readonly unknown[] => {
         `Library ${home} changed, but backups for ${installedSkillId} at ${path} stayed pending`,
       SetupStopNotRecorded: ({ home, operationId }) =>
         `Setup ${operationId} stopped in ${home}, but could not record it`,
-      HistoryDeliveryPending: ({ home, actionId }) =>
-        `Library history delivery is pending in ${home}${actionId === undefined ? "" : ` for ${actionId}`}`,
     });
     return [text, value.failure];
   }

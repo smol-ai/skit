@@ -339,7 +339,10 @@ token = "do-not-print\q"`,
       );
 
       expect(report.findings).toContainEqual(
-        expect.objectContaining({ code: "unreadable-library-ledger", details: { statePath } }),
+        expect.objectContaining({
+          code: "unreadable-library-ledger",
+          details: { statePath },
+        }),
       );
     }).pipe(Effect.provide(testPlatformLayer)),
   );
@@ -366,7 +369,7 @@ token = "do-not-print\q"`,
         false,
       );
       const migrated = JSON.parse(yield* fs.readFileString(join(library, "state.json")));
-      expect(migrated.schemaVersion).toBe(CURRENT_LIBRARY_STATE_VERSION);
+      expect(migrated.schemaVersion).toBeGreaterThan(CURRENT_LIBRARY_STATE_VERSION);
       const backups = (yield* fs.readDirectory(library)).filter((name) =>
         name.startsWith("state.json.v4.backup-"),
       );

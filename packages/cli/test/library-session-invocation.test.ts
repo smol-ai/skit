@@ -299,6 +299,7 @@ describe("skit list", () => {
               yield* fs.writeFileString(join(source, "agents", "openai.yaml"), "policy: [\n");
             yield* importSource("2026-10-01T00:00:00.000Z");
             const badState = yield* home.durable;
+            yield* home.enable([{ skill: badState.skills[0]!.skill_id }]);
             if (problem === "missing-skill")
               yield* fs.remove(
                 join(
@@ -331,11 +332,7 @@ describe("skit list", () => {
                 }),
               ),
             );
-            const state = yield* home.durable;
-            yield* home.writeDurable({
-              ...state,
-              enabled: [{ skill: badState.skills[0]!.skill_id }],
-            });
+
             const session = yield* home.owned(
               Effect.flatMap(Library.Service, (library) => library.session.open()),
             );
@@ -379,14 +376,14 @@ describe("skit list", () => {
           yield* importSource("2026-10-01T00:00:00.000Z");
           yield* fs.writeFileString(join(source, "SKILL.md"), text(false));
           yield* importSource("2026-10-02T00:00:00.000Z");
-          const state = yield* home.durable;
-          yield* home.writeDurable({
-            ...state,
-            skills: state.skills.map((skill) => ({
+
+          yield* home.restore((manifest) => ({
+            ...manifest,
+            skills: manifest.skills.map((skill) => ({
               ...skill,
               local_version_id: skill.versions[0]!.skill_version_id,
             })),
-          });
+          }));
           const selected = yield* home.durable;
           const session = yield* home.owned(
             Effect.flatMap(Library.Service, (library) => library.session.open()),

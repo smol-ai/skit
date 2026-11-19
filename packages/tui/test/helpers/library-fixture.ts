@@ -3,7 +3,8 @@ import { LinkStat } from "@smolai/skit-core/platform";
 import * as Library from "@smolai/skit-core/library";
 import { skitConfigurationLayer, skitLayer } from "@smolai/skit-core/platform";
 import { join } from "node:path";
-import { Effect, FileSystem, Layer } from "effect";
+import { DatabaseSync } from "node:sqlite";
+import { Effect, FileSystem, Layer, Schema } from "effect";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { makeMachineId } from "@smolai/skit-core/universal/consumer";
 import {
@@ -114,18 +115,54 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
         application,
         Effect.flatMap(Library.Service, (library) => library.session.open()),
       ),
-    /** Every path under the fixture, by lstat: its type, mode, link target and bytes. */
+    /** Every durable path: type, mode, link target and bytes, or all SQLite schema/row values.
+     * WAL/SHM are coordination files; committed rows in a WAL still enter the SQL snapshot. */
     tree: Effect.gen(function* () {
       const links = yield* LinkStat;
       const entries = new Map<string, string>();
-      const walk = (path: string): Effect.Effect<void, PlatformError> =>
+      const walk = (path: string): Effect.Effect<void, PlatformError | Schema.SchemaError> =>
         Effect.gen(function* () {
+          if (
+            path === join(skitHome, "library.sqlite-wal") ||
+            path === join(skitHome, "library.sqlite-shm")
+          )
+            return;
           const info = yield* links.lstat(path);
           if (info.type === "SymbolicLink")
             entries.set(path, `link ${info.mode} ${yield* fs.readLink(path)}`);
           else if (info.type === "Directory") {
             entries.set(path, `directory ${info.mode}`);
             for (const name of yield* fs.readDirectory(path)) yield* walk(join(path, name));
+          } else if (path === join(skitHome, "library.sqlite")) {
+            const saved = yield* Effect.acquireUseRelease(
+              Effect.sync(() => new DatabaseSync(path, { readOnly: true })),
+              (database) =>
+                Effect.gen(function* () {
+                  database.exec("BEGIN");
+                  const tables = yield* Schema.decodeUnknownEffect(
+                    Schema.Array(
+                      Schema.Struct({
+                        name: Schema.String,
+                        sql: Schema.String,
+                      }),
+                    ),
+                  )(
+                    database
+                      .prepare(
+                        "SELECT name,sql FROM sqlite_schema WHERE type='table' ORDER BY name",
+                      )
+                      .all(),
+                  );
+                  return tables.map((table) => ({
+                    ...table,
+                    rows: database
+                      .prepare(`SELECT * FROM "${table.name.replaceAll('"', '""')}"`)
+                      .all(),
+                  }));
+                }),
+              (database) => Effect.sync(() => database.close()),
+            );
+            entries.set(path, `database ${info.mode} ${JSON.stringify(saved)}`);
           } else
             entries.set(
               path,

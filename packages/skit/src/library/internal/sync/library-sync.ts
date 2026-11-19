@@ -1,13 +1,17 @@
 import { Effect, Option } from "effect";
 import type * as Library from "../../library.js";
 import { RestoreInvalid } from "../content/restore.js";
-import type { LibraryManifest, SnapshotArchive } from "../../library-contracts.js";
+import { LibraryManifest, type SnapshotArchive } from "../../library-contracts.js";
 import type { RestoreProgress } from "../../restore-progress.js";
 import type { InventoryRootOptions } from "../../routing/roots.js";
 import type { SyncChanges } from "../../sync-changes.js";
 import type { SyncIssue } from "../../sync-issues.js";
 import { openSyncSession, type SyncSessionRequest } from "./session.js";
 import { silentSyncProgress, type SyncPhase, type SyncProgress } from "./progress.js";
+import { canonicalJson } from "../../../shared/json.js";
+import { StalePlan } from "../../plan-failures.js";
+import type { SyncAcceptance, saveSyncAncestry } from "../../store/sync-ancestry.js";
+import { normalizeLibraryManifest } from "../../manifest.js";
 
 export type RemoteLibrary = NonNullable<SyncSessionRequest["remote"]>;
 
@@ -149,130 +153,188 @@ export const syncLibrary = Effect.fn("Library.sync")(function* <
     readonly restoreProgress?: RestoreProgress;
   },
   transport: LibrarySyncTransport<ReadError, UploadError, WriteError, DownloadError, R>,
+  accept: (
+    request: SyncAcceptance,
+  ) => Effect.Effect<void, Effect.Error<ReturnType<typeof saveSyncAncestry>>>,
 ) {
   const progress = options.progress ?? silentSyncProgress;
-  const snapshot = yield* progress.around({ kind: "inspect-local" }, library.read);
-  const inventory = yield* inspectSyncSnapshots(library, snapshot, progress);
-  if (inventory._tag === "Changed")
-    return { status: "local_bytes_changed" as const, hash: inventory.hash };
-  const remote = yield* progress.around({ kind: "read-remote" }, transport.read);
-  const session = yield* openSyncSession(
-    library,
-    roots,
-    {
-      origin: options.origin,
+  let installed = 0;
+  let uninstalled = 0;
+  for (let attempt = 0; ; attempt++) {
+    const snapshot = yield* progress.around({ kind: "inspect-local" }, library.read);
+    const inventory = yield* inspectSyncSnapshots(library, snapshot, progress);
+    if (inventory._tag === "Changed")
+      return { status: "local_bytes_changed" as const, hash: inventory.hash };
+    const remote = yield* progress.around({ kind: "read-remote" }, transport.read);
+    const session = yield* openSyncSession(
+      library,
+      roots,
+      {
+        origin: options.origin,
+        remote,
+        ...(options.takeRemote === undefined ? {} : { takeRemote: options.takeRemote }),
+        ...(options.keepEnabled === undefined ? {} : { keepEnabled: options.keepEnabled }),
+        ...(options.deviceSelection === undefined
+          ? {}
+          : { deviceSelection: options.deviceSelection }),
+        around: (phase, work) => progress.around(phase, work),
+      },
+      { base: snapshot },
+    );
+    if (session._tag === "Empty") {
+      if (options.apply) yield* session.apply;
+      return { status: "clean" as const, changed: false };
+    }
+    if (session._tag === "Stopped") return session.result;
+    const { target, plan, note } = session;
+    if (session.direction === "clean" && remote !== null) {
+      const copies = options.apply
+        ? yield* Effect.gen(function* () {
+            const staged = yield* library.content.stage(target, {
+              localArchives: inventory.archives,
+              registry: {
+                origin: options.origin,
+                token: Option.fromUndefinedOr(options.token),
+              },
+            });
+            const prepared = yield* session.prepare(staged);
+            return yield* progress.around({ kind: "save-local" }, prepared.apply(remote));
+          })
+        : {
+            installed: 0,
+            uninstalled: 0,
+            enablementIssues: [] as readonly SyncIssue[],
+          };
+      return {
+        ...note,
+        status: copies.enablementIssues.length
+          ? ("enablement_incomplete" as const)
+          : ("clean" as const),
+        ...(copies.enablementIssues.length
+          ? {
+              sync_status: "clean" as const,
+              enablement_issues: copies.enablementIssues,
+            }
+          : {}),
+        changed: false,
+        revision_id: remote.revision_id,
+        installed: installed + copies.installed,
+        uninstalled: uninstalled + copies.uninstalled,
+      };
+    }
+    const transfer = yield* prepareSyncTransfer(
+      library,
+      inventory.archives,
+      target,
       remote,
-      ...(options.takeRemote === undefined ? {} : { takeRemote: options.takeRemote }),
-      ...(options.keepEnabled === undefined ? {} : { keepEnabled: options.keepEnabled }),
-      ...(options.deviceSelection === undefined
-        ? {}
-        : { deviceSelection: options.deviceSelection }),
-      around: (phase, work) => progress.around(phase, work),
-    },
-    { base: snapshot },
-  );
-  if (session._tag === "Empty") {
-    if (options.apply) yield* session.apply;
-    return { status: "clean" as const, changed: false };
-  }
-  if (session._tag === "Stopped") return session.result;
-  const { target, plan, note } = session;
-  if (session.direction === "clean" && remote !== null) {
-    const copies = options.apply
-      ? yield* Effect.gen(function* () {
-          const staged = yield* library.content.stage(target, {
-            localArchives: inventory.archives,
-            registry: {
-              origin: options.origin,
-              token: Option.fromUndefinedOr(options.token),
-            },
-          });
-          const prepared = yield* session.prepare(staged);
-          return yield* progress.around({ kind: "save-local" }, prepared.apply(remote));
-        })
-      : {
-          installed: 0,
-          uninstalled: 0,
-          enablementIssues: [] as readonly SyncIssue[],
-        };
+      transport,
+      {
+        origin: options.origin,
+        ...(options.token === undefined ? {} : { token: options.token }),
+        progress,
+        ...(options.restoreProgress === undefined
+          ? {}
+          : { restoreProgress: options.restoreProgress }),
+      },
+    );
+    const snapshots = transfer.snapshotCount;
+    if (!options.apply)
+      return session.direction === "push"
+        ? { ...note, status: "push_ready" as const, snapshots, plan }
+        : session.direction === "pull"
+          ? { ...note, status: "pull_ready" as const, snapshots, plan }
+          : {
+              ...note,
+              status: "merge_ready" as const,
+              revision_id: remote?.revision_id,
+              snapshots,
+              collections_to_remove: session.collectionsToRemove,
+              plan,
+            };
+    if (options.onPlan) yield* options.onPlan(plan);
+    const restored = yield* transfer.restore();
+    const prepared = yield* session.prepareLocal(restored);
+    yield* prepared.checkCurrent;
+    const copies = yield* progress.around({ kind: "save-local" }, prepared.applyLocal);
+    installed += copies.installed;
+    uninstalled += copies.uninstalled;
+    yield* transfer.upload();
+    const sentManifest = canonicalJson(target);
+    const saved =
+      !session.writeRemote && remote !== null
+        ? remote
+        : yield* progress.around(
+            { kind: "save-remote" },
+            transport.write(remote?.revision_id ?? null, structuredClone(target)).pipe(
+              Effect.catch((failure) =>
+                Effect.gen(function* () {
+                  // A failed response does not establish whether the CAS committed. Read once;
+                  // only the exact sent manifest proves acceptance of this write. The local save
+                  // already recorded the remote head it merged; it did not accept the sent target.
+                  const readBack = yield* transport.read.pipe(Effect.option);
+                  if (
+                    Option.isSome(readBack) &&
+                    readBack.value !== null &&
+                    (remote === null || readBack.value.library_id === remote.library_id) &&
+                    canonicalJson(readBack.value.manifest) === sentManifest
+                  )
+                    return readBack.value;
+                  if (
+                    attempt < 2 &&
+                    Option.isSome(readBack) &&
+                    readBack.value !== null &&
+                    (remote === null || readBack.value.library_id === remote.library_id) &&
+                    readBack.value.revision_id !== remote?.revision_id &&
+                    Object.keys(readBack.value.manifest).every((field) =>
+                      Object.hasOwn(LibraryManifest.fields, field),
+                    )
+                  )
+                    // Re-read and merge from the remote head incorporated by the local save.
+                    // Bound contention retries;
+                    // a head with unknown fields stays untouched rather than being projected away.
+                    return { _tag: "Retry" as const };
+                  return yield* Effect.fail(failure);
+                }),
+              ),
+            ),
+          );
+    if ("_tag" in saved) continue;
+    if (
+      (remote !== null && saved.library_id !== remote.library_id) ||
+      canonicalJson(saved.manifest) !== sentManifest
+    )
+      return yield* new StalePlan({
+        reason: { _tag: "SyncPlanInvalid", reason: "receipt-mismatch" },
+      });
+    yield* accept({
+      expectedBase: session.expectedBase,
+      ancestry: {
+        origin: options.origin,
+        library_id: saved.library_id,
+        revision_id: saved.revision_id,
+        base_manifest: normalizeLibraryManifest(target),
+      },
+    });
+    const syncStatus =
+      session.direction === "push"
+        ? ("pushed" as const)
+        : session.direction === "pull"
+          ? ("pulled" as const)
+          : ("merged" as const);
     return {
       ...note,
-      status: copies.enablementIssues.length
-        ? ("enablement_incomplete" as const)
-        : ("clean" as const),
+      status: copies.enablementIssues.length ? ("enablement_incomplete" as const) : syncStatus,
       ...(copies.enablementIssues.length
         ? {
-            sync_status: "clean" as const,
+            sync_status: syncStatus,
             enablement_issues: copies.enablementIssues,
           }
         : {}),
-      changed: false,
-      revision_id: remote.revision_id,
-      installed: copies.installed,
-      uninstalled: copies.uninstalled,
+      revision_id: saved.revision_id,
+      snapshots,
+      installed,
+      uninstalled,
+      plan,
     };
   }
-  const transfer = yield* prepareSyncTransfer(
-    library,
-    inventory.archives,
-    target,
-    remote,
-    transport,
-    {
-      origin: options.origin,
-      ...(options.token === undefined ? {} : { token: options.token }),
-      progress,
-      ...(options.restoreProgress === undefined
-        ? {}
-        : { restoreProgress: options.restoreProgress }),
-    },
-  );
-  const snapshots = transfer.snapshotCount;
-  if (!options.apply)
-    return session.direction === "push"
-      ? { ...note, status: "push_ready" as const, snapshots, plan }
-      : session.direction === "pull"
-        ? { ...note, status: "pull_ready" as const, snapshots, plan }
-        : {
-            ...note,
-            status: "merge_ready" as const,
-            revision_id: remote?.revision_id,
-            snapshots,
-            collections_to_remove: session.collectionsToRemove,
-            plan,
-          };
-  if (options.onPlan) yield* options.onPlan(plan);
-  const restored = yield* transfer.restore();
-  const prepared = yield* session.prepare(restored);
-  yield* prepared.checkCurrent;
-  yield* transfer.upload();
-  const saved =
-    !session.writeRemote && remote !== null
-      ? remote
-      : yield* progress.around(
-          { kind: "save-remote" },
-          transport.write(remote?.revision_id ?? null, target),
-        );
-  const copies = yield* progress.around({ kind: "save-local" }, prepared.apply(saved));
-  const syncStatus =
-    session.direction === "push"
-      ? ("pushed" as const)
-      : session.direction === "pull"
-        ? ("pulled" as const)
-        : ("merged" as const);
-  return {
-    ...note,
-    status: copies.enablementIssues.length ? ("enablement_incomplete" as const) : syncStatus,
-    ...(copies.enablementIssues.length
-      ? {
-          sync_status: syncStatus,
-          enablement_issues: copies.enablementIssues,
-        }
-      : {}),
-    revision_id: saved.revision_id,
-    snapshots,
-    installed: copies.installed,
-    uninstalled: copies.uninstalled,
-    plan,
-  };
 }, Effect.scoped);

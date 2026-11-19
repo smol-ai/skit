@@ -1,6 +1,8 @@
-import { expect, it } from "@effect/vitest";
+import { assert, expect, it } from "@effect/vitest";
 import { Effect, FileSystem, Schema } from "effect";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { recoverFileReplacement } from "../src/author/file-replacement.js";
+import { LinkStat } from "../src/platform/link-stat.js";
 import { scanAuthorSyncTree } from "../src/author/local-tree.js";
 import { writeWorkspaceTree } from "../src/author/write-tree.js";
 import * as History from "../src/history/history.js";
@@ -144,5 +146,194 @@ it.effect("refuses a file/descendant target before staging or mutating files", (
     ).toMatchObject({ _tag: "SkitContractError", contract: "Author sync tree" });
     expect(yield* fs.readFileString(join(root, "original"))).toBe("untouched");
     expect(yield* fs.readDirectory(join(root, ".skit"))).toEqual([]);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+for (const firstSave of [false, true]) {
+  it.effect(
+    firstSave
+      ? "keeps both editor saves when the original path is occupied during recovery"
+      : "keeps an editor's new file when the original path is occupied during installation",
+    () =>
+      Effect.gen(function* () {
+        const { fs, root, put } = yield* fixture;
+        const from = files({ "note.txt": "base" });
+        const to = files({ "note.txt": "incoming" });
+        yield* put(from);
+        const target = join(root, "note.txt");
+        let backup: string | undefined;
+        const raced: FileSystem.FileSystem = {
+          ...fs,
+          rename: (source, destination) =>
+            Effect.gen(function* () {
+              if (source === target && firstSave) yield* fs.writeFileString(target, "first save");
+              yield* fs.rename(source, destination);
+              if (source === target) {
+                backup = destination;
+                yield* fs.writeFileString(target, "second save", { flag: "wx" });
+              }
+            }),
+        };
+        const failure = yield* Effect.flip(
+          writeWorkspaceTree(root, from, to).pipe(
+            Effect.provideService(FileSystem.FileSystem, raced),
+          ),
+        );
+        expect(yield* fs.readFileString(target)).toBe("second save");
+        assert.isDefined(backup);
+        if (firstSave) {
+          expect(failure).toMatchObject({
+            _tag: "AuthorWorkspaceUnsafe",
+            path: backup,
+            reason: { _tag: "FileReplacementNeedsRecovery" },
+          });
+          expect(yield* fs.readFileString(backup)).toBe("first save");
+        } else {
+          expect(failure).toMatchObject({ _tag: "LocalFilesChangedDuringSync" });
+          expect(yield* fs.exists(backup)).toBe(false);
+        }
+      }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  );
+}
+
+it.effect("restores an in-place write through a descriptor opened before the move", () =>
+  Effect.gen(function* () {
+    const { fs, root, put } = yield* fixture;
+    const from = files({ "note.txt": "base" });
+    const to = files({ "note.txt": "incoming" });
+    yield* put(from);
+    const target = join(root, "note.txt");
+    const failure = yield* Effect.flip(
+      writeWorkspaceTree(root, from, to).pipe(
+        Effect.provideService(FileSystem.FileSystem, {
+          ...fs,
+          rename: (source, destination) =>
+            source === target
+              ? Effect.scoped(
+                  Effect.gen(function* () {
+                    // An editor opened without truncating, so only the later write changes it.
+                    const editor = yield* fs.open(target, { flag: "r+" });
+                    yield* fs.rename(source, destination);
+                    yield* editor.writeAll(new TextEncoder().encode("editor save"));
+                    yield* editor.sync;
+                  }),
+                )
+              : fs.rename(source, destination),
+        }),
+      ),
+    );
+    expect(failure).toMatchObject({ _tag: "LocalFilesChangedDuringSync" });
+    expect(yield* fs.readFileString(target)).toBe("editor save");
+    expect(yield* fs.readDirectory(join(root, ".skit"))).toEqual([]);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("restores a concurrent save when native realpath spells the root differently", () =>
+  Effect.gen(function* () {
+    const { fs, root, put } = yield* fixture;
+    const links = yield* LinkStat;
+    const from = files({ "notes/note.txt": "base" });
+    const to = files({ "notes/note.txt": "incoming" });
+    yield* put(from);
+    const target = join(root, "notes/note.txt");
+    const nativeRoot = join(dirname(root), basename(root).toUpperCase());
+    const failure = yield* Effect.flip(
+      writeWorkspaceTree(root, from, to).pipe(
+        Effect.provideService(LinkStat, {
+          ...links,
+          realPathNative: (path) =>
+            links
+              .realPathNative(path)
+              .pipe(
+                Effect.map((native) =>
+                  native.startsWith(root) ? nativeRoot + native.slice(root.length) : native,
+                ),
+              ),
+        }),
+        Effect.provideService(FileSystem.FileSystem, {
+          ...fs,
+          rename: (source, destination) =>
+            Effect.gen(function* () {
+              if (source === target) yield* fs.writeFileString(target, "editor save");
+              yield* fs.rename(source, destination);
+            }),
+        }),
+      ),
+    );
+    expect(failure).toMatchObject({ _tag: "LocalFilesChangedDuringSync" });
+    expect(yield* fs.readFileString(target)).toBe("editor save");
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("reports the backup and restores it when a moved parent comes back", () =>
+  Effect.gen(function* () {
+    const { fs, root, put } = yield* fixture;
+    const from = files({ "notes/note.txt": "base" });
+    const to = files({ "notes/note.txt": "incoming" });
+    yield* put(from);
+    const parent = join(root, "notes");
+    const movedParent = join(root, "moved");
+    const target = join(parent, "note.txt");
+    let backup: string | undefined;
+    const failure = yield* Effect.flip(
+      writeWorkspaceTree(root, from, to).pipe(
+        Effect.provideService(FileSystem.FileSystem, {
+          ...fs,
+          rename: (source, destination) =>
+            Effect.gen(function* () {
+              yield* fs.rename(source, destination);
+              if (source === target) {
+                backup = destination;
+                yield* fs.rename(parent, movedParent);
+              }
+            }),
+        }),
+      ),
+    );
+    assert.isDefined(backup);
+    expect(failure).toMatchObject({
+      _tag: "AuthorWorkspaceUnsafe",
+      path: backup,
+      reason: { _tag: "FileReplacementNeedsRecovery" },
+    });
+    expect(yield* fs.readFileString(backup)).toBe("base");
+    yield* fs.rename(movedParent, parent);
+    yield* recoverFileReplacement(root, dirname(backup));
+    expect(yield* fs.readFileString(target)).toBe("base");
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("keeps a directory unexpectedly moved into recovery", () =>
+  Effect.gen(function* () {
+    const { fs, root, put } = yield* fixture;
+    const from = files({ notes: "base" });
+    const to = files({ notes: "incoming" });
+    yield* put(from);
+    const target = join(root, "notes");
+    let backup: string | undefined;
+    const failure = yield* Effect.flip(
+      writeWorkspaceTree(root, from, to).pipe(
+        Effect.provideService(FileSystem.FileSystem, {
+          ...fs,
+          rename: (source, destination) =>
+            Effect.gen(function* () {
+              if (source === target) {
+                yield* fs.remove(target);
+                yield* fs.makeDirectory(target);
+                yield* fs.writeFileString(join(target, "editor.txt"), "editor save");
+                backup = destination;
+              }
+              yield* fs.rename(source, destination);
+            }),
+        }),
+      ),
+    );
+    assert.isDefined(backup);
+    expect(failure).toMatchObject({
+      _tag: "AuthorWorkspaceUnsafe",
+      path: backup,
+      reason: { _tag: "FileReplacementNeedsRecovery" },
+    });
+    expect(yield* fs.readFileString(join(backup, "editor.txt"))).toBe("editor save");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

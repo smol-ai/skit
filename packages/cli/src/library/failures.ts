@@ -1,3 +1,4 @@
+import { errorMessage } from "@smolai/skit-core/shared";
 import { describeFailure } from "../terminal/failure.js";
 import { collectionVersionArchiveFailure } from "./collection-version-archive-failure.js";
 import { schemaFailure, schemaFailureMessages } from "../platform/schema-failure.js";
@@ -18,6 +19,7 @@ import {
   SecurityFindingAbsent,
   UnknownInstalledSkill,
   InvalidIntent,
+  LibrarySqlError,
   InvalidLibraryState,
   InvalidLibraryStateReason,
   ManageSelectionInvalid,
@@ -53,6 +55,7 @@ export const LibraryDataFailure = Schema.Union([
   SecurityFindingAbsent,
   UnknownInstalledSkill,
   InvalidIntent,
+  LibrarySqlError,
   InvalidLibraryState,
   ManageSelectionInvalid,
   SetEnabledInvalid,
@@ -118,8 +121,23 @@ const libraryFailureMessage = Match.type<typeof LibraryDataFailure.Type>().pipe(
         Manage: "Invalid Manage intent",
         Sync: "Invalid Sync intent",
       })[intent],
+    LibrarySqlError: ({ path, cause }) =>
+      `Cannot access Library database at ${path}: ${errorMessage(cause)}`,
     InvalidLibraryState: ({ path, reason }) =>
       `Invalid Library state at ${path}: ${InvalidLibraryStateReason.match(reason, {
+        LegacySourceChanged: ({ sourcePath, backupPath, databasePath }) =>
+          `legacy file ${sourcePath} changed after import into ${databasePath}; original backup: ${backupPath ?? "source was absent"}`,
+        LegacyStateBesideDatabase: ({ statePath, databasePath }) =>
+          `database ${databasePath} is authoritative. Move ${statePath} aside before retrying`,
+        ImportBackupChanged: ({ sourcePath, backupPath, databasePath }) =>
+          `backup ${backupPath} differs from source ${sourcePath} while preparing ${databasePath}`,
+        NewerDatabaseMigration: ({ databasePath, migration, supported }) =>
+          `database ${databasePath} has migration ${migration}; this build supports through ${supported}`,
+        OperationStateMissing: ({ databasePath }) =>
+          `operation records in ${databasePath} have no current Library state`,
+        DatabaseIntegrityInvalid: ({ databasePath, result }) =>
+          `database integrity check failed at ${databasePath}: ${result.join(", ")}`,
+
         SchemaInvalid: ({ failure }) => schemaFailure(failure),
         ArchiveInvalid: ({ failure }) => collectionVersionArchiveFailure(failure).message,
         InvalidData: ({ issue, tree }) =>
@@ -203,11 +221,30 @@ const libraryFailureNext = Match.type<typeof LibraryDataFailure.Type>().pipe(
       " to list the findings in the Skill Version.",
     ],
     UnknownInstalledSkill: () => ["Run ", { code: "skit list" }, " to find an installed Skill."],
-    InvalidLibraryState: () => [
-      "Back up the state file before recovery. To reset an alpha Library, move it aside and run ",
-      { code: "skit setup" },
-      "; keep installed Skill files.",
-    ],
+    LibrarySqlError: () => ["Check the reported database failure and retry."],
+    InvalidLibraryState: ({ path, reason }) => {
+      if (reason._tag === "NewerDatabaseMigration")
+        return ["Use a build that supports this database migration. Keep the database intact."];
+      if (reason._tag === "LegacyStateBesideDatabase")
+        return [
+          "Keep the authoritative database. Move ",
+          { code: reason.statePath },
+          " aside as a separate backup, then retry.",
+        ];
+      if (
+        path.endsWith("library.sqlite") ||
+        reason._tag === "DatabaseIntegrityInvalid" ||
+        reason._tag === "OperationStateMissing"
+      )
+        return [
+          "Preserve a copy of the entire Library home, including library.sqlite and any -wal/-shm files. Restore a verified complete Library backup; keep installed Skill files.",
+        ];
+      return [
+        "Back up the state file before recovery. To reset an alpha Library, move it aside and run ",
+        { code: "skit setup" },
+        "; keep installed Skill files.",
+      ];
+    },
     "Library.InvalidIntent": () => ["Check the reported failure and retry."],
     "Library.ManageSelectionInvalid": () => ["Check the reported failure and retry."],
     "Library.SetupStepsInvalid": () => ["Check the reported failure and retry."],

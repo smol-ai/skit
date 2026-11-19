@@ -8,11 +8,15 @@
  * Reach for these only at the point where untrusted data enters. Everything past that boundary
  * should hold a declared shape, narrowed through the accessors below.
  */
-export type JsonValue = string | number | boolean | null | JsonValue[] | JsonObject;
+import { Schema } from "effect";
+
+export type JsonValue = Schema.MutableJson;
 
 export interface JsonObject {
   [key: string]: JsonValue;
 }
+
+export const JsonObject = Schema.Record(Schema.String, Schema.mutableKey(Schema.MutableJson));
 
 export interface YamlMapping {
   [key: string]: unknown;

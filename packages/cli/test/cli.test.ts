@@ -1,17 +1,20 @@
+import { it } from "@effect/vitest";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { afterAll, describe, expect, test } from "vitest";
-import { Schema } from "effect";
-import { LibraryState } from "@smolai/skit-core/library";
+import { Effect, Schema } from "effect";
+import { SqlClient } from "effect/sql";
+import { sqliteLayer } from "@smolai/skit-core/platform";
+import { savedLibrary } from "./helpers/saved-library.js";
+import { testPlatformLayer } from "./helpers/platform.js";
 import { outputContracts } from "../src/commands/output-contracts.js";
 import { copySkitFixture } from "./helpers/skit-fixture.js";
 
 const bin = join(process.cwd(), "bin", "skit.js");
 const PackageDocument = Schema.fromJsonString(Schema.Struct({ version: Schema.String }));
-const LibraryStateDocument = Schema.fromJsonString(LibraryState);
 const InstalledEditPlanDocument = Schema.fromJsonString(
   Schema.Struct({
     schema: Schema.Literal(outputContracts.installedEditPlan.id),
@@ -214,12 +217,8 @@ test.each(["list", "check", "setup"])(
         encoding: "utf8",
       });
       expect(processResult.status).toBe(1);
-      if (command === "setup") expect(processResult.stderr).toBe("");
-      else expect(processResult.stdout).toBe("");
-      const failure =
-        command === "setup"
-          ? JSON.parse(processResult.stdout).data
-          : JSON.parse(processResult.stderr).error;
+      expect(processResult.stdout).toBe("");
+      const failure = JSON.parse(processResult.stderr).error;
       expect(failure.code).toBe("VALIDATION_FAILED");
       expect(failure).not.toHaveProperty("message");
       expect(failure).not.toHaveProperty("remediation");
@@ -372,61 +371,69 @@ test("add emits a structured machine-readable result", async () => {
   );
 });
 
-test("both destinations and lifecycle dry-runs preserve exact state and installed skills", async () => {
-  const root = await mkdtemp(join(tmpdir(), "skit-cli-matrix-"));
-  const home = join(root, "home");
-  const configHome = join(root, "config");
-  const source = join(root, "source");
-  const repo = join(root, "repo");
-  await mkdir(join(configHome, "devin"), { recursive: true });
-  await copySkitFixture("authored", source);
-  const skill = join(source, "skills", "review", "SKILL.md");
-  await writeFile(skill, "---\nname: review\ndescription: Review code.\n---\n# v1\n");
-  const run = (...args: string[]) =>
-    spawnSync(
-      process.execPath,
-      [
-        bin,
-        ...args,
-        "--home",
-        home,
-        "--codex-root",
-        join(root, "detected-codex"),
-        "--claude-root",
-        join(root, "detected-claude"),
-        "--opencode-root",
-        join(root, "detected-opencode"),
-        "--devin-root",
-        join(root, "detected-devin"),
-      ],
-      { encoding: "utf8", env: { ...process.env, XDG_CONFIG_HOME: configHome } },
+it.live("both destinations and lifecycle dry-runs preserve exact state and installed skills", () =>
+  Effect.gen(function* () {
+    const root = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "skit-cli-matrix-")));
+    const home = join(root, "home");
+    const configHome = join(root, "config");
+    const source = join(root, "source");
+    const repo = join(root, "repo");
+    yield* Effect.promise(() => mkdir(join(configHome, "devin"), { recursive: true }));
+    yield* Effect.promise(() => copySkitFixture("authored", source));
+    const skill = join(source, "skills", "review", "SKILL.md");
+    yield* Effect.promise(() =>
+      writeFile(skill, "---\nname: review\ndescription: Review code.\n---\n# v1\n"),
     );
-  expect(run("add", source).status).toBe(0);
-  expect(run("enable", "review", "--repo", repo).status).toBe(0);
-  for (const relative of [".agents/skills/review/SKILL.md", ".claude/skills/review/SKILL.md"])
-    expect(readFileSync(join(repo, relative), "utf8")).toContain("# v1");
-  // OpenCode and Devin read `.agents`, so nothing is written to their own roots.
-  for (const relative of [".opencode/skills/review", ".devin/skills/review"])
-    expect(existsSync(join(repo, relative))).toBe(false);
+    const run = (...args: string[]) =>
+      spawnSync(
+        process.execPath,
+        [
+          bin,
+          ...args,
+          "--home",
+          home,
+          "--codex-root",
+          join(root, "detected-codex"),
+          "--claude-root",
+          join(root, "detected-claude"),
+          "--opencode-root",
+          join(root, "detected-opencode"),
+          "--devin-root",
+          join(root, "detected-devin"),
+        ],
+        { encoding: "utf8", env: { ...process.env, XDG_CONFIG_HOME: configHome } },
+      );
+    expect(run("add", source).status).toBe(0);
+    expect(run("enable", "review", "--repo", repo).status).toBe(0);
+    for (const relative of [".agents/skills/review/SKILL.md", ".claude/skills/review/SKILL.md"])
+      expect(readFileSync(join(repo, relative), "utf8")).toContain("# v1");
+    // OpenCode and Devin read `.agents`, so nothing is written to their own roots.
+    for (const relative of [".opencode/skills/review", ".devin/skills/review"])
+      expect(existsSync(join(repo, relative))).toBe(false);
 
-  const stateBefore = readFileSync(join(home, "state.json"));
-  const collectionId = JSON.parse(stateBefore.toString()).collections[0].collection_id as string;
-  const codexBefore = readFileSync(join(repo, ".agents", "skills", "review", "SKILL.md"));
-  await writeFile(skill, "---\nname: review\ndescription: Review code.\n---\n# v2\n");
-  for (const args of [
-    ["disable", "review", "--repo", repo, "--dry-run", "--json"],
-    ["remove", collectionId, "--dry-run", "--json"],
-  ])
-    expect(run(...args).status).toBe(0);
-  expect(run("update", "review", "--dry-run", "--json").status).toBe(1);
-  // `review` is its Collection's only Skill, so it can be removed; the dry run changes nothing.
-  expect(run("remove", "review", "--dry-run", "--json").status).toBe(0);
-  expect(readFileSync(join(home, "state.json"))).toEqual(stateBefore);
-  expect(readFileSync(join(repo, ".agents", "skills", "review", "SKILL.md"))).toEqual(codexBefore);
+    const stateBefore = yield* savedLibrary(home);
+    const collectionId = stateBefore.state.collections[0].collection_id;
+    const codexBefore = readFileSync(join(repo, ".agents", "skills", "review", "SKILL.md"));
+    yield* Effect.promise(() =>
+      writeFile(skill, "---\nname: review\ndescription: Review code.\n---\n# v2\n"),
+    );
+    for (const args of [
+      ["disable", "review", "--repo", repo, "--dry-run", "--json"],
+      ["remove", collectionId, "--dry-run", "--json"],
+    ])
+      expect(run(...args).status).toBe(0);
+    expect(run("update", "review", "--dry-run", "--json").status).toBe(1);
+    // `review` is its Collection's only Skill, so it can be removed; the dry run changes nothing.
+    expect(run("remove", "review", "--dry-run", "--json").status).toBe(0);
+    expect(yield* savedLibrary(home)).toEqual(stateBefore);
+    expect(readFileSync(join(repo, ".agents", "skills", "review", "SKILL.md"))).toEqual(
+      codexBefore,
+    );
 
-  expect(run("disable", "review", "--repo", repo).status).toBe(0);
-  expect(existsSync(join(repo, ".agents", "skills", "review"))).toBe(false);
-});
+    expect(run("disable", "review", "--repo", repo).status).toBe(0);
+    expect(existsSync(join(repo, ".agents", "skills", "review"))).toBe(false);
+  }).pipe(Effect.provide(testPlatformLayer)),
+);
 
 describe("skit auth login", () => {
   describe("Choosing a Registry", () => {
@@ -502,11 +509,17 @@ describe("skit auth login", () => {
           ],
           { stdio: ["ignore", "pipe", "pipe"] },
         );
+        let serverError = "";
+        server.stderr!.on("data", (data) => {
+          serverError += String(data);
+        });
         try {
           const port = await new Promise<string>((resolve, reject) => {
             server.stdout!.once("data", (data) => resolve(String(data).trim()));
             server.once("error", reject);
-            server.once("exit", (code) => reject(new Error(`Test server exited ${code}`)));
+            server.once("exit", (code) =>
+              reject(new Error(`Test server exited ${code}: ${serverError}`)),
+            );
           });
           const origin = `http://127.0.0.1:${port}`;
           const document = JSON.stringify({
@@ -746,37 +759,37 @@ describe("skit add", () => {
 
 describe("skit enable", () => {
   describe("Preview leaves installed Skills unchanged.", () => {
-    test("repository enable dry-run returns a plan without changing bindings or disk", async () => {
-      const root = await mkdtemp(join(tmpdir(), "skit-cli-e2e-"));
-      const home = join(root, "home"),
-        source = join(root, "source"),
-        repo = join(root, "repo");
-      await copySkitFixture("authored", source);
-      const preview = spawnSync(
-        process.execPath,
-        [bin, "add", source, "--list", "--json", "--home", home],
-        { encoding: "utf8" },
-      );
-      expect(preview.status).toBe(0);
-      expect(JSON.parse(preview.stdout).schema).toBe("skit.add.preview.v5");
-      expect(existsSync(join(home, "state.json"))).toBe(false);
-      expect(
-        spawnSync(process.execPath, [bin, "add", source, "--home", home], { encoding: "utf8" })
-          .status,
-      ).toBe(0);
-      const result = spawnSync(
-        process.execPath,
-        [bin, "enable", "review", "--repo", repo, "--dry-run", "--json", "--home", home],
-        { encoding: "utf8" },
-      );
-      expect(result.status).toBe(0);
-      expect(JSON.parse(result.stdout).schema).toBe("skit.enable.plan.v8");
-      expect(existsSync(join(repo, ".agents", "skills", "review"))).toBe(false);
-      const state = Schema.decodeSync(LibraryStateDocument)(
-        await readFile(join(home, "state.json"), "utf8"),
-      );
-      expect(state.enabled).toEqual([]);
-    });
+    it.live("repository enable dry-run returns a plan without changing bindings or disk", () =>
+      Effect.gen(function* () {
+        const root = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "skit-cli-e2e-")));
+        const home = join(root, "home"),
+          source = join(root, "source"),
+          repo = join(root, "repo");
+        yield* Effect.promise(() => copySkitFixture("authored", source));
+        const preview = spawnSync(
+          process.execPath,
+          [bin, "add", source, "--list", "--json", "--home", home],
+          { encoding: "utf8" },
+        );
+        expect(preview.status).toBe(0);
+        expect(JSON.parse(preview.stdout).schema).toBe("skit.add.preview.v5");
+        expect(existsSync(join(home, "state.json"))).toBe(false);
+        expect(
+          spawnSync(process.execPath, [bin, "add", source, "--home", home], { encoding: "utf8" })
+            .status,
+        ).toBe(0);
+        const result = spawnSync(
+          process.execPath,
+          [bin, "enable", "review", "--repo", repo, "--dry-run", "--json", "--home", home],
+          { encoding: "utf8" },
+        );
+        expect(result.status).toBe(0);
+        expect(JSON.parse(result.stdout).schema).toBe("skit.enable.plan.v8");
+        expect(existsSync(join(repo, ".agents", "skills", "review"))).toBe(false);
+        const state = (yield* savedLibrary(home)).state;
+        expect(state.enabled).toEqual([]);
+      }).pipe(Effect.provide(testPlatformLayer)),
+    );
   });
 });
 
@@ -810,225 +823,254 @@ describe("skit enable", () => {
 describe("skit update", () => {
   describe("Updating imported Collections", () => {
     describe("Update installs only an approved change to an edited installed Skill.", () => {
-      test("imports installed edits by path through the built CLI without overwriting disagreement", async () => {
-        const root = await mkdtemp(join(tmpdir(), "skit-cli-installed-edit-"));
-        const home = join(root, "home");
-        const source = join(root, "source");
-        const codexRoot = join(root, "codex");
-        const claudeRoot = join(root, "claude");
-        let configuredCodexRoot = codexRoot;
-        let configuredClaudeRoot = claudeRoot;
-        await mkdir(source, { recursive: true });
-        await writeFile(
-          join(source, "SKILL.md"),
-          "---\nname: review\ndescription: Review code.\n---\noriginal\n",
-        );
-        const run = (...args: string[]) =>
-          spawnSync(
-            process.execPath,
-            [
-              bin,
-              ...args,
-              "--home",
-              home,
-              "--codex-root",
-              configuredCodexRoot,
-              "--claude-root",
-              configuredClaudeRoot,
-              "--json",
-            ],
-            {
-              encoding: "utf8",
-              env: { ...process.env, HOME: root, XDG_CONFIG_HOME: join(root, "config") },
-            },
-          );
-        expect(run("add", source).status).toBe(0);
-        expect(run("enable", "review").status).toBe(0);
+      it.live(
+        "imports installed edits by path through the built CLI without overwriting disagreement",
+        () =>
+          Effect.gen(function* () {
+            const root = yield* Effect.promise(() =>
+              mkdtemp(join(tmpdir(), "skit-cli-installed-edit-")),
+            );
+            const home = join(root, "home");
+            const source = join(root, "source");
+            const codexRoot = join(root, "codex");
+            const claudeRoot = join(root, "claude");
+            let configuredCodexRoot = codexRoot;
+            let configuredClaudeRoot = claudeRoot;
+            yield* Effect.promise(() => mkdir(source, { recursive: true }));
+            yield* Effect.promise(() =>
+              writeFile(
+                join(source, "SKILL.md"),
+                "---\nname: review\ndescription: Review code.\n---\noriginal\n",
+              ),
+            );
+            const run = (...args: string[]) =>
+              spawnSync(
+                process.execPath,
+                [
+                  bin,
+                  ...args,
+                  "--home",
+                  home,
+                  "--codex-root",
+                  configuredCodexRoot,
+                  "--claude-root",
+                  configuredClaudeRoot,
+                  "--json",
+                ],
+                {
+                  encoding: "utf8",
+                  env: { ...process.env, HOME: root, XDG_CONFIG_HOME: join(root, "config") },
+                },
+              );
+            expect(run("add", source).status).toBe(0);
+            expect(run("enable", "review").status).toBe(0);
 
-        const paths = { agents: join(codexRoot, "review"), claude: join(claudeRoot, "review") };
-        configuredCodexRoot = join(root, "new-codex-root");
-        configuredClaudeRoot = join(root, "new-claude-root");
-        const markerBefore = {
-          agents: await readFile(join(paths.agents, ".skit-ownership.json"), "utf8"),
-          claude: await readFile(join(paths.claude, ".skit-ownership.json"), "utf8"),
-        };
-        const selectedBytes =
-          "---\nname: review\ndescription: Review code.\n---\nselected change\n";
-        const differentBytes =
-          "---\nname: review\ndescription: Review code.\n---\ndifferent change\n";
-        await writeFile(join(paths.claude, "SKILL.md"), selectedBytes);
-        await writeFile(join(paths.agents, "SKILL.md"), differentBytes);
+            const paths = { agents: join(codexRoot, "review"), claude: join(claudeRoot, "review") };
+            configuredCodexRoot = join(root, "new-codex-root");
+            configuredClaudeRoot = join(root, "new-claude-root");
+            const markerBefore = {
+              agents: yield* Effect.promise(() =>
+                readFile(join(paths.agents, ".skit-ownership.json"), "utf8"),
+              ),
+              claude: yield* Effect.promise(() =>
+                readFile(join(paths.claude, ".skit-ownership.json"), "utf8"),
+              ),
+            };
+            const selectedBytes =
+              "---\nname: review\ndescription: Review code.\n---\nselected change\n";
+            const differentBytes =
+              "---\nname: review\ndescription: Review code.\n---\ndifferent change\n";
+            yield* Effect.promise(() => writeFile(join(paths.claude, "SKILL.md"), selectedBytes));
+            yield* Effect.promise(() => writeFile(join(paths.agents, "SKILL.md"), differentBytes));
 
-        const stateBeforePreview = await readFile(join(home, "state.json"), "utf8");
-        const missingSkill = run("update", "--from", paths.claude, "--dry-run");
-        expect(missingSkill.status).toBe(2);
-        expect(JSON.parse(missingSkill.stderr).error).toMatchObject({
-          code: "INVALID_ARGUMENT",
-        });
-        expect(JSON.parse(missingSkill.stderr).error.cause).toContainEqual({
-          _tag: "Fail",
-          error: { _tag: "MissingRequirement", reason: { _tag: "InstalledEditSubject" } },
-        });
-        const oldFlag = run("update", "review", "--from-projection", paths.claude, "--dry-run");
-        expect(oldFlag.status).toBe(2);
-        expect(JSON.parse(oldFlag.stderr).error.cause).toContainEqual({
-          _tag: "Fail",
-          error: {
-            _tag: "CommandLineInvalid",
-            errors: [
-              {
-                _tag: "UnrecognizedOption",
-                option: "--from-projection",
-                command: ["skit", "update"],
-                suggestions: [],
+            const stateBeforePreview = yield* savedLibrary(home);
+            const missingSkill = run("update", "--from", paths.claude, "--dry-run");
+            expect(missingSkill.status).toBe(2);
+            expect(JSON.parse(missingSkill.stderr).error).toMatchObject({
+              code: "INVALID_ARGUMENT",
+            });
+            expect(JSON.parse(missingSkill.stderr).error.cause).toContainEqual({
+              _tag: "Fail",
+              error: { _tag: "MissingRequirement", reason: { _tag: "InstalledEditSubject" } },
+            });
+            const oldFlag = run("update", "review", "--from-projection", paths.claude, "--dry-run");
+            expect(oldFlag.status).toBe(2);
+            expect(JSON.parse(oldFlag.stderr).error.cause).toContainEqual({
+              _tag: "Fail",
+              error: {
+                _tag: "CommandLineInvalid",
+                errors: [
+                  {
+                    _tag: "UnrecognizedOption",
+                    option: "--from-projection",
+                    command: ["skit", "update"],
+                    suggestions: [],
+                  },
+                ],
               },
-            ],
-          },
-        });
-        const previewProcess = run(
-          "update",
-          "review",
-          "--from",
-          relative(process.cwd(), paths.claude),
-          "--dry-run",
-        );
-        expect(previewProcess.status).toBe(0);
-        const preview = Schema.decodeSync(InstalledEditPlanDocument)(previewProcess.stdout);
-        expect(
-          preview.data.installed_skills.map(({ destination, agreement }) => [
-            destination,
-            agreement,
-          ]),
-        ).toEqual([
-          ["agents", "different"],
-          ["claude", "selected"],
-        ]);
-        expect(preview.data.current_hash).not.toBe("");
-        expect(preview.data.snapshot_digest).not.toBe("");
-        expect(existsSync(preview.data.original_path)).toBe(false);
-        expect(await readFile(join(home, "state.json"), "utf8")).toBe(stateBeforePreview);
-        expect(await readFile(join(paths.agents, ".skit-ownership.json"), "utf8")).toBe(
-          markerBefore.agents,
-        );
-        for (const path of [
-          "claude",
-          "claude-code",
-          preview.data.selected_installed_skill_id,
-          source,
-        ]) {
-          const invalid = run("update", "review", "--from", path, "--dry-run");
-          expect(invalid.status).toBe(1);
-          expect(JSON.parse(invalid.stderr).error.cause).toContainEqual({
-            _tag: "Fail",
-            error: {
-              _tag: "Library.EditImportMissing",
-              reason: { _tag: "InstalledSkillNotFound", selector: path },
-            },
-          });
-        }
-        expect(await readFile(join(home, "state.json"), "utf8")).toBe(stateBeforePreview);
+            });
+            const previewProcess = run(
+              "update",
+              "review",
+              "--from",
+              relative(process.cwd(), paths.claude),
+              "--dry-run",
+            );
+            expect(previewProcess.status).toBe(0);
+            const preview = Schema.decodeSync(InstalledEditPlanDocument)(previewProcess.stdout);
+            expect(
+              preview.data.installed_skills.map(({ destination, agreement }) => [
+                destination,
+                agreement,
+              ]),
+            ).toEqual([
+              ["agents", "different"],
+              ["claude", "selected"],
+            ]);
+            expect(preview.data.current_hash).not.toBe("");
+            expect(preview.data.snapshot_digest).not.toBe("");
+            expect(existsSync(preview.data.original_path)).toBe(false);
+            expect(yield* savedLibrary(home)).toEqual(stateBeforePreview);
+            expect(
+              yield* Effect.promise(() =>
+                readFile(join(paths.agents, ".skit-ownership.json"), "utf8"),
+              ),
+            ).toBe(markerBefore.agents);
+            for (const path of [
+              "claude",
+              "claude-code",
+              preview.data.selected_installed_skill_id,
+              source,
+            ]) {
+              const invalid = run("update", "review", "--from", path, "--dry-run");
+              expect(invalid.status).toBe(1);
+              expect(JSON.parse(invalid.stderr).error.cause).toContainEqual({
+                _tag: "Fail",
+                error: {
+                  _tag: "Library.EditImportMissing",
+                  reason: { _tag: "InstalledSkillNotFound", selector: path },
+                },
+              });
+            }
+            expect(yield* savedLibrary(home)).toEqual(stateBeforePreview);
 
-        const applyProcess = run("update", "review", "--from", paths.claude);
-        expect(applyProcess.status).toBe(0);
-        const applied = Schema.decodeSync(InstalledEditResultDocument)(applyProcess.stdout);
-        expect(applied.data.previous_skill_version_id).toBe(preview.data.previous_skill_version_id);
-        expect(applied.data.imported_skill_version_id).not.toBe(
-          applied.data.previous_skill_version_id,
-        );
-        expect(applied.data.imported).toBe(true);
-        expect(
-          applied.data.installed_skills.map(({ destination, status }) => [destination, status]),
-        ).toEqual([
-          ["agents", "conflicted"],
-          ["claude", "installed"],
-        ]);
+            const applyProcess = run("update", "review", "--from", paths.claude);
+            expect(applyProcess.status).toBe(0);
+            const applied = Schema.decodeSync(InstalledEditResultDocument)(applyProcess.stdout);
+            expect(applied.data.previous_skill_version_id).toBe(
+              preview.data.previous_skill_version_id,
+            );
+            expect(applied.data.imported_skill_version_id).not.toBe(
+              applied.data.previous_skill_version_id,
+            );
+            expect(applied.data.imported).toBe(true);
+            expect(
+              applied.data.installed_skills.map(({ destination, status }) => [destination, status]),
+            ).toEqual([
+              ["agents", "conflicted"],
+              ["claude", "installed"],
+            ]);
 
-        const state = Schema.decodeSync(LibraryStateDocument)(
-          await readFile(join(home, "state.json"), "utf8"),
-        );
-        const importedSkill = state.skills.find(
-          (skill) => skill.skill_id === preview.data.skill_id,
-        );
-        expect(importedSkill?.versions).toHaveLength(2);
-        expect(importedSkill?.local_version_id).toBe(applied.data.imported_skill_version_id);
-        expect(state.imports.at(-1)).toMatchObject({
-          kind: "edit",
-          source_identity: {
-            kind: "local",
-            path: { value: paths.claude },
-          },
-          input: { value: paths.claude },
-        });
-        expect(await readFile(join(preview.data.original_path, "SKILL.md"), "utf8")).toBe(
-          selectedBytes,
-        );
-        expect(await readFile(join(paths.claude, "SKILL.md"), "utf8")).toBe(selectedBytes);
-        expect(await readFile(join(paths.agents, "SKILL.md"), "utf8")).toBe(differentBytes);
-        expect(await readFile(join(paths.claude, ".skit-ownership.json"), "utf8")).not.toBe(
-          markerBefore.claude,
-        );
-        expect(await readFile(join(paths.agents, ".skit-ownership.json"), "utf8")).toBe(
-          markerBefore.agents,
-        );
-        expect(existsSync(join(configuredCodexRoot, "review"))).toBe(false);
-        expect(existsSync(join(configuredClaudeRoot, "review"))).toBe(false);
+            const state = (yield* savedLibrary(home)).state;
+            const importedSkill = state.skills.find(
+              (skill) => skill.skill_id === preview.data.skill_id,
+            );
+            expect(importedSkill?.versions).toHaveLength(2);
+            expect(importedSkill?.local_version_id).toBe(applied.data.imported_skill_version_id);
+            expect(state.imports.at(-1)).toMatchObject({
+              kind: "edit",
+              source_identity: {
+                kind: "local",
+                path: { value: paths.claude },
+              },
+              input: { value: paths.claude },
+            });
+            expect(
+              yield* Effect.promise(() =>
+                readFile(join(preview.data.original_path, "SKILL.md"), "utf8"),
+              ),
+            ).toBe(selectedBytes);
+            expect(
+              yield* Effect.promise(() => readFile(join(paths.claude, "SKILL.md"), "utf8")),
+            ).toBe(selectedBytes);
+            expect(
+              yield* Effect.promise(() => readFile(join(paths.agents, "SKILL.md"), "utf8")),
+            ).toBe(differentBytes);
+            expect(
+              yield* Effect.promise(() =>
+                readFile(join(paths.claude, ".skit-ownership.json"), "utf8"),
+              ),
+            ).not.toBe(markerBefore.claude);
+            expect(
+              yield* Effect.promise(() =>
+                readFile(join(paths.agents, ".skit-ownership.json"), "utf8"),
+              ),
+            ).toBe(markerBefore.agents);
+            expect(existsSync(join(configuredCodexRoot, "review"))).toBe(false);
+            expect(existsSync(join(configuredClaudeRoot, "review"))).toBe(false);
 
-        const doctorProcess = run("doctor");
-        expect(doctorProcess.status).toBe(1);
-        const doctor = Schema.decodeSync(DoctorDocument)(doctorProcess.stdout);
-        expect(doctor.data.issues).toEqual([
-          expect.objectContaining({ code: "PROJECTION_CONFLICT", path: paths.agents }),
-        ]);
+            const doctorProcess = run("doctor");
+            expect(doctorProcess.status).toBe(1);
+            const doctor = Schema.decodeSync(DoctorDocument)(doctorProcess.stdout);
+            expect(doctor.data.issues).toEqual([
+              expect.objectContaining({ code: "PROJECTION_CONFLICT", path: paths.agents }),
+            ]);
 
-        const partialState = JSON.parse(await readFile(join(home, "state.json"), "utf8"));
-        const selectedHash = preview.data.current_hash;
-        const marker = JSON.parse(markerBefore.claude);
-        await writeFile(join(paths.claude, ".skit-ownership.json"), markerBefore.claude);
-        const installedSkill = partialState.installed_skills.find(
-          (candidate: { path: string }) => candidate.path === paths.claude,
-        );
-        installedSkill.skill_version_id = marker.skill_version_id;
-        installedSkill.expected_hash = marker.expected_hash;
-        installedSkill.current_hash = selectedHash;
-        installedSkill.status = "conflicted";
-        installedSkill.conflicts = [
-          {
-            _tag: "ContentChanged",
-            expected: marker.expected_hash,
-            actual: selectedHash,
-            baseline: "marker",
-          },
-        ];
-        await writeFile(join(home, "state.json"), `${JSON.stringify(partialState, null, 2)}\n`);
-        const beforeRecovery = Schema.decodeSync(LibraryStateDocument)(
-          await readFile(join(home, "state.json"), "utf8"),
-        );
-        const recoveredProcess = run("update", "review", "--from", paths.claude);
-        expect(recoveredProcess.status).toBe(0);
-        const recovered = Schema.decodeSync(InstalledEditResultDocument)(recoveredProcess.stdout);
-        expect(recovered.data.imported).toBe(false);
-        expect(recovered.data.imported_skill_version_id).toBe(
-          applied.data.imported_skill_version_id,
-        );
-        expect(
-          recovered.data.installed_skills.map(({ destination, status }) => [destination, status]),
-        ).toEqual([
-          ["agents", "conflicted"],
-          ["claude", "installed"],
-        ]);
-        const afterRecovery = Schema.decodeSync(LibraryStateDocument)(
-          await readFile(join(home, "state.json"), "utf8"),
-        );
-        expect(afterRecovery.skills[0]?.versions.length).toBe(
-          beforeRecovery.skills[0]?.versions.length,
-        );
-        expect(afterRecovery.imports.length).toBe(beforeRecovery.imports.length);
+            const selectedHash = preview.data.current_hash;
+            const marker = JSON.parse(markerBefore.claude);
+            yield* Effect.promise(() =>
+              writeFile(join(paths.claude, ".skit-ownership.json"), markerBefore.claude),
+            );
+            // Simulate a partial prior installation: retain imported bytes/version, but leave this
+            // installed row and its marker on the old version with the observed content conflict.
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const sql = yield* SqlClient.SqlClient;
+                const changed = yield* sql`UPDATE library_installed_skills
+            SET skill_version_id=${marker.skill_version_id},expected_hash=${marker.expected_hash},
+                current_hash=${selectedHash},status='conflicted',conflicts=${JSON.stringify([
+                  {
+                    _tag: "ContentChanged",
+                    expected: marker.expected_hash,
+                    actual: selectedHash,
+                    baseline: "marker",
+                  },
+                ])}
+            WHERE path=${paths.claude} RETURNING installed_skill_id`;
+                expect(changed).toHaveLength(1);
+              }).pipe(Effect.provide(sqliteLayer({ filename: join(home, "library.sqlite") }))),
+            );
+            const beforeRecovery = (yield* savedLibrary(home)).state;
+            const recoveredProcess = run("update", "review", "--from", paths.claude);
+            expect(recoveredProcess.status).toBe(0);
+            const recovered = Schema.decodeSync(InstalledEditResultDocument)(
+              recoveredProcess.stdout,
+            );
+            expect(recovered.data.imported).toBe(false);
+            expect(recovered.data.imported_skill_version_id).toBe(
+              applied.data.imported_skill_version_id,
+            );
+            expect(
+              recovered.data.installed_skills.map(({ destination, status }) => [
+                destination,
+                status,
+              ]),
+            ).toEqual([
+              ["agents", "conflicted"],
+              ["claude", "installed"],
+            ]);
+            const afterRecovery = (yield* savedLibrary(home)).state;
+            expect(afterRecovery.skills[0]?.versions.length).toBe(
+              beforeRecovery.skills[0]?.versions.length,
+            );
+            expect(afterRecovery.imports.length).toBe(beforeRecovery.imports.length);
 
-        const stateBeforeRepeat = await readFile(join(home, "state.json"), "utf8");
-        const repeated = run("update", "review", "--from", paths.claude);
-        expect(repeated.status).toBe(1);
-        expect(await readFile(join(home, "state.json"), "utf8")).toBe(stateBeforeRepeat);
-      });
+            const stateBeforeRepeat = yield* savedLibrary(home);
+            const repeated = run("update", "review", "--from", paths.claude);
+            expect(repeated.status).toBe(1);
+            expect(yield* savedLibrary(home)).toEqual(stateBeforeRepeat);
+          }).pipe(Effect.provide(testPlatformLayer)),
+      );
     });
   });
 });

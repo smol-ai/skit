@@ -1,3 +1,16 @@
+import {
+  loadOperation,
+  operationSummary,
+  loadOperations,
+  LibraryWriter,
+  libraryStatePath,
+  loadLibrary,
+  writeLibrary,
+  type LibraryStateReadError,
+  type LibraryStateWriteError,
+  inspectLocalLibraryState,
+} from "../../store/library-store.js";
+import type { OperationKind } from "../../store/state-schema.js";
 import { LibraryRecoveryNotice } from "../../recovery-notice.js";
 import { UpdateSelectionMissing } from "../../setup-failures.js";
 import type { SetupWarning } from "../../setup-warning.js";
@@ -24,12 +37,14 @@ import {
 } from "./steps.js";
 import { absentEvidence, readPathEvidence } from "../../folder-evidence.js";
 
-import { recordedLibrary } from "./intent.js";
+import { CurrentSetupOperation, prepareSetupChanges } from "../../store/setup-intent.js";
+import { setupIntent } from "../../store/intent.js";
+import { recordedLibrary } from "../../store/intent.js";
 import { restoreRecorded } from "../recovery/moves.js";
 import { moveAside, recoveryDirectory } from "./moves.js";
 import { runSyncStep, type SyncStepResult } from "../sync/operation.js";
 import { importCollection, type ImportedCollection } from "../../import-collection.js";
-import { emptyLibraryState, type LibraryState } from "../../library-state.js";
+import { emptyLibraryState } from "../../library-state.js";
 import { StalePlan, type Plan, type Outcome } from "../../library-plan.js";
 import { InstalledSkillInvalid } from "../../installation/install-enabled.js";
 import { prepareApply } from "../operations/recorded.js";
@@ -40,15 +55,7 @@ import type { InventoryRootOptions } from "../../routing/roots.js";
 import type { StepRouting } from "../../store/state-schema.js";
 import { stepRouting } from "../../routing/step.js";
 import { snapshotOf, type Snapshot } from "../../snapshot.js";
-import {
-  LibraryWriter,
-  libraryStatePath,
-  loadLibrary,
-  writeLibrary,
-  type LibraryStateReadError,
-  type LibraryStateWriteError,
-  inspectLocalLibraryState,
-} from "../../store/library-store.js";
+
 import {
   OperationStatus,
   type FolderEvidence,
@@ -97,7 +104,7 @@ export type SetupResult =
     };
 
 /**
- * Failures before the operation is saved: nothing was written. Once state.json holds it, every
+ * Failures before the operation is saved: nothing was written. Once the store holds it, every
  * failure is a Stopped result; an interruption leaves it Pending.
  */
 export type SetupError =
@@ -255,42 +262,6 @@ export const checkSteps = (home: string, steps: readonly SetupStep[]) => {
   return Option.none<SetupStepsInvalid>();
 };
 
-const decodeOperations = (state: LibraryState) =>
-  Schema.decodeEffect(Schema.Array(OperationStatus))(state.operations);
-const encodeOperation = Schema.encodeEffect(OperationStatus);
-
-/** The decoded operation `operationId` names in `state`, if it records one. */
-const operationIn = Effect.fn("Library.setup.operationIn")(function* (
-  state: LibraryState,
-  operationId: OperationId,
-) {
-  return Option.fromUndefinedOr(
-    (yield* decodeOperations(state)).find((operation) => operation.operationId === operationId),
-  );
-});
-
-/** The steps an operation records, whatever its status, so undo keeps their evidence. */
-const stepsOf = (operation: Option.Option<OperationStatus>) =>
-  Option.match(operation, { onNone: () => [], onSome: ({ steps }) => steps });
-
-/** What the record saved of the Library before any step ran; `state` when it is gone. */
-const beforeOf = (operation: Option.Option<OperationStatus>, state: LibraryState) =>
-  Option.match(operation, { onNone: () => recordedLibrary(state), onSome: ({ before }) => before });
-
-/** Save `operation` in place of the record of the same id, or after the others. */
-const saveOperation = Effect.fn("Library.setup.saveOperation")(function* (
-  base: LibraryState,
-  operation: OperationStatus,
-) {
-  const writer = yield* LibraryWriter;
-  const encoded = yield* encodeOperation(operation);
-  const others = base.operations.filter((other) => other.operationId !== operation.operationId);
-  const index = base.operations.findIndex((other) => other.operationId === operation.operationId);
-  const operations =
-    index < 0 ? [...others, encoded] : [...others.slice(0, index), encoded, ...others.slice(index)];
-  yield* writer.save({ ...base, operations }, base);
-});
-
 type StepOutcome =
   | {
       readonly _tag: "Ran";
@@ -425,18 +396,10 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
   const completed: SetupStepResult[] = [];
   const stop = (reason: SetupStopReason) =>
     Effect.gen(function* () {
-      const current = yield* loadLibrary(home);
-      const operation = yield* operationIn(current, operationId);
-      yield* saveOperation(
-        current,
-        OperationStatus.cases.Stopped.make({
-          operationId,
-          steps: stepsOf(operation),
-          reason,
-          before: beforeOf(operation, current),
-          after: recordedLibrary(current),
-        }),
-      );
+      const operation = yield* loadOperation(home, operationId);
+      if (Option.isNone(operation) || operation.value._tag !== "Pending")
+        return yield* new LibraryChanged({ path: libraryStatePath(home) });
+      yield* (yield* LibraryWriter).settleOperation(operation.value, reason);
     }).pipe(
       // Unsaved, the record stays Pending and the next run finds it.
       Effect.catch((error) =>
@@ -453,9 +416,7 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
   const failed = (step: number) => (error: unknown) =>
     stop({ _tag: "StepFailed", step, error: stepError(error) });
 
-  const loaded = yield* Effect.result(
-    Effect.flatMap(loadLibrary(home), (state) => operationIn(state, operationId)),
-  );
+  const loaded = yield* Effect.result(loadOperation(home, operationId));
   if (loaded._tag === "Failure") return yield* failed(0)(loaded.failure);
   if (Option.isNone(loaded.success) || loaded.success.value._tag !== "Pending")
     return yield* stop({
@@ -495,10 +456,9 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
         : failed(0)(error);
     }
     if (!pending.preparation.done) {
+      const before = pending;
       pending = { ...pending, ...prepared.success };
-      const saved = yield* Effect.result(
-        Effect.flatMap(loadLibrary(home), (current) => saveOperation(current, pending)),
-      );
+      const saved = yield* Effect.result((yield* LibraryWriter).saveOperation(pending, before));
       if (saved._tag === "Failure") return yield* failed(0)(saved.failure);
     }
   }
@@ -507,9 +467,7 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
   for (const [index, { status }] of recorded.entries()) {
     if (status === "Done") continue;
     // The record as saved now: an earlier step's Done write may have added this step's evidence.
-    const current = yield* Effect.result(
-      Effect.flatMap(loadLibrary(home), (state) => operationIn(state, operationId)),
-    );
+    const current = yield* Effect.result(loadOperation(home, operationId));
     if (current._tag === "Failure") return yield* failed(index)(current.failure);
     const steps =
       Option.isSome(current.success) && current.success.value._tag === "Pending"
@@ -523,15 +481,15 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
       return yield* stop(outcome.success.reason);
     }
     const { result, after } = outcome.success;
-    // Mark the step Done in the state as it is now: the step itself may have saved it.
+    // Mark the step Done in the record as it is now: the step itself may have saved it.
     const marked = yield* Effect.result(
       Effect.gen(function* () {
-        const current = yield* loadLibrary(home);
-        const operation = yield* operationIn(current, operationId);
-        if (Option.isNone(operation) || operation.value._tag !== "Pending")
-          return Option.some(snapshotOf({ present: true, state: current }).revision);
-        yield* saveOperation(
-          current,
+        const operation = yield* loadOperation(home, operationId);
+        if (Option.isNone(operation) || operation.value._tag !== "Pending") {
+          const current = yield* inspectLocalLibraryState(home);
+          return Option.some(snapshotOf(current).revision);
+        }
+        yield* (yield* LibraryWriter).saveOperation(
           OperationStatus.cases.Pending.make({
             ...operation.value,
             operationId,
@@ -545,6 +503,7 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
                   : saved,
             ),
           }),
+          operation.value,
         );
         return Option.none();
       }),
@@ -556,17 +515,10 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
   }
   const finished = yield* Effect.result(
     Effect.gen(function* () {
-      const current = yield* loadLibrary(home);
-      const operation = yield* operationIn(current, operationId);
-      yield* saveOperation(
-        current,
-        OperationStatus.cases.Done.make({
-          operationId,
-          steps: stepsOf(operation),
-          before: beforeOf(operation, current),
-          after: recordedLibrary(current),
-        }),
-      );
+      const operation = yield* loadOperation(home, operationId);
+      if (Option.isNone(operation) || operation.value._tag !== "Pending")
+        return yield* new LibraryChanged({ path: libraryStatePath(home) });
+      yield* (yield* LibraryWriter).settleOperation(operation.value);
     }),
   );
   if (finished._tag === "Failure") return yield* failed(recorded.length - 1)(finished.failure);
@@ -595,7 +547,9 @@ export const setupOperation = Effect.fn("Library.setupOperation")(function* (
   options: {
     readonly base: Snapshot;
     readonly operationId: OperationId;
+    readonly kind?: OperationKind;
     readonly replaceDone?: boolean;
+    readonly machineChoices?: import("../../store/state-schema.js").SetupRecord["machineChoices"];
   },
 ) {
   const writer = yield* LibraryWriter;
@@ -611,55 +565,59 @@ export const setupOperation = Effect.fn("Library.setupOperation")(function* (
     });
   const state = inspected.present ? inspected.state : emptyLibraryState();
   const operationId = options.operationId;
-  if (state.operations.some((operation) => operation.operationId === operationId))
-    return yield* new StalePlan({ reason: { _tag: "OperationAlreadyRecorded" } });
   const preparation = yield* recordPreparation(steps);
-  const pending = yield* encodeOperation(
-    OperationStatus.cases.Pending.make({
-      operationId,
-      ...(preparation === undefined ? {} : { preparation }),
-      steps: yield* Effect.forEach(steps, recordedStep),
-      before: recordedLibrary(state),
-    }),
-  ).pipe(
+  const pending = yield* OperationStatus.cases.Pending.makeEffect({
+    operationId,
+    ...(preparation === undefined ? {} : { preparation }),
+    steps: yield* Effect.forEach(steps, recordedStep),
+    before:
+      (options.kind ?? "setup") === "setup"
+        ? { installedSkills: structuredClone(state.installed_skills) }
+        : recordedLibrary(state),
+    ...((options.kind ?? "setup") === "setup"
+      ? {
+          setup: {
+            changes: yield* prepareSetupChanges(
+              setupIntent(state),
+              setupIntent(state),
+              libraryStatePath(writer.home),
+            ),
+            ...(options.machineChoices === undefined
+              ? {}
+              : { machineChoices: options.machineChoices }),
+          },
+        }
+      : {}),
+  }).pipe(
     Effect.mapError(
-      () =>
+      (failure) =>
         new InvalidLibraryState({
           path: libraryStatePath(writer.home),
-          reason: { _tag: "InvalidData" },
+          reason: { _tag: "SchemaInvalid", failure: new Schema.SchemaError(failure) },
         }),
     ),
   );
   yield* writer
-    .save(
-      {
-        ...state,
-        operations: [
-          ...state.operations.filter(
-            (operation) => !options.replaceDone || operation._tag !== "Done",
-          ),
-          pending,
-        ],
-      },
-      state,
-    )
+    .recordOperation(pending, options.base, options.kind ?? "setup", options.replaceDone ?? false)
     .pipe(
       Effect.catchTag("LibraryChanged", () =>
         Effect.fail(
-          new StalePlan({
-            reason: { _tag: "LibraryChanged" },
-            expected: options.base.revision,
-          }),
+          new StalePlan({ reason: { _tag: "LibraryChanged" }, expected: options.base.revision }),
         ),
       ),
     );
-  return yield* runOperation(operationId);
+  return yield* runOperation(operationId).pipe(
+    Effect.provideService(CurrentSetupOperation, operationId),
+  );
 });
 
 /** Public setup allocates its operation; standalone plans allocate one before their preview. */
 export const setup = Effect.fn("Library.setup")(function* (
   steps: readonly SetupStep[],
-  options: { readonly base: Snapshot },
+  options: {
+    readonly base: Snapshot;
+    readonly machineChoices?: import("../../store/state-schema.js").SetupRecord["machineChoices"];
+  },
 ) {
   return yield* setupOperation(steps, {
     ...options,
@@ -695,7 +653,7 @@ export const applyRecorded = Effect.fn("Library.applyRecorded")(function* (
   const prepared = yield* prepareApply(home, plan, routing);
   if (prepared.noop) {
     const copies = copiesOf(prepared.step);
-    return applyOutcome(
+    return yield* applyOutcome(
       prepared.step,
       prepared.snapshot._tag === "Present" ? prepared.snapshot.state : emptyLibraryState(),
       { _tag: "Applied", results: [], copies },
@@ -704,6 +662,7 @@ export const applyRecorded = Effect.fn("Library.applyRecorded")(function* (
   const result = yield* setupOperation([prepared.step], {
     base: prepared.snapshot,
     operationId: makeOperationId(),
+    kind: "apply",
   });
   const steps = result._tag === "Done" ? result.steps : result.completed;
   const applied = steps.find((step) => step._tag === "Apply");
@@ -711,7 +670,7 @@ export const applyRecorded = Effect.fn("Library.applyRecorded")(function* (
     return yield* new InstalledSkillInvalid({
       reason: { _tag: "ApplyStopped" },
     });
-  const outcome = applyOutcome(prepared.step, yield* loadLibrary(home), applied.outcome);
+  const outcome = yield* applyOutcome(prepared.step, yield* loadLibrary(home), applied.outcome);
   // A durable attempt is not saved enablement. Fail normally if root preparation stopped
   // before any requested enablement was accepted; the stopped operation remains inspectable.
   if (
@@ -723,12 +682,10 @@ export const applyRecorded = Effect.fn("Library.applyRecorded")(function* (
 }, Effect.scoped);
 
 type StoppedOperation = Extract<OperationStatus, { readonly _tag: "Stopped" }>;
-/** Installed-change batches are private recovery state, not part of startup's operation report. */
-type StartupStoppedOperation = {
-  readonly [K in keyof StoppedOperation]: K extends "steps"
-    ? readonly Omit<RecordedSetupStep, "applies">[]
-    : StoppedOperation[K];
-};
+type StartupStoppedOperation = Extract<
+  import("../../store/state-schema.js").OperationSummary,
+  { readonly _tag: "Stopped" }
+>;
 
 /** What startup recovery did with the operations it found unfinished. */
 export interface StartupRecovery {
@@ -741,32 +698,15 @@ export interface StartupRecovery {
 /**
  * Resume every Pending operation, as after a crash: a step whose effect is complete is skipped,
  * one still as recorded runs, and anything else stops its operation. Never rolls back. Reads
- * `state.json` without the lock first, and takes it only when an operation is Pending. Setups
- * interrupted before operations were recorded in `state.json` are not resumed.
+ * the operation rows without the lock first, and takes it only when an operation is Pending. Setups
+ * interrupted before operations were recorded in the Library store are not resumed.
  */
 export const recover = Effect.fn("Library.recover")(function* (home: string) {
-  const operations = Effect.flatMap(inspectLocalLibraryState(home), (inspected) =>
-    inspected.present
-      ? decodeOperations(inspected.state).pipe(
-          Effect.mapError(
-            () =>
-              new InvalidLibraryState({
-                path: libraryStatePath(home),
-                reason: { _tag: "InvalidData" },
-              }),
-          ),
-        )
-      : Effect.succeed([]),
-  );
-  // A state.json the store cannot read is left for reads to refuse, as they always have.
+  const operations = loadOperations(home);
+  // Unreadable store data is left for ordinary reads to refuse.
   const found = yield* operations.pipe(
     Effect.catchTag("InvalidLibraryState", () => Effect.succeed([])),
   );
-  const reportStopped = (stopped: readonly StoppedOperation[]) =>
-    stopped.map(({ steps, ...operation }) => ({
-      ...operation,
-      steps: steps.map(({ applies: _applies, ...step }) => step),
-    }));
   if (!found.some((operation) => operation._tag === "Pending"))
     return { finished: [], stopped: [] } satisfies StartupRecovery;
   return yield* withHomeLock(
@@ -776,17 +716,23 @@ export const recover = Effect.fn("Library.recover")(function* (home: string) {
       const stopped: StoppedOperation[] = [];
       for (const operation of yield* operations) {
         if (operation._tag !== "Pending") continue;
-        const result = yield* writeLibrary(home, runOperation(operation.operationId), {
-          resume: operation.operationId,
-        });
+        const result = yield* writeLibrary(
+          home,
+          runOperation(operation.operationId).pipe(
+            Effect.provideService(CurrentSetupOperation, operation.operationId),
+          ),
+          {
+            resume: operation.operationId,
+          },
+        );
         if (result._tag === "Done") {
           finished.push(operation.operationId);
           continue;
         }
         // As recorded; a stop that could not be saved still reports its steps and reason.
-        const saved = yield* Effect.flatMap(loadLibrary(home), (state) =>
-          operationIn(state, operation.operationId),
-        ).pipe(Effect.orElseSucceed(() => Option.none<OperationStatus>()));
+        const saved = yield* loadOperation(home, operation.operationId).pipe(
+          Effect.orElseSucceed(() => Option.none<OperationStatus>()),
+        );
         stopped.push(
           Option.isSome(saved) && saved.value._tag === "Stopped"
             ? saved.value
@@ -796,12 +742,13 @@ export const recover = Effect.fn("Library.recover")(function* (home: string) {
                 reason: result.reason,
                 before: operation.before,
                 after: operation.before,
+                ...(operation.setup === undefined ? {} : { setup: operation.setup }),
               }),
         );
       }
       return {
         finished,
-        stopped: reportStopped(stopped),
+        stopped: stopped.map((operation) => operationSummary(operation)),
       } satisfies StartupRecovery;
     }),
   );

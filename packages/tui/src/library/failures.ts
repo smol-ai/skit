@@ -54,6 +54,7 @@ import { AuthorFailure } from "@smolai/skit-core/author/failures";
 import { authorFailure } from "./author-failures";
 import { HomeBusy } from "@smolai/skit-core/platform";
 import {
+  LibrarySqlError,
   InvalidLibraryState,
   InvalidLibraryStateReason,
   LibrarySubjectNotFound,
@@ -63,15 +64,36 @@ import { errorMessage } from "@smolai/skit-core/shared";
 import { Match, Schema } from "effect";
 import { invocationFailure, treeFailure } from "./invocation-failure";
 
-const LibraryReadFailure = Schema.Union([HomeBusy, InvalidLibraryState, LibrarySubjectNotFound]);
+const LibraryReadFailure = Schema.Union([
+  HomeBusy,
+  LibrarySqlError,
+  InvalidLibraryState,
+  LibrarySubjectNotFound,
+]);
 const readFailure = Match.type<typeof LibraryReadFailure.Type>().pipe(
   Match.tagsExhaustive({
-    HomeBusy: ({ path }) =>
-      `Another running SKIT process holds the home writer lock at ${path}. Wait for it to finish, then retry.`,
+    HomeBusy: ({ path, owner }) =>
+      owner === undefined
+        ? `Another running SKIT process holds the home writer lock at ${path}. Wait for it to finish, then retry.`
+        : `Legacy Library lock at ${path} is owned by ${owner.trim()}. Confirm that owner has stopped before removing the lock.`,
     "Library.SubjectNotFound": ({ query }) =>
       `No Skill or Collection in the Library matches ${query}`,
+    LibrarySqlError: ({ path, cause }) =>
+      `Cannot access Library database at ${path}: ${errorMessage(cause)}`,
     InvalidLibraryState: ({ path, reason }) =>
       `Invalid Library state at ${path}: ${InvalidLibraryStateReason.match(reason, {
+        LegacySourceChanged: ({ sourcePath, backupPath, databasePath }) =>
+          `legacy file ${sourcePath} changed after import into ${databasePath}; original backup: ${backupPath ?? "source was absent"}`,
+        LegacyStateBesideDatabase: ({ statePath, databasePath }) =>
+          `database ${databasePath} is authoritative. Move ${statePath} aside before retrying`,
+        ImportBackupChanged: ({ sourcePath, backupPath, databasePath }) =>
+          `backup ${backupPath} differs from source ${sourcePath} while preparing ${databasePath}`,
+        NewerDatabaseMigration: ({ databasePath, migration, supported }) =>
+          `database ${databasePath} has migration ${migration}; this build supports through ${supported}. Use a build that supports this migration; keep the database intact`,
+        OperationStateMissing: ({ databasePath }) =>
+          `operation records in ${databasePath} have no current Library state. Preserve the entire Library home, including any database -wal/-shm files, and restore a verified complete backup`,
+        DatabaseIntegrityInvalid: ({ databasePath, result }) =>
+          `database integrity check failed at ${databasePath}: ${result.join(", ")}. Preserve the entire Library home, including any database -wal/-shm files, and restore a verified complete backup`,
         SchemaInvalid: ({ failure }) => schemaFailure(failure),
         ArchiveInvalid: ({ failure }) => collectionVersionArchiveFailure(failure).message,
         InvalidData: ({ issue, tree }) =>

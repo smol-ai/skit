@@ -1,44 +1,79 @@
-import { LibraryRecoveryNotice } from "../recovery-notice.js";
-import type { HistoryAction } from "./history-delivery.js";
+import { saveInventory, type InventoryState } from "./inventory.js";
+import { saveSyncAncestry, type SyncAcceptance } from "./sync-ancestry.js";
+import { saveAcceptance } from "./acceptance.js";
+import type { SkillAssessmentAcceptance } from "../assessment-acceptance.js";
+import { saveCatalogue, type Catalogue } from "./catalogue.js";
+import { saveEnabled, type EnabledState } from "./enabled.js";
+import type { InstalledSkill } from "../device-state.js";
+import { loadLibraryRevision, saveInstalledSkill } from "./installed.js";
+import type { Unusable } from "../machine-settings-failures.js";
+import type { StalePlan } from "../plan-failures.js";
+import {
+  saveSetupUndo,
+  recordOperation,
+  saveOperation,
+  settleOperation,
+  type PendingOperation,
+  type OperationPublication,
+} from "./operations.js";
+import type { OperationKind, SetupStopReason } from "./state-schema.js";
+import type { Snapshot } from "../snapshot.js";
+import type { LibraryAuditInvalid } from "../audit/failures.js";
+import type { HistoryAction } from "./history-action.js";
 import type { OperationId } from "../entity-ids.js";
 import { Context, Effect, FileSystem, Option, References } from "effect";
+import { Digest } from "effect/crypto";
 import type { PlatformError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
-import type { InvalidLibraryState, LibraryChanged } from "../failures.js";
+import type { InvalidLibraryState, LibraryChanged, LibrarySqlError } from "../failures.js";
 import type { HomeBusy } from "../../platform/lock-failures.js";
 import { emptyLibraryState, type LibraryState } from "../library-state.js";
-import {
-  inspectLocalLibraryState,
-  saveLibraryState,
-  libraryHistoryAction,
-  deliverLibraryHistory,
-} from "./state-file.js";
+import { inspectLocalLibraryState, saveLibraryState, libraryHistoryAction } from "./state-file.js";
 import { withLock as withHomeLock } from "../../platform/home-lock.js";
 
-// Reads and the one-time migration go through here too: only this module touches state-file.
+// Compatibility reads and the one-time import are exposed here; relational owners read their own tables.
 export {
   inspectLocalLibraryState,
   migrateLocalLibraryState,
   type InspectedLibraryState,
 } from "./state-file.js";
 
-export type LibraryStateReadError = PlatformError | InvalidLibraryState;
+export {
+  loadOperations,
+  loadOperation,
+  operationSummary,
+  loadOperationHistory,
+} from "./operations.js";
+
+export type LibraryStateReadError =
+  | PlatformError
+  | InvalidLibraryState
+  | LibrarySqlError
+  | HomeBusy;
 /** Opening a Library migrates a legacy state.json under the home lock: `HomeBusy` if held elsewhere. */
-export type LibraryLayerError = PlatformError | InvalidLibraryState | HomeBusy;
+export type LibraryLayerError =
+  | LibrarySqlError
+  | Unusable
+  | PlatformError
+  | InvalidLibraryState
+  | LibraryAuditInvalid
+  | HomeBusy;
 export type LibraryStateWriteError =
+  | LibraryAuditInvalid
+  | LibrarySqlError
+  | Unusable
   | PlatformError
   | InvalidLibraryState
   | HomeBusy
   | LibraryChanged;
 
-export const libraryStatePath = (home: string) => join(resolve(home), "state.json");
+export const libraryStatePath = (home: string) => join(resolve(home), "library.sqlite");
 export const libraryOriginalsPath = (home: string) => join(resolve(home), "originals");
 export const libraryVariantsPath = (home: string) => join(resolve(home), "variants");
 
 /**
  * The current state; a Library that has never been written reads as an empty one. A read never
- * writes: the Library layer migrated a legacy file when it was built, and a read refuses any
- * state.json that is not the current version.
+ * writes: the Library layer migrated legacy files when it was built.
  */
 export const loadLibrary = Effect.fn("Library.load")(function* (home: string) {
   const inspected = yield* inspectLocalLibraryState(home);
@@ -46,20 +81,72 @@ export const loadLibrary = Effect.fn("Library.load")(function* (home: string) {
 });
 
 /**
- * The one way to change `state.json`: present only inside `writeLibrary`, which holds the home
+ * The one way to change Library data: present only inside `writeLibrary`, which holds the home
  * lock. Code that saves requires it, so its type says it writes.
  */
 export class LibraryWriter extends Context.Service<
   LibraryWriter,
   {
     readonly home: string;
+    readonly revision: Effect.Effect<number, LibraryStateWriteError>;
+    readonly saveSyncAncestry: (
+      request: SyncAcceptance,
+    ) => Effect.Effect<void, Effect.Error<ReturnType<typeof saveSyncAncestry>>>;
+    readonly saveInventory: (
+      next: InventoryState,
+      base: InventoryState,
+      revision: number | null,
+    ) => Effect.Effect<number, LibraryStateWriteError>;
+    readonly saveAcceptance: (
+      acceptance: SkillAssessmentAcceptance,
+      revision: number,
+    ) => Effect.Effect<number, LibraryStateWriteError>;
+    readonly saveCatalogue: (
+      next: Catalogue,
+      base: Catalogue,
+      revision: number | null,
+    ) => Effect.Effect<number | null, LibraryStateWriteError>;
+    readonly saveEnabled: (
+      next: EnabledState,
+      base: EnabledState,
+      revision: number,
+    ) => Effect.Effect<number, LibraryStateWriteError>;
+    readonly saveInstalledSkill: (
+      next: InstalledSkill | undefined,
+      base: InstalledSkill | undefined,
+      revision: number,
+    ) => Effect.Effect<number, LibraryStateWriteError>;
+    readonly recordOperation: (
+      operation: PendingOperation,
+      base: Snapshot,
+      kind: OperationKind,
+      replaceDone?: boolean,
+    ) => Effect.Effect<void, LibraryStateWriteError | StalePlan>;
+    readonly saveOperation: (
+      next: PendingOperation,
+      base: PendingOperation,
+      state?: OperationPublication,
+    ) => Effect.Effect<void, LibraryStateWriteError>;
+    readonly settleOperation: (
+      base: PendingOperation,
+      reason?: SetupStopReason,
+    ) => Effect.Effect<void, LibraryStateWriteError>;
+    /** Save the inverse's domain rows, discovery and target status at the captured revision. */
+    readonly saveUndo: (
+      program: import("./state-schema.js").UndoProgram,
+      next: LibraryState,
+      base: LibraryState,
+      revision: number,
+    ) => Effect.Effect<void, LibraryStateWriteError>;
     /**
-     * Replace `base`, a state this caller loaded, with `next`. Fails with `LibraryChanged` and
-     * saves nothing when the Library is no longer `base`.
+     * Replace `base`, a state this caller loaded, with `next`. An initialized boundary supplies
+     * the revision from that same read, never a later counter. Without it, the legacy document/
+     * import path verifies the stored body. A stale base saves nothing.
      */
     readonly save: (
       next: LibraryState,
       base: LibraryState,
+      revision?: number,
     ) => Effect.Effect<void, LibraryStateWriteError>;
   }
 >()("skit/library/LibraryWriter") {}
@@ -71,51 +158,8 @@ const historyWorkflow = Effect.map(References.CurrentLogAnnotations, (annotation
 });
 
 /**
- * Expected delivery failures are best-effort: the durable queue retains their events for retry.
- * Defects and interruption still escape, including from the post-write finalizer. Such an exit
- * does not undo a published Library state; recovery can deliver its recorded event on the next healthy open.
- */
-export const recoverLibraryHistory = (home: string, actionId?: OperationId) =>
-  deliverLibraryHistory(home, actionId).pipe(
-    Effect.catchTags({
-      PlatformError: (error) =>
-        Effect.logWarning(
-          LibraryRecoveryNotice.cases.HistoryDeliveryPending.make({
-            home,
-            ...(actionId === undefined ? {} : { actionId }),
-            failure: error,
-          }),
-        ),
-      InvalidLibraryState: (error) =>
-        Effect.logWarning(
-          LibraryRecoveryNotice.cases.HistoryDeliveryPending.make({
-            home,
-            ...(actionId === undefined ? {} : { actionId }),
-            failure: error,
-          }),
-        ),
-      LibraryAuditInvalid: (error) =>
-        Effect.logWarning(
-          LibraryRecoveryNotice.cases.HistoryDeliveryPending.make({
-            home,
-            ...(actionId === undefined ? {} : { actionId }),
-            failure: error,
-          }),
-        ),
-      HomeBusy: (error) =>
-        Effect.logWarning(
-          LibraryRecoveryNotice.cases.HistoryDeliveryPending.make({
-            home,
-            ...(actionId === undefined ? {} : { actionId }),
-            failure: error,
-          }),
-        ),
-    }),
-  );
-
-/**
  * Run `program` holding the home lock, with a `LibraryWriter` for `home`. Every change saved under
- * it is recorded as one history event when it ends, on success and failure alike, because a
+ * it accumulates in one event in the same transaction as each accepted save, because a
  * workflow that commits in stages can fail after changing the Library. Inside another write to the
  * same Library it joins that write, so one action is one event however many workflows it composes.
  * A save from a fiber that outlives the write records its own event.
@@ -131,42 +175,64 @@ export const writeLibrary = <A, E, R>(
     if (Option.isSome(outer) && outer.value.home === root && options.resume === undefined)
       return yield* program.pipe(Effect.provideService(LibraryWriter, outer.value));
     const fs = yield* FileSystem.FileSystem;
+    const digest = yield* Digest.Digest;
     let live = true;
-    let currentAction: HistoryAction | undefined;
     return yield* withHomeLock(
       root,
       Effect.gen(function* () {
         const action = yield* libraryHistoryAction(root, yield* historyWorkflow, options.resume);
-        currentAction = action;
+        // A late mutation gets a new action and home lease, including operation progress.
+        const write = <A, E>(
+          mutation: (
+            action: HistoryAction,
+          ) => Effect.Effect<A, E, FileSystem.FileSystem | Digest.Digest>,
+        ) =>
+          Effect.gen(function* () {
+            if (live) return yield* mutation(action);
+            return yield* withHomeLock(
+              root,
+              Effect.gen(function* () {
+                return yield* mutation(yield* libraryHistoryAction(root, yield* historyWorkflow));
+              }),
+            );
+          }).pipe(
+            Effect.provideService(FileSystem.FileSystem, fs),
+            Effect.provideService(Digest.Digest, digest),
+          );
         const writer = LibraryWriter.of({
           home: root,
-          save: Effect.fn("Library.save")(
-            function* (next: LibraryState, base: LibraryState) {
-              if (live) return yield* saveLibraryState(root, next, base, action);
-              // An escaped writer cannot extend an action that already delivered its event.
-              let late: HistoryAction | undefined;
-              yield* withHomeLock(
-                root,
-                Effect.gen(function* () {
-                  late = yield* libraryHistoryAction(root, yield* historyWorkflow);
-                  yield* saveLibraryState(root, next, base, late);
-                }),
-              ).pipe(
-                Effect.onExit(() =>
-                  late ? recoverLibraryHistory(root, late.eventId) : Effect.void,
-                ),
-              );
-            },
+          revision: loadLibraryRevision(root).pipe(
             Effect.provideService(FileSystem.FileSystem, fs),
           ),
+          saveSyncAncestry: (request) => write(() => saveSyncAncestry(root, request)),
+          saveInventory: (next, base, revision) =>
+            write((action) => saveInventory(root, next, base, revision, action)),
+          saveAcceptance: (acceptance, revision) =>
+            write((action) => saveAcceptance(root, acceptance, revision, action)),
+          saveCatalogue: (next, base, revision) =>
+            write((action) => saveCatalogue(root, next, base, revision, action)),
+          saveEnabled: (next, base, revision) =>
+            write((action) => saveEnabled(root, next, base, revision, action)),
+          saveInstalledSkill: (next, base, revision) =>
+            write((action) => saveInstalledSkill(root, next, base, revision, action)),
+          saveUndo: (program, next, base, revision) =>
+            write((action) => saveSetupUndo(root, program, next, base, action, revision)),
+          save: (next, base, revision) =>
+            write((action) => saveLibraryState(root, next, base, action, revision)),
+          recordOperation: (operation, base, kind, replaceDone = false) =>
+            write((action) => recordOperation(root, operation, base, kind, action, replaceDone)),
+          saveOperation: (next, base, state) =>
+            write((action) => saveOperation(root, next, base, action, state)),
+          settleOperation: (base, reason) =>
+            write((action) => settleOperation(root, base, action, reason)),
         });
         return yield* program.pipe(Effect.provideService(LibraryWriter, writer));
       }),
     ).pipe(
-      Effect.onExit(() => {
-        // withHomeLock has drained the save leases, so the whole action's draft is now final.
-        live = false;
-        return currentAction ? recoverLibraryHistory(root, currentAction.eventId) : Effect.void;
-      }),
+      Effect.onExit(() =>
+        Effect.sync(() => {
+          live = false;
+        }),
+      ),
     );
   });

@@ -17,7 +17,7 @@ describe("skit author sync", () => {
           "removed",
           "directory-removed",
           "published",
-          "checkpoint",
+          "before-checkpoint",
           "edited",
           "EXDEV",
         ] as const) {
@@ -88,11 +88,13 @@ describe("skit author sync", () => {
                           yield* stop("published");
                         }
                       }),
-                    rename: (from, to) =>
+                    open: (path, options) =>
                       Effect.gen(function* () {
-                        if (published && to === join(world.a.home, "author-sync.json"))
-                          yield* stop("checkpoint");
-                        yield* fs.rename(from, to);
+                        // The final workspace flush follows all links and precedes the SQLite
+                        // checkpoint. No author-sync.json rename occurs on this path.
+                        if (published && path === world.a.workspace)
+                          yield* stop("before-checkpoint");
+                        return yield* fs.open(path, options);
                       }),
                   }),
                   Effect.provideService(LinkStat, {

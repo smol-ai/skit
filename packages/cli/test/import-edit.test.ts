@@ -13,7 +13,7 @@ import {
   libraryHome,
   writingTo,
 } from "./helpers/library-home.js";
-import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
+
 import { isolatedRoots } from "./helpers/isolated-library.js";
 
 const installedSkillFixture = Effect.gen(function* () {
@@ -62,7 +62,7 @@ const installedSkillFixture = Effect.gen(function* () {
     (candidate) => candidate.collection_id === collection.collection?.collection_id,
   );
   assert.ok(skill);
-  yield* library.writeDurable({ ...initial, enabled: [{ skill: skill.skill_id }] });
+  yield* library.enable([{ skill: skill.skill_id }]);
   const rootByTarget = { agents: roots.codexRoot, claude: roots.claudeRoot } as const;
   for (const target of ["agents", "claude"] as const)
     yield* writingTo(
@@ -107,11 +107,13 @@ describe("skit update", () => {
             assert.strictEqual(before.skills[0]?.versions.length, 1);
             assert.strictEqual(yield* fs.exists(plan.original_path), false);
 
-            const auditPath = join(home, "audit.jsonl");
-            const beforeEvents = (yield* fs.readFileString(auditPath)).trim().split("\n").length;
+            const beforeEvents = (yield* library.owned(
+              Effect.flatMap(Library.Service, (owner) => owner.history),
+            )).events.length;
             const result = yield* prepared.apply().pipe(Effect.provide(configuration));
             assert.strictEqual(
-              (yield* fs.readFileString(auditPath)).trim().split("\n").length,
+              (yield* library.owned(Effect.flatMap(Library.Service, (owner) => owner.history)))
+                .events.length,
               beforeEvents + 1,
             );
             assert.deepStrictEqual(
@@ -181,14 +183,9 @@ describe("skit update", () => {
             const otherHome = join(f.workspace, "other-library");
             const applicationLayer = f.configuration;
             if (change === "Library") {
-              const state = yield* f.library.durable;
-              yield* f.library.writeDurable({
-                ...state,
-                collections: state.collections.map((collection) => ({
-                  ...collection,
-                  label: "renamed",
-                })),
-              });
+              yield* f.library.owned(
+                Effect.flatMap(Library.Service, (library) => library.inventory.refresh),
+              );
             } else {
               const root = change === "selected" ? f.roots.codexRoot : f.roots.claudeRoot;
               yield* f.fs.writeFileString(
@@ -196,15 +193,16 @@ describe("skit update", () => {
                 "changed after preparation\n",
               );
             }
-            const before = yield* captureDisk(
-              [f.home, otherHome, f.roots.codexRoot, f.roots.claudeRoot],
-              { identity: true },
-            );
+            const before = yield* f.library.unchanged([
+              otherHome,
+              f.roots.codexRoot,
+              f.roots.claudeRoot,
+            ]);
             const failure = yield* Effect.flip(
               prepared.apply().pipe(Effect.provide(applicationLayer)),
             );
             assert.strictEqual(failure._tag, "Library.StalePlan");
-            yield* assertDiskUnchanged(before);
+            yield* before.check;
             const state = yield* f.library.durable;
             assert.strictEqual(state.skills[0]?.versions.length, 1);
           }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -217,13 +215,11 @@ describe("skit update", () => {
             join(f.roots.claudeRoot, "review", "SKILL.md"),
             "selected change\n",
           );
-          const before = yield* captureDisk([f.home, f.roots.codexRoot, f.roots.claudeRoot], {
-            identity: true,
-          });
+          const before = yield* f.library.unchanged([f.roots.codexRoot, f.roots.claudeRoot]);
           const prepared = yield* Effect.flatMap(Library.Service, (library) =>
             library.edit(f.skill.name, join(f.roots.codexRoot, "review")),
           ).pipe(Effect.provide(f.configuration));
-          yield* assertDiskUnchanged(before);
+          yield* before.check;
           assert.deepStrictEqual(
             prepared.preview.installed_skills.map((item) => item.agreement),
             ["selected", "identical"],

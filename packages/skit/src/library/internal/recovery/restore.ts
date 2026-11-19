@@ -59,6 +59,7 @@ export const applyRestore = (home: string, plan: RestorePlan) =>
         const result = yield* setupOperation([{ _tag: "Restore", program: again.program }], {
           base,
           operationId: makeOperationId(),
+          kind: "restore",
         });
         if (result._tag === "Stopped")
           return yield* new RecoveryInvalid({

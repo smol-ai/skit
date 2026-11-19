@@ -1,3 +1,4 @@
+import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { describe } from "@effect/vitest";
 import { recoveryList } from "./helpers/recovery.js";
 import * as Library from "@smolai/skit-core/library";
@@ -245,10 +246,24 @@ describe("skit setup", () => {
             const f = yield* fixture();
             const other = join(f.claude, "review");
             const state = yield* f.home.durable;
-            yield* f.home.writeDurable({
-              ...state,
-              installed_skills: state.installed_skills.filter((copy) => copy.path !== other),
-            });
+            const displaced = `${other}.saved`;
+            yield* f.fs.rename(other, displaced);
+            const row = state.installed_skills.find((copy) => copy.path === other)!;
+            yield* f.home.owned(
+              Effect.gen(function* () {
+                const owner = yield* Library.Service;
+                const plan = yield* owner.plan(
+                  {
+                    _tag: "Uninstall",
+                    copies: [row.installed_skill_id],
+                    drop: [row.installed_skill_id],
+                  },
+                  { base: yield* owner.read },
+                );
+                yield* owner.apply({ _tag: "Apply", plan });
+              }),
+            );
+            yield* f.fs.rename(displaced, other);
             yield* f.fs.remove(join(other, ".skit-ownership.json"));
             const markerPath = join(f.copy, ".skit-ownership.json");
             const marker = JSON.parse(yield* f.fs.readFileString(markerPath));
@@ -462,10 +477,21 @@ describe("skit setup", () => {
           // The Library wants this copy, but has never installed it here.
           yield* f.fs.remove(f.copy, { recursive: true });
           const state = yield* f.home.durable;
-          yield* f.home.writeDurable({
-            ...state,
-            installed_skills: state.installed_skills.filter((copy) => copy.path !== f.copy),
-          });
+          const row = state.installed_skills.find((copy) => copy.path === f.copy)!;
+          yield* f.home.owned(
+            Effect.gen(function* () {
+              const owner = yield* Library.Service;
+              const plan = yield* owner.plan(
+                {
+                  _tag: "Uninstall",
+                  copies: [row.installed_skill_id],
+                  drop: [row.installed_skill_id],
+                },
+                { base: yield* owner.read },
+              );
+              yield* owner.apply({ _tag: "Apply", plan });
+            }),
+          );
 
           const scan = yield* f.observe;
           const install = scan.changes?.find((fact) => fact.path === f.copy);
@@ -515,7 +541,7 @@ describe("skit setup", () => {
                 );
               const before = yield* f.home.durable;
               const stateBytes = yield* f.fs.readFileString(join(f.home.home, "state.json"));
-              const settingsBytes = yield* f.fs.readFileString(join(f.home.home, "machine.json"));
+              const settingsBytes = yield* MachineSettings.read(f.home.home);
               const installed = yield* f.fs.readFileString(join(f.copy, "SKILL.md"));
               const scan = yield* f.observe;
               const fact = scan.changes?.find((item) => item.path === f.copy);
@@ -532,9 +558,7 @@ describe("skit setup", () => {
               expect(fact?.metadataChanged).toBe(scenario === "equal-current-desired");
               expect(yield* f.home.durable).toEqual(before);
               expect(yield* f.fs.readFileString(join(f.home.home, "state.json"))).toBe(stateBytes);
-              expect(yield* f.fs.readFileString(join(f.home.home, "machine.json"))).toBe(
-                settingsBytes,
-              );
+              expect(yield* MachineSettings.read(f.home.home)).toEqual(settingsBytes);
               expect(yield* f.fs.readFileString(join(f.copy, "SKILL.md"))).toBe(installed);
               expect((yield* f.observe).onboarding.planId).toBe(scan.onboarding.planId);
             }).pipe(Effect.provide(skitLayer)),

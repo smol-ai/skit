@@ -1,7 +1,8 @@
+import type * as Library from "@smolai/skit-core/library";
 import { assert } from "@effect/vitest";
 import { Schema, SchemaAST } from "effect";
 import type { HttpClientRequest } from "effect/http";
-import type { LibraryFixtureState as LibraryState } from "./library-home.js";
+
 import {
   InvalidRequestResponse,
   LibraryManifest,
@@ -32,7 +33,7 @@ export type Fault =
   | {
       readonly _tag: "ChangeStateWhenHeadRead";
       readonly home: string;
-      readonly state: LibraryState;
+      readonly change: Library.Interface["inventory"]["refresh"];
     }
   /** A file occupies `path` right after `home` saves, so installing there fails. */
   | { readonly _tag: "ObstructAfterSave"; readonly home: string; readonly path: string }

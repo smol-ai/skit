@@ -1,17 +1,28 @@
+import { libraryStateRevision } from "../../library-state.js";
+import { prepareLibrarySide } from "../../store/difference.js";
+import {
+  libraryStatePath,
+  loadOperation,
+  LibraryWriter,
+  libraryOriginalsPath,
+  loadLibrary,
+  inspectLocalLibraryState,
+} from "../../store/library-store.js";
+import { Option, Effect, FileSystem } from "effect";
 import { basename, dirname, join, relative } from "node:path";
-import { Effect, FileSystem, Schema } from "effect";
+
 import { canonicalJson } from "../../../shared/json.js";
 import { copyLocalTree } from "../../../platform/copy-tree.js";
 import { LinkStat } from "../../../platform/link-stat.js";
 import { prepareInstalledSkillRebuild } from "../../installation/retained-skill.js";
 import { originalTreeHash } from "../../collection-version.js";
+import { readCollectionVersion } from "../content/read-collection-version.js";
 import { globalEnabled } from "../../enabled.js";
 import { holdsEvidence, parentIsAsRecorded, recoveryEntryPath } from "../../folder-evidence.js";
-import { LibraryState } from "../../library-state.js";
 import { StalePlan } from "../../library-plan.js";
 import { moveAside } from "./moves.js";
-import { LibraryWriter, libraryOriginalsPath, loadLibrary } from "../../store/library-store.js";
-import { OperationStatus, type UndoProgram } from "../../store/state-schema.js";
+
+import { type UndoProgram } from "../../store/state-schema.js";
 import type { OperationId } from "../../entity-ids.js";
 import { ensureRecoveryOperation } from "../recovery/moves.js";
 import { RecoveryInvalid } from "../../store/operation-failures.js";
@@ -32,12 +43,23 @@ export const runUndo = Effect.fn("Library.runUndo")(function* (
   const links = yield* LinkStat;
   const writer = yield* LibraryWriter;
   const home = writer.home;
+  const initial = yield* loadLibrary(home);
+  const beforeState = yield* prepareLibrarySide(
+    recorded.difference,
+    initial,
+    "before",
+    libraryStatePath(home),
+  ).pipe(Effect.mapError(() => new StalePlan({ reason: { _tag: "LibraryChanged" } })));
+  const afterState = yield* prepareLibrarySide(
+    recorded.difference,
+    initial,
+    "after",
+    libraryStatePath(home),
+  ).pipe(Effect.mapError(() => new StalePlan({ reason: { _tag: "LibraryChanged" } })));
   let program = recorded;
   const directory = join(home, "removed", program.backupId, "step-1");
   const save = Effect.fn("Library.saveUndoProgress")(function* (next: UndoProgram) {
-    const state = yield* loadLibrary(home);
-    const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(state.operations);
-    const operation = operations.find((item) => item.operationId === operationId);
+    const operation = Option.getOrUndefined(yield* loadOperation(home, operationId));
     if (operation?._tag !== "Pending" || operation.steps[index]?.step._tag !== "Undo")
       return yield* new StalePlan({ reason: { _tag: "OperationMissing", kind: "undo" } });
     const changed = {
@@ -46,24 +68,19 @@ export const runUndo = Effect.fn("Library.runUndo")(function* (
         at === index ? { ...step, step: { _tag: "Undo" as const, program: next } } : step,
       ),
     };
-    const encoded = yield* Schema.encodeEffect(OperationStatus)(changed);
-    yield* writer.save(
-      {
-        ...state,
-        operations: state.operations.map((item) =>
-          item.operationId === operationId ? encoded : item,
-        ),
-      },
-      state,
-    );
+    yield* writer.saveOperation(changed, operation);
     program = next;
   });
   const publication = Effect.fn("Library.checkUndoPublication")(function* () {
-    const state = yield* loadLibrary(home);
-    const { operations: _operations, ...body } = state;
-    if (!equal(body, program.before) && !equal(body, program.after))
+    const snapshot = yield* inspectLocalLibraryState(home);
+    if (!snapshot.present) return yield* new StalePlan({ reason: { _tag: "LibraryChanged" } });
+    const state = snapshot.state;
+    if (
+      libraryStateRevision(state) !== libraryStateRevision(beforeState) &&
+      libraryStateRevision(state) !== libraryStateRevision(afterState)
+    )
       return yield* new StalePlan({ reason: { _tag: "LibraryChanged" } });
-    return state;
+    return snapshot;
   });
   const isAfter = (action: UndoAction, actual: UndoPath) =>
     action.after !== undefined && equal(actual, action.after);
@@ -85,7 +102,13 @@ export const runUndo = Effect.fn("Library.runUndo")(function* (
   const check = Effect.fn("Library.checkUndoFiles")(function* () {
     yield* publication();
     for (const source of program.sourceImports)
-      if ((yield* originalTreeHash(source.path)) !== source.hash)
+      if (
+        (yield* Effect.scoped(
+          readCollectionVersion(libraryOriginalsPath(home), source.hash).pipe(
+            Effect.flatMap(originalTreeHash),
+          ),
+        )) !== source.hash
+      )
         return yield* new RecoveryInvalid({
           reason: { _tag: "ContentChanged", kind: "undo-source", path: source.path },
         });
@@ -203,12 +226,12 @@ export const runUndo = Effect.fn("Library.runUndo")(function* (
       const path = join(staging, basename(action.path));
       if (!(yield* fs.exists(path))) {
         if (action.transfer === "rebuild") {
-          const prior = program.after.installed_skills.find((item) => item.path === action.path);
+          const prior = afterState.installed_skills.find((item) => item.path === action.path);
           if (!prior)
             return yield* new RecoveryInvalid({
               reason: { _tag: "MissingRecord", record: "reconstruction-owner" },
             });
-          const state = { ...program.after, operations: [] };
+          const state = afterState;
           const policy = globalEnabled(state).invocation_policies?.[prior.skill_id];
           const rebuild = yield* prepareInstalledSkillRebuild(
             state,
@@ -221,6 +244,22 @@ export const runUndo = Effect.fn("Library.runUndo")(function* (
               reason: { _tag: "ContentChanged", kind: "reconstruction-source" },
             });
           yield* rebuild.build(path);
+        } else if (action.transfer === "original") {
+          const original = action.original;
+          if (!original)
+            return yield* new RecoveryInvalid({
+              reason: { _tag: "MissingRecord", record: "reconstruction-evidence" },
+            });
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const root = yield* readCollectionVersion(libraryOriginalsPath(home), original.hash);
+              if ((yield* originalTreeHash(root)) !== original.hash)
+                return yield* new RecoveryInvalid({
+                  reason: { _tag: "ContentChanged", kind: "reconstruction-source" },
+                });
+              yield* copyLocalTree(join(root, original.path), path, undefined, true);
+            }),
+          );
         } else yield* copyLocalTree(action.source, path, undefined, true);
         if (file.entry.type === "Directory") yield* restoreMarker(path, file.entry);
       }
@@ -285,11 +324,7 @@ export const runUndo = Effect.fn("Library.runUndo")(function* (
   }
   yield* check();
   const current = yield* publication();
-  const { operations, ...body } = current;
-  if (!equal(body, program.after)) {
-    const next = yield* LibraryState.makeEffect({ ...program.after, operations });
-    yield* writer.save(next, current);
-  }
+  yield* writer.saveUndo(program, afterState, current.state, current.revision);
   for (const action of program.actions) {
     if (!action.staged) continue;
     const parent = action.staged.anchor;

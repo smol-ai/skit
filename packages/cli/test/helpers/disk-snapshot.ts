@@ -67,6 +67,12 @@ export const captureDisk = Effect.fn("Test.captureDisk")(function* (
       return observed.failure.reason._tag === "NotFound" ? undefined : yield* observed.failure;
     const info = observed.success;
     const mode = info.mode & 0o7777;
+    // SQLite reader coordination files are not Library data; keep library.sqlite itself exact.
+    if (
+      info.type === "File" &&
+      (segments.at(-1) === "library.sqlite-wal" || segments.at(-1) === "library.sqlite-shm")
+    )
+      return;
     if (info.type === "SymbolicLink")
       entries.push({
         path: segments,

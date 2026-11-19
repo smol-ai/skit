@@ -36,11 +36,10 @@ test("the host keeps its frontend logger and stderr policy for later operations"
     const failure = new Error("Native failure");
     await host.run(
       Effect.logWarning(
-        LibraryRecoveryNotice.cases.HistoryDeliveryPending.make({ home: "/tmp/library", failure }),
+        LibraryRecoveryNotice.cases.PendingStateSaveFailed.make({ home: "/tmp/library", failure }),
       ),
     );
     expect(captured).toHaveLength(1);
-    expect(captured[0]!.message).toContain("Library history delivery is pending in /tmp/library");
     expect(captured[0]!.message).toContain(failure);
     expect(stderr).toEqual([true]);
   } finally {

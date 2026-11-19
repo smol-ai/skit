@@ -15357,6 +15357,27 @@
       ],
       "additionalProperties": true
     },
+    "LibrarySqlErrorEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "LibrarySqlError"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "cause": {}
+      },
+      "required": [
+        "_tag",
+        "path",
+        "cause"
+      ],
+      "additionalProperties": true
+    },
     "InvalidLibraryStateEncoded": {
       "type": "object",
       "properties": {
@@ -15371,6 +15392,166 @@
         },
         "reason": {
           "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "LegacySourceChanged"
+                  ]
+                },
+                "sourcePath": {
+                  "type": "string"
+                },
+                "backupPath": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "databasePath": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "sourcePath",
+                "backupPath",
+                "databasePath"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "LegacyStateBesideDatabase"
+                  ]
+                },
+                "statePath": {
+                  "type": "string"
+                },
+                "databasePath": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "statePath",
+                "databasePath"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ImportBackupChanged"
+                  ]
+                },
+                "sourcePath": {
+                  "type": "string"
+                },
+                "backupPath": {
+                  "type": "string"
+                },
+                "databasePath": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "sourcePath",
+                "backupPath",
+                "databasePath"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "NewerDatabaseMigration"
+                  ]
+                },
+                "databasePath": {
+                  "type": "string"
+                },
+                "migration": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "supported": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "_tag",
+                "databasePath",
+                "migration",
+                "supported"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "OperationStateMissing"
+                  ]
+                },
+                "databasePath": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "databasePath"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "DatabaseIntegrityInvalid"
+                  ]
+                },
+                "databasePath": {
+                  "type": "string"
+                },
+                "result": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "_tag",
+                "databasePath",
+                "result"
+              ],
+              "additionalProperties": true
+            },
             {
               "type": "object",
               "properties": {
@@ -16512,6 +16693,9 @@
         },
         "path": {
           "type": "string"
+        },
+        "owner": {
+          "type": "string"
         }
       },
       "required": [
@@ -16606,6 +16790,15 @@
             "reason"
           ],
           "additionalProperties": true
+        },
+        {
+          "$ref": "#/definitions/MachineSettingsUnusableEncoded"
+        },
+        {
+          "$ref": "#/definitions/LibraryAuditInvalidEncoded"
+        },
+        {
+          "$ref": "#/definitions/LibrarySqlErrorEncoded"
         },
         {
           "$ref": "#/definitions/InvalidLibraryStateEncoded"
@@ -20740,6 +20933,9 @@
         },
         {
           "$ref": "#/definitions/InvalidLibraryStateEncoded"
+        },
+        {
+          "$ref": "#/definitions/LibrarySqlErrorEncoded"
         },
         {
           "$ref": "#/definitions/Library.InvalidIntentEncoded"

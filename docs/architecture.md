@@ -23,7 +23,7 @@ The following rules define the system:
 
 - Adding a source does not enable any skill.
 - Source originals and normalized releases have different identities and are retained separately.
-- `state.json` is the authoritative record of managed local state.
+- `library.sqlite` is the authoritative record of managed local state.
 - Harness projections are derived filesystem effects, not independent sources of truth.
 - Bindings express desired enablement; library entries retain artifacts; projections record materialized copies.
 - Bindings name no Harness. Every Binding projects into the shared `.agents` target, and into the `.claude` target only while Claude Code is present on the device.
@@ -174,14 +174,14 @@ The local state also retains:
 - current native-deletion suppression on the affected Projection;
 - observations of unmanaged harness content.
 
-Device-local `audit.jsonl` records semantic history. Undelivered events are saved alongside
-authoritative state, delivered by stable event ID, and acknowledged afterward. Startup retries
-interrupted delivery without duplicate events. Audit history never drives reconciliation. These boundaries support reconciliation and diagnosis without
+The Library database records device-local semantic history. Each event is saved in the same
+transaction as the change it describes and accumulates the changes of one action under a stable
+event ID. History omits an event while an operation it covers is still Pending. Audit history never drives reconciliation. These boundaries support reconciliation and diagnosis without
 treating every file found in a harness root as SKIT-owned.
 
 ## Authoritative state and filesystem effects
 
-The default local library is `~/.skit`, overridable with `SKIT_HOME` or `--home`. Its `state.json` is the single authoritative metadata store. Content-addressed originals and normalized releases live alongside it.
+The default local library is `~/.skit`, overridable with `SKIT_HOME` or `--home`. Its `library.sqlite` database is the single authoritative metadata store; a released `state.json` and `audit.jsonl` are imported into it once ([ADR-0020](adr/0020-treat-projections-as-reconcilable-derived-state.md#amendment-library-database-2026-11-14)). Content-addressed originals and normalized releases live alongside it.
 
 `Library.layer` constructs the public owner. Its `read` returns a snapshot; `plan` prepares against that snapshot and `apply` revalidates before recorded mutation. Inventory refresh and enable/disable run through that owner. Stores and writers stay private to Library; CLI code does not provide a store or write state independently.
 
@@ -432,7 +432,7 @@ The repository has several different compatibility surfaces:
 | Experimental commands and `v1alpha1` schemas | May change before promotion                                                                   |
 | Core TypeScript exports                      | Internal workspace API while packages remain private                                          |
 | Registry HTTP schemas                        | Shared client/server wire contract                                                            |
-| `state.json` schema                          | Authoritative local state; intentional migrations or explicit pre-release resets are required |
+| Library state document schema                | Authoritative local state; intentional migrations or explicit pre-release resets are required |
 | Harness Profile Catalog                      | Versioned knowledge with evidence and freshness obligations                                   |
 
 The packages are currently private and versioned `0.1.0`. The repository is licensed under the MIT License.

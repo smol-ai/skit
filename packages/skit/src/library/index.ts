@@ -16,7 +16,7 @@ export {
   type SetupResult,
 } from "./library.js";
 export { ImportContentInvalid, ImportContentInvalidReason } from "./failures.js";
-export { InvalidLibraryState, InvalidLibraryStateReason } from "./failures.js";
+export { LibrarySqlError, InvalidLibraryState, InvalidLibraryStateReason } from "./failures.js";
 export {
   UninstallConflict,
   UnsafeInstalledSkillName,

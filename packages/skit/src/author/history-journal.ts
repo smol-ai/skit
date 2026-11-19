@@ -1,0 +1,393 @@
+import { Effect, FileSystem, Option, Schema, Semaphore, Schedule } from "effect";
+import { SecureRandom } from "effect/crypto";
+import { SqlClient } from "effect/sql";
+import { isSqlError } from "effect/sql/SqlError";
+import { join } from "node:path";
+import * as History from "../history/history.js";
+import { Hash, sha256Hash } from "../shared/hash.js";
+import { JsonObject, canonicalJson } from "../shared/json.js";
+import { sqliteLayer } from "../platform/sqlite.js";
+import { HomeBusy } from "../platform/lock-failures.js";
+import { lockFile } from "../platform/file-lock.js";
+import { withLock as withHomeLock } from "../platform/home-lock.js";
+import { syncPaths } from "../platform/atomic-write.js";
+import { LinkStat } from "../platform/link-stat.js";
+import { AuthorHistoryBusy, AuthorHistoryInvalid } from "./history-failures.js";
+import { AuthorWorkspaceAlreadyRegistered } from "./failures.js";
+import { AuthorWorkspace } from "./workspace.js";
+import { LibrarySqlError } from "../library/failures.js";
+import {
+  currentLibraryTransaction,
+  libraryDatabasePath,
+  prepareLibraryDatabase,
+  withLibraryDatabase,
+  withDatabaseTransaction,
+} from "../library/store/database.js";
+
+const HistoryEvent = Schema.Struct({
+  schema: Schema.Literal("skit.author-history-event.v1"),
+  workspace_key: Hash,
+  sequence: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER })),
+  revision: History.RevisionId,
+  root: Schema.String,
+  workspace_id: Schema.optionalKey(Schema.String),
+});
+type HistoryEvent = typeof HistoryEvent.Type;
+const Workspace = Schema.Struct({
+  workspace_key: Hash,
+  workspace_id: Schema.NullOr(Schema.String),
+  root: Schema.String,
+});
+const fields = ["schema", "workspace_key", "sequence", "revision", "root", "workspace_id"];
+const invalid = (path: string, cause: unknown) =>
+  new AuthorHistoryInvalid({ path, reason: { _tag: "JournalFailure", cause } });
+
+const saveEvent = Effect.fn("AuthorHistory.saveEvent")(function* (event: HistoryEvent) {
+  const sql = yield* SqlClient.SqlClient;
+  const document = yield* Schema.decodeUnknownEffect(JsonObject)(event);
+  const extra = Object.fromEntries(
+    Object.entries(document).filter(([key]) => !fields.includes(key)),
+  );
+  yield* sql`INSERT INTO author_history_events(workspace_key,sequence,revision,root,workspace_id,extra)
+    VALUES(${event.workspace_key},${event.sequence},${event.revision},${event.root},${event.workspace_id ?? null},${JSON.stringify(extra)})`;
+});
+
+const latestEvent = Effect.fn("AuthorHistory.latestEvent")(function* (key: Hash) {
+  const sql = yield* SqlClient.SqlClient;
+  const row = (yield* sql<{
+    workspace_key: string;
+    sequence: number;
+    revision: string;
+    root: string;
+    workspace_id: string | null;
+    extra: string;
+  }>`SELECT * FROM author_history_events WHERE workspace_key=${key} ORDER BY sequence DESC LIMIT 1`)[0];
+  if (!row) return undefined;
+  const extra = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(JsonObject))(row.extra);
+  return yield* Schema.decodeUnknownEffect(Schema.declare(Schema.is(HistoryEvent)))({
+    ...extra,
+    schema: "skit.author-history-event.v1",
+    workspace_key: row.workspace_key,
+    sequence: row.sequence,
+    revision: row.revision,
+    root: row.root,
+    ...(row.workspace_id === null ? {} : { workspace_id: row.workspace_id }),
+  });
+});
+
+/** Fence first, then import: either crash point leaves a complete, retryable source. */
+const loadLegacyJournal = Effect.fn("AuthorHistory.loadLegacyJournal")(function* (path: string) {
+  const fs = yield* FileSystem.FileSystem;
+  return yield* Effect.scoped(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* fs.chmod(path, 0o600);
+      yield* sql`PRAGMA synchronous = FULL`;
+      const snapshot = yield* sql.withTransaction(
+        Effect.gen(function* () {
+          yield* Effect.forEach(
+            [`${path}-wal`, `${path}-shm`],
+            (sidecar) =>
+              fs
+                .chmod(sidecar, 0o600)
+                .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void)),
+            { discard: true },
+          );
+          const version = yield* Schema.decodeUnknownEffect(
+            Schema.Struct({ user_version: Schema.Literals([0, 1, 2]) }),
+          )((yield* sql`PRAGMA user_version`)[0]).pipe(
+            Effect.mapError(
+              (failure) =>
+                new AuthorHistoryInvalid({
+                  path,
+                  reason: { _tag: "JournalVersionInvalid", failure },
+                }),
+            ),
+          );
+          if (version.user_version === 2) {
+            const fence = (yield* sql<{
+              marker: string;
+            }>`SELECT marker FROM author_history_device_database WHERE id=1`)[0];
+            yield* Schema.decodeUnknownEffect(
+              Schema.Literal("skit.author-history-device-database.v1"),
+            )(fence?.marker);
+          }
+          const tables = yield* sql<{
+            name: string;
+          }>`SELECT name FROM sqlite_master WHERE type='table' AND name IN ('author_history_workspaces','author_history_events')`;
+          if (tables.length !== 0 && tables.length !== 2)
+            return yield* invalid(path, { _tag: "JournalTablesMissing" });
+          if (version.user_version !== 0 && tables.length !== 2)
+            return yield* invalid(path, { _tag: "JournalTablesMissing" });
+          const workspaces = tables.length
+            ? yield* Schema.decodeUnknownEffect(Schema.Array(JsonObject))(
+                yield* sql`SELECT * FROM author_history_workspaces ORDER BY workspace_key`,
+              )
+            : [];
+          const events = tables.length
+            ? yield* Schema.decodeUnknownEffect(
+                Schema.Array(
+                  Schema.Struct({
+                    workspace_key: Hash,
+                    sequence: HistoryEvent.fields.sequence,
+                    event_json: Schema.String,
+                  }),
+                ),
+              )(yield* sql`SELECT * FROM author_history_events ORDER BY workspace_key,sequence`)
+            : [];
+          const keys = new Set<string>();
+          for (const workspace of workspaces)
+            keys.add((yield* Schema.decodeUnknownEffect(Workspace)(workspace)).workspace_key);
+          const decoded = yield* Effect.forEach(events, (row) =>
+            Effect.gen(function* () {
+              const value = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(JsonObject))(
+                row.event_json,
+              );
+              const event = yield* Schema.decodeUnknownEffect(
+                Schema.declare(Schema.is(HistoryEvent)),
+              )(value);
+              if (
+                event.workspace_key !== row.workspace_key ||
+                event.sequence !== row.sequence ||
+                !keys.has(row.workspace_key)
+              )
+                return yield* invalid(path, { _tag: "JournalEventIdentityDiffers" });
+              return event;
+            }),
+          );
+          if (version.user_version !== 2) {
+            if (tables.length === 0) {
+              yield* sql`CREATE TABLE author_history_workspaces(workspace_key TEXT PRIMARY KEY,workspace_id TEXT UNIQUE,root TEXT NOT NULL)`;
+              yield* sql`CREATE TABLE author_history_events(workspace_key TEXT NOT NULL,sequence INTEGER NOT NULL,event_json TEXT NOT NULL,PRIMARY KEY(workspace_key,sequence)) WITHOUT ROWID`;
+            }
+            yield* sql`CREATE TABLE author_history_device_database(id INTEGER PRIMARY KEY CHECK(id=1),marker TEXT NOT NULL)`;
+            yield* sql`INSERT INTO author_history_device_database(id,marker) VALUES(1,'skit.author-history-device-database.v1')`;
+            yield* sql`PRAGMA user_version=2`;
+          }
+          return {
+            workspaces,
+            events: decoded,
+            hash: yield* sha256Hash(
+              new TextEncoder().encode(canonicalJson({ workspaces, events })),
+            ),
+          };
+        }),
+      );
+      return snapshot;
+    }).pipe(Effect.provide(sqliteLayer({ filename: path, busyTimeout: 0 }))),
+  );
+});
+
+/** Only the loader opens the old journal. Ordinary history work reads and writes native rows. */
+export const prepareHistoryJournal = Effect.fn("AuthorHistory.prepareJournal")(function* (
+  home: string,
+) {
+  yield* prepareLibraryDatabase(home, true);
+  const path = libraryDatabasePath(home);
+  const imported = yield* withLibraryDatabase(
+    path,
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return (yield* sql`SELECT id FROM author_history_import WHERE id=1`).length > 0;
+    }),
+    true,
+  );
+  if (imported) return;
+  yield* withHomeLock(
+    home,
+    Effect.gen(function* () {
+      const source = join(home, "history", "journal.sqlite");
+      const snapshot = yield* loadLegacyJournal(source).pipe(
+        Effect.retry({
+          while: (error) => isSqlError(error) && error.reason._tag === "LockTimeoutError",
+          schedule: Schedule.spaced("25 millis"),
+          times: 200,
+        }),
+        Effect.catchIf(
+          (error) => isSqlError(error) && error.reason._tag === "LockTimeoutError",
+          () => Effect.fail(new AuthorHistoryBusy({ path: source })),
+        ),
+      );
+      yield* syncPaths([source, join(home, "history"), home]);
+      yield* withDatabaseTransaction(
+        home,
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          if ((yield* sql`SELECT id FROM author_history_import WHERE id=1`).length) return;
+          for (const raw of snapshot.workspaces) {
+            const row = yield* Schema.decodeUnknownEffect(Workspace)(raw);
+            const extra = Object.fromEntries(
+              Object.entries(raw).filter(
+                ([key]) => !["workspace_key", "workspace_id", "root"].includes(key),
+              ),
+            );
+            yield* sql`INSERT INTO author_history_workspaces(workspace_key,workspace_id,root,extra) VALUES(${row.workspace_key},${row.workspace_id},${row.root},${JSON.stringify(extra)})`;
+          }
+          for (const event of snapshot.events) yield* saveEvent(event);
+          yield* sql`INSERT INTO author_history_import(id,source_hash) VALUES(1,${snapshot.hash})`;
+        }),
+      );
+    }),
+  );
+});
+
+// The original registration rules stay with the owner of the history timeline.
+/**
+ * The journal's key for this workspace, or none when the journal does not know it yet. Keeps an
+ * anonymous folder's sequence when it later gains an Author Workspace identity.
+ */
+const resolveWorkspace = Effect.fn("AuthorHistory.resolveWorkspace")(function* (
+  root: string,
+  workspaceId: string | undefined,
+  path: string,
+) {
+  const sql = yield* SqlClient.SqlClient;
+  if (workspaceId !== undefined) {
+    const rows =
+      yield* sql`SELECT workspace_key, workspace_id, root FROM author_history_workspaces WHERE workspace_id = ${workspaceId}`;
+    if (rows.length > 0) {
+      const workspace = yield* Schema.decodeUnknownEffect(Workspace)(rows[0]);
+      if (workspace.root !== root) {
+        // Only a live copy elsewhere refuses: a gone root, or one without this identity, does not.
+        const workspaces = yield* AuthorWorkspace;
+        const previous = yield* workspaces.resolveRoot(workspace.root).pipe(
+          Effect.flatMap(workspaces.readIdentity),
+          Effect.catchTags({
+            AuthorWorkspaceRootInvalid: () => Effect.succeedNone,
+            AuthorWorkspaceMetadataInvalid: () => Effect.succeedNone,
+          }),
+        );
+        if (Option.exists(previous, (identity) => identity.workspaceId === workspaceId))
+          return yield* new AuthorWorkspaceAlreadyRegistered({ workspaceId, at: workspace.root });
+        yield* sql`UPDATE author_history_workspaces SET root = ${root} WHERE workspace_key = ${workspace.workspace_key}`;
+      }
+      return workspace.workspace_key;
+    }
+  }
+  const roots = yield* Schema.decodeUnknownEffect(Schema.Array(Workspace))(
+    yield* sql`SELECT workspace_key, workspace_id, root FROM author_history_workspaces WHERE root = ${root}`,
+  );
+  if (workspaceId === undefined && roots.length > 1)
+    return yield* new AuthorHistoryInvalid({
+      path,
+      reason: { _tag: "AmbiguousWorkspace" },
+    });
+  const existing = roots.length === 1 ? roots[0] : undefined;
+  if (existing && (workspaceId === undefined || existing.workspace_id === null)) {
+    if (workspaceId !== undefined)
+      yield* sql`UPDATE author_history_workspaces SET workspace_id = ${workspaceId} WHERE workspace_key = ${existing.workspace_key}`;
+    return existing.workspace_key;
+  }
+  return undefined;
+});
+
+/** Give a workspace the journal does not know its own key. */
+const addWorkspace = Effect.fn("AuthorHistory.addWorkspace")(function* (
+  root: string,
+  workspaceId: string | undefined,
+) {
+  const sql = yield* SqlClient.SqlClient;
+  // Keep the existing Hash encoding, but identify an alias with a random nonce rather
+  // than a reusable root or workspace ID. Existing keys and event documents stay valid.
+  const key = yield* sha256Hash(yield* (yield* SecureRandom.SecureRandom).randomBytes(32));
+  yield* sql`INSERT INTO author_history_workspaces (workspace_key, workspace_id, root, extra)
+    VALUES (${key}, ${workspaceId ?? null}, ${root}, '{}')`;
+  return key;
+});
+
+const retryable = (error: unknown) =>
+  Schema.is(HomeBusy)(error) ||
+  (Schema.is(History.StoreFailed)(error) && Schema.is(HomeBusy)(error.cause)) ||
+  Schema.is(Schema.Struct({ _tag: Schema.Literal("FileLockBusy") }))(error) ||
+  (isSqlError(error) && error.reason._tag === "LockTimeoutError") ||
+  (Schema.is(LibrarySqlError)(error) &&
+    isSqlError(error.cause) &&
+    error.cause.reason._tag === "LockTimeoutError");
+
+/** Serialize scans with an OS lock; the shared database never holds a writer through file work. */
+export const writeHistoryEvent = Effect.fn("AuthorHistory.writeHistoryEvent")(function* <
+  A extends { readonly id: History.RevisionId },
+  E,
+  R,
+>(
+  writers: Semaphore.Semaphore,
+  home: string,
+  root: string,
+  workspaceId: string | undefined,
+  save: (latest: History.RevisionId | undefined) => Effect.Effect<A, E, R>,
+) {
+  const path = libraryDatabasePath(home);
+  const directory = join(home, "history");
+  const lockPath = join(directory, "lock.sqlite");
+  const fs = yield* FileSystem.FileSystem;
+  const links = yield* LinkStat;
+  if (yield* currentLibraryTransaction(home))
+    return yield* invalid(path, { _tag: "HistoryScanInsideDatabaseTransaction" });
+  return yield* writers
+    .withPermit(
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* fs.makeDirectory(directory, { recursive: true, mode: 0o700 });
+          const lock = yield* links
+            .lstat(lockPath)
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
+          if (lock?.type === "SymbolicLink")
+            return yield* new AuthorHistoryInvalid({
+              path: lockPath,
+              reason: { _tag: "JournalRedirected" },
+            });
+          // Keep existing lock files private, including when another process holds the lock.
+          if (lock !== undefined) yield* fs.chmod(lockPath, 0o600);
+          yield* lockFile(lockPath);
+          yield* fs.chmod(lockPath, 0o600);
+          yield* prepareHistoryJournal(home);
+          const { key, last } = yield* withDatabaseTransaction(
+            home,
+            Effect.gen(function* () {
+              const key =
+                (yield* resolveWorkspace(root, workspaceId, path)) ??
+                (yield* addWorkspace(root, workspaceId));
+              return { key, last: yield* latestEvent(key) };
+            }),
+          );
+          // Tree scanning, immutable byte writes, fsync and revision creation are outside SQL transactions.
+          const saved = yield* save(last?.revision);
+          if (last?.revision === saved.id) return saved;
+          yield* withDatabaseTransaction(
+            home,
+            Effect.gen(function* () {
+              const current = yield* latestEvent(key);
+              if (canonicalJson(current) !== canonicalJson(last))
+                return yield* invalid(path, { _tag: "JournalHeadChanged" });
+              yield* saveEvent({
+                schema: "skit.author-history-event.v1",
+                workspace_key: key,
+                sequence: (last?.sequence ?? 0) + 1,
+                revision: saved.id,
+                root,
+                ...(workspaceId === undefined ? {} : { workspace_id: workspaceId }),
+              });
+            }),
+          );
+          return saved;
+        }),
+      ),
+    )
+    .pipe(
+      Effect.retry({ while: retryable, schedule: Schedule.spaced("25 millis"), times: 200 }),
+      Effect.catchIf(retryable, () => Effect.fail(new AuthorHistoryBusy({ path: lockPath }))),
+      Effect.catchTag("FileLockBusy", () => Effect.fail(new AuthorHistoryBusy({ path: lockPath }))),
+      Effect.catchTag(
+        ["SqlError", "LibrarySqlError", "InvalidLibraryState", "FileLockFailed", "SchemaError"],
+        (error) =>
+          Effect.fail(
+            Schema.isSchemaError(error)
+              ? new AuthorHistoryInvalid({
+                  path,
+                  reason: { _tag: "JournalSchemaInvalid", failure: error },
+                })
+              : invalid(path, error),
+          ),
+      ),
+    );
+});

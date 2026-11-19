@@ -1,3 +1,4 @@
+import { savedLibrary } from "./helpers/saved-library.js";
 import { describe } from "@effect/vitest";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
@@ -453,7 +454,7 @@ it.effect("the composed source previews preserve state and report no command fai
         ),
       );
 
-    const before = yield* fs.readFileString(join(home, "state.json"));
+    const before = yield* savedLibrary(home);
 
     yield* run(["enable", workspace, "--all", "--global", "--dry-run", "--codex-root", agents]);
 
@@ -461,7 +462,7 @@ it.effect("the composed source previews preserve state and report no command fai
 
     yield* run(["remove", "https://registry.example/tim/skills", "--dry-run"]);
 
-    assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), before);
+    assert.deepStrictEqual(yield* savedLibrary(home), before);
 
     assert.isFalse(yield* fs.exists(agents));
 

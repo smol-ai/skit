@@ -1,10 +1,11 @@
+import { prepareSetupUndo } from "@smolai/skit-core/library/setup";
 import { defineCommand } from "./definition.js";
 import { Cause, Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 import { commandFailure } from "./failure-classification.js";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { CommandMetadata } from "./metadata.js";
-import { setupOutputContracts, setupUndoActions, prepareSetupUndo } from "../library/setup.js";
+import { setupOutputContracts, setupUndoActions } from "../library/setup.js";
 import { jsonFlag, optionalString } from "./parameters.js";
 
 import { Renderer } from "../terminal/renderer.js";

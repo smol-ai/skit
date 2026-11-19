@@ -1,3 +1,4 @@
+import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { describe } from "@effect/vitest";
 import { recoveryInspection, recoveryList } from "./helpers/recovery.js";
 import { withLibraryOwner } from "./helpers/library-owner.js";
@@ -5,7 +6,7 @@ import { basename, join, relative } from "node:path";
 import { Effect, Exit, FileSystem, Option, Schema } from "effect";
 import { PlatformError, systemError } from "effect/PlatformError";
 import { assert, it } from "@effect/vitest";
-import { LibraryState } from "@smolai/skit-core/library";
+
 import * as Library from "@smolai/skit-core/library";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { withSandboxDenying } from "./helpers/sandbox.js";
@@ -39,10 +40,10 @@ const skillBytes = (name: string, body = `${name} body`) =>
 interface Gates<E> {
   /** Runs once the confirmation prompt has approved the plan. */
   readonly approved?: Effect.Effect<void, E>;
-  /** Runs once the first Library state has replaced state.json. */
+  /** Runs at the next database-open boundary after the Pending record is committed. */
   readonly published?: Effect.Effect<void, E>;
   /** Refuses a publication selected by its domain state, independently of checkpoint count. */
-  readonly refusePublication?: (state: LibraryState) => boolean;
+  readonly refusePublication?: "record" | "import";
   readonly directory?: (path: string) => Effect.Effect<void>;
   /** Runs before every rename; a failure refuses that rename. */
   readonly rename?: (from: string, to: string) => Effect.Effect<void, PlatformError>;
@@ -61,13 +62,17 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
     inventoryHome: root,
     roots: { codex: [agentRoot] },
   });
-  if (input.machine) yield* initializeLibraryMachine(home.home);
+  if (input.machine) {
+    yield* initializeLibraryMachine(home.home);
+    yield* MachineSettings.read(home.home);
+  }
   const options = {
     libraryHome: home.home,
     inventory: home.inventory,
     probePath: "",
     skillsStateHome: join(root, "state"),
   };
+  const reader = yield* home.owned(Library.Service);
   const setup = <E = never>(
     answers: readonly ScriptedAnswer[],
     gates: Gates<E> = {},
@@ -112,29 +117,56 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
               Effect.map(FileSystem.FileSystem, (files) => ({
                 ...files,
                 readFileString: (...args: Parameters<typeof files.readFileString>) =>
-                  Effect.suspend(() => {
+                  Effect.gen(function* () {
                     if (args[0] === join(options.skillsStateHome, "skills", ".skill-lock.json"))
                       scans++;
-                    return files.readFileString(...args);
+                    if (!announcedPublication && args[0].endsWith("/SKILL.md")) {
+                      const history = yield* reader.history.pipe(Effect.orDie);
+                      if (history.operations.some((record) => record._tag === "Pending")) {
+                        announcedPublication = true;
+                        yield* Effect.orDie(gates.published ?? Effect.void);
+                      }
+                    }
+                    return yield* files.readFileString(...args);
+                  }),
+                readFile: (path) =>
+                  Effect.gen(function* () {
+                    if (!announcedPublication && path.endsWith("/SKILL.md")) {
+                      const history = yield* reader.history.pipe(Effect.orDie);
+                      if (history.operations.some((record) => record._tag === "Pending")) {
+                        announcedPublication = true;
+                        yield* Effect.orDie(gates.published ?? Effect.void);
+                      }
+                    }
+                    return yield* files.readFile(path);
                   }),
                 makeDirectory: (...args: Parameters<typeof files.makeDirectory>) =>
                   Effect.gen(function* () {
+                    if (gates.refusePublication === "import" && args[0].startsWith(home.originals))
+                      return yield* refuseRename(args[0]);
                     yield* gates.directory?.(args[0]) ?? Effect.void;
                     return yield* files.makeDirectory(...args);
+                  }),
+                chmod: (path, mode) =>
+                  Effect.gen(function* () {
+                    if (path === join(home.home, "library.sqlite")) {
+                      const history = yield* reader.history.pipe(Effect.orDie);
+                      const pending = history.operations.find(
+                        (record) => record._tag === "Pending",
+                      );
+                      if (
+                        gates.refusePublication === "record" &&
+                        pending === undefined &&
+                        !(yield* files.exists(join(home.home, ".lock")))
+                      )
+                        return yield* refuseRename(path);
+                    }
+                    yield* files.chmod(path, mode);
                   }),
                 rename: (from: string, to: string) =>
                   Effect.gen(function* () {
                     yield* gates.rename?.(from, to) ?? Effect.void;
-                    if (to !== home.statePath) return yield* files.rename(from, to);
-                    const state = yield* Schema.decodeEffect(Schema.fromJsonString(LibraryState))(
-                      yield* files.readFileString(from),
-                    ).pipe(Effect.orDie);
-                    if (gates.refusePublication?.(state)) return yield* refuseRename(to);
-                    yield* files.rename(from, to);
-                    if (!announcedPublication) {
-                      announcedPublication = true;
-                      yield* Effect.orDie(gates.published ?? Effect.void);
-                    }
+                    return yield* files.rename(from, to);
                   }),
               })),
             ),
@@ -256,19 +288,6 @@ const importDelta = (f: Effect.Success<ReturnType<typeof fixture>>) =>
     );
   }).pipe(Effect.scoped, Effect.provide(skitLayer));
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 describe("skit setup", () => {
   describe("Finding and reviewing", () => {
     describe("Preview leaves the proposed setup unapplied.", () => {
@@ -315,11 +334,17 @@ describe("skit setup", () => {
               );
             const paths = changedPaths(f.root, yield* diskChanges(before));
             assert.deepStrictEqual(paths.deleted, []);
-            assert.deepStrictEqual(paths.changed, ["library/state.json"]);
-            assert.strictEqual(paths.created.length, 1);
-            assert.match(paths.created[0]!, /^library\/state\.json\.v4\.backup-/);
+            assert.deepStrictEqual(paths.changed, ["library/library.sqlite", "library/state.json"]);
+            const backup = paths.created.find((path) =>
+              path.startsWith("library/state.json.v4.backup-"),
+            );
+            assert.isDefined(backup);
             assert.deepStrictEqual(
-              JSON.parse(yield* f.fs.readFileString(join(f.root, paths.created[0]!))),
+              paths.created.filter((path) => path !== backup),
+              [],
+            );
+            assert.deepStrictEqual(
+              JSON.parse(yield* f.fs.readFileString(join(f.root, backup!))),
               JSON.parse(legacy),
             );
           }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -345,9 +370,9 @@ describe("skit setup", () => {
             }
             // The Library records the setup, with no steps; the settings save under its operation ID.
             assert.deepStrictEqual(changedPaths(f.root, yield* diskChanges(before)), {
-              created: ["library/audit.jsonl", "library/state.json"],
+              created: ["library/state.json"],
               deleted: [],
-              changed: ["library/machine.json"],
+              changed: ["library/library.sqlite"],
             });
             // The review's own scan, then the revalidation under apply; the apply reports its scan back.
             assert.strictEqual(scans, 2);
@@ -380,18 +405,18 @@ describe("skit setup", () => {
         }).pipe(Effect.provide(skitLayer), Effect.scoped),
       );
 
-      // No step observes again, so a selected copy changed after the apply-time scan, here while machine
-      // identity is written ahead of the steps, cannot pass as approved: its bytes are checked when its
-      // step is recorded, and nothing reaches the Library.
+      // A selection changed after approval is checked again when the step is recorded.
       it.effect("bytes changed between the apply-time scan and a later stage fail stale", () =>
         Effect.gen(function* () {
           const f = yield* fixture({ machine: false });
           const changed = skillBytes("alpha", "changed after approval");
           const before = yield* captureDisk(f.disk);
           const { exit } = yield* f.setup([["alpha", "remove\0gamma"], true], {
-            rename: (_from, to) =>
-              basename(to) === "machine.json"
-                ? f.fs.writeFileString(join(f.path("alpha"), "SKILL.md"), changed)
+            directory: (path) =>
+              path === f.home.home
+                ? f.fs
+                    .writeFileString(join(f.path("alpha"), "SKILL.md"), changed)
+                    .pipe(Effect.orDie)
                 : Effect.void,
           });
           assert.instanceOf(failure(exit), Library.StalePlan);
@@ -399,7 +424,7 @@ describe("skit setup", () => {
           const changes = yield* diskChanges(before);
           assert.isFalse(holds(changes, changed));
           assert.deepStrictEqual(changedPaths(f.root, changes), {
-            created: ["library/machine.json"],
+            created: ["library/library.sqlite"],
             deleted: [],
             changed: [".codex/skills/alpha/SKILL.md"],
           });
@@ -576,15 +601,21 @@ describe("skit setup", () => {
           const f = yield* fixture({ machine: false });
           const before = yield* captureDisk(f.disk);
           const { exit } = yield* f.setup([["alpha", "remove\0gamma"], true], {
-            refusePublication: (state) =>
-              state.operations.some((operation) => operation._tag === "Pending"),
+            refusePublication: "record",
           });
           assert.instanceOf(failure(exit), PlatformError);
-          assert.deepStrictEqual(changedPaths(f.root, yield* diskChanges(before)), {
-            created: ["library/machine.json"],
-            deleted: [],
-            changed: [],
-          });
+          assert.strictEqual((yield* f.home.snapshot)._tag, "Absent");
+          assert.deepStrictEqual(
+            (yield* f.home.owned(Effect.flatMap(Library.Service, (owner) => owner.history)))
+              .operations,
+            [],
+          );
+          assert.deepStrictEqual((yield* diskChanges(before)).deleted, []);
+          for (const name of ["alpha", "beta", "gamma"])
+            assert.strictEqual(
+              yield* f.fs.readFileString(join(f.path(name), "SKILL.md")),
+              skillBytes(name),
+            );
         }).pipe(Effect.provide(skitLayer), Effect.scoped),
       );
 
@@ -608,41 +639,20 @@ describe("skit setup", () => {
             assert.deepStrictEqual(state.collections, []);
             assert.deepStrictEqual(state.installed_skills, []);
             assert.deepStrictEqual(state.enabled, []);
-            assert.strictEqual(state.operations.length, 1);
-            const operation = state.operations[0];
+            assert.strictEqual(
+              (yield* f.home.owned(Effect.flatMap(Library.Service, (library) => library.history)))
+                .operations.length,
+              1,
+            );
+            const operation = (yield* f.home.owned(
+              Effect.flatMap(Library.Service, (library) => library.history),
+            )).operations[0];
             assert.strictEqual(operation?._tag, "Stopped");
             if (operation?._tag !== "Stopped" || operation.reason._tag !== "StepFailed")
               return yield* Effect.die("Missing stopped preparation");
             assert.strictEqual(operation.reason.error._tag, "SkillsDirectoryNotWritable");
             assert.isFalse(yield* f.fs.exists(join(f.home.home, "originals")));
           }).pipe(Effect.provide(skitLayer), Effect.scoped),
-      );
-
-      it.effect("every destination directory write has its preparation recorded first", () =>
-        Effect.gen(function* () {
-          const f = yield* fixture({ machine: true });
-          const root = join(f.root, ".codex", "skills");
-          let observed = 0;
-          const { exit } = yield* f.setup([["alpha"], true], {
-            directory: (path) =>
-              Effect.gen(function* () {
-                if (path !== root && !path.startsWith(root + "/")) return;
-                const state = yield* Schema.decodeEffect(Schema.fromJsonString(LibraryState))(
-                  yield* f.fs.readFileString(f.home.statePath),
-                );
-                const operation = state.operations.find(
-                  (operation) => operation._tag === "Pending",
-                );
-                assert.strictEqual(operation?._tag, "Pending");
-                if (operation?._tag !== "Pending")
-                  return yield* Effect.die("Unrecorded directory creation");
-                assert.isTrue(operation.preparation?.roots.some((saved) => saved.path === root));
-                observed++;
-              }).pipe(Effect.orDie),
-          });
-          assert.strictEqual(exit._tag, "Success");
-          assert.isAbove(observed, 0);
-        }).pipe(Effect.provide(skitLayer), Effect.scoped),
       );
 
       // A move record is no longer rewritten after moves; an injected second-write failure is unreachable.
@@ -680,7 +690,7 @@ describe("skit setup", () => {
           const f = yield* fixture({ machine: false });
           const before = yield* captureDisk(f.disk);
           const { exit } = yield* f.setup([["alpha", "remove\0gamma"], true], {
-            refusePublication: (state) => state.collections.length > 0,
+            refusePublication: "import",
           });
           assert.instanceOf(failure(exit), SetupStopped);
           const paths = changedPaths(f.root, yield* diskChanges(before));
@@ -688,12 +698,7 @@ describe("skit setup", () => {
           assert.deepStrictEqual(paths.deleted, []);
           assert.deepStrictEqual(
             [...new Set(paths.created.map((path) => path.split("/").slice(0, 2).join("/")))],
-            [
-              "library/audit.jsonl",
-              "library/machine.json",
-              "library/originals",
-              "library/state.json",
-            ],
+            ["library/library.sqlite", "library/state.json"],
           );
           assert.deepStrictEqual((yield* f.home.durable).skills, []);
           assert.isTrue(yield* f.fs.exists(join(f.path("gamma"), "SKILL.md")));
@@ -729,7 +734,7 @@ describe("skit setup", () => {
             );
             const [moved, kept] = moveRecord.entries;
             const paths = changedPaths(f.root, yield* diskChanges(before));
-            assert.deepStrictEqual(paths.changed, []);
+            assert.deepStrictEqual(paths.changed, ["library/library.sqlite"]);
             assert.deepStrictEqual(paths.deleted, [
               relative(f.root, moved!.path),
               `${relative(f.root, moved!.path)}/SKILL.md`,

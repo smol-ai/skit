@@ -294,7 +294,7 @@ it.effect("preparation returns a write bound to its lease and private saved tree
       });
       const other = yield* otherLease;
       const foreignKey = { ...key, workspaceId: (yield* identified(other)).workspaceId };
-      const checkpoint = yield* f.fs.readFileString(join(home, "author-sync.json"));
+      const checkpoint = yield* history.syncState.read(key);
       expect(
         yield* Effect.flip(
           history.syncState.prepareWrite(lease, foreignKey, {
@@ -303,7 +303,7 @@ it.effect("preparation returns a write bound to its lease and private saved tree
           }),
         ),
       ).toMatchObject({ _tag: "AuthorWorkspaceConflict" });
-      expect(yield* f.fs.readFileString(join(home, "author-sync.json"))).toBe(checkpoint);
+      expect(yield* history.syncState.read(key)).toEqual(checkpoint);
       const current = yield* history.syncState.prepareWrite(lease, key, {
         from: writing,
         trees: { from: fromHash, to: toHash },
@@ -602,7 +602,7 @@ it.effect.each(["WriteNotOwned", "TreesDiffer"] as const)(
             }),
           },
         );
-        const checkpoint = yield* f.fs.readFileString(join(home, "author-sync.json"));
+        const checkpoint = yield* history.syncState.read(key);
         expect(yield* Effect.exit(prepared.apply())).toMatchObject({
           _tag: "Failure",
           cause: {
@@ -617,7 +617,7 @@ it.effect.each(["WriteNotOwned", "TreesDiffer"] as const)(
             ],
           },
         });
-        expect(yield* f.fs.readFileString(join(home, "author-sync.json"))).toBe(checkpoint);
+        expect(yield* history.syncState.read(key)).toEqual(checkpoint);
         expect(yield* f.fs.readFileString(join(f.root, "notes.txt"))).toBe("before\n");
         expect(yield* f.fs.exists(join(other.root, "notes.txt"))).toBe(false);
       }).pipe(Effect.provide(authorLayer(home)));

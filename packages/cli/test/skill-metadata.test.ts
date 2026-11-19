@@ -251,7 +251,11 @@ describe("skit list", () => {
               lock_file_entries: [observation(index)],
             })),
           };
-          yield* home.writeDurable(selected);
+          yield* home.restore((manifest) => ({
+            ...manifest,
+            skills: selected.skills,
+            imports: selected.imports,
+          }));
           const view = yield* home.owned(Library.Service);
           const viewBase = yield* view.read;
           const viewFacts = yield* view.list({ base: viewBase });
@@ -339,7 +343,11 @@ describe("skit list", () => {
           expect(subjects[0]?.skills[0]?.versionId).toBe(rows[0]?.versionId);
           expect(rows[0]?.revision).toBe("1".repeat(40));
           // A held view keeps the displayed selection even when another action selects newer bytes.
-          yield* home.writeDurable(state);
+          yield* home.restore((manifest) => ({
+            ...manifest,
+            skills: state.skills,
+            imports: state.imports,
+          }));
           viewFacts.collections.length = 0;
           expect(
             (yield* view.list({ base: viewBase }).pipe(Effect.map((report) => report.subjects)))[0]

@@ -1,3 +1,4 @@
+import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
 import { describe } from "@effect/vitest";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option, Schema } from "effect";
@@ -7,7 +8,8 @@ import { readInventory } from "../src/library/inventory.js";
 import * as Library from "../src/library/library.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { testRoots } from "./helpers/library-store.js";
+import { loadLibrary } from "../src/library/store/library-store.js";
+import { saveLibrary, testRoots } from "./helpers/library-store.js";
 
 const folder = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -80,7 +82,7 @@ describe("skit inventory", () => {
             assert.strictEqual(changed._tag, "Failure");
             if (changed._tag === "Failure")
               assert.strictEqual(changed.failure._tag, "Library.StalePlan");
-            assert.isFalse(yield* f.fs.exists(join(f.home, "state.json")));
+            assert.isFalse((yield* inspectLocalLibraryState(join(f.home))).present);
             assert.strictEqual(yield* f.fs.readFileString(f.path), "operator edit\n");
             yield* f.fs.writeFileString(f.path, f.bytes);
             const altered = yield* Effect.result(
@@ -95,19 +97,19 @@ describe("skit inventory", () => {
             assert.strictEqual(altered._tag, "Failure");
             if (altered._tag === "Failure")
               assert.strictEqual(altered.failure._tag, "Library.StalePlan");
-            assert.isFalse(yield* f.fs.exists(join(f.home, "state.json")));
+            assert.isFalse((yield* inspectLocalLibraryState(join(f.home))).present);
             yield* library.apply({
               _tag: "Apply",
               plan: yield* library.plan({ _tag: "RefreshInventory", roots: [] }, { base }),
             });
-            const bytes = yield* f.fs.readFileString(join(f.home, "state.json"));
+            const saved = yield* loadLibrary(f.home);
             const stale = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
             assert.strictEqual(stale._tag, "Failure");
             if (stale._tag === "Failure")
               assert.strictEqual(stale.failure._tag, "Library.StalePlan");
-            assert.strictEqual(yield* f.fs.readFileString(join(f.home, "state.json")), bytes);
-            const future = { ...JSON.parse(bytes), future: { keep: "future data" } };
-            yield* f.fs.writeFileString(join(f.home, "state.json"), JSON.stringify(future));
+            assert.deepStrictEqual(yield* loadLibrary(f.home), saved);
+            const future = { ...saved, future: { keep: "future data" } };
+            yield* saveLibrary(f.home, future);
             const futurePlan = yield* library.plan(
               { _tag: "RefreshInventory", roots: [{ harness: "codex", root: f.skills }] },
               { base: yield* library.read },
@@ -117,8 +119,10 @@ describe("skit inventory", () => {
             );
             yield* library.apply({ _tag: "Apply", plan: decoded });
             assert.deepStrictEqual(
-              JSON.parse(yield* f.fs.readFileString(join(f.home, "state.json"))).future,
-              { keep: "future data" },
+              yield* Schema.decodeUnknownEffect(Schema.Struct({ future: Schema.Unknown }))(
+                yield* loadLibrary(f.home),
+              ),
+              { future: { keep: "future data" } },
             );
           }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
         }).pipe(Effect.scoped, Effect.provide(skitLayer)),

@@ -1,11 +1,14 @@
-import { describe } from "@effect/vitest";
-import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Option, Schema } from "effect";
+import { loadOperations, loadLibrary } from "../src/library/store/library-store.js";
+import { SqlClient } from "effect/sql";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+
+import { describe, assert, it } from "@effect/vitest";
+
+import { Effect, FileSystem, Layer, Option } from "effect";
 import { basename, join } from "node:path";
 import * as Library from "../src/library/library.js";
 import { readPathEvidence } from "../src/library/folder-evidence.js";
-import { LibraryState } from "../src/library/library-state.js";
-import { OperationStatus } from "../src/library/store/state-schema.js";
+
 import { skitLayer } from "../src/platform/layer.js";
 import { testRoots } from "./helpers/library-store.js";
 
@@ -37,21 +40,20 @@ const fixture = Effect.fn("test.recoveryOwner.fixture")(function* () {
       { base: yield* owner.read },
     );
   }).pipe(Effect.provide(layer));
-  const read = Schema.decodeUnknownEffect(Schema.fromJsonString(LibraryState));
-  return { fs, home, paths, plan, layer, read };
+  return { fs, home, paths, plan, layer };
 });
 
 it.effect("restore preview leaves saved Library state unchanged", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
 
-    const before = yield* f.fs.readFileString(join(f.home, "state.json"));
+    const before = yield* loadLibrary(f.home);
     yield* Effect.gen(function* () {
       const owner = yield* Library.Service;
 
       yield* owner.plan(f.plan.intent, { base: yield* owner.read });
 
-      assert.strictEqual(yield* f.fs.readFileString(join(f.home, "state.json")), before);
+      assert.deepStrictEqual(yield* loadLibrary(f.home), before);
     }).pipe(Effect.provide(f.layer));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -64,9 +66,7 @@ it.effect("restoring files does not advertise an undo of that restore", () =>
       yield* owner.apply({ _tag: "Apply", plan: f.plan });
     }).pipe(Effect.provide(f.layer));
 
-    const state = yield* f.read(yield* f.fs.readFileString(join(f.home, "state.json")));
-
-    const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(state.operations);
+    const operations = yield* loadOperations(f.home);
 
     const restored = operations.at(-1);
 
@@ -114,10 +114,8 @@ describe("skit library recovery restore", () => {
             );
             assert.strictEqual(exit._tag, "Failure");
             assert.isTrue(interrupted);
-            const recorded = yield* f.read(yield* f.fs.readFileString(join(f.home, "state.json")));
-            const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
-              recorded.operations,
-            );
+
+            const operations = yield* loadOperations(f.home);
             const pending = operations.at(-1);
             assert.strictEqual(pending?._tag, "Pending");
             if (!pending) return assert.fail("Missing Pending Restore");
@@ -148,7 +146,7 @@ describe("skit library recovery restore", () => {
       Effect.gen(function* () {
         const f = yield* fixture();
 
-        const before = yield* f.fs.readFileString(join(f.home, "state.json"));
+        const before = yield* loadLibrary(f.home);
         yield* Effect.gen(function* () {
           const owner = yield* Library.Service;
 
@@ -157,19 +155,17 @@ describe("skit library recovery restore", () => {
           assert.strictEqual(outcome.result.phase, "restored");
         }).pipe(Effect.provide(f.layer));
 
-        const old = yield* f.read(before);
+        const old = before;
 
-        const state = yield* f.read(yield* f.fs.readFileString(join(f.home, "state.json")));
+        const state = yield* loadLibrary(f.home);
 
-        const { operations: _old, ...oldSelection } = old;
+        const oldSelection = old;
 
-        const { operations: _new, ...selection } = state;
+        const selection = state;
 
         assert.deepStrictEqual(selection, oldSelection);
 
-        const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
-          state.operations,
-        );
+        const operations = yield* loadOperations(f.home);
 
         assert.strictEqual(operations.at(-1)?._tag, "Done");
 
@@ -188,13 +184,17 @@ describe("skit library recovery list", () => {
       Effect.gen(function* () {
         const f = yield* fixture();
 
-        const auditPath = join(f.home, "audit.jsonl");
-
         const malformed = "{ malformed history\n";
 
-        yield* f.fs.writeFileString(auditPath, malformed);
+        yield* withLibraryDatabase(
+          libraryDatabasePath(f.home),
+          Effect.gen(function* () {
+            const sql = yield* SqlClient.SqlClient;
+            yield* sql`UPDATE library_audit_events SET document = ${malformed}`;
+          }),
+        );
 
-        const state = yield* f.fs.readFileString(join(f.home, "state.json"));
+        const state = yield* loadLibrary(f.home);
         yield* Effect.gen(function* () {
           const owner = yield* Library.Service;
 
@@ -207,9 +207,19 @@ describe("skit library recovery list", () => {
 
           assert.deepStrictEqual(yield* owner.recovery.list, [f.plan.intent.operationId]);
 
-          assert.strictEqual(yield* f.fs.readFileString(auditPath), malformed);
+          yield* withLibraryDatabase(
+            libraryDatabasePath(f.home),
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              const rows = yield* sql<{
+                document: string;
+              }>`SELECT document FROM library_audit_events`;
+              assert.isTrue(rows.every((row) => row.document === malformed));
+            }),
+            true,
+          );
 
-          assert.strictEqual(yield* f.fs.readFileString(join(f.home, "state.json")), state);
+          assert.deepStrictEqual(yield* loadLibrary(f.home), state);
         }).pipe(Effect.provide(f.layer));
       }).pipe(Effect.provide(skitLayer), Effect.scoped),
     );
@@ -222,11 +232,15 @@ describe("skit library recovery inspect", () => {
       Effect.gen(function* () {
         const f = yield* fixture();
 
-        const auditPath = join(f.home, "audit.jsonl");
-
         const malformed = "{ malformed history\n";
 
-        yield* f.fs.writeFileString(auditPath, malformed);
+        yield* withLibraryDatabase(
+          libraryDatabasePath(f.home),
+          Effect.gen(function* () {
+            const sql = yield* SqlClient.SqlClient;
+            yield* sql`UPDATE library_audit_events SET document = ${malformed}`;
+          }),
+        );
         yield* Effect.gen(function* () {
           const owner = yield* Library.Service;
 

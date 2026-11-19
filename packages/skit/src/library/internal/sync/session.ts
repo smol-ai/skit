@@ -121,6 +121,17 @@ export function openSyncSession(
         }),
       };
     const remoteManifest = remote?.manifest ?? empty;
+    // Once its changes are saved locally, this proven head is the next merge base. The sent
+    // target is still unconfirmed and must never be used as its own accepted base.
+    const mergedBase =
+      remote === null
+        ? undefined
+        : {
+            origin: input.origin,
+            library_id: remote.library_id,
+            revision_id: remote.revision_id,
+            base_manifest: normalizeLibraryManifest(remote.manifest),
+          };
     const base = (!mismatched ? ancestry?.base_manifest : undefined) ?? empty;
     const clean =
       present && remote !== null && same(manifest, remoteManifest) && !input.keepEnabled?.length;
@@ -200,29 +211,29 @@ export function openSyncSession(
       ...planLibrarySync(merge.alignedLocal, remoteManifest, desired),
       ...(merge.enabledResolution ? { enabled_resolution: merge.enabledResolution } : {}),
     };
-    const prepare = (content: Library.StagedContent) => {
+    const prepare = (content: Library.StagedContent, local = false) => {
       const staged = structuredClone(content);
       return Effect.gen(function* () {
         if (!same(yield* libraryManifestFromLocalState(staged.state), desired))
           return yield* new StalePlan({
             reason: { _tag: "SyncChanged", part: "target" },
           });
-        const plan = yield* library
-          .plan(
-            {
-              _tag: "Sync",
-              staged,
-              acceptedBase: Option.fromUndefinedOr(ancestry),
-              deviceSelection: Option.fromUndefinedOr(selected),
-              pendingOrigin: Option.none(),
-              remote: Option.some({
-                origin: input.origin,
-                libraryId: Option.fromNullishOr(remote?.library_id),
-              }),
-            },
-            { base: snapshot },
-          )
-          .pipe(Effect.filterOrFail(isRemoteSyncPlan, () => new SyncLocalChanged()));
+        const plan = yield* library.plan(
+          {
+            _tag: "Sync",
+            saveLocal: local,
+            staged,
+            acceptedBase: Option.fromUndefinedOr(ancestry),
+            ...(local && mergedBase !== undefined ? { mergedBase } : {}),
+            deviceSelection: Option.fromUndefinedOr(selected),
+            pendingOrigin: Option.none(),
+            remote: Option.some({
+              origin: input.origin,
+              libraryId: Option.fromNullishOr(remote?.library_id),
+            }),
+          },
+          { base: snapshot },
+        );
         return {
           checkCurrent:
             remote === null
@@ -234,8 +245,14 @@ export function openSyncSession(
                       : Effect.fail(new SyncLocalChanged()),
                   ),
                 ),
-          apply: (saved: { readonly library_id: string; readonly revision_id: string }) =>
-            library
+          applyLocal: Effect.gen(function* () {
+            if (isRemoteSyncPlan(plan)) return yield* new SyncLocalChanged();
+            const outcome = yield* library.apply({ _tag: "Apply", plan });
+            return outcome.result;
+          }),
+          apply: (saved: { readonly library_id: string; readonly revision_id: string }) => {
+            if (!isRemoteSyncPlan(plan)) return Effect.fail(new SyncLocalChanged());
+            return library
               .apply({
                 _tag: "ApplySynced",
                 plan,
@@ -255,7 +272,8 @@ export function openSyncSession(
               .pipe(
                 Effect.map((outcome) => outcome.result),
                 Effect.catchTag("Library.StalePlan", () => Effect.fail(new SyncLocalChanged())),
-              ),
+              );
+          },
         };
       });
     };
@@ -279,6 +297,8 @@ export function openSyncSession(
           ).length
         : 0,
       prepare,
+      prepareLocal: (content: Library.StagedContent) => prepare(content, true),
+      expectedBase: structuredClone(mergedBase ?? ancestry ?? null),
     };
   });
 }

@@ -1,3 +1,6 @@
+import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
+import { readLibraryAudit } from "../src/library/audit/audit-log.js";
+import { loadLibrary } from "../src/library/store/library-store.js";
 import { SourceProcess } from "../src/platform/source-process.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
@@ -43,10 +46,10 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture;
-      const state = yield* f.fs.readFileString(join(f.home, "state.json"));
+      const state = yield* loadLibrary(f.home);
       assert.deepStrictEqual(yield* f.library.content.inspect(f.snapshot), { _tag: "Intact" });
       assert.strictEqual(f.archives.length, 2);
-      assert.strictEqual(yield* f.fs.readFileString(join(f.home, "state.json")), state);
+      assert.deepStrictEqual(yield* loadLibrary(f.home), state);
       const tree = f.manifest.collection_versions[0];
       yield* f.fs.writeFileString(
         join(collectionVersionPath(join(f.home, "originals"), tree.hash), "SKILL.md"),
@@ -77,10 +80,8 @@ it.effect("content inspection and packing refuse inconsistent snapshots without 
     const current = yield* f.library.read;
     assert.notStrictEqual(current.revision, f.snapshot.revision);
     const inconsistent = { ...current, revision: f.snapshot.revision };
-    const statePath = join(f.home, "state.json");
-    const auditPath = join(f.home, "audit.jsonl");
-    const state = yield* f.fs.readFileString(statePath);
-    const audit = yield* f.fs.readFileString(auditPath);
+    const state = yield* loadLibrary(f.home);
+    const audit = yield* readLibraryAudit(f.home);
     for (const read of [
       Effect.asVoid(f.library.content.inspect(inconsistent)),
       Effect.asVoid(f.library.content.pack(inconsistent)),
@@ -89,8 +90,8 @@ it.effect("content inspection and packing refuse inconsistent snapshots without 
       assert.strictEqual(refused._tag, "Failure");
       if (refused._tag === "Failure") assert.strictEqual(refused.failure._tag, "Library.StalePlan");
     }
-    assert.strictEqual(yield* f.fs.readFileString(statePath), state);
-    assert.strictEqual(yield* f.fs.readFileString(auditPath), audit);
+    assert.deepStrictEqual(yield* loadLibrary(f.home), state);
+    assert.deepStrictEqual(yield* readLibraryAudit(f.home), audit);
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
@@ -129,7 +130,7 @@ it.effect(
         assert.deepStrictEqual(staged.missing, []);
         assert.strictEqual((yield* library.read)._tag, "Absent");
         assert.deepStrictEqual((yield* library.history).events, []);
-        assert.isFalse(yield* f.fs.exists(join(home, "state.json")));
+        assert.isFalse((yield* inspectLocalLibraryState(join(home))).present);
         for (const archive of f.archives)
           assert.isTrue(
             yield* f.fs.exists(collectionVersionPath(join(home, "originals"), archive.digest)),
@@ -270,7 +271,7 @@ it.effect("staging refuses reusable bytes changed during a download without over
       if (result._tag === "Failure")
         assert.strictEqual(result.failure._tag, "ContentAddressCollision");
       assert.strictEqual(yield* f.fs.readFileString(unexpected), "changed during fetch\n");
-      assert.isFalse(yield* f.fs.exists(join(home, "state.json")));
+      assert.isFalse((yield* inspectLocalLibraryState(join(home))).present);
     }).pipe(Effect.provide(Library.layer({ home, roots: testRoots(home) })));
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );

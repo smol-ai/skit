@@ -1,10 +1,16 @@
+import {
+  LibraryWriter,
+  loadOperationHistory,
+  writeLibrary,
+  inspectLocalLibraryState,
+  migrateLocalLibraryState,
+} from "../store/library-store.js";
 import { addSource, importSource } from "../source.js";
 import { planEnabled } from "./session/set-enabled.js";
 import { openLibrarySession, readLibrarySkillContent } from "./session/session.js";
 import { syncLibrary } from "./sync/library-sync.js";
 import { openSyncSession } from "./sync/session.js";
 import { listRecoveryOperations, inspectRecoveryOperation } from "./recovery/moves.js";
-import { resolve } from "node:path";
 import { planRestore, applyRestore } from "./recovery/restore.js";
 import { planSync, applySync, type SyncApplyRequest } from "./sync/sync.js";
 import { planManaging, applyManaging, checkedManageIntent } from "./manage/manage.js";
@@ -12,7 +18,7 @@ import { stepRouting } from "../routing/step.js";
 import { planAcceptance, applyAcceptance } from "./security/accept.js";
 import { planInventory, applyInventory } from "./inventory/refresh.js";
 import { planUndo, applyUndo } from "./setup/undo.js";
-import { Context, Effect, FileSystem, Option, Path, Schema, Struct } from "effect";
+import { Context, Effect, FileSystem, Option, Path } from "effect";
 import { LinkStat } from "../../platform/link-stat.js";
 import { SourceProcess } from "../../platform/source-process.js";
 import { HttpClient } from "effect/http";
@@ -26,17 +32,9 @@ import {
 import type { LibraryManifest } from "../library-contracts.js";
 import { Digest } from "effect/crypto";
 import * as InstalledSkills from "../installed-skills.js";
-import {
-  LibraryWriter,
-  libraryStatePath,
-  loadLibrary,
-  writeLibrary,
-  inspectLocalLibraryState,
-  migrateLocalLibraryState,
-  recoverLibraryHistory,
-} from "../store/library-store.js";
-import { InvalidLibraryState, type LibraryChanged } from "../failures.js";
-import { type StepRouting, OperationStatus } from "../store/state-schema.js";
+
+import { type LibraryChanged } from "../failures.js";
+import { type StepRouting } from "../store/state-schema.js";
 import { readLibraryAudit } from "../audit/audit-log.js";
 import { snapshotOf, type Snapshot } from "../snapshot.js";
 import { recover, setup, applyRecorded } from "./setup/run.js";
@@ -70,15 +68,13 @@ import type {
  */
 const make = Effect.fn("Library.make")(function* (home: string, roots: InventoryRootOptions) {
   yield* migrateLocalLibraryState(home);
-  const activeWriter = yield* Effect.serviceOption(LibraryWriter);
-  if (Option.isNone(activeWriter) || activeWriter.value.home !== resolve(home))
-    yield* recoverLibraryHistory(home);
   const startup = yield* recover(home);
   const files = yield* InstalledSkills.Service;
   // Only the platform services: an owner built inside a write must never carry that writer out.
-  const writer = Context.pick(FileSystem.FileSystem)(
-    yield* Effect.context<FileSystem.FileSystem>(),
-  );
+  const writer = Context.pick(
+    FileSystem.FileSystem,
+    Digest.Digest,
+  )(yield* Effect.context<FileSystem.FileSystem | Digest.Digest>());
   // The platform's HTTP client is captured like its filesystem: an owner never picks a transport.
   const importing = Context.pick(
     FileSystem.FileSystem,
@@ -271,25 +267,11 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
     },
     read,
     history: Effect.gen(function* () {
-      const state = yield* loadLibrary(home);
-      const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
-        state.operations,
-      ).pipe(
-        Effect.mapError(
-          () =>
-            new InvalidLibraryState({
-              path: libraryStatePath(home),
-              reason: { _tag: "InvalidData" },
-            }),
-        ),
-      );
+      const operations = yield* loadOperationHistory(home);
       const events = yield* readLibraryAudit(home);
       return {
         events,
-        operations: operations.map(({ steps, ...operation }) => ({
-          ...(operation._tag === "Pending" ? Struct.omit(operation, ["preparation"]) : operation),
-          steps: steps.map(({ applies: _applies, ...step }) => step),
-        })),
+        operations,
       } satisfies History;
     }).pipe(Effect.provide(writer), Effect.provide(importing)),
     recovery: {
@@ -308,7 +290,17 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
         ),
       ),
     content,
-    sync: (options, transport) => operation(syncLibrary(syncing, roots, options, transport)),
+    sync: (options, transport) =>
+      operation(
+        syncLibrary(syncing, roots, options, transport, (request) =>
+          owned(
+            Effect.gen(function* () {
+              const writer = yield* LibraryWriter;
+              yield* writer.saveSyncAncestry(structuredClone(request));
+            }),
+          ),
+        ),
+      ),
     syncSession: (request, options) => operation(openSyncSession(syncing, roots, request, options)),
     setup: (steps, options) =>
       writeLibrary(home, setup(steps, options)).pipe(

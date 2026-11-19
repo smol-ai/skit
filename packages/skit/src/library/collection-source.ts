@@ -20,7 +20,7 @@ export type CollectionSource = typeof CollectionSource.Type;
 /** Missing/broken workspace metadata must not hide its retained Library entry. Remote facts
  * are shown only when the live folder still has the identity this Collection owns. */
 export const readCollectionSource = Effect.fn("Library.readCollectionSource")(function* (
-  state: LibraryState,
+  state: Pick<LibraryState, "imports">,
   collection: Collection,
 ): Effect.fn.Return<CollectionSource | undefined, never, FileSystem.FileSystem> {
   const acquisition = sourceImports(state, collection.collection_id)[0];

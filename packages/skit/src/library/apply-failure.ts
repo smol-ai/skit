@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { PlatformErrorSchema } from "../platform/error-schema.js";
-import { InvalidLibraryState, LibraryChanged } from "./failures.js";
+import { LibrarySqlError, InvalidLibraryState, LibraryChanged } from "./failures.js";
 import { InvalidIntent, SetEnabledInvalid } from "./enabled-plan.js";
 import {
   StalePlan,
@@ -31,11 +31,16 @@ import {
   ConflictingInvocationDeclaration,
   ReadmeFrontmatterMissing,
 } from "../artifact/failures.js";
+import { Unusable } from "./machine-settings-failures.js";
+import { LibraryAuditInvalid } from "./audit/failures.js";
 import { HomeBusy } from "../platform/lock-failures.js";
 
 /** Every checked failure applying a reviewed installed-skill plan can return. */
 export const ApplyFailure = Schema.Union([
   PlatformErrorSchema,
+  Unusable,
+  LibraryAuditInvalid,
+  LibrarySqlError,
   InvalidLibraryState,
   InvalidIntent,
   SetEnabledInvalid,

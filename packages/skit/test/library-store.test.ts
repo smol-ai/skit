@@ -1,3 +1,17 @@
+import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
+import { prepareSetupChanges } from "../src/library/store/setup-intent.js";
+import { snapshotOf, Revision } from "../src/library/snapshot.js";
+import {
+  migrateLocalLibraryState,
+  loadOperations,
+  libraryOriginalsPath,
+  LibraryWriter,
+  loadLibrary,
+  writeLibrary,
+  type LibraryStateWriteError,
+} from "../src/library/store/library-store.js";
+
+import { libraryDatabasePath } from "../src/library/store/database.js";
 import { PnpmSkillManaged } from "../src/installed-skills/pnpm-failures.js";
 import { PluginManifestInvalid } from "../src/sources/plugin-failures.js";
 import { DedicatedInstallerRequired } from "../src/sources/installer-guidance.js";
@@ -26,7 +40,17 @@ import {
 } from "../src/library/installation/remove.js";
 import { openLibrary } from "./helpers/library-store.js";
 import { assert, it } from "@effect/vitest";
-import { Deferred, Effect, Fiber, FileSystem, Option, Predicate, Result, Schema } from "effect";
+import {
+  Context,
+  Deferred,
+  Effect,
+  Fiber,
+  FileSystem,
+  Option,
+  Predicate,
+  Result,
+  Schema,
+} from "effect";
 import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { makeOperationId, migratedMachineId } from "../src/library/entity-ids.js";
@@ -36,7 +60,7 @@ import {
   libraryManifestFromLocalState,
   type LibraryState,
 } from "../src/library/library-state.js";
-import { recordedLibrary } from "../src/library/internal/setup/intent.js";
+import { setupIntent, recordedLibrary } from "../src/library/store/intent.js";
 import { readSnapshotArchive } from "../src/library/snapshot-archive.js";
 import { OperationStatus, StepError } from "../src/library/store/state-schema.js";
 import {
@@ -68,7 +92,7 @@ import {
   InstalledSkillWouldReplaceLink,
   DestinationsIncomplete,
 } from "../src/library/plan-failures.js";
-import { Revision } from "../src/library/snapshot.js";
+
 import { Changed } from "../src/library/installed-skill-facts.js";
 import {
   UnsafeInstalledSkillName,
@@ -82,13 +106,6 @@ import {
 } from "../src/installed-skills/failures.js";
 import { badArgument, systemError } from "effect/PlatformError";
 
-import {
-  libraryOriginalsPath,
-  LibraryWriter,
-  loadLibrary,
-  writeLibrary,
-  type LibraryStateWriteError,
-} from "../src/library/store/library-store.js";
 import { Hash } from "../src/shared/hash.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { lockFile } from "../src/platform/file-lock.js";
@@ -128,14 +145,13 @@ const library = Effect.gen(function* () {
       home,
       Effect.flatMap(LibraryWriter, (writer) => writer.save(next, base)),
     );
-  return { save, home, path: join(home, "state.json") };
+  return { save, home, path: libraryDatabasePath(home) };
 });
 
 it.effect("refuses to save a state its own loader would reject", () =>
   Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const { save, home, path } = yield* library;
-    const before = yield* fs.readFileString(path);
+    const { save, home } = yield* library;
+    const before = yield* loadLibrary(home);
     const state = yield* loadLibrary(home);
 
     // Duplicate Collection IDs satisfy the state schema but not the portable manifest.
@@ -145,7 +161,7 @@ it.effect("refuses to save a state its own loader would reject", () =>
     ).pipe(Effect.flip);
 
     assert.strictEqual(error._tag, "InvalidLibraryState");
-    assert.strictEqual(yield* fs.readFileString(path), before);
+    assert.deepStrictEqual(yield* loadLibrary(home), before);
     assert.deepStrictEqual(yield* loadLibrary(home), state);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -207,26 +223,24 @@ it.effect("accepts exactly one of two concurrent saves sharing one write", () =>
 
 it.effect("refuses to save while another holder has the lock", () =>
   Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const { save, home, path } = yield* library;
+    const { save, home } = yield* library;
     const state = yield* loadLibrary(home);
-    const before = yield* fs.readFileString(path);
+    const before = yield* loadLibrary(home);
     // Another holder, as another process would be.
     yield* lockFile(join(home, "lock.sqlite"));
 
     const error = yield* save({ ...state, enabled: [] }, state).pipe(Effect.flip);
 
     assert.strictEqual(error._tag, "HomeBusy");
-    assert.strictEqual(yield* fs.readFileString(path), before);
+    assert.deepStrictEqual(yield* loadLibrary(home), before);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("makes a save that outlives its write acquire the lock again", () =>
   Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const { home, path } = yield* library;
+    const { home } = yield* library;
     const base = yield* loadLibrary(home);
-    const before = yield* fs.readFileString(path);
+    const before = yield* loadLibrary(home);
     const resume = yield* Deferred.make<void>();
     const child = yield* writeLibrary(
       home,
@@ -243,7 +257,7 @@ it.effect("makes a save that outlives its write acquire the lock again", () =>
     yield* Deferred.succeed(resume, undefined);
 
     assert.strictEqual((yield* Effect.flip(Fiber.join(child)))._tag, "HomeBusy");
-    assert.strictEqual(yield* fs.readFileString(path), before);
+    assert.deepStrictEqual(yield* loadLibrary(home), before);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -255,22 +269,18 @@ it.live("keeps the lock until a save already under way in a forked fiber has fin
     const entered = yield* Deferred.make<void>();
     const resume = yield* Deferred.make<void>();
     let armed = false;
-    // Pause the save inside its check-and-write, at its read of the current state.
+    // Pause the save inside its check-and-write, before opening its SQL write transaction.
     const gatedFs: FileSystem.FileSystem = {
       ...fs,
-      readFileString: (file, encoding) =>
-        fs.readFileString(file, encoding).pipe(
-          Effect.tap(() =>
-            file === path && armed
-              ? Effect.sync(() => {
-                  armed = false;
-                }).pipe(
-                  Effect.andThen(Deferred.succeed(entered, undefined)),
-                  Effect.andThen(Deferred.await(resume)),
-                )
-              : Effect.void,
-          ),
-        ),
+      chmod: (file, mode) =>
+        Effect.gen(function* () {
+          if (file === path && armed) {
+            armed = false;
+            yield* Deferred.succeed(entered, undefined);
+            yield* Deferred.await(resume);
+          }
+          yield* fs.chmod(file, mode);
+        }),
     };
     const base = yield* loadLibrary(home);
     const next = { ...base, enabled: [] };
@@ -310,7 +320,7 @@ const synced = (state: LibraryState, originalsPath: string) =>
 
 it.effect("keeps operation records on this device: saved and loaded, never synced", () =>
   Effect.gen(function* () {
-    const { save, home } = yield* library;
+    const { home } = yield* library;
     const base = yield* loadLibrary(home);
     const hash = Hash.make(`sha256:${"a".repeat(64)}`);
     const parent = { path: join(home, "skills"), dev: 1n, ino: 2n };
@@ -325,6 +335,10 @@ it.effect("keeps operation records on this device: saved and loaded, never synce
       marker: Option.none(),
     };
     const removed = { _tag: "Absent" as const, path: folder.path, parent };
+    const evidence = {
+      before: { installedSkills: base.installed_skills },
+      setup: { changes: yield* prepareSetupChanges(setupIntent(base), setupIntent(base), home) },
+    };
     const operations: OperationStatus[] = [
       OperationStatus.cases.Pending.make({
         operationId: makeOperationId(),
@@ -336,7 +350,7 @@ it.effect("keeps operation records on this device: saved and loaded, never synce
             status: "Pending",
           },
         ],
-        before: recordedLibrary(base),
+        ...evidence,
       }),
       OperationStatus.cases.Stopped.make({
         operationId: makeOperationId(),
@@ -347,28 +361,47 @@ it.effect("keeps operation records on this device: saved and loaded, never synce
           path: folder.path,
           expected: { before: Option.some(folder), after: Option.none() },
         },
-        before: recordedLibrary(base),
-        after: recordedLibrary(base),
+        ...evidence,
+        after: { installedSkills: base.installed_skills },
       }),
       OperationStatus.cases.Done.make({
         operationId: makeOperationId(),
         steps: [],
-        before: recordedLibrary(base),
-        after: recordedLibrary(base),
+        ...evidence,
+        after: { installedSkills: base.installed_skills },
       }),
     ];
-    const next = {
-      ...base,
-      operations: yield* Schema.encodeEffect(Schema.Array(OperationStatus))(operations),
-    };
-
-    yield* save(next, base);
+    yield* writeLibrary(
+      home,
+      Effect.gen(function* () {
+        const writer = yield* LibraryWriter;
+        for (const operation of operations) {
+          const pending = OperationStatus.cases.Pending.make({
+            operationId: operation.operationId,
+            steps: operation.steps,
+            before: operation.before,
+            setup: operation.setup,
+          });
+          yield* writer.recordOperation(
+            pending,
+            snapshotOf(yield* inspectLocalLibraryState(home)),
+            "setup",
+          );
+          if (operation._tag !== "Pending")
+            yield* writer.settleOperation(
+              pending,
+              operation._tag === "Stopped" ? operation.reason : undefined,
+            );
+        }
+      }),
+    );
     const loaded = yield* loadLibrary(home);
-
-    assert.deepStrictEqual(loaded, next);
+    assert.deepStrictEqual(loaded, base);
     assert.deepStrictEqual(
-      yield* Schema.decodeEffect(Schema.Array(OperationStatus))(loaded.operations),
-      operations,
+      yield* loadOperations(home),
+      operations.map((operation) =>
+        operation._tag === "Pending" ? operation : { ...operation, kind: "setup" },
+      ),
     );
     assert.deepStrictEqual(
       yield* synced(loaded, libraryOriginalsPath(home)),
@@ -378,10 +411,10 @@ it.effect("keeps operation records on this device: saved and loaded, never synce
 );
 
 it.effect(
-  "a stopped operation keeps its step's error through state.json, in each stored form",
+  "a stopped operation keeps its step's error through the Library database, in each stored form",
   () =>
     Effect.gen(function* () {
-      const { save, home } = yield* library;
+      const { home } = yield* library;
       const nativeSchemaError = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ requestId: Schema.String }),
       )({ requestId: 42 }).pipe(Effect.flip);
@@ -638,27 +671,40 @@ it.effect(
           reason: { _tag: "ExitCode", exitCode: 128, stderr: "object missing" },
         }),
       ];
+      const state = yield* loadLibrary(home);
+      const changes = yield* prepareSetupChanges(setupIntent(state), setupIntent(state), home);
       const operations = errors.map((error, step) =>
         OperationStatus.cases.Stopped.make({
           operationId: makeOperationId(),
           steps: [],
           reason: { _tag: "StepFailed", step, error },
-          before: recordedLibrary(emptyLibraryState()),
-          after: recordedLibrary(emptyLibraryState()),
+          before: { installedSkills: state.installed_skills },
+          setup: { changes },
+          after: { installedSkills: state.installed_skills },
         }),
       );
-      const base = yield* loadLibrary(home);
-      yield* save(
-        {
-          ...base,
-          operations: yield* Schema.encodeEffect(Schema.Array(OperationStatus))(operations),
-        },
-        base,
+      yield* writeLibrary(
+        home,
+        Effect.gen(function* () {
+          const writer = yield* LibraryWriter;
+          for (const operation of operations) {
+            const pending = OperationStatus.cases.Pending.make({
+              operationId: operation.operationId,
+              steps: operation.steps,
+              before: operation.before,
+              setup: operation.setup,
+            });
+            const state = yield* loadLibrary(home);
+            yield* writer.recordOperation(
+              pending,
+              snapshotOf(yield* inspectLocalLibraryState(home)),
+              "setup",
+            );
+            yield* writer.settleOperation(pending, operation.reason);
+          }
+        }),
       );
-
-      const loaded = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
-        (yield* loadLibrary(home)).operations,
-      );
+      const loaded = yield* loadOperations(home);
 
       // Each error reads back as the same kind, with every stored field equal.
       const fields = (error: unknown) =>
@@ -703,13 +749,12 @@ it.effect("reads a recorded LibraryBusy failure without rewriting it, and encode
       ],
     });
     yield* fs.writeFileString(join(home, "state.json"), bytes);
+    yield* migrateLocalLibraryState(home);
     const owner = yield* openLibrary(home);
     const snapshot = yield* owner.read;
     assert.strictEqual(snapshot._tag, "Present");
     if (snapshot._tag !== "Present") return;
-    const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
-      snapshot.state.operations,
-    );
+    const operations = yield* loadOperations(home);
     const operation = operations[0];
     assert.strictEqual(operation?._tag, "Stopped");
     if (operation?._tag !== "Stopped" || operation.reason._tag !== "StepFailed")
@@ -719,7 +764,10 @@ it.effect("reads a recorded LibraryBusy failure without rewriting it, and encode
       _tag: "HomeBusy",
       path: "/home/lock.sqlite",
     });
-    assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), bytes);
+    assert.strictEqual(
+      yield* fs.readFileString(join(home, "state.json.v12.backup-database")),
+      bytes,
+    );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -751,12 +799,11 @@ it.effect("reads historical stored prose without rewriting bytes or inventing fa
       ],
     });
     yield* fs.writeFileString(join(home, "state.json"), bytes);
+    yield* migrateLocalLibraryState(home);
     const snapshot = yield* (yield* openLibrary(home)).read;
     assert.strictEqual(snapshot._tag, "Present");
     if (snapshot._tag !== "Present") return;
-    const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
-      snapshot.state.operations,
-    );
+    const operations = yield* loadOperations(home);
     const operation = operations[0];
     if (operation?._tag !== "Stopped" || operation.reason._tag !== "StepFailed")
       return yield* Effect.die("Missing historical failure");
@@ -767,6 +814,40 @@ it.effect("reads historical stored prose without rewriting bytes or inventing fa
       diagnostic: "historical diagnostic",
       originalRemediation: "historical guidance",
     });
-    assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), bytes);
+    assert.strictEqual(
+      yield* fs.readFileString(join(home, "state.json.v12.backup-database")),
+      bytes,
+    );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect(
+  "saving an initialized database needs no Digest service and never revisits legacy files",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const { home } = yield* library;
+      const before = yield* loadLibrary(home);
+      const next: LibraryState = {
+        ...before,
+        scanIssues: [{ path: "/missing", harness: "codex", code: "MISSING_ROOT" }],
+      };
+      yield* writeLibrary(
+        home,
+        Effect.gen(function* () {
+          yield* (yield* LibraryWriter).save(next, before);
+        }),
+      ).pipe(
+        Effect.provide(
+          Context.make(FileSystem.FileSystem, {
+            ...fs,
+            readFileString: (path, encoding) =>
+              path === join(home, "state.json") || path === join(home, "audit.jsonl")
+                ? Effect.die("save revisited legacy data")
+                : fs.readFileString(path, encoding),
+          }),
+        ),
+      );
+      assert.deepStrictEqual(yield* loadLibrary(home), next);
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

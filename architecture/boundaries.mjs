@@ -226,6 +226,10 @@ export const approvedServices = [
   "skit/library/Library",
   // Present only inside writeLibrary, which holds the home lock: the capability to save state.
   "skit/library/LibraryWriter",
+  // The scoped SQL connection lets settings and Library saves share one transaction.
+  "skit/library/LibraryDatabase",
+  // The running setup owns its accumulated changed intent across Library saves.
+  "skit/library/CurrentSetupOperation",
   // Private scoped capability over HomeLock's OS lock; nested leases drain before release.
   "skit/platform/HomeLockLease",
   "skit/library/InstalledSkills",

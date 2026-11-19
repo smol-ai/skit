@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 import { currentCollectionSkills, enabledSkillIds, Enabled } from "./library-contracts.js";
-import { enabledAt, globalEnabled } from "./enabled.js";
+import { enabledSetsEqual, enabledAt, globalEnabled } from "./enabled.js";
 import { type LibraryState } from "./library-state.js";
 import { CollectionId, SkillId } from "./entity-ids.js";
 import { InstallScope } from "./scope.js";
@@ -184,10 +184,10 @@ export const calculateEnabled = Effect.fn("SetEnabled.calculate")(function* (
   const changed =
     hasList &&
     (existing === undefined ||
-      !Schema.toEquivalence(Schema.Array(Enabled))(existing.enabled, items) ||
-      !Schema.toEquivalence(Schema.UndefinedOr(Schema.Record(Schema.String, Schema.String)))(
-        existing.invocation_policies,
-        invocation_policies,
+      !enabledSetsEqual(existing.enabled, items) ||
+      !Schema.toEquivalence(Schema.Record(Schema.String, Schema.String))(
+        existing.invocation_policies ?? {},
+        invocation_policies ?? {},
       ));
   const existingIds = new Set(existing ? enabledSkillIds(state, existing.enabled) : []);
   const newlyEnabledSkills = options.enabled
@@ -230,7 +230,19 @@ export const uniqueInstallScopes = (scopes: readonly InstallScope[]) => [
 ];
 
 /** One Collection's enabled members and invocation intent at a scope, including empty follows. */
-export const enabledCollections = (state: LibraryState): EnabledCollection[] =>
+export const enabledCollections = (
+  state: Pick<
+    LibraryState,
+    | "collections"
+    | "skills"
+    | "collection_versions"
+    | "imports"
+    | "enabled"
+    | "repositories"
+    | "device_skill_selection"
+    | "invocation_policies"
+  >,
+): EnabledCollection[] =>
   [
     { scope: { kind: "global" as const }, ...globalEnabled(state) },
     ...state.repositories.map((repository) => ({

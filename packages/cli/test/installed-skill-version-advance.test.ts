@@ -51,12 +51,12 @@ const boundRawReview = Effect.gen(function* () {
   const first = yield* observe("first verbatim Skill\n");
   const bound = yield* library.durable;
   assert.ok(bound);
-  yield* library.writeDurable({
-    ...bound,
-    enabled: bound.skills
+  yield* library.enable(
+    bound.skills
       .filter((skill) => skill.collection_id === first.collection?.collection_id)
       .map((skill) => ({ skill: skill.skill_id })),
-  });
+  );
+
   const project = writingTo(
     home,
     installEnabledSkills({
@@ -93,28 +93,13 @@ const boundRawReview = Effect.gen(function* () {
 // Before the fix, an update left untouched installed skills recorded as conflicted at the new Version.
 it.effect("heals an untouched installed skill already recorded as conflicted", () =>
   Effect.gen(function* () {
-    const { fs, library, observe, project, installedPath, installedSkill } = yield* boundRawReview;
+    const { fs, observe, project, installedPath, installedSkill } = yield* boundRawReview;
+    yield* fs.writeFileString(installedPath, "local edit\n");
     yield* observe("second verbatim Skill\n");
-    const state = yield* library.durable;
-    assert.ok(state);
-    const view = yield* library.owned(Library.Service);
-    const viewBase = yield* view.read;
-    const viewFacts = yield* view.list({ base: viewBase });
-    const selected = viewFacts.collections
-      .flatMap((collection) => collection.members)
-      .find((member) => member.id === state.skills[0]?.skill_id)?.versionId;
-    assert.ok(selected);
-    yield* library.writeDurable({
-      ...state,
-      // Untouched on disk, so the folder still holds the hash SKIT wrote.
-      installed_skills: state.installed_skills.map((row) => ({
-        ...row,
-        skill_version_id: selected,
-        status: "conflicted" as const,
-        conflicts: [],
-        current_hash: row.expected_hash,
-      })),
-    });
+    yield* project;
+    assert.strictEqual((yield* installedSkill).row.status, "conflicted");
+    // The user restores the bytes SKIT wrote, leaving the recorded conflict to be healed.
+    yield* fs.writeFileString(installedPath, "first verbatim Skill\n");
     yield* project;
     assert.strictEqual(yield* fs.readFileString(installedPath), "second verbatim Skill\n");
     const { row } = yield* installedSkill;
@@ -172,15 +157,10 @@ describe("skit enable", () => {
             const selectedSkill = withOther.skills.find((skill) => skill.name === "raw-review");
             assert.ok(selectedSkill);
             const skillId = selectedSkill.skill_id;
-            yield* library.writeDurable({
-              ...withOther,
-              enabled: [
-                ...(followedCollection
-                  ? [{ collection: selectedSkill.collection_id }]
-                  : withOther.enabled),
-                { skill: otherId },
-              ],
-            });
+            yield* library.enable([
+              ...(followedCollection ? [{ collection: selectedSkill.collection_id }] : []),
+              { skill: otherId },
+            ]);
             yield* project;
             yield* fs.remove(join(roots.codexRoot, "other"), { recursive: true });
             yield* fs.remove(join(roots.codexRoot, "raw-review"), { recursive: true });

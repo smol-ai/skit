@@ -4,10 +4,10 @@ import { originalArchive, originalTreePath } from "./helpers/original-tree.js";
 import { installEnabledSkills } from "./helpers/installed-skills.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Schema } from "effect";
+import { Effect, FileSystem, Layer } from "effect";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { LibraryState } from "@smolai/skit-core/library";
+
 import { type SkitSource } from "@smolai/skit-core/library/source";
 import * as Library from "@smolai/skit-core/library";
 import { SourceProcess } from "@smolai/skit-core/platform";
@@ -137,11 +137,26 @@ describe("skit sync", () => {
               assert.strictEqual(yield* f.fs.readFileString(join(f.root(hash), path)), bytes);
             const targetRoot = join(f.workspace, "agent-skills");
             const restored = yield* f.load(f.freshHome);
-            yield* f.fs.writeFileString(
-              join(f.freshHome, "state.json"),
-              yield* Schema.encodeEffect(Schema.fromJsonString(LibraryState))({
-                ...restored,
-                enabled: restored.skills.map((skill) => ({ skill: skill.skill_id })),
+            yield* writingTo(
+              f.freshHome,
+              Effect.gen(function* () {
+                const owner = yield* Library.Service;
+                for (const skill of restored.skills) {
+                  const plan = yield* owner.plan(
+                    {
+                      _tag: "Enabled",
+                      changes: [
+                        {
+                          _tag: "Enable",
+                          subject: { _tag: "Skill", id: skill.skill_id },
+                          where: [{ kind: "global" }],
+                        },
+                      ],
+                    },
+                    { base: yield* owner.read },
+                  );
+                  yield* owner.apply({ _tag: "Apply", plan });
+                }
               }),
             );
             yield* writingTo(

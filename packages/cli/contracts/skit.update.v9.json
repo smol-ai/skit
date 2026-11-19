@@ -4644,6 +4644,435 @@
             "_tag": {
               "type": "string",
               "enum": [
+                "MachineSettingsUnusable"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "ReadFailed"
+                      ]
+                    },
+                    "failure": {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "PlatformError"
+                          ]
+                        },
+                        "reason": {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": [
+                                "AlreadyExists",
+                                "BadResource",
+                                "Busy",
+                                "InvalidData",
+                                "NotFound",
+                                "PermissionDenied",
+                                "TimedOut",
+                                "UnexpectedEof",
+                                "Unknown",
+                                "WouldBlock",
+                                "WriteZero",
+                                "BadArgument"
+                              ]
+                            },
+                            "module": {
+                              "type": "string"
+                            },
+                            "method": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "syscall": {
+                              "type": "string"
+                            },
+                            "pathOrDescriptor": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "module",
+                            "method"
+                          ],
+                          "additionalProperties": true
+                        }
+                      },
+                      "required": [
+                        "_tag",
+                        "reason"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "failure"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "InvalidData"
+                      ]
+                    },
+                    "failure": {
+                      "type": "object",
+                      "properties": {
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/definitions/SchemaIssueFact"
+                          }
+                        }
+                      },
+                      "required": [
+                        "issues"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "failure"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "UnsupportedVersion"
+                      ]
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "supported": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      }
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "version",
+                    "supported"
+                  ],
+                  "additionalProperties": true
+                }
+              ]
+            }
+          },
+          "required": [
+            "_tag",
+            "path",
+            "reason"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "LibraryAuditInvalid"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "line": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "SchemaInvalid"
+                      ]
+                    },
+                    "failure": {
+                      "type": "object",
+                      "properties": {
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/definitions/SchemaIssueFact"
+                          }
+                        }
+                      },
+                      "required": [
+                        "issues"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "failure"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "EventIdentityChanged"
+                      ]
+                    },
+                    "eventId": {
+                      "type": "string"
+                    },
+                    "expected": {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number",
+                          "enum": [
+                            1
+                          ]
+                        },
+                        "eventId": {
+                          "type": "string"
+                        },
+                        "occurredAt": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "workflow": {
+                          "type": "string"
+                        },
+                        "imported": {
+                          "type": "boolean"
+                        },
+                        "changes": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "entity": {
+                                "type": "string",
+                                "enum": [
+                                  "collection",
+                                  "skill",
+                                  "version",
+                                  "binding",
+                                  "projection",
+                                  "custody",
+                                  "library"
+                                ]
+                              },
+                              "id": {
+                                "type": "string"
+                              },
+                              "action": {
+                                "type": "string"
+                              },
+                              "before": {
+                                "type": "string"
+                              },
+                              "after": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "digest": {
+                                "type": "string",
+                                "pattern": "^sha256:[a-f0-9]{64}$"
+                              }
+                            },
+                            "required": [
+                              "entity",
+                              "id",
+                              "action"
+                            ],
+                            "additionalProperties": true
+                          }
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "eventId",
+                        "occurredAt",
+                        "type",
+                        "workflow",
+                        "changes"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "actual": {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number",
+                          "enum": [
+                            1
+                          ]
+                        },
+                        "eventId": {
+                          "type": "string"
+                        },
+                        "occurredAt": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "workflow": {
+                          "type": "string"
+                        },
+                        "imported": {
+                          "type": "boolean"
+                        },
+                        "changes": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "entity": {
+                                "type": "string",
+                                "enum": [
+                                  "collection",
+                                  "skill",
+                                  "version",
+                                  "binding",
+                                  "projection",
+                                  "custody",
+                                  "library"
+                                ]
+                              },
+                              "id": {
+                                "type": "string"
+                              },
+                              "action": {
+                                "type": "string"
+                              },
+                              "before": {
+                                "type": "string"
+                              },
+                              "after": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "digest": {
+                                "type": "string",
+                                "pattern": "^sha256:[a-f0-9]{64}$"
+                              }
+                            },
+                            "required": [
+                              "entity",
+                              "id",
+                              "action"
+                            ],
+                            "additionalProperties": true
+                          }
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "eventId",
+                        "occurredAt",
+                        "type",
+                        "workflow",
+                        "changes"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "eventId",
+                    "expected",
+                    "actual"
+                  ],
+                  "additionalProperties": true
+                }
+              ]
+            }
+          },
+          "required": [
+            "_tag",
+            "path",
+            "reason"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "LibrarySqlError"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "cause": {}
+          },
+          "required": [
+            "_tag",
+            "path",
+            "cause"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
                 "InvalidLibraryState"
               ]
             },
@@ -4652,6 +5081,166 @@
             },
             "reason": {
               "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "LegacySourceChanged"
+                      ]
+                    },
+                    "sourcePath": {
+                      "type": "string"
+                    },
+                    "backupPath": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "databasePath": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "sourcePath",
+                    "backupPath",
+                    "databasePath"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "LegacyStateBesideDatabase"
+                      ]
+                    },
+                    "statePath": {
+                      "type": "string"
+                    },
+                    "databasePath": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "statePath",
+                    "databasePath"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "ImportBackupChanged"
+                      ]
+                    },
+                    "sourcePath": {
+                      "type": "string"
+                    },
+                    "backupPath": {
+                      "type": "string"
+                    },
+                    "databasePath": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "sourcePath",
+                    "backupPath",
+                    "databasePath"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "NewerDatabaseMigration"
+                      ]
+                    },
+                    "databasePath": {
+                      "type": "string"
+                    },
+                    "migration": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "supported": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "databasePath",
+                    "migration",
+                    "supported"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "OperationStateMissing"
+                      ]
+                    },
+                    "databasePath": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "databasePath"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "DatabaseIntegrityInvalid"
+                      ]
+                    },
+                    "databasePath": {
+                      "type": "string"
+                    },
+                    "result": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "databasePath",
+                    "result"
+                  ],
+                  "additionalProperties": true
+                },
                 {
                   "type": "object",
                   "properties": {
@@ -5561,6 +6150,9 @@
               ]
             },
             "path": {
+              "type": "string"
+            },
+            "owner": {
               "type": "string"
             }
           },
@@ -20801,6 +21393,9 @@
             },
             "path": {
               "type": "string"
+            },
+            "owner": {
+              "type": "string"
             }
           },
           "required": [
@@ -20938,6 +21533,166 @@
             },
             "reason": {
               "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "LegacySourceChanged"
+                      ]
+                    },
+                    "sourcePath": {
+                      "type": "string"
+                    },
+                    "backupPath": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "databasePath": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "sourcePath",
+                    "backupPath",
+                    "databasePath"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "LegacyStateBesideDatabase"
+                      ]
+                    },
+                    "statePath": {
+                      "type": "string"
+                    },
+                    "databasePath": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "statePath",
+                    "databasePath"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "ImportBackupChanged"
+                      ]
+                    },
+                    "sourcePath": {
+                      "type": "string"
+                    },
+                    "backupPath": {
+                      "type": "string"
+                    },
+                    "databasePath": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "sourcePath",
+                    "backupPath",
+                    "databasePath"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "NewerDatabaseMigration"
+                      ]
+                    },
+                    "databasePath": {
+                      "type": "string"
+                    },
+                    "migration": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "supported": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "databasePath",
+                    "migration",
+                    "supported"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "OperationStateMissing"
+                      ]
+                    },
+                    "databasePath": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "databasePath"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "DatabaseIntegrityInvalid"
+                      ]
+                    },
+                    "databasePath": {
+                      "type": "string"
+                    },
+                    "result": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "databasePath",
+                    "result"
+                  ],
+                  "additionalProperties": true
+                },
                 {
                   "type": "object",
                   "properties": {
@@ -21145,6 +21900,27 @@
             "_tag",
             "path",
             "reason"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "LibrarySqlError"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "cause": {}
+          },
+          "required": [
+            "_tag",
+            "path",
+            "cause"
           ],
           "additionalProperties": true
         },
@@ -40405,6 +41181,27 @@
             "_tag": {
               "type": "string",
               "enum": [
+                "LibrarySqlError"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "cause": {}
+          },
+          "required": [
+            "_tag",
+            "path",
+            "cause"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
                 "InvalidLibraryState"
               ]
             },
@@ -40413,6 +41210,166 @@
             },
             "reason": {
               "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "LegacySourceChanged"
+                      ]
+                    },
+                    "sourcePath": {
+                      "type": "string"
+                    },
+                    "backupPath": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "databasePath": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "sourcePath",
+                    "backupPath",
+                    "databasePath"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "LegacyStateBesideDatabase"
+                      ]
+                    },
+                    "statePath": {
+                      "type": "string"
+                    },
+                    "databasePath": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "statePath",
+                    "databasePath"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "ImportBackupChanged"
+                      ]
+                    },
+                    "sourcePath": {
+                      "type": "string"
+                    },
+                    "backupPath": {
+                      "type": "string"
+                    },
+                    "databasePath": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "sourcePath",
+                    "backupPath",
+                    "databasePath"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "NewerDatabaseMigration"
+                      ]
+                    },
+                    "databasePath": {
+                      "type": "string"
+                    },
+                    "migration": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "supported": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "databasePath",
+                    "migration",
+                    "supported"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "OperationStateMissing"
+                      ]
+                    },
+                    "databasePath": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "databasePath"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "DatabaseIntegrityInvalid"
+                      ]
+                    },
+                    "databasePath": {
+                      "type": "string"
+                    },
+                    "result": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "databasePath",
+                    "result"
+                  ],
+                  "additionalProperties": true
+                },
                 {
                   "type": "object",
                   "properties": {
@@ -42522,6 +43479,411 @@
       ],
       "additionalProperties": true
     },
+    "MachineSettingsUnusableEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "MachineSettingsUnusable"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ReadFailed"
+                  ]
+                },
+                "failure": {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "PlatformError"
+                      ]
+                    },
+                    "reason": {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "AlreadyExists",
+                            "BadResource",
+                            "Busy",
+                            "InvalidData",
+                            "NotFound",
+                            "PermissionDenied",
+                            "TimedOut",
+                            "UnexpectedEof",
+                            "Unknown",
+                            "WouldBlock",
+                            "WriteZero",
+                            "BadArgument"
+                          ]
+                        },
+                        "module": {
+                          "type": "string"
+                        },
+                        "method": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "syscall": {
+                          "type": "string"
+                        },
+                        "pathOrDescriptor": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "_tag",
+                        "module",
+                        "method"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "reason"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "_tag",
+                "failure"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "InvalidData"
+                  ]
+                },
+                "failure": {
+                  "$ref": "#/definitions/SchemaFailureEncoded"
+                }
+              },
+              "required": [
+                "_tag",
+                "failure"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "UnsupportedVersion"
+                  ]
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "supported": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                }
+              },
+              "required": [
+                "_tag",
+                "version",
+                "supported"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "path",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "LibraryAuditInvalidEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "LibraryAuditInvalid"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "SchemaInvalid"
+                  ]
+                },
+                "failure": {
+                  "$ref": "#/definitions/SchemaFailureEncoded"
+                }
+              },
+              "required": [
+                "_tag",
+                "failure"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "EventIdentityChanged"
+                  ]
+                },
+                "eventId": {
+                  "type": "string"
+                },
+                "expected": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "enum": [
+                        1
+                      ]
+                    },
+                    "eventId": {
+                      "type": "string"
+                    },
+                    "occurredAt": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "workflow": {
+                      "type": "string"
+                    },
+                    "imported": {
+                      "type": "boolean"
+                    },
+                    "changes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "entity": {
+                            "type": "string",
+                            "enum": [
+                              "collection",
+                              "skill",
+                              "version",
+                              "binding",
+                              "projection",
+                              "custody",
+                              "library"
+                            ]
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "action": {
+                            "type": "string"
+                          },
+                          "before": {
+                            "type": "string"
+                          },
+                          "after": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "digest": {
+                            "type": "string",
+                            "pattern": "^sha256:[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "entity",
+                          "id",
+                          "action"
+                        ],
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "eventId",
+                    "occurredAt",
+                    "type",
+                    "workflow",
+                    "changes"
+                  ],
+                  "additionalProperties": true
+                },
+                "actual": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "enum": [
+                        1
+                      ]
+                    },
+                    "eventId": {
+                      "type": "string"
+                    },
+                    "occurredAt": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "workflow": {
+                      "type": "string"
+                    },
+                    "imported": {
+                      "type": "boolean"
+                    },
+                    "changes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "entity": {
+                            "type": "string",
+                            "enum": [
+                              "collection",
+                              "skill",
+                              "version",
+                              "binding",
+                              "projection",
+                              "custody",
+                              "library"
+                            ]
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "action": {
+                            "type": "string"
+                          },
+                          "before": {
+                            "type": "string"
+                          },
+                          "after": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "digest": {
+                            "type": "string",
+                            "pattern": "^sha256:[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "entity",
+                          "id",
+                          "action"
+                        ],
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "eventId",
+                    "occurredAt",
+                    "type",
+                    "workflow",
+                    "changes"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "_tag",
+                "eventId",
+                "expected",
+                "actual"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "path",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "LibrarySqlErrorEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "LibrarySqlError"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "cause": {}
+      },
+      "required": [
+        "_tag",
+        "path",
+        "cause"
+      ],
+      "additionalProperties": true
+    },
     "CollectionVersionArchiveInvalidReason_1": {
       "anyOf": [
         {
@@ -42751,6 +44113,166 @@
         },
         "reason": {
           "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "LegacySourceChanged"
+                  ]
+                },
+                "sourcePath": {
+                  "type": "string"
+                },
+                "backupPath": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "databasePath": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "sourcePath",
+                "backupPath",
+                "databasePath"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "LegacyStateBesideDatabase"
+                  ]
+                },
+                "statePath": {
+                  "type": "string"
+                },
+                "databasePath": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "statePath",
+                "databasePath"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ImportBackupChanged"
+                  ]
+                },
+                "sourcePath": {
+                  "type": "string"
+                },
+                "backupPath": {
+                  "type": "string"
+                },
+                "databasePath": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "sourcePath",
+                "backupPath",
+                "databasePath"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "NewerDatabaseMigration"
+                  ]
+                },
+                "databasePath": {
+                  "type": "string"
+                },
+                "migration": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "supported": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "_tag",
+                "databasePath",
+                "migration",
+                "supported"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "OperationStateMissing"
+                  ]
+                },
+                "databasePath": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "databasePath"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "DatabaseIntegrityInvalid"
+                  ]
+                },
+                "databasePath": {
+                  "type": "string"
+                },
+                "result": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "_tag",
+                "databasePath",
+                "result"
+              ],
+              "additionalProperties": true
+            },
             {
               "type": "object",
               "properties": {
@@ -43779,6 +45301,9 @@
         },
         "path": {
           "type": "string"
+        },
+        "owner": {
+          "type": "string"
         }
       },
       "required": [
@@ -43873,6 +45398,15 @@
             "reason"
           ],
           "additionalProperties": true
+        },
+        {
+          "$ref": "#/definitions/MachineSettingsUnusableEncoded"
+        },
+        {
+          "$ref": "#/definitions/LibraryAuditInvalidEncoded"
+        },
+        {
+          "$ref": "#/definitions/LibrarySqlErrorEncoded"
         },
         {
           "$ref": "#/definitions/InvalidLibraryStateEncoded"

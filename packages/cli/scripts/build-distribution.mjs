@@ -13,12 +13,12 @@ const outputs = [
   {
     entry: "src/storybook/index.ts",
     file: "dist/src/storybook/index.js",
-    external: ["effect", "effect/*"],
+    external: ["effect", "effect/*", "bun:sqlite"],
     splitting: true,
   },
 ];
-// Preserve the lazy Node-only author journal adapter when Storybook runs under Bun.
-// A single bundled file would hoist its node:sqlite import into the public entry point.
+// Storybook runs under Node and Bun. Keep each native driver behind its runtime import.
+// A single bundled file would hoist the native imports into the public entry point.
 await rm("dist/src/storybook/chunks", { recursive: true, force: true });
 const results = await Promise.all(
   outputs.map(async (output) => ({
@@ -43,6 +43,8 @@ const results = await Promise.all(
       },
       define: {
         __SKIT_BUILD__: JSON.stringify(buildInfo(packageMetadata)),
+        // The CLI binary runs on Node; omit Bun's driver from this standalone bundle.
+        ...(output.splitting ? {} : { "process.versions.bun": "undefined" }),
       },
       legalComments: "external",
       metafile: true,
@@ -68,6 +70,7 @@ for (const { output, result } of results) {
       !path.startsWith("node:") &&
       !builtins.has(path) &&
       !optionalAddons.has(path) &&
+      !(output.splitting && path === "bun:sqlite") &&
       !(output.external.length > 0 && (path === "effect" || path.startsWith("effect/"))),
   );
   if (packageImports.length > 0) {

@@ -1,3 +1,5 @@
+import { readCatalogue, decodeCatalogue } from "./store/catalogue.js";
+import { readInstalledSkill } from "./store/installed.js";
 import { Effect, FileSystem, Schema } from "effect";
 import { dirname, join } from "node:path";
 import { deterministicTreeHash, validateSkitDirectory } from "../artifact/skit.js";
@@ -28,14 +30,7 @@ import {
   SourceIdentity,
   SourceTracking,
 } from "./library-contracts.js";
-import { decodeLibraryState, libraryManifestFromLocalState } from "./library-state.js";
-import {
-  LibraryWriter,
-  libraryOriginalsPath,
-  libraryStatePath,
-  loadLibrary,
-  inspectLocalLibraryState,
-} from "./store/library-store.js";
+import { LibraryWriter, libraryOriginalsPath, libraryStatePath } from "./store/library-store.js";
 import { originalTreeHash } from "./collection-version.js";
 import { writeCollectionVersion } from "./internal/content/collection-version.js";
 import { installedSkillHash } from "./installed-skill-hash.js";
@@ -204,7 +199,8 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
 ) {
   const writer = yield* LibraryWriter;
   const machineId = request.machineId ?? (yield* MachineSettings.ensureIdentity(writer.home));
-  const base = yield* loadLibrary(writer.home);
+  const stored = yield* readCatalogue(writer.home);
+  const base = stored.value;
   const state = structuredClone(base);
   const source =
     request.sourceIdentity ??
@@ -349,24 +345,17 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       })),
     });
   state.imports.push(sourceImport);
-  const successor = yield* decodeLibraryState(state).pipe(
-    Effect.mapError(
-      (error) =>
-        new ImportRequestInvalid({
-          reason: { _tag: "StateInvalid", kind: "library-state", failure: error },
-        }),
-    ),
-  );
-  yield* libraryManifestFromLocalState(successor).pipe(
-    Effect.mapError(
-      (error) =>
-        new ImportRequestInvalid({
-          reason: {
-            _tag: "StateInvalid",
-            kind: "portable-manifest",
-            failure: new Schema.SchemaError(error),
-          },
-        }),
+  const successor = yield* decodeCatalogue(libraryStatePath(writer.home), state).pipe(
+    Effect.mapError((error) =>
+      error.reason._tag === "SchemaInvalid"
+        ? new ImportRequestInvalid({
+            reason: {
+              _tag: "StateInvalid",
+              kind: "portable-manifest",
+              failure: error.reason.failure,
+            },
+          })
+        : error,
     ),
   );
   const skills = persistedSkills.map((skill) =>
@@ -377,7 +366,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     : versionsChanged
       ? ("updated" as const)
       : ("unchanged" as const);
-  yield* writer.save(successor, base);
+  yield* writer.saveCatalogue(successor, base, stored.revision);
   return { action, collection, skills, ...imported } satisfies ImportedCollection;
 });
 
@@ -408,17 +397,15 @@ export const importCollection = Effect.fn("Library.importCollection")(function* 
  */
 export const importEdit = Effect.fn("Library.importEdit")(function* (request: EditImport) {
   const writer = yield* LibraryWriter;
-  const current = yield* inspectLocalLibraryState(writer.home);
-  if (!current.present)
+  const current = yield* readCatalogue(writer.home);
+  if (current.revision === null)
     return yield* new InvalidLibraryState({
       path: libraryStatePath(writer.home),
       reason: { _tag: "MissingRecord", record: "library-state" },
     });
-  const state = structuredClone(current.state);
+  const state = structuredClone(current.value);
   const skill = state.skills.find((candidate) => candidate.skill_id === request.skillId);
-  const installedSkill = state.installed_skills.find(
-    (candidate) => candidate.installed_skill_id === request.installedSkillId,
-  );
+  const installedSkill = yield* readInstalledSkill(writer.home, request.installedSkillId);
   if (
     skill === undefined ||
     installedSkill === undefined ||
@@ -491,16 +478,8 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: Ed
   });
   if (!skill.versions.includes(version)) skill.versions.push(version);
   skill.local_version_id = version.skill_version_id;
-  const successor = yield* decodeLibraryState(state).pipe(
-    Effect.mapError(
-      (error) =>
-        new InvalidLibraryState({
-          path: libraryStatePath(writer.home),
-          reason: { _tag: "SchemaInvalid", failure: error },
-        }),
-    ),
-  );
-  yield* writer.save(successor, current.state);
+  const successor = yield* decodeCatalogue(libraryStatePath(writer.home), state);
+  yield* writer.saveCatalogue(successor, current.value, current.revision);
   return {
     skillVersionId: version.skill_version_id,
     collectionVersionId,

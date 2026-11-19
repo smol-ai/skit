@@ -3,7 +3,7 @@ import { basename, join } from "node:path";
 import { Effect, Schema, type Scope } from "effect";
 import * as InstalledSkills from "./installed-skills.js";
 import { libraryOriginalsPath } from "./store/library-store.js";
-import { emptyLibraryState, type LibraryState } from "./library-state.js";
+import { emptyLibraryState, prepareLibrarySets, type LibraryState } from "./library-state.js";
 import { type InstalledSkill } from "./device-state.js";
 import type { Snapshot } from "./snapshot.js";
 import { skillsToCheckForDuplicates, deviceInstallationIntent } from "./enabled.js";
@@ -238,7 +238,9 @@ export const planChanges = Effect.fn("Library.planChanges")(function* (
   approvals: readonly Approval[],
 ): Effect.fn.Return<PlannedChanges, PlanError, InstalledSkills.Service | Scope.Scope> {
   const files = yield* InstalledSkills.Service;
-  const { next, requests } = yield* edit(base, intent);
+  base = prepareLibrarySets(base);
+  const { next: edited, requests } = yield* edit(base, intent);
+  const next = prepareLibrarySets(edited);
   // A plan touches only the Skills its intent names. Enabling and installing read this device's
   // folders; the others work where copies are already recorded. Uninstall names copies, below.
   // Enabling also retires the copies of Skills the Library no longer has.
@@ -299,10 +301,17 @@ export const planChanges = Effect.fn("Library.planChanges")(function* (
   /** A recorded copy's scope: the repository whose root holds it, else global. */
   const scopeOf = (recorded: InstalledSkill): InstallScope => {
     const path = canonical(recorded.root);
-    const repository = base.repositories.find((item) => {
+    let repository: LibraryState["repositories"][number] | undefined;
+    for (const item of base.repositories) {
       const root = canonical(item.root);
-      return path === root || path.startsWith(`${root}/`);
-    });
+      if (
+        (path === root || path.startsWith(root.endsWith("/") ? root : `${root}/`)) &&
+        (repository === undefined ||
+          root.length > canonical(repository.root).length ||
+          (root.length === canonical(repository.root).length && item.root < repository.root))
+      )
+        repository = item;
+    }
     return repository === undefined
       ? { kind: "global" }
       : { kind: "repository", root: repository.root };

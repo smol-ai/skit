@@ -13,6 +13,8 @@ import {
 import { TestClock } from "effect/testing";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { DatabaseSync } from "node:sqlite";
+import { checkpointStates } from "./helpers/author-checkpoints.js";
 import type * as History from "@smolai/skit-core/history";
 // Independent disk format: this test observes checkpoint progress, not engine capabilities.
 const IdleCheckpoint = Schema.TaggedStruct("Idle", { base: Schema.NullOr(Schema.String) });
@@ -53,21 +55,14 @@ const workspaceIdOf = Effect.fn("Test.workspaceIdOf")(function* (device: {
   return identity.workspace_id;
 });
 
-/** The device's saved checkpoints for its workspace, by locator, from its v4 sync bindings. */
+/** The device's persisted checkpoint facts, read independently from SQLite. */
 const savedStates = Effect.fn("Test.savedSyncStates")(function* (device: {
   readonly workspace: string;
   readonly home: string;
 }) {
-  const fs = yield* FileSystem.FileSystem;
-  const bindings = yield* Schema.decodeEffect(
-    Schema.fromJsonString(
-      Schema.Struct({
-        schema: Schema.Literal("skit.author-sync.v1"),
-        workspaces: Schema.Record(Schema.String, Schema.Record(Schema.String, SyncCheckpoint)),
-      }),
-    ),
-  )(yield* fs.readFileString(join(device.home, "author-sync.json")));
-  return bindings.workspaces[yield* workspaceIdOf(device)];
+  return yield* Schema.decodeUnknownEffect(Schema.Record(Schema.String, SyncCheckpoint))(
+    yield* checkpointStates(device.home, yield* workspaceIdOf(device)),
+  );
 });
 
 type World = Effect.Success<ReturnType<typeof makeAuthorSyncWorld>>;
@@ -347,7 +342,7 @@ describe("skit author sync", () => {
           Effect.gen(function* () {
             const world = yield* makeAuthorSyncWorld();
             yield* world.connect();
-            const path = join(world.a.home, "author-sync.json");
+            const path = join(world.a.home, "library.sqlite");
             const saved = yield* world.a.readCheckpoint();
             const invalid = render(yield* workspaceIdOf(world.a));
             const files = yield* world.a.files();
@@ -529,34 +524,32 @@ describe("skit author sync", () => {
       it.effect("a state flush failure stops sync before it moves current", () =>
         Effect.gen(function* () {
           const world = yield* makeAuthorSyncWorld();
-          const fs = yield* FileSystem.FileSystem;
           yield* world.connect();
           yield* world.a.edit("notes/a.txt", "not yet sent", "local-history");
           const current = yield* world.server.current();
-          const bindingPath = join(world.a.home, "author-sync.json");
-          const before = yield* fs.readFileString(bindingPath);
-          const failed = yield* Effect.result(
-            world.a.sync().pipe(
-              Effect.provideService(FileSystem.FileSystem, {
-                ...fs,
-                open: Effect.fn("Test.failStateFlush")(function* (path, options) {
-                  const file = yield* fs.open(path, options);
-                  return path.includes("/.sync-state-")
-                    ? {
-                        ...file,
-                        writeAll: (bytes: Uint8Array) => file.writeAll(bytes),
-                        sync: fs
-                          .readFile(join(world.a.home, "missing-flush-target"))
-                          .pipe(Effect.asVoid),
-                      }
-                    : file;
-                }),
-              }),
-            ),
-          );
+          const before = yield* world.a.readCheckpoint();
+          yield* Effect.sync(() => {
+            const database = new DatabaseSync(join(world.a.home, "library.sqlite"));
+            try {
+              database.exec(
+                "CREATE TRIGGER refuse_fixture_checkpoint BEFORE UPDATE ON author_state_fields BEGIN SELECT RAISE(ABORT, 'fixture refuses checkpoint'); END",
+              );
+            } finally {
+              database.close();
+            }
+          });
+          const failed = yield* Effect.result(world.a.sync());
+          yield* Effect.sync(() => {
+            const database = new DatabaseSync(join(world.a.home, "library.sqlite"));
+            try {
+              database.exec("DROP TRIGGER refuse_fixture_checkpoint");
+            } finally {
+              database.close();
+            }
+          });
           expect(Result.isFailure(failed)).toBe(true);
           expect(yield* world.server.current()).toBe(current);
-          expect(yield* fs.readFileString(bindingPath)).toBe(before);
+          expect(yield* world.a.readCheckpoint()).toBe(before);
           expect((yield* world.a.sync()).status).toBe("pushed");
           yield* world.b.sync();
           yield* expectConverged(world);
@@ -1328,6 +1321,79 @@ describe("skit author sync", () => {
           }).pipe(Effect.provide(testPlatformLayer)),
       );
 
+      it.effect.each(["atomic", "in-place", "write-error", "interrupted"] as const)(
+        "an %s save at replacement survives sync and restart",
+        (kind) =>
+          Effect.gen(function* () {
+            const world = yield* makeAuthorSyncWorld();
+            const fs = yield* FileSystem.FileSystem;
+            const file = "notes/a.txt";
+            const editor = "editor save at replacement\n";
+            yield* world.connect();
+            yield* world.a.edit(file, "base\n");
+            yield* world.a.sync();
+            yield* world.b.sync();
+            yield* world.a.edit(file, "incoming\n");
+            yield* world.a.sync();
+
+            const target = join(world.b.workspace, file);
+            let saved = false;
+            let stopAt: string | undefined;
+            const result = yield* Effect.exit(
+              world.b.sync().pipe(
+                Effect.provideService(FileSystem.FileSystem, {
+                  ...fs,
+                  rename: (source, destination) =>
+                    Effect.gen(function* () {
+                      // The old code renamed onto the target and lost this version. The new
+                      // code moves the target aside and checks what it actually displaced.
+                      if (!saved && (source === target || destination === target)) {
+                        if (kind === "atomic") {
+                          const temporary = target + ".editor";
+                          yield* fs.writeFileString(temporary, editor);
+                          yield* fs.rename(temporary, target);
+                        } else {
+                          yield* fs.writeFileString(target, editor);
+                        }
+                        expect(yield* fs.readFileString(target)).toBe(editor);
+                        saved = true;
+                        yield* fs.rename(source, destination);
+                        if (kind === "interrupted") return yield* Effect.interrupt;
+                        if (kind === "write-error") stopAt = destination;
+                        return;
+                      }
+                      yield* fs.rename(source, destination);
+                    }),
+                  // Fail the first flush so rollback has to restore the displaced file.
+                  open: (path, options) => {
+                    if (path !== stopAt) return fs.open(path, options);
+                    stopAt = undefined;
+                    return fs.open(target, options);
+                  },
+                }),
+              ),
+            );
+            expect(saved).toBe(true);
+            expect(result._tag).toBe("Failure");
+            if (kind === "interrupted") {
+              expect(Exit.hasInterrupts(result)).toBe(true);
+              expect(yield* fs.exists(target)).toBe(false);
+            } else {
+              expect(yield* world.b.read(file)).toBe(editor);
+            }
+            yield* world.b.restart();
+            yield* world.b.sync();
+            const copies = yield* world.copies();
+            expect(
+              copies.some((copy) =>
+                copy.files.some(
+                  (entry) => entry.path === file && Buffer.from(entry.bytes).toString() === editor,
+                ),
+              ),
+            ).toBe(true);
+          }).pipe(Effect.provide(testPlatformLayer)),
+      );
+
       it.effect("a local save while posting the merge input prevents stale application", () =>
         Effect.gen(function* () {
           const world = yield* makeAuthorSyncWorld();
@@ -1358,7 +1424,6 @@ describe("skit author sync", () => {
       it.effect("an editor save during a push is kept locally and sent by the next sync", () =>
         Effect.gen(function* () {
           const world = yield* makeAuthorSyncWorld();
-          const fs = yield* FileSystem.FileSystem;
           yield* world.connect();
           yield* world.a.edit("notes/a.txt", "first save\n", "remote");
           yield* world.a.backUp();
@@ -1369,10 +1434,9 @@ describe("skit author sync", () => {
           yield* gate.release();
           expect((yield* Fiber.join(pending)).status).toBe("pushed");
           expect(yield* world.a.read("notes/a.txt")).toBe("save while upload was in flight\n");
-          const bindingPath = join(world.a.home, "author-sync.json");
-          const beforePreview = yield* fs.readFileString(bindingPath);
+          const beforePreview = yield* world.a.readCheckpoint();
           expect(yield* world.a.preview()).toMatchObject({ status: "ready", action: "push" });
-          expect(yield* fs.readFileString(bindingPath)).toBe(beforePreview);
+          expect(yield* world.a.readCheckpoint()).toBe(beforePreview);
           yield* world.b.sync();
           expect(yield* world.b.read("notes/a.txt")).toBe("first save\n");
           expect((yield* world.a.sync()).status).toBe("pushed");
@@ -1429,7 +1493,6 @@ describe("skit author sync", () => {
       it.effect("a lost move response cannot override the revision's later descendant", () =>
         Effect.gen(function* () {
           const world = yield* makeAuthorSyncWorld();
-          const fs = yield* FileSystem.FileSystem;
           yield* world.connect();
           yield* world.a.edit("notes/a.txt", "accepted x", "remote");
           // The move lands, but A never hears so: A is left sending.
@@ -1438,10 +1501,9 @@ describe("skit author sync", () => {
           yield* world.b.sync();
           yield* world.b.edit("notes/a.txt", "descendant y", "remote");
           yield* world.b.sync();
-          const bindingPath = join(world.a.home, "author-sync.json");
-          const before = yield* fs.readFileString(bindingPath);
+          const before = yield* world.a.readCheckpoint();
           const preview = yield* world.a.preview();
-          expect(yield* fs.readFileString(bindingPath)).toBe(before);
+          expect(yield* world.a.readCheckpoint()).toBe(before);
           const result = yield* world.a.sync();
           expect(yield* world.a.read("notes/a.txt")).toBe("descendant y");
           expect([preview, result]).toMatchObject([
@@ -1499,7 +1561,6 @@ describe("skit author sync", () => {
       it.effect("recovers a move whose response disappeared without posting it again as new", () =>
         Effect.gen(function* () {
           const world = yield* makeAuthorSyncWorld();
-          const fs = yield* FileSystem.FileSystem;
           yield* world.connect();
           yield* world.a.edit("notes/a.txt", "accepted before disconnect\n", "remote");
           yield* world.server.dropNextResponse("a");
@@ -1508,11 +1569,10 @@ describe("skit author sync", () => {
           expect(yield* world.server.current()).toBe(committed.at(-1)?.id);
           yield* expectRecoverable(world);
           // The binding still says Sending; a preview reports the landed move and changes nothing.
-          const bindingPath = join(world.a.home, "author-sync.json");
-          const before = yield* fs.readFileString(bindingPath);
+          const before = yield* world.a.readCheckpoint();
           expect((yield* savedStates(world.a))?.[locator]?._tag).toBe("Sending");
           expect((yield* world.a.preview()).status).toBe("up_to_date");
-          expect(yield* fs.readFileString(bindingPath)).toBe(before);
+          expect(yield* world.a.readCheckpoint()).toBe(before);
           expect((yield* world.a.sync()).status).toBe("up_to_date");
           expect(yield* savedStates(world.a)).toEqual({
             [locator]: { _tag: "Idle", base: committed.at(-1)?.id },

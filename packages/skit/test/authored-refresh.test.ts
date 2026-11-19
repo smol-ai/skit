@@ -31,6 +31,8 @@ import { watchAuthorWorkspace, AuthorWatchEvent } from "../src/author/watch.js";
 import { AuthorWorkspace } from "../src/author/workspace.js";
 import { AuthorHistory } from "../src/author/history.js";
 import { DatabaseSync } from "node:sqlite";
+import { SqlClient } from "effect/sql";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
 import * as History from "../src/history/history.js";
 import * as Sync from "../src/sync/sync.js";
 import { memoryStore } from "./helpers/memory-store.js";
@@ -1106,10 +1108,19 @@ describe("skit update", () => {
             yield* Effect.gen(function* () {
               yield* enable(f.root, f.home);
               yield* updateAuthoredSkills(f.root);
-              const statePath = join(f.home, "author-sync.json");
-              const state = JSON.parse(yield* f.fs.readFileString(statePath));
-              delete state.inventories;
-              yield* f.fs.writeFileString(statePath, JSON.stringify(state));
+              yield* withLibraryDatabase(
+                libraryDatabasePath(f.home),
+                Effect.gen(function* () {
+                  const sql = yield* SqlClient.SqlClient;
+                  yield* sql.withTransaction(
+                    Effect.gen(function* () {
+                      yield* sql`DELETE FROM author_inventory_paths`;
+                      yield* sql`DELETE FROM author_inventories`;
+                      yield* sql`UPDATE author_state_fields SET inventories_present=0 WHERE id=1`;
+                    }),
+                  );
+                }),
+              );
               yield* f.fs.remove(join(f.root, "skills/review/notes.txt"));
               yield* updateAuthoredSkills(f.root);
               yield* TestClock.adjust("1 hour");

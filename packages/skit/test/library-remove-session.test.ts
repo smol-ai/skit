@@ -1,3 +1,4 @@
+import { loadLibrary } from "../src/library/store/library-store.js";
 import { describe } from "@effect/vitest";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
@@ -28,12 +29,12 @@ describe("skit remove", () => {
             const request = yield* localImportRequest(source, "2026-11-04T00:00:00.000Z");
             if (Option.isNone(request)) return yield* Effect.die("Expected Skill source");
             yield* library.import.collection(request.value);
-            const before = yield* fs.readFileString(join(home, "state.json"));
+            const before = yield* loadLibrary(home);
             const planned = yield* library.remove({ query: "review", dryRun: true });
             assert.strictEqual(planned.kind, "plan");
             assert.strictEqual(planned.value.skills, 1);
             assert.strictEqual(planned.value.versions, 1);
-            assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), before);
+            assert.deepStrictEqual(yield* loadLibrary(home), before);
             assert.strictEqual(yield* fs.readFileString(path), bytes);
             const removed = yield* library.remove({ query: "review", dryRun: false });
             assert.strictEqual(removed.kind, "removed");

@@ -6,7 +6,7 @@ import { installEnabledSkills } from "./helpers/installed-skills.js";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { Clock, Effect, FileSystem, Option } from "effect";
-import { systemError } from "effect/PlatformError";
+
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { TestClock } from "effect/testing";
 import { it } from "@effect/vitest";
@@ -17,7 +17,7 @@ import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { skillsDirectoryFor } from "@smolai/skit-core/library/routing";
 import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply.js";
-import { prepareSetupUndo } from "../src/library/setup/undo.js";
+import { prepareSetupUndo } from "@smolai/skit-core/library/setup";
 import { setupSourceChoiceId, runSetup, setupIntent } from "@smolai/skit-core/library/setup";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 
@@ -101,7 +101,9 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
         }))
       : initial.skills,
   };
-  yield* home.writeDurable(before);
+  yield* home.enable(enabled);
+  if (selectedOverride) yield* home.restore((manifest) => ({ ...manifest, skills: before.skills }));
+  before = yield* home.durable;
   if (projectExisting) {
     yield* home.owned(
       writingTo(
@@ -170,7 +172,7 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
           },
         }),
   };
-  let saves = 0;
+  const reader = yield* home.owned(Library.Service);
   const executed = yield* Effect.exit(
     home.owned(
       Effect.gen(function* () {
@@ -183,18 +185,22 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
         });
       }).pipe(
         Effect.provide(interaction.layer),
-        // The record is the first state.json replacement and the import the second: dying there
-        // leaves it Pending.
+        // Interrupt at the next write boundary after the source import is visible in domain state.
         withLibraryOwner(home.inventory),
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
-          rename: (from, to) =>
-            Effect.andThen(
-              fs.rename(from, to),
-              interruptAfterImport && to === home.statePath && ++saves === 2
-                ? Effect.interrupt
-                : Effect.void,
-            ),
+          chmod: (path, mode) =>
+            Effect.gen(function* () {
+              if (interruptAfterImport && path === join(home.home, "library.sqlite")) {
+                const snapshot = yield* reader.read.pipe(Effect.orDie);
+                if (
+                  snapshot._tag === "Present" &&
+                  snapshot.state.imports.length > before.imports.length
+                )
+                  return yield* Effect.interrupt;
+              }
+              yield* fs.chmod(path, mode);
+            }),
         }),
       ),
     ),
@@ -202,10 +208,9 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
   let operationId: string | undefined;
   if (interruptAfterImport) {
     expect(executed._tag).toBe("Failure");
-    const saved: { operations: readonly { operationId: string }[] } = JSON.parse(
-      yield* fs.readFileString(home.statePath),
-    );
-    operationId = saved.operations[0]?.operationId;
+    operationId = (yield* reader.history).operations.find(
+      (operation) => operation._tag === "Pending",
+    )?.operationId;
   } else {
     if (executed._tag === "Failure") return yield* Effect.failCause(executed.cause);
     operationId = executed.value.operationId;
@@ -452,49 +457,23 @@ describe("skit library undo", () => {
         }).pipe(Effect.provide(skitLayer)),
     );
 
-    it.effect(
-      "a source inverse already published before a settings failure is not appended again on retry",
-      () =>
-        Effect.gen(function* () {
-          const f = yield* fixture();
-          const inverse = yield* f.home.owned(prepareSetupUndo(f.operationId));
-          const failure = yield* Effect.flip(
-            f.home.owned(
-              inverse.apply().pipe(
-                Effect.provideService(FileSystem.FileSystem, {
-                  ...f.fs,
-                  rename: (from, to) =>
-                    to === join(f.home.home, "machine.json")
-                      ? Effect.fail(
-                          systemError({
-                            _tag: "PermissionDenied",
-                            module: "FileSystem",
-                            method: "rename",
-                            pathOrDescriptor: to,
-                          }),
-                        )
-                      : f.fs.rename(from, to),
-                }),
-              ),
-            ),
-          );
-          expect(failure._tag).toBe("PlatformError");
-          const partial = yield* f.home.durable;
-          expect(
-            setupIntent(partial).memberships?.find(
-              (membership) => membership.collectionId === f.collectionId,
-            )?.skillIds,
-          ).toHaveLength(1);
-          expect((yield* Effect.flip(f.home.owned(inverse.apply())))._tag).toBe(
-            "Library.StalePlan",
-          );
-          const refreshed = yield* f.home.owned(prepareSetupUndo(f.operationId));
-          expect(refreshed.summary.conflicts).toEqual([]);
-          expect(refreshed.summary.sourceSelections).toEqual([]);
-          expect(refreshed.summary.intentChanged).toBe(false);
-          yield* f.home.owned(refreshed.apply());
-          expect((yield* f.home.durable).imports).toEqual(partial.imports);
-        }).pipe(Effect.provide(skitLayer)),
+    it.effect("a completed source inverse is never appended again on retry", () =>
+      Effect.gen(function* () {
+        const f = yield* fixture();
+        yield* f.home.owned(
+          Effect.gen(function* () {
+            const plan = yield* prepareSetupUndo(f.operationId);
+            expect((yield* plan.apply()).status).toBe("undone");
+            const saved = yield* f.home.durable;
+            yield* MachineSettings.setRepositoryDecision(f.home.home, "/later/repo", "watched");
+            const settings = yield* MachineSettings.read(f.home.home);
+            const retry = yield* prepareSetupUndo(f.operationId);
+            expect((yield* retry.apply()).status).toBe("already-undone");
+            expect(yield* f.home.durable).toEqual(saved);
+            expect(yield* MachineSettings.read(f.home.home)).toEqual(settings);
+          }),
+        );
+      }).pipe(Effect.provide(skitLayer)),
     );
 
     it.effect(

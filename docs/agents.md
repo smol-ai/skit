@@ -77,7 +77,7 @@ skit enable skit
 
 ## What agents should not do
 
-- Copy, move or delete skill folders by hand, or edit `~/.skit/state.json`. SKIT keeps the only
+- Copy, move or delete skill folders by hand, or edit `~/.skit/library.sqlite`. SKIT keeps the only
   record of what it manages and refuses changes it cannot account for.
 - Retry `--apply` after it succeeds. The plan ID changes once the plan is applied, so a second run
   fails as stale; `skit inventory --json` shows the current state instead.

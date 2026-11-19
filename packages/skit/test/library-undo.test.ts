@@ -1,3 +1,4 @@
+import { loadLibrary } from "../src/library/store/library-store.js";
 import { describe } from "@effect/vitest";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option, Schema } from "effect";
@@ -37,14 +38,14 @@ describe("skit library undo", () => {
             { _tag: "Undo", operationId },
             { base: yield* library.read },
           );
-          const bytes = yield* fs.readFileString(join(home, "state.json"));
+          const bytes = yield* loadLibrary(home);
           yield* fs.makeDirectory(folder);
           yield* fs.writeFileString(join(folder, "independent.txt"), "User's newer folder.\n");
           assert.strictEqual(
             (yield* Effect.flip(library.apply({ _tag: "Apply", plan: plan })))._tag,
             "Library.StalePlan",
           );
-          assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), bytes);
+          assert.deepStrictEqual(yield* loadLibrary(home), bytes);
           assert.strictEqual(
             yield* fs.readFileString(join(folder, "independent.txt")),
             "User's newer folder.\n",
@@ -66,7 +67,7 @@ describe("skit library undo", () => {
               { _tag: "Undo", operationId },
               { base: yield* library.read },
             );
-            const bytes = yield* fs.readFileString(join(home, "state.json"));
+            const bytes = yield* loadLibrary(home);
             const forged = {
               ...plan,
               change: {
@@ -84,7 +85,7 @@ describe("skit library undo", () => {
               ))._tag,
               "RecoveryInvalid",
             );
-            assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), bytes);
+            assert.deepStrictEqual(yield* loadLibrary(home), bytes);
             assert.isFalse(yield* fs.exists(folder));
             assert.isFalse(yield* fs.exists(join(home, "removed", plan.backupId)));
           }).pipe(Effect.provide(libraryLayer(home)));
@@ -121,16 +122,18 @@ describe("skit library undo", () => {
               yield* fs.readFileString(join(folder, "SKILL.md")),
               "Original review bytes.\n",
             );
-            const inverse = (yield* library.history).operations.find((operation) =>
-              operation.steps.some(
-                ({ step }) => step._tag === "Undo" && step.program.operationId === operationId,
+            const history = (yield* library.history).operations;
+            assert.strictEqual(
+              history.find((operation) => operation.operationId === operationId)?._tag,
+              "Undone",
+            );
+            assert.isFalse(
+              history.some((operation) =>
+                operation.steps.some(
+                  ({ step }) => step._tag === "Undo" && step.program.operationId === operationId,
+                ),
               ),
             );
-            assert.strictEqual(inverse?._tag, "Done");
-            const step = inverse?.steps.find(({ step }) => step._tag === "Undo")?.step;
-            if (step?._tag !== "Undo") return yield* Effect.die("Missing recorded inverse");
-            assert.isFalse(Object.hasOwn(step.program, "settingsBefore"));
-            assert.isFalse(Object.hasOwn(step.program, "settingsAfter"));
             assert.isFalse(yield* fs.exists(join(home, "removed", operationId, "undo")));
             assert.isFalse(yield* fs.exists(join(home, "machine.json")));
             yield* fs.writeFileString(join(folder, "SKILL.md"), "Later independent bytes.\n");

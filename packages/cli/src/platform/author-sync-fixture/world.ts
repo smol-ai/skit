@@ -13,6 +13,7 @@ import { authorRegistry, authorSyncApi } from "../../registry/author-sync.js";
 import type { PlatformError } from "effect/PlatformError";
 import { syncAuthorWorkspace } from "../../author/sync/workflow.js";
 import { authorLayer, storedTreesAt } from "./history.js";
+import { checkpointStore } from "./checkpoints.js";
 import { registryHttpLayer } from "../../registry/registry-http.js";
 import { testHttpClientLayer } from "./transport.js";
 import { registryCredentialLayer } from "./transport.js";
@@ -205,9 +206,8 @@ export const makeAuthorSyncWorld = Effect.fn("Fixture.makeAuthorSyncWorld")(func
       }),
       remove: (path: string) => fs.remove(join(workspace, path), { recursive: true }),
       exists: (path: string) => fs.exists(join(workspace, path)),
-      readCheckpoint: () => fs.readFileString(join(home, "author-sync.json")),
-      writeCheckpoint: (content: string) =>
-        fs.writeFileString(join(home, "author-sync.json"), content),
+      readCheckpoint: () => checkpointStore(home).read,
+      writeCheckpoint: (content: string) => checkpointStore(home).write(content),
       saveAtomically: Effect.fn("Fixture.saveAtomically")(function* (
         path: string,
         content: string,

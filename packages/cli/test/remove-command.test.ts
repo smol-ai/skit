@@ -1,3 +1,5 @@
+import { testPlatformLayer } from "./helpers/platform.js";
+import { savedLibrary } from "./helpers/saved-library.js";
 import { describe } from "@effect/vitest";
 import { assert, it } from "@effect/vitest";
 import { NodeServices } from "@effect/platform-node";
@@ -103,7 +105,7 @@ describe("skit remove", () => {
 
         const skill = join(installed, "review", "SKILL.md");
 
-        const before = yield* fs.readFileString(join(home, "state.json"));
+        const before = yield* savedLibrary(home);
 
         const bytes = yield* fs.readFileString(skill);
 
@@ -111,10 +113,10 @@ describe("skit remove", () => {
 
         assert.strictEqual(results.at(-1)?.contract, "removePlan");
 
-        assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), before);
+        assert.deepStrictEqual(yield* savedLibrary(home), before);
 
         assert.strictEqual(yield* fs.readFileString(skill), bytes);
-      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+      }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
     );
   });
 });

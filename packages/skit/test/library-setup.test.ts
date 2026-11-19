@@ -1,9 +1,16 @@
-import { describe } from "@effect/vitest";
-import { recordedLibrary } from "../src/library/internal/setup/intent.js";
-import { emptyLibraryState } from "../src/library/library-state.js";
-import { assert, it } from "@effect/vitest";
-import { Context, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Option, Schema } from "effect";
+import {
+  loadOperations,
+  loadLibrary,
+  operationSummary,
+} from "../src/library/store/library-store.js";
+
+import { libraryDatabasePath } from "../src/library/store/database.js";
+import { readLibraryAudit } from "../src/library/audit/audit-log.js";
+import { describe, assert, it } from "@effect/vitest";
+
+import { Context, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Option } from "effect";
 import { join } from "node:path";
+import { Digest } from "effect/crypto";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
 import { readPathEvidence } from "../src/library/folder-evidence.js";
@@ -16,20 +23,76 @@ import { inspectLibrary, libraryLayer } from "./helpers/library-store.js";
 
 const machineId = migratedMachineId("019950c0-4c00-7000-8000-000000000001", "library-setup-test");
 
-/**
- * A FileSystem that lets `commits` renames and links through, then crashes on the next: every
- * durable write setup makes ends in one of them (state.json, the receipt, the move).
- */
-const crashingAfter = (commits: number) =>
+/** Interrupt at a durable operation or filesystem boundary, independent of storage writes. */
+const crashingAt = (home: string, boundary: string) =>
   Layer.effect(
     FileSystem.FileSystem,
-    Effect.map(FileSystem.FileSystem, (fs) => {
-      let left = commits;
-      const crash = Effect.suspend(() => (left-- <= 0 ? Effect.die("crash") : Effect.void));
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const digest = yield* Digest.Digest;
+      let crashed = false;
       return {
         ...fs,
-        rename: (from: string, to: string) => Effect.andThen(crash, fs.rename(from, to)),
-        link: (from: string, to: string) => Effect.andThen(crash, fs.link(from, to)),
+        chmod: (path: string, mode: number) =>
+          Effect.gen(function* () {
+            if (
+              !crashed &&
+              path === libraryDatabasePath(home) &&
+              (boundary === "step" || boundary === "import-published")
+            ) {
+              const state = yield* loadLibrary(home).pipe(
+                Effect.provideService(FileSystem.FileSystem, fs),
+                Effect.provideService(Digest.Digest, digest),
+                Effect.orDie,
+              );
+              const operation = (yield* loadOperations(home).pipe(
+                Effect.provideService(FileSystem.FileSystem, fs),
+                Effect.provideService(Digest.Digest, digest),
+                Effect.orDie,
+              )).find((operation) => operation._tag === "Pending");
+              if (
+                operation &&
+                ((boundary === "step" && operation.steps[0]?.status === "Done") ||
+                  (boundary === "import-published" &&
+                    state.collections.length > 0 &&
+                    operation.steps[0]?.status === "Pending"))
+              ) {
+                crashed = true;
+                return yield* Effect.die("crash at " + boundary);
+              }
+            }
+            yield* fs.chmod(path, mode);
+          }),
+        link: (from: string, to: string) =>
+          Effect.gen(function* () {
+            const receipt = to.endsWith("/receipt.json");
+            if (!crashed && receipt && (boundary === "record" || boundary === "import-done")) {
+              crashed = true;
+              return yield* Effect.die("crash at " + boundary);
+            }
+            yield* fs.link(from, to);
+            if (!crashed && receipt && boundary === "receipt") {
+              crashed = true;
+              return yield* Effect.die("crash after receipt");
+            }
+          }),
+        rename: (from: string, to: string) =>
+          Effect.gen(function* () {
+            const receipt = to.endsWith("/receipt.json");
+            const move = to.includes("/removed/") && !receipt;
+            if (!crashed && receipt && (boundary === "record" || boundary === "import-done")) {
+              crashed = true;
+              return yield* Effect.die("crash at " + boundary);
+            }
+            yield* fs.rename(from, to);
+            if (
+              !crashed &&
+              ((boundary === "receipt" && receipt) || (boundary === "move" && move))
+            ) {
+              crashed = true;
+              return yield* Effect.die("crash at " + boundary);
+            }
+          }),
       };
     }),
   );
@@ -38,7 +101,7 @@ const crashingAfter = (commits: number) =>
 const withLibrary = <A, E, R>(
   home: string,
   use: (library: Library.Interface) => Effect.Effect<A, E, R>,
-  fileSystem = crashingAfter(Number.POSITIVE_INFINITY),
+  fileSystem = crashingAt(home, "none"),
 ) =>
   Effect.gen(function* () {
     const layer = libraryLayer(home).pipe(Layer.provide(fileSystem));
@@ -68,18 +131,10 @@ const restart = (home: string) => withLibrary(home, (library) => Effect.succeed(
 const recordedOperations = (home: string) =>
   Effect.gen(function* () {
     const inspected = yield* inspectLocalLibraryState(home);
-    return inspected.present
-      ? yield* Schema.decodeEffect(Schema.Array(OperationStatus))(inspected.state.operations)
-      : [];
+    return inspected.present ? yield* loadOperations(home) : [];
   });
 
-const auditLines = (home: string) =>
-  Effect.flatMap(FileSystem.FileSystem, (fs) =>
-    fs.readFileString(join(home, "audit.jsonl")).pipe(
-      Effect.map((text) => text.trim().split("\n").filter(Boolean).length),
-      Effect.orElseSucceed(() => 0),
-    ),
-  );
+const auditLines = (home: string) => Effect.map(readLibraryAudit(home), (events) => events.length);
 
 /** A home with a source to import and a folder to remove, as one setup. */
 const importFixture = Effect.gen(function* () {
@@ -126,7 +181,10 @@ it.effect("a later setup replaces Done records and keeps Stopped ones", () =>
     assert.strictEqual(second._tag, "Stopped");
     assert.strictEqual(third._tag, "Done");
     const history = yield* withLibrary(home, (library) => library.history);
-    assert.deepStrictEqual(history.operations, yield* recordedOperations(home));
+    assert.deepStrictEqual(
+      history.operations,
+      (yield* recordedOperations(home)).map(operationSummary),
+    );
     assert.deepStrictEqual(
       (yield* recordedOperations(home)).map(({ _tag, operationId }) => ({ _tag, operationId })),
       [
@@ -186,7 +244,7 @@ describe("skit setup", () => {
 
           assert.strictEqual(error._tag, "Library.StalePlan");
           assert.isTrue(yield* fs.exists(folder));
-          assert.isFalse(yield* fs.exists(join(home, "state.json")));
+          assert.isFalse((yield* inspectLocalLibraryState(join(home))).present);
         }).pipe(Effect.provide(skitLayer), Effect.scoped),
       );
     });
@@ -217,10 +275,11 @@ describe("skit setup", () => {
           // The Done record keeps every step with its evidence, for undo.
           assert.deepStrictEqual(yield* recordedOperations(home), [
             OperationStatus.cases.Done.make({
+              kind: "setup",
               operationId: result.operationId,
               steps: [
                 {
-                  step: remove,
+                  step: { _tag: "Remove" },
                   before: remove._tag === "Remove" ? remove.folders : [],
                   after:
                     remove._tag === "Remove"
@@ -234,8 +293,9 @@ describe("skit setup", () => {
                 },
               ],
               // Moving a folder aside changes nothing the Library records.
-              before: recordedLibrary(emptyLibraryState()),
-              after: recordedLibrary(emptyLibraryState()),
+              before: { installedSkills: [] },
+              after: { installedSkills: [] },
+              setup: { changes: { scopes: [], sources: [], memberships: [], versions: [] } },
             }),
           ]);
           assert.strictEqual(yield* auditLines(home), 1);
@@ -251,7 +311,7 @@ describe("skit setup", () => {
             withLibrary(
               home,
               (library) => Effect.flatMap(library.read, (base) => library.setup(steps, { base })),
-              crashingAfter(3),
+              crashingAt(home, "import-published"),
             ),
           );
           assert.isTrue(Exit.isFailure(crashed));
@@ -278,7 +338,7 @@ describe("skit setup", () => {
             withLibrary(
               home,
               (library) => Effect.flatMap(library.read, (base) => library.setup(steps, { base })),
-              crashingAfter(4),
+              crashingAt(home, "import-done"),
             ),
           );
           const inspected = yield* inspectLocalLibraryState(home);
@@ -310,11 +370,11 @@ describe("skit setup", () => {
       );
 
       // Commits a one-folder removal makes, in order: the record, the receipt, the move, the Done mark.
-      for (const [commits, after] of [
-        [1, "the record"],
-        [2, "the receipt"],
-        [3, "the move"],
-        [4, "the Done mark"],
+      for (const [boundary, after] of [
+        ["record", "the record"],
+        ["receipt", "the receipt"],
+        ["move", "the move"],
+        ["step", "the Done mark"],
       ] as const)
         it.effect(`a crash after ${after} is finished by running setup again`, () =>
           Effect.gen(function* () {
@@ -324,7 +384,7 @@ describe("skit setup", () => {
                 home,
                 (library) =>
                   Effect.flatMap(library.read, (base) => library.setup([remove], { base })),
-                crashingAfter(commits),
+                crashingAt(home, boundary),
               ),
             );
             assert.isTrue(Exit.isFailure(crashed));
@@ -343,10 +403,17 @@ describe("skit setup", () => {
             );
             assert.deepStrictEqual(yield* recordedOperations(home), [
               OperationStatus.cases.Done.make({
+                kind: "setup",
                 operationId: operation.operationId,
-                steps: operation.steps.map((step) => ({ ...step, status: "Done" as const })),
+                steps: operation.steps.map((step) => ({
+                  step: { _tag: "Remove" },
+                  before: step.before,
+                  after: step.after,
+                  status: "Done",
+                })),
                 before: operation.before,
                 after: operation.before,
+                setup: operation.setup,
               }),
             ]);
           }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -360,7 +427,7 @@ describe("skit setup", () => {
               home,
               (library) =>
                 Effect.flatMap(library.read, (base) => library.setup([remove], { base })),
-              crashingAfter(2),
+              crashingAt(home, "receipt"),
             ),
           );
           const [operation] = yield* recordedOperations(home);
@@ -382,11 +449,18 @@ describe("skit setup", () => {
           assert.deepStrictEqual(
             stopped,
             OperationStatus.cases.Stopped.make({
+              kind: "setup",
               operationId: operation.operationId,
-              steps: operation.steps,
+              steps: operation.steps.map((step) => ({
+                step: { _tag: "Remove" },
+                before: step.before,
+                after: step.after,
+                status: step.status,
+              })),
               reason: result.reason,
               before: operation.before,
               after: operation.before,
+              setup: operation.setup,
             }),
           );
         }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -400,7 +474,7 @@ describe("skit setup", () => {
               home,
               (library) =>
                 Effect.flatMap(library.read, (base) => library.setup([remove], { base })),
-              crashingAfter(3),
+              crashingAt(home, "move"),
             ),
           );
           const [operation] = yield* recordedOperations(home);

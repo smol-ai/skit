@@ -1,19 +1,18 @@
+import * as Library from "@smolai/skit-core/library";
 import { describe } from "@effect/vitest";
 import { LinkStat } from "@smolai/skit-core/platform";
 import { recoveryInspection } from "./helpers/recovery.js";
 import { withLibraryOwner } from "./helpers/library-owner.js";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 
-import type { LibraryFixtureState as LibraryState } from "./helpers/library-home.js";
 import { skitLayer } from "@smolai/skit-core/platform";
-import type { PlatformError } from "effect/PlatformError";
 import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply.js";
 import { runSetup } from "@smolai/skit-core/library/setup";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
-import { prepareSetupUndo } from "../src/library/setup/undo.js";
+import { prepareSetupUndo } from "@smolai/skit-core/library/setup";
 import { libraryHome, scratch } from "./helpers/library-home.js";
 
 const fixture = Effect.fn("Test.setupDuplicateCopies")(function* () {
@@ -58,30 +57,6 @@ const fixture = Effect.fn("Test.setupDuplicateCopies")(function* () {
   return { fs, root, home, source, duplicate, markdown, prepared, apply, input, interaction };
 });
 
-/**
- * The real filesystem, except each replacement of `state.json` then runs `onSaved` with the state
- * it saved. Provided outside the owner, so the owner's saves go through it.
- */
-const afterSaves =
-  (statePath: string, onSaved: (next: LibraryState) => Effect.Effect<void, PlatformError>) =>
-  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      return yield* effect.pipe(
-        Effect.provideService(FileSystem.FileSystem, {
-          ...fs,
-          rename: (from, to) =>
-            to === statePath
-              ? Effect.gen(function* () {
-                  const next: LibraryState = JSON.parse(yield* fs.readFileString(from));
-                  yield* fs.rename(from, to);
-                  yield* onSaved(next);
-                })
-              : fs.rename(from, to),
-        }),
-      );
-    });
-
 describe("skit setup", () => {
   describe("Finding and reviewing", () => {
     describe("A changed setup must be reviewed again before it can change files.", () => {
@@ -116,16 +91,18 @@ describe("skit setup", () => {
             f.home.owned(
               f.apply.pipe(
                 withLibraryOwner(f.home.inventory),
-                afterSaves(f.home.statePath, (next) =>
-                  next.installed_skills.some(
-                    (installedSkill) => installedSkill.status === "installed",
-                  )
-                    ? f.fs.writeFileString(
-                        join(f.duplicate, ".git"),
-                        "gitdir: newly-owned-checkout\n",
-                      )
-                    : Effect.void,
-                ),
+                Effect.provideService(FileSystem.FileSystem, {
+                  ...f.fs,
+                  rename: (from, to) =>
+                    Effect.gen(function* () {
+                      yield* f.fs.rename(from, to);
+                      if (to === join(f.source, ".skit-ownership.json"))
+                        yield* f.fs.writeFileString(
+                          join(f.duplicate, ".git"),
+                          "gitdir: newly-owned-checkout\n",
+                        );
+                    }),
+                }),
               ),
             ),
           );
@@ -148,31 +125,33 @@ describe("skit setup", () => {
               .owned(
                 f.apply.pipe(
                   withLibraryOwner(f.home.inventory),
-                  afterSaves(f.home.statePath, (next) => {
-                    const operation = next.operations.find(
-                      (operation) => operation._tag === "Pending",
-                    );
-                    const apply =
-                      operation?._tag === "Pending"
-                        ? operation.steps
-                            .find((step) => step.step._tag === "Manage")
-                            ?.applies?.at(-1)?.apply
-                        : undefined;
-                    const atBoundary =
-                      apply !== undefined &&
-                      (boundary === "cleanup"
-                        ? apply.phase._tag === "Done"
-                        : apply.phase._tag !== "Done" &&
-                          next.installed_skills.some((copy) => copy.status === "installed"));
-                    return !edited && atBoundary
-                      ? f.fs.writeFileString(join(f.source, "SKILL.md"), "New user edits").pipe(
-                          Effect.tap(() =>
-                            Effect.sync(() => {
-                              edited = true;
-                            }),
-                          ),
-                        )
-                      : Effect.void;
+                  Effect.provideService(FileSystem.FileSystem, {
+                    ...f.fs,
+                    rename: (from, to) =>
+                      Effect.gen(function* () {
+                        yield* f.fs.rename(from, to);
+                        if (
+                          !edited &&
+                          boundary === "installing" &&
+                          to === join(f.source, ".skit-ownership.json")
+                        ) {
+                          edited = true;
+                          yield* f.fs.writeFileString(join(f.source, "SKILL.md"), "New user edits");
+                        }
+                      }),
+                    realPath: (path) =>
+                      Effect.gen(function* () {
+                        if (
+                          !edited &&
+                          boundary === "cleanup" &&
+                          path === dirname(f.duplicate) &&
+                          (yield* f.fs.exists(join(f.source, ".skit-ownership.json")))
+                        ) {
+                          edited = true;
+                          yield* f.fs.writeFileString(join(f.source, "SKILL.md"), "New user edits");
+                        }
+                        return yield* f.fs.realPath(path);
+                      }),
                   }),
                 ),
               )
@@ -185,9 +164,11 @@ describe("skit setup", () => {
               expect(outcome._tag).toBe("Failure");
               if (outcome._tag !== "Failure") return;
               expect(outcome.failure._tag).toBe("SetupStopped");
-              expect((yield* f.home.durable).operations.map((operation) => operation._tag)).toEqual(
-                ["Stopped"],
-              );
+              expect(
+                (yield* f.home.owned(
+                  Effect.flatMap(Library.Service, (library) => library.history),
+                )).operations.map((operation) => operation._tag),
+              ).toEqual(["Stopped"]);
               return;
             }
             expect(outcome._tag).toBe("Success");

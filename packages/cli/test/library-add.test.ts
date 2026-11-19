@@ -1,3 +1,4 @@
+import { DatabaseSync } from "node:sqlite";
 import { describe } from "@effect/vitest";
 import {
   emptyLibraryFixture,
@@ -15,7 +16,7 @@ import { deterministicTreeHash } from "@smolai/skit-core/author";
 import * as Library from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { Layer, Effect, FileSystem } from "effect";
+import { Layer, Effect, FileSystem, Tracer, Exit, Schema } from "effect";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { HttpClient, HttpClientResponse } from "effect/http";
@@ -54,7 +55,36 @@ it.effect(
       yield* fs.makeDirectory(source);
       yield* fs.writeFileString(skillPath, bytes);
       let sourceReadWithoutWriter: boolean | undefined;
-      let stateSavedWithWriter = false;
+      const publicationLocks: boolean[] = [];
+      const underlying = yield* Tracer.Tracer;
+      const tracer = Tracer.make({
+        ...underlying,
+        span: (options) => {
+          const span = underlying.span(options);
+          const end = span.end.bind(span);
+          span.end = (time, exit) => {
+            const statement = span.attributes.get("db.query.text");
+            if (
+              Exit.isSuccess(exit) &&
+              typeof statement === "string" &&
+              /INSERT INTO ["]?library_collections["]? /iu.test(statement)
+            ) {
+              const contender = new DatabaseSync(join(home, "lock.sqlite"));
+              try {
+                contender.exec("PRAGMA busy_timeout=0; BEGIN IMMEDIATE; ROLLBACK");
+                publicationLocks.push(false);
+              } catch (error) {
+                if (!Schema.is(Schema.Struct({ errcode: Schema.Literal(5) }))(error)) throw error;
+                publicationLocks.push(true);
+              } finally {
+                contender.close();
+              }
+            }
+            end(time, exit);
+          };
+          return span;
+        },
+      });
       const checkSourceRead = <A, E, R>(path: string, read: Effect.Effect<A, E, R>) =>
         Effect.gen(function* () {
           if (path === skillPath && sourceReadWithoutWriter === undefined)
@@ -66,7 +96,8 @@ it.effect(
         const library = yield* Library.Service;
         const history = yield* library.history;
         assert.strictEqual(sourceReadWithoutWriter, true);
-        assert.strictEqual(stateSavedWithWriter, true);
+        assert.isAbove(publicationLocks.length, 0);
+        assert.isTrue(publicationLocks.every(Boolean));
         assert.strictEqual(history.events.length, 1);
         assert.strictEqual(yield* fs.readFileString(skillPath), bytes);
         assert.strictEqual(
@@ -76,18 +107,13 @@ it.effect(
           bytes,
         );
       }).pipe(
+        Effect.withTracer(tracer),
         Effect.provide(Library.layer({ home, roots: testRoots(home) })),
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
           readFile: (path) => checkSourceRead(path, fs.readFile(path)),
           readFileString: (path, encoding) =>
             checkSourceRead(path, fs.readFileString(path, encoding)),
-          rename: (from, to) =>
-            Effect.gen(function* () {
-              yield* fs.rename(from, to);
-              if (to === join(home, "state.json"))
-                stateSavedWithWriter = !(yield* homeLockIsFree(home));
-            }),
         }),
       );
     }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),

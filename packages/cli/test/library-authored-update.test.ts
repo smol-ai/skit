@@ -26,7 +26,8 @@ import { makeAuthorSyncWorld } from "../src/platform/author-sync-fixture/world.j
 import { registryCredentialLayer } from "./helpers/registry-credential.js";
 import { testHttpClientLayer } from "./helpers/http-test-client.js";
 import { inspectLibrarySource } from "../src/library/source.js";
-import { captureDisk, assertDiskUnchanged } from "./helpers/disk-snapshot.js";
+
+import { libraryHome } from "./helpers/library-home.js";
 import { DatabaseSync } from "node:sqlite";
 
 const content = (name: string, body: string) =>
@@ -119,7 +120,7 @@ it.effect("manual authored preview reports exact invalid inputs without writing"
 
       yield* updateAdapters;
 
-      const disk = yield* captureDisk([root, home, agents]);
+      const disk = yield* (yield* libraryHome({ home })).unchanged([root, agents]);
 
       const preview = yield* library.previewSourceUpdates(undefined, inspectLibrarySource);
 
@@ -135,7 +136,7 @@ it.effect("manual authored preview reports exact invalid inputs without writing"
 
       assert.isUndefined(preview[0]!.available_snapshot_digest);
 
-      yield* assertDiskUnchanged(disk);
+      yield* disk.check;
     }).pipe(
       Effect.provide(layer),
       Effect.provideService(RegistryHttp, {

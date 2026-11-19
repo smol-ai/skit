@@ -10,7 +10,8 @@ import {
   versionBacking,
 } from "../../library-contracts.js";
 import { parseSkillFrontmatter } from "../../../harnesses/frontmatter.js";
-import { collectionVersionPath, originalTreeHash } from "../../collection-version.js";
+import { originalTreeHash } from "../../collection-version.js";
+import { readCollectionVersion } from "../content/read-collection-version.js";
 
 export const securitySkill = Effect.fn("Library.securitySkill")(function* (
   state: LibraryState,
@@ -51,7 +52,7 @@ export const securityReview = Effect.fn("Library.securityReviewSnapshot")(functi
   query: string,
 ) {
   const { version, member, tree } = yield* securitySkill(state, query);
-  const originalPath = collectionVersionPath(originalsPath, tree.hash);
+  const originalPath = yield* readCollectionVersion(originalsPath, tree.hash);
   if ((yield* originalTreeHash(originalPath)) !== tree.hash)
     return yield* new ContentAddressCollision();
   const skillPath =
@@ -93,4 +94,4 @@ export const securityReview = Effect.fn("Library.securityReviewSnapshot")(functi
               : ("applicable" as const),
       })),
   } satisfies SkillSecurityReview;
-});
+}, Effect.scoped);

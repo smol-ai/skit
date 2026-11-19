@@ -1,3 +1,4 @@
+import { savedLibrary } from "./helpers/saved-library.js";
 import { describe } from "@effect/vitest";
 import { originalTreePath } from "./helpers/original-tree.js";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -127,7 +128,7 @@ describe("skit check", () => {
 
         if (loaded._tag !== "Present") return;
 
-        const beforeState = yield* fs.readFileString(join(home, "state.json"));
+        const beforeState = yield* savedLibrary(home);
 
         const checkedCollections = yield* Ref.make<ReadonlyArray<string>>([]);
 
@@ -165,7 +166,7 @@ describe("skit check", () => {
 
         assert.strictEqual(changed[0]?.collection_versions[0]?.original_intact, false);
 
-        assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), beforeState);
+        assert.deepStrictEqual(yield* savedLibrary(home), beforeState);
 
         const reloaded = yield* read;
 

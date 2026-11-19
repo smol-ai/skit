@@ -1,7 +1,7 @@
 import { sourceIdentityLabel } from "../../source-identity.js";
 import { currentSkillVersion, versionBacking, type Skill } from "../../library-contracts.js";
 import { readSkitDescriptor } from "../../../artifact/skit.js";
-import { collectionVersionPath } from "../../collection-version.js";
+import { readCollectionVersion } from "../content/read-collection-version.js";
 import { type LibraryState } from "../../library-state.js";
 import { type SkitDescriptor } from "../../../artifact/schemas.js";
 import { Effect, FileSystem, Option, Schema } from "effect";
@@ -34,7 +34,10 @@ const validTimestamp = (value: string | undefined): string | null =>
   value === undefined || Number.isNaN(Date.parse(value)) ? null : new Date(value).toISOString();
 
 /** Provenance belongs to the selected retained bytes, not the Collection's latest acquisition. */
-export function makeLibrarySkillMetadataReader(state: LibraryState, originalsPath: string) {
+export function makeLibrarySkillMetadataReader(
+  state: Pick<LibraryState, "collections" | "skills" | "collection_versions" | "imports">,
+  originalsPath: string,
+) {
   const descriptors = new Map<string, SkitDescriptor | undefined>();
   const authoredInputs = new Map<string, Effect.Success<ReturnType<typeof readAuthoredInputs>>>();
   return Effect.fn("Library.readSkillMetadata")(function* (skill: Skill) {
@@ -65,9 +68,11 @@ export function makeLibrarySkillMetadataReader(state: LibraryState, originalsPat
       if (!descriptors.has(backing.copy.hash))
         descriptors.set(
           backing.copy.hash,
-          yield* readSkitDescriptor(collectionVersionPath(originalsPath, backing.copy.hash)).pipe(
-            Effect.orElseSucceed(() => undefined),
-          ),
+          yield* Effect.gen(function* () {
+            return yield* readSkitDescriptor(
+              yield* readCollectionVersion(originalsPath, backing.copy.hash),
+            );
+          }).pipe(Effect.orElseSucceed(() => undefined)),
         );
       const descriptor = descriptors
         .get(backing.copy.hash)
@@ -83,7 +88,7 @@ export function makeLibrarySkillMetadataReader(state: LibraryState, originalsPat
       if (!authoredInputs.has(backing.copy.hash))
         authoredInputs.set(
           backing.copy.hash,
-          yield* readAuthoredInputs(collectionVersionPath(originalsPath, backing.copy.hash)),
+          yield* readAuthoredInputs(yield* readCollectionVersion(originalsPath, backing.copy.hash)),
         );
       const selection = authoredInputs
         .get(backing.copy.hash)
@@ -105,7 +110,7 @@ export function makeLibrarySkillMetadataReader(state: LibraryState, originalsPat
       source_updated_at: sourceUpdated,
       imported_at: validTimestamp(importedAt),
     } satisfies SkillMetadata;
-  });
+  }, Effect.scoped);
 }
 
 /** A bulk passive report uses the same per-read caches as the Library view. */

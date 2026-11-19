@@ -19,6 +19,7 @@ const syncStateInvalidReason = (reason: SyncStateInvalidReason): string =>
 const workspaceUnsafeReason = (reason: WorkspaceUnsafeReason): string =>
   WorkspaceUnsafeReason.match(reason, {
     RootChanged: () => "the folder no longer resolves to itself",
+    FileReplacementNeedsRecovery: () => "a displaced entry needs manual recovery",
     ControlNotDirectory: () => ".skit is not a real directory",
     LockNotFile: () => "the lock is not a regular file",
     LockFailed: ({ cause }) => errorMessage(cause),
@@ -47,9 +48,15 @@ export const workspaceFailure = Match.type<WorkspaceFailure>().pipe(
     AuthorWorkspaceUnsafe: ({ path, reason }) =>
       describeFailure({
         summary: [
-          `The author workspace cannot be locked safely at ${path}: ${workspaceUnsafeReason(reason)}`,
+          reason._tag === "FileReplacementNeedsRecovery"
+            ? `Author sync kept a displaced entry at ${path}`
+            : `The author workspace cannot be locked safely at ${path}: ${workspaceUnsafeReason(reason)}`,
         ],
-        next: ["Inspect that path, move anything unexpected aside, then run the command again."],
+        next: [
+          reason._tag === "FileReplacementNeedsRecovery"
+            ? "Move the saved entry to a safe location, review both versions, then sync again."
+            : "Inspect that path, move anything unexpected aside, then run the command again.",
+        ],
       }),
     AuthorWorkspaceBusy: ({ root }) =>
       describeFailure({

@@ -1,10 +1,14 @@
-import { describe } from "@effect/vitest";
-import { assert, it } from "@effect/vitest";
+import { loadOperations, loadLibrary } from "../src/library/store/library-store.js";
+
+import { libraryDatabasePath } from "../src/library/store/database.js";
+import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
+import { describe, assert, it } from "@effect/vitest";
+
 import { Cause, Effect, FileSystem, Layer, Option, Schema } from "effect";
 import { join } from "node:path";
 import * as Library from "../src/library/library.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
-import { LibraryState, libraryManifestFromLocalState } from "../src/library/library-state.js";
+import { libraryManifestFromLocalState } from "../src/library/library-state.js";
 import { currentLibraryManifest, type LibraryManifest } from "../src/library/library-contracts.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { testRoots } from "./helpers/library-store.js";
@@ -94,7 +98,7 @@ describe("skit sync", () => {
                 }),
               );
               assert.strictEqual(wrong._tag, "Library.StalePlan");
-              assert.isFalse(yield* fs.exists(join(home, "state.json")));
+              assert.isFalse((yield* inspectLocalLibraryState(join(home))).present);
               assert.isFalse(yield* fs.exists(join(skills, "review")));
               const outcome = yield* library.apply({
                 _tag: "ApplySynced",
@@ -114,29 +118,13 @@ describe("skit sync", () => {
               assert.deepStrictEqual(snapshot.state.sync_ancestry, ancestry);
               const history = yield* library.history;
               assert.strictEqual(history.events.length, 1);
-              const operation = history.operations.find(
-                (item) => item.operationId === plan.operationId,
+              assert.isFalse(
+                history.operations.some((operation) => operation.operationId === plan.operationId),
               );
-              if (!operation) return yield* Effect.die("Missing recorded Sync");
-              assert.strictEqual(operation._tag, "Done");
-              assert.deepStrictEqual(
-                operation.steps.map((item) => item.status),
-                ["Done", "Done", "Done"],
-              );
-              const step = operation.steps[0]?.step;
-              if (step?._tag !== "Sync" || step.phase !== "retire")
-                return yield* Effect.die("Missing Sync program");
-              assert.isFalse(Object.hasOwn(step.program.before, "operations"));
-              assert.isFalse(Object.hasOwn(step.program.after, "operations"));
-              const undo = yield* library.plan(
-                { _tag: "Undo", operationId: operation.operationId },
-                { base: snapshot },
-              );
-              assert.strictEqual(undo.change.status, "conflicted");
-              assert.deepInclude(undo.change.conflicts, {
-                _tag: "UnsupportedOperation",
-                kind: "sync",
-              });
+              const replay = yield* library
+                .apply({ _tag: "ApplySynced", plan: portable, receipt })
+                .pipe(Effect.flip);
+              assert.strictEqual(replay._tag, "Library.StalePlan");
               const clean = yield* library.plan(
                 {
                   ...portable.intent,
@@ -283,28 +271,29 @@ describe("skit sync", () => {
               let crashed = false;
               const interruptedFs: FileSystem.FileSystem = {
                 ...fs,
-                rename: (from, to) =>
+                chmod: (path, mode) =>
                   Effect.gen(function* () {
-                    if (to === join(home, "state.json")) {
-                      const next = yield* Schema.decodeUnknownEffect(LibraryState)(
-                        JSON.parse(yield* fs.readFileString(from)),
-                      ).pipe(Effect.orDie);
-                      const record = next.operations.at(-1);
+                    if (path === libraryDatabasePath(home)) {
+                      const record = (yield* loadOperations(home).pipe(
+                        Effect.provideService(FileSystem.FileSystem, fs),
+                        Effect.orDie,
+                      )).at(-1);
                       const statuses = record?.steps.map((step) => step.status);
                       const checkpoint = retiring
                         ? ["Done", "Pending", "Pending"]
-                        : boundary === "published"
-                          ? ["Done", "Done", "Pending"]
-                          : ["Done", "Done", "Done"];
+                        : ["Done", "Done", "Pending"];
                       if (
                         record?._tag === "Pending" &&
-                        JSON.stringify(statuses) === JSON.stringify(checkpoint)
+                        JSON.stringify(statuses) === JSON.stringify(checkpoint) &&
+                        (retiring ||
+                          boundary === "published" ||
+                          (yield* fs.exists(join(skills, "review", "SKILL.md"))))
                       ) {
                         crashed = true;
-                        return yield* Effect.die("Interrupted before Sync checkpoint commit");
+                        return yield* Effect.die("Interrupted after Sync checkpoint commit");
                       }
                     }
-                    return yield* fs.rename(from, to);
+                    return yield* fs.chmod(path, mode);
                   }),
               };
               const interrupted = yield* Effect.exit(
@@ -321,13 +310,17 @@ describe("skit sync", () => {
                   ? Cause.pretty(interrupted.cause)
                   : "Unexpected success",
               );
-              const saved = yield* Schema.decodeUnknownEffect(LibraryState)(
-                JSON.parse(yield* fs.readFileString(join(home, "state.json"))),
+              const saved = yield* loadLibrary(home);
+              assert.strictEqual(
+                (yield* loadOperations(home).pipe(
+                  Effect.provideService(FileSystem.FileSystem, fs),
+                  Effect.orDie,
+                )).at(-1)?._tag,
+                "Pending",
               );
-              assert.strictEqual(saved.operations.at(-1)?._tag, "Pending");
               assert.strictEqual(
                 saved.sync_ancestry?.revision_id,
-                retiring ? "revision_previous" : "revision_fixture",
+                "revision_fixture",
               );
               const file = join(skills, "review", "SKILL.md");
               if (retiring || boundary === "published") assert.isFalse(yield* fs.exists(file));
@@ -342,7 +335,8 @@ describe("skit sync", () => {
                 const library = yield* Library.Service;
                 const history = yield* library.history;
                 const operation = history.operations.at(-1);
-                assert.strictEqual(operation?._tag, divergent ? "Stopped" : "Done");
+                if (divergent) assert.strictEqual(operation?._tag, "Stopped");
+                else assert.deepStrictEqual(history.operations, []);
                 if (retiring && !divergent) assert.isFalse(yield* fs.exists(file));
                 else assert.strictEqual(yield* fs.readFileString(file), divergent ? edited : bytes);
                 if (divergent) {
@@ -351,10 +345,6 @@ describe("skit sync", () => {
                     assert.strictEqual(operation.reason._tag, "EvidenceDiffers");
                 } else {
                   assert.strictEqual(library.startup.finished.length, 1);
-                  assert.deepStrictEqual(
-                    operation?.steps.map((step) => step.status),
-                    ["Done", "Done", "Done"],
-                  );
                 }
                 assert.strictEqual((yield* library.read)._tag, "Present");
               }).pipe(Effect.provide(layer));

@@ -1,3 +1,4 @@
+import { InvalidLibraryState } from "@smolai/skit-core/library";
 import {
   AuthorWorkspaceInvariantFailed,
   WorkspaceRoot,
@@ -108,4 +109,30 @@ test("the TUI formats plugin, installer, import and update failures from their f
     expect(text).not.toContain("skit add");
     expect(text).not.toContain("[object Object]");
   }
+});
+
+test("database failures explain recovery without resetting only the legacy state file", () => {
+  const path = "/library/library.sqlite";
+  for (const reason of [
+    { _tag: "DatabaseIntegrityInvalid", databasePath: path, result: ["corrupt"] },
+    { _tag: "OperationStateMissing", databasePath: path },
+  ] as const) {
+    const rendered = libraryFailure(new InvalidLibraryState({ path, reason }));
+    expect(rendered).toContain("entire Library home");
+    expect(rendered).toContain("-wal/-shm");
+    expect(rendered).toContain("verified complete backup");
+  }
+  expect(
+    libraryFailure(
+      new InvalidLibraryState({
+        path,
+        reason: {
+          _tag: "NewerDatabaseMigration",
+          databasePath: path,
+          migration: 99,
+          supported: 10,
+        },
+      }),
+    ),
+  ).toContain("build that supports this migration");
 });

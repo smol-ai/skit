@@ -7,7 +7,6 @@ import { result } from "../src/commands/result.js";
 import { renderResultFrame, defaultTerminalEnvironment } from "../src/commands/output-frame.js";
 import { devices } from "./helpers/library-sync-devices.js";
 import { testPlatformLayer } from "./helpers/platform.js";
-import { captureDisk, assertDiskUnchanged } from "./helpers/disk-snapshot.js";
 
 describe("skit sync", () => {
   describe("Choosing between changes", () => {
@@ -49,7 +48,7 @@ describe("skit sync", () => {
               ],
             }));
             yield* a.sync();
-            const before = yield* captureDisk(b.disk, { identity: true });
+            const before = yield* b.unchanged;
             const head = yield* remote;
             const previousEvents = [...events];
             for (const apply of [false, true]) {
@@ -90,7 +89,7 @@ describe("skit sync", () => {
                 (yield* b.sync({ apply, takeRemote: ["manifest:invariants"] })).status,
                 "resolution_invalid",
               );
-              yield* assertDiskUnchanged(before);
+              yield* before.check;
               assert.deepEqual(yield* remote, head);
               assert.deepEqual(events, previousEvents);
             }

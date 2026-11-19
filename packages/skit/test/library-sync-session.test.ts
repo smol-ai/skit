@@ -1,3 +1,4 @@
+import { loadLibrary } from "../src/library/store/library-store.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option, Result } from "effect";
 import { join } from "node:path";
@@ -49,12 +50,12 @@ it.effect("sync session captures review inputs and refuses redirected staged con
         registry: { origin: "https://registry.test", token: Option.none<string>() },
       };
       const foreign = yield* library.content.stage(session.target, sourceContent);
-      const before = yield* fs.readFileString(join(home, "state.json"));
+      const before = yield* loadLibrary(home);
       const rejected = yield* Effect.result(session.prepare(foreign));
       assert.isTrue(Result.isFailure(rejected));
       if (Result.isFailure(rejected))
         assert.strictEqual(rejected.failure._tag, "Library.StalePlan");
-      assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), before);
+      assert.deepStrictEqual(yield* loadLibrary(home), before);
       const staged = yield* library.content.stage(reviewed, sourceContent);
       const preparing = session.prepare(staged);
       Reflect.set(staged.state.collections[0]!, "label", "changed staged input");
@@ -69,4 +70,43 @@ it.effect("sync session captures review inputs and refuses redirected staged con
       }
     }).pipe(Effect.provide(Library.layer({ home, roots: testRoots(home) })));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect(
+  "preparing an already-local push records no operation or revision before its remote CAS",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-sync-local-noop-" });
+      const source = join(home, "source");
+      yield* fs.makeDirectory(source);
+      yield* fs.writeFileString(
+        join(source, "SKILL.md"),
+        "---\nname: review\ndescription: review\n---\nReview\n",
+      );
+      yield* Effect.gen(function* () {
+        const owner = yield* Library.Service;
+        const request = yield* localImportRequest(source, "2026-11-18T00:00:00Z");
+        if (Option.isNone(request)) return assert.fail("Missing source");
+        yield* owner.import.collection(request.value);
+        const before = yield* owner.read,
+          history = yield* owner.history;
+        const session = yield* owner.syncSession(
+          { origin: "https://registry.test", remote: null },
+          { base: before },
+        );
+        if (session._tag !== "Ready") return assert.fail("Expected push session");
+        assert.strictEqual(session.direction, "push");
+        const staged = yield* owner.content.stage(session.target, {
+          localArchives: yield* owner.content.pack(before),
+          registry: { origin: "https://registry.test", token: Option.none() },
+        });
+        const prepared = yield* session.prepareLocal(staged);
+        yield* prepared.checkCurrent;
+        const result = yield* prepared.applyLocal;
+        assert.strictEqual(result.installed, 0);
+        assert.deepStrictEqual(yield* owner.read, before);
+        assert.deepStrictEqual(yield* owner.history, history);
+      }).pipe(Effect.provide(Library.layer({ home, roots: testRoots(home) })));
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

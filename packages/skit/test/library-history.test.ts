@@ -1,13 +1,20 @@
-import { describe } from "@effect/vitest";
+import { snapshotOf } from "../src/library/snapshot.js";
+import { makeOperationId, migratedMachineId } from "../src/library/entity-ids.js";
+import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
+import { readLibraryAudit } from "../src/library/audit/audit-log.js";
+import { SqlClient } from "effect/sql";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import { OperationStatus } from "../src/library/store/state-schema.js";
+
+import { describe, assert, it } from "@effect/vitest";
 import { openLibrary, libraryLayer } from "./helpers/library-store.js";
-import { assert, it } from "@effect/vitest";
+
 import { Deferred, Effect, Fiber, FileSystem } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import * as Library from "../src/library/library.js";
 
 import { classifyLibraryAuditEvent } from "../src/library/audit/state-diff.js";
-import { migratedMachineId } from "../src/library/entity-ids.js";
 
 import {
   LibraryWriter,
@@ -136,15 +143,32 @@ it.effect("records what was committed before a mutation failed", () =>
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("keeps a committed mutation successful when its history cannot be written", () =>
+it.effect("rolls back a mutation when its audit event cannot be written", () =>
   Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
     const { importSource, home } = yield* library;
-    // A directory where the log should be makes every append fail.
-    yield* fs.makeDirectory(join(home, "audit.jsonl"), { recursive: true });
     const imported = yield* writeLibrary(home, Effect.scoped(importSource));
-    const state = yield* loadLibrary(home);
-    assert.strictEqual(state.collections[0]?.collection_id, imported.collection?.collection_id);
+    yield* withLibraryDatabase(
+      libraryDatabasePath(home),
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`CREATE TRIGGER audit_failure BEFORE INSERT ON library_audit_events BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END`;
+      }),
+    );
+    const before = yield* loadLibrary(home);
+    const events = yield* readLibraryAudit(home);
+    const failed = yield* writeLibrary(
+      home,
+      Effect.gen(function* () {
+        const writer = yield* LibraryWriter;
+        yield* writer.save(
+          { ...before, enabled: [{ skill: imported.skills[0]!.skill_id }] },
+          before,
+        );
+      }),
+    ).pipe(Effect.flip);
+    assert.strictEqual(failed._tag, "LibrarySqlError");
+    assert.deepStrictEqual(yield* loadLibrary(home), before);
+    assert.deepStrictEqual(yield* readLibraryAudit(home), events);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -241,18 +265,37 @@ it.effect("owner history includes unfinished operations without resuming them", 
       const done = yield* owner.history;
       assert.strictEqual(done.operations[0]?._tag, "Done");
       assert.strictEqual(done.events.length, 1);
-      const statePath = join(home, "state.json");
-      const saved = JSON.parse(yield* fs.readFileString(statePath));
-      saved.operations[0]._tag = "Pending";
-      delete saved.operations[0].after;
-      const pendingBytes = JSON.stringify(saved);
-      yield* fs.writeFileString(statePath, pendingBytes);
-      const filesBefore = (yield* fs.readDirectory(home)).sort();
+      const operation = done.operations[0];
+      if (operation?._tag !== "Done") return yield* Effect.die("Missing completed operation");
+      const pendingRecord = OperationStatus.cases.Pending.make({
+        operationId: makeOperationId(),
+        steps: [],
+        before: operation.before,
+      });
+      yield* writeLibrary(
+        home,
+        Effect.gen(function* () {
+          const writer = yield* LibraryWriter;
+          const base = yield* loadLibrary(home);
+          yield* writer.recordOperation(
+            pendingRecord,
+            snapshotOf(yield* inspectLocalLibraryState(home)),
+            "setup",
+          );
+        }),
+      );
+      const before = yield* loadLibrary(home);
+      const expectedEvents = yield* readLibraryAudit(home);
       const pending = yield* owner.history;
-      assert.strictEqual(pending.operations[0]?._tag, "Pending");
-      assert.deepStrictEqual(pending.events, done.events);
-      assert.strictEqual(yield* fs.readFileString(statePath), pendingBytes);
-      assert.deepStrictEqual((yield* fs.readDirectory(home)).sort(), filesBefore);
+      assert.deepStrictEqual(
+        pending.operations.map(({ operationId, _tag }) => ({ operationId, _tag })),
+        [
+          { operationId: operation.operationId, _tag: "Done" },
+          { operationId: pendingRecord.operationId, _tag: "Pending" },
+        ],
+      );
+      assert.deepStrictEqual(pending.events, expectedEvents);
+      assert.deepStrictEqual(yield* loadLibrary(home), before);
     }).pipe(Effect.provide(libraryLayer(home)));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -315,7 +358,7 @@ describe("skit library recovery list", () => {
             assert.deepStrictEqual(yield* owner.recovery.list, [operationId]);
           }
           assert.strictEqual(yield* fs.readFileString(evidencePath), evidence);
-          assert.isFalse(yield* fs.exists(join(home, "state.json")));
+          assert.isFalse((yield* inspectLocalLibraryState(join(home))).present);
           assert.isFalse(yield* fs.exists(join(home, "audit.jsonl")));
         }).pipe(Effect.provide(libraryLayer(home)));
       }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -340,7 +383,7 @@ describe("skit library recovery list", () => {
         );
         assert.strictEqual(error._tag, "RecoveryInvalid");
         assert.deepStrictEqual(yield* fs.readDirectory(outside), []);
-        assert.isFalse(yield* fs.exists(join(home, "state.json")));
+        assert.isFalse((yield* inspectLocalLibraryState(join(home))).present);
       }).pipe(Effect.provide(skitLayer), Effect.scoped),
     );
   });

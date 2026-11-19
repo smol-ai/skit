@@ -1,4 +1,4 @@
-import { Revision, type Snapshot } from "../../snapshot.js";
+import { Revision, snapshotDatabaseRevision, type Snapshot } from "../../snapshot.js";
 import { Clock, Effect, Option, Schema, Struct } from "effect";
 import { Hash } from "../../../shared/hash.js";
 import { SkillAssessmentAcceptance } from "../../assessment-acceptance.js";
@@ -137,7 +137,11 @@ export const applyAcceptance = Effect.fn("Library.applyAcceptance")(function* (
           ...state,
           assessmentAcceptances: [...(state.assessmentAcceptances ?? []), acceptance],
         };
-        yield* (yield* LibraryWriter).save(next, state);
+        const writer = yield* LibraryWriter;
+        const revision = snapshotDatabaseRevision(base.revision);
+        if (revision === undefined)
+          return yield* new StalePlan({ reason: { _tag: "SnapshotRequired" } });
+        yield* writer.saveAcceptance(acceptance, revision);
         const review = yield* securityReview(
           next,
           libraryOriginalsPath(home),

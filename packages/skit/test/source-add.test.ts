@@ -1,3 +1,4 @@
+import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
 import { describe } from "@effect/vitest";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
@@ -87,7 +88,7 @@ describe("skit add", () => {
               const failure = yield* operation.pipe(Effect.flip);
               assert.instanceOf(failure, DedicatedInstallerRequired);
             }
-            assert.isFalse(yield* fs.exists(join(home, "state.json")));
+            assert.isFalse((yield* inspectLocalLibraryState(join(home))).present);
           }).pipe(
             Effect.provide(Library.layer({ home, roots: testRoots(home) })),
             Effect.provideService(

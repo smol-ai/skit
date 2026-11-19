@@ -1,99 +1,109 @@
+import { prepareEnabledSet } from "./enabled.js";
+import { normalizeCatalogue } from "./manifest.js";
 import { localStateViolationIssue } from "./local-state-violation.js";
 import { createHash } from "node:crypto";
 import { Effect, Schema, Struct } from "effect";
 import { resolve } from "node:path";
 import {
   currentLibraryManifest,
+  enabledItemKey,
   LibraryManifest,
   librarySnapshotDigests,
 } from "./library-contracts.js";
-import {
-  LibraryStateFields,
-  OperationStatus,
-  CURRENT_LIBRARY_STATE_VERSION,
-} from "./store/state-schema.js";
+import { LibraryStateFields, CURRENT_LIBRARY_STATE_VERSION } from "./store/state-fields.js";
 import { canonicalJson } from "../shared/json.js";
 
-export { CURRENT_LIBRARY_STATE_VERSION } from "./store/state-schema.js";
+export { CURRENT_LIBRARY_STATE_VERSION } from "./store/state-fields.js";
 
 export const LibraryState = Schema.Struct({
   ...LibraryStateFields,
-  /** Operation records are local; a Sync publication never embeds them. */
-  operations: Schema.Array(Schema.toEncoded(OperationStatus)),
-}).check(
-  Schema.makeFilter((state) => {
-    const skills = new Map(state.skills.map((skill) => [skill.skill_id, skill]));
-    const collections = new Set(state.collections.map((collection) => collection.collection_id));
-    const roots = new Map<string, string>();
-    for (const repository of state.repositories) {
-      const canonical = resolve(repository.root);
-      const first = roots.get(canonical);
-      if (first !== undefined)
-        return localStateViolationIssue(["repositories"], {
-          _tag: "RepositoryRootCollision",
-          first,
-          second: repository.root,
-          canonical,
-        });
-      roots.set(canonical, repository.root);
-    }
-    const paths = new Map<string, (typeof state.installed_skills)[number]>();
-    const ids = new Set<string>();
-    for (const installed of state.installed_skills) {
-      const canonical = resolve(installed.path);
-      const first = paths.get(canonical);
-      if (first !== undefined)
-        return localStateViolationIssue(["installed_skills"], {
-          _tag: "InstalledPathCollision",
-          firstId: first.installed_skill_id,
-          secondId: installed.installed_skill_id,
-          firstPath: first.path,
-          secondPath: installed.path,
-          canonical,
-        });
-      paths.set(canonical, installed);
-      if (ids.has(installed.installed_skill_id))
-        return localStateViolationIssue(["installed_skills"], {
-          _tag: "InstalledIdDuplicate",
-          installedSkillId: installed.installed_skill_id,
-        });
-      ids.add(installed.installed_skill_id);
-    }
-    for (const repository of state.repositories) {
-      for (const item of repository.enabled) {
-        if ("skill" in item ? !skills.has(item.skill) : !collections.has(item.collection))
+})
+  .check(
+    Schema.makeFilter((state) => {
+      const skills = new Map(state.skills.map((skill) => [skill.skill_id, skill]));
+      const collections = new Set(state.collections.map((collection) => collection.collection_id));
+      const roots = new Map<string, string>();
+      for (const repository of state.repositories) {
+        const canonical = resolve(repository.root);
+        const first = roots.get(canonical);
+        if (first !== undefined)
           return localStateViolationIssue(["repositories"], {
-            _tag: "RepositorySubjectMissing",
-            root: repository.root,
-            ...("skill" in item
-              ? { kind: "skill" as const, id: item.skill }
-              : { kind: "collection" as const, id: item.collection }),
+            _tag: "RepositoryRootCollision",
+            first,
+            second: repository.root,
+            canonical,
+          });
+        roots.set(canonical, repository.root);
+      }
+      const paths = new Map<string, (typeof state.installed_skills)[number]>();
+      const ids = new Set<string>();
+      for (const installed of state.installed_skills) {
+        const canonical = resolve(installed.path);
+        const first = paths.get(canonical);
+        if (first !== undefined)
+          return localStateViolationIssue(["installed_skills"], {
+            _tag: "InstalledPathCollision",
+            firstId: first.installed_skill_id,
+            secondId: installed.installed_skill_id,
+            firstPath: first.path,
+            secondPath: installed.path,
+            canonical,
+          });
+        paths.set(canonical, installed);
+        if (ids.has(installed.installed_skill_id))
+          return localStateViolationIssue(["installed_skills"], {
+            _tag: "InstalledIdDuplicate",
+            installedSkillId: installed.installed_skill_id,
+          });
+        ids.add(installed.installed_skill_id);
+      }
+      for (const repository of state.repositories) {
+        for (const item of repository.enabled) {
+          if ("skill" in item ? !skills.has(item.skill) : !collections.has(item.collection))
+            return localStateViolationIssue(["repositories"], {
+              _tag: "RepositorySubjectMissing",
+              root: repository.root,
+              ...("skill" in item
+                ? { kind: "skill" as const, id: item.skill }
+                : { kind: "collection" as const, id: item.collection }),
+            });
+        }
+      }
+      for (const installed of state.installed_skills) {
+        const skill = skills.get(installed.skill_id);
+        if (skill === undefined)
+          return localStateViolationIssue(["installed_skills"], {
+            _tag: "InstalledSkillMissing",
+            installedSkillId: installed.installed_skill_id,
+            skillId: installed.skill_id,
+            path: installed.path,
+          });
+        if (
+          !skill.versions.some((version) => version.skill_version_id === installed.skill_version_id)
+        )
+          return localStateViolationIssue(["installed_skills"], {
+            _tag: "InstalledVersionMissing",
+            installedSkillId: installed.installed_skill_id,
+            skillId: installed.skill_id,
+            versionId: installed.skill_version_id,
+            path: installed.path,
           });
       }
-    }
-    for (const installed of state.installed_skills) {
-      const skill = skills.get(installed.skill_id);
-      if (skill === undefined)
-        return localStateViolationIssue(["installed_skills"], {
-          _tag: "InstalledSkillMissing",
-          installedSkillId: installed.installed_skill_id,
-          skillId: installed.skill_id,
-          path: installed.path,
-        });
-      if (
-        !skill.versions.some((version) => version.skill_version_id === installed.skill_version_id)
-      )
-        return localStateViolationIssue(["installed_skills"], {
-          _tag: "InstalledVersionMissing",
-          installedSkillId: installed.installed_skill_id,
-          skillId: installed.skill_id,
-          versionId: installed.skill_version_id,
-          path: installed.path,
-        });
-    }
-    return true;
-  }),
-);
+      return true;
+    }),
+  )
+  .check(
+    Schema.makeFilter((state) => {
+      const lists = [
+        state.enabled,
+        ...state.repositories.map((row) => row.enabled),
+        ...(state.device_skill_selection?.mode === "choose"
+          ? [state.device_skill_selection.enabled]
+          : []),
+      ];
+      return lists.every((items) => new Set(items.map(enabledItemKey)).size === items.length);
+    }),
+  );
 export namespace LibraryState {
   export interface Type extends Schema.Schema.Type<typeof LibraryState> {}
   export interface Encoded extends Schema.Codec.Encoded<typeof LibraryState> {}
@@ -116,12 +126,51 @@ export const emptyLibraryState = (): LibraryState =>
     repositories: [],
     installed_skills: [],
     unmanaged: [],
-    operations: [],
   });
 
-/** Content identity of a state; a save is accepted only onto the revision it was planned from. */
-export const libraryStateRevision = (state: LibraryState): string =>
-  createHash("sha256").update(canonicalJson(state)).digest("hex");
+/** Normalize keyed Catalogue data and selections before comparing Library state. */
+export const prepareLibrarySets = (state: LibraryState): LibraryState => ({
+  ...normalizeCatalogue(prepareEnabledSet(state)),
+  repositories: state.repositories
+    .map((row) => prepareEnabledSet(row))
+    .sort((a, b) => (a.root < b.root ? -1 : a.root > b.root ? 1 : 0)),
+  ...(state.device_skill_selection?.mode === "choose"
+    ? { device_skill_selection: prepareEnabledSet(state.device_skill_selection) }
+    : {}),
+  ...(state.sync_ancestry === undefined
+    ? {}
+    : {
+        sync_ancestry: {
+          ...state.sync_ancestry,
+          base_manifest: normalizeCatalogue(state.sync_ancestry.base_manifest),
+        },
+      }),
+});
+
+export const libraryStateRevision = (state: LibraryState): string => {
+  const value = prepareLibrarySets(state);
+  const ancestry = value.sync_ancestry;
+  const document =
+    ancestry === undefined
+      ? value
+      : {
+          ...value,
+          sync_ancestry: {
+            ...ancestry,
+            base_manifest: {
+              ...ancestry.base_manifest,
+              enabled: [...ancestry.base_manifest.enabled].sort((a, b) =>
+                enabledItemKey(a) < enabledItemKey(b)
+                  ? -1
+                  : enabledItemKey(a) > enabledItemKey(b)
+                    ? 1
+                    : 0,
+              ),
+            },
+          },
+        };
+  return createHash("sha256").update(canonicalJson(document)).digest("hex");
+};
 
 export const LibraryInventory = LibraryState.mapFields(
   Struct.pick(["unmanaged", "ownershipIssues", "scanIssues", "skills", "installed_skills"]),
@@ -147,11 +196,13 @@ export const LibraryStateDocument = Schema.declareConstructor<LibraryState>()(
       Effect.mapError((error) => error.issue),
     ),
   { identifier: "LibraryStateDocument", toCodecJson: () => undefined },
+).check(
+  Schema.makeFilter(
+    (value) => !Object.hasOwn(value, "operations") && !Object.hasOwn(value, "historyDelivery"),
+  ),
 );
-export const decodeLibraryState = Schema.decodeUnknownEffect(LibraryStateDocument);
-export const encodeLibraryState = Schema.encodeEffect(
-  Schema.fromJsonString(LibraryStateDocument, { space: 2 }),
-);
+export const decodeLibraryState = (value: unknown) =>
+  Schema.decodeUnknownEffect(LibraryStateDocument)(value).pipe(Effect.map(prepareLibrarySets));
 
 export const libraryManifestFromLocalState = Effect.fn("Library.libraryManifestFromLocalState")(
   function* (state: LibraryState) {

@@ -108,6 +108,7 @@ it.effect("built-in Author edits refuse a held workspace lease while preview sta
           }),
           (db) => Effect.sync(() => db.close()),
         );
+        yield* f.home.snapshot;
         const before = yield* captureDisk([f.source, f.home.home], { identity: true });
         const scaffoldFailure = yield* Effect.flip(initSkit(f.source));
         assert.strictEqual(scaffoldFailure._tag, "AuthorWorkspaceBusy");
@@ -279,7 +280,11 @@ describe("skit remove", () => {
                     library.remove({ query: first.entry.collection.collection_id, dryRun: false }),
                   ),
                 );
-                return { result, snapshot: yield* (yield* Library.Service).read };
+                return {
+                  result,
+                  snapshot: yield* (yield* Library.Service).read,
+                  history: yield* (yield* Library.Service).history,
+                };
               }),
             )
             .pipe(
@@ -309,7 +314,7 @@ describe("skit remove", () => {
           if (failed.snapshot._tag === "Present") {
             assert.strictEqual(failed.snapshot.state.collections.length, 1);
             assert.isTrue(
-              failed.snapshot.state.operations.some((operation) => operation._tag === "Stopped"),
+              failed.history.operations.some((operation) => operation._tag === "Stopped"),
             );
           }
           assert.strictEqual(yield* f.fs.readFileString(join(installed, "SKILL.md")), bytes);
@@ -385,6 +390,7 @@ describe("skit author init", () => {
         yield* f.init();
         const copy = join(f.root, "copy");
         yield* f.fs.copy(f.source, copy);
+        yield* f.home.snapshot;
         const before = yield* captureDisk([f.source, copy, f.home.home], { identity: true });
         const failure = yield* Effect.flip(f.init(copy));
         assert.strictEqual(failure._tag, "AuthorWorkspaceAlreadyRegistered");
@@ -482,6 +488,7 @@ describe("skit author init", () => {
         Effect.gen(function* () {
           const f = yield* workspaceFixture;
           yield* f.home.owned(importSource(f.source));
+          yield* f.home.snapshot;
           const before = yield* captureDisk([f.home.home], { identity: true });
           const descriptor = yield* f.fs.readFileString(join(f.source, "skit.json"));
           const failure = yield* Effect.flip(f.init());

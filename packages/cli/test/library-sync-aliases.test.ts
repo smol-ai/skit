@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { LibraryState } from "@smolai/skit-core/library";
 import { LibraryManifest } from "@smolai/skit-core/library";
 import { type SkillId } from "@smolai/skit-core/universal/consumer";
-import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
+
 import { devices } from "./helpers/library-sync-devices.js";
 
 // Every expected identity below is derived by hand from the alias rules in
@@ -54,14 +54,9 @@ const assertIntact = Effect.fn("Test.assertIntact")(function* (
 const collectionVersionHashes = (device: Device) =>
   Effect.map(device.state, (state) => state.collection_versions.map((copy) => copy.hash));
 
-/** Check every current reference, including unknown fields, without loader normalization.
- * The operation journal deliberately retains the exact pre-Sync identities as recovery evidence.
- */
-const publicationBytes = (fs: FileSystem.FileSystem, device: Device) =>
-  Effect.map(fs.readFileString(join(device.home, "state.json")), (text) => {
-    const { operations: _history, ...current } = JSON.parse(text);
-    return JSON.stringify(current);
-  });
+/** Inspect the complete public domain view; executable journal evidence is separate. */
+const publicationBytes = (_fs: FileSystem.FileSystem, device: Device) =>
+  Effect.map(device.state, (state) => JSON.stringify(state));
 
 describe("skit sync", () => {
   describe("Choosing between changes", () => {
@@ -164,13 +159,8 @@ describe("skit sync", () => {
               localVersion,
             ])
               assert.notInclude(text, retired);
-            const history = JSON.stringify(after.operations);
-            for (const retired of [
-              local.collection.collection_id,
-              localSkill.skill_id,
-              localVersion,
-            ])
-              assert.include(history, retired);
+            // A completed sync leaves no operation record, so none can keep one either.
+            assert.deepStrictEqual((yield* (yield* b.owner()).history).operations, []);
             yield* assertIntact(homes, b, imported);
 
             // A gains B's import without another write, then both homes are clean.
@@ -282,7 +272,7 @@ describe("skit sync", () => {
             const localImports = ids((yield* b.state).imports, (item) => item.import_id);
             const remoteImports = ids(server.remote!.manifest.imports, (item) => item.import_id);
 
-            const unchanged = yield* captureDisk(b.disk);
+            const unchanged = yield* b.unchanged;
             const stored = server.stored;
             for (const apply of [false, true]) {
               const stopped = yield* b.sync({ apply });
@@ -295,7 +285,7 @@ describe("skit sync", () => {
                   name: (yield* b.state).skills[0]!.name,
                 });
               }
-              yield* assertDiskUnchanged(unchanged);
+              yield* unchanged.check;
               assert.deepStrictEqual(server.stored, stored);
             }
 
@@ -439,7 +429,7 @@ describe("skit sync", () => {
             yield* a.sync();
             const imported = yield* collectionVersionHashes(b);
             const key = `collection:${published.collection.collection_id}`;
-            const unchanged = yield* captureDisk(b.disk);
+            const unchanged = yield* b.unchanged;
             const stored = server.stored;
             const stopped = yield* b.sync({ apply: false });
             assert.strictEqual(stopped.status, "conflicted");
@@ -453,7 +443,7 @@ describe("skit sync", () => {
                 (yield* b.sync({ apply, takeRemote: [key] })).status,
                 "resolution_invalid",
               );
-            yield* assertDiskUnchanged(unchanged);
+            yield* unchanged.check;
             assert.deepStrictEqual(server.stored, stored);
             yield* assertIntact(homes, b, imported);
           }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -586,7 +576,7 @@ describe("skit sync", () => {
 
           const key = `collection:${published.collection.collection_id}`;
 
-          const unchanged = yield* captureDisk(b.disk);
+          const unchanged = yield* b.unchanged;
 
           const stored = server.stored;
 
@@ -598,7 +588,7 @@ describe("skit sync", () => {
               assert.deepStrictEqual(stopped.conflicts, [key]);
               assert.strictEqual(stopped.conflict_details?.[0]?.resolution, "take-remote");
             }
-            yield* assertDiskUnchanged(unchanged);
+            yield* unchanged.check;
             assert.deepStrictEqual(server.stored, stored);
             assert.strictEqual(
               yield* fs.readFileString(join(b.root, "same", "SKILL.md")),

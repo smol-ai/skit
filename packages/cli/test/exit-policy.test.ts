@@ -88,3 +88,40 @@ test("later successful scopes retain a partial failure, while a repaired doctor'
   expect(resultExitCode(result("version", { version: "0.3.0" }), 1)).toBe(1);
   expect(resultExitCode(story("doctor", "healthy"), 1)).toBe(0);
 });
+
+for (const status of [
+  "local_bytes_changed",
+  "conflicted",
+  "resolution_invalid",
+  "enablement_incomplete",
+] as const)
+  test(`Library sync ${status} exits 1 in human and JSON output`, () => {
+    for (const format of ["human", "json"] as const) {
+      const frame = renderResultFrame(result("librarySync", { status }), {
+        ...defaultTerminalEnvironment,
+        format,
+      });
+      expect(frame.exitCode).toBe(1);
+      if (format === "json") expect(JSON.parse(frame.stdout).data.status).toBe(status);
+    }
+  });
+
+for (const status of [
+  "clean",
+  "push_ready",
+  "pushed",
+  "pull_ready",
+  "pulled",
+  "merge_ready",
+  "merged",
+] as const)
+  test(`Library sync ${status} exits 0 in human and JSON output`, () => {
+    for (const format of ["human", "json"] as const) {
+      const frame = renderResultFrame(result("librarySync", { status }), {
+        ...defaultTerminalEnvironment,
+        format,
+      });
+      expect(frame.exitCode).toBe(0);
+      if (format === "json") expect(JSON.parse(frame.stdout).data.status).toBe(status);
+    }
+  });

@@ -1,3 +1,4 @@
+import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
 import {
   prepareRecoveryMoves,
   readRecoveryRestore,
@@ -106,7 +107,7 @@ it.effect(
       );
       const repeated = yield* readRecoveryRestore(f.home, f.operationId);
       expect((yield* restoreRecorded(f.home, repeated)).planId).toBe(restored.planId);
-      expect(yield* f.fs.exists(join(f.home, "state.json"))).toBe(false);
+      expect((yield* inspectLocalLibraryState(join(f.home))).present).toBe(false);
     }).pipe(Effect.provide(skitLayer)),
 );
 

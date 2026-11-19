@@ -7,13 +7,14 @@ import { TreeEntry } from "../artifact/tree-entry.js";
 import { syncPaths } from "../platform/atomic-write.js";
 import { AuthorLocalPathUnchecked, LocalFilesChangedDuringSync } from "./failures.js";
 import { scanWorkspaceWrite } from "./local-tree.js";
+import { replaceFile } from "./file-replacement.js";
 
 /**
  * The file half of WorkspaceLease.writeTree, after the lease has checked its private checkpoint: make
  * the workspace's files `to`, if they are still `from`. Only files are written: a directory or
  * symlink in a SKIT is refused rather than dropped.
  *
- * Staged under <root>/.skit/stage-*, on the targets' filesystem, so each rename stays on one
+ * Staged under <root>/.skit/stage-*, on the targets' filesystem, so each write stays on one
  * mount; EXDEV from a nested mount is reported, never copied around. Every written file and every
  * directory whose entries changed is flushed before this returns (ADR-0027). A stage
  * folder left by a crash is removed at the next acquire.
@@ -121,13 +122,14 @@ export const writeWorkspaceTree = Effect.fn("AuthorWorkspace.writeTree")(functio
         yield* local.makeParents(entry.path);
         const target = yield* local.checkTarget(entry.path);
         const staged = path.join(staging, ...entry.path.split("/"));
-        if (before.has(entry.path)) yield* fs.rename(staged, target);
+        const previous = before.get(entry.path);
+        if (previous !== undefined) yield* replaceFile(root, target, staged, previous);
         else {
           // Exclusive publication refuses an editor's new file at a target this write vacated.
           yield* fs.link(staged, target);
           yield* fs.remove(staged);
         }
-        // The rename changed its folder, and any folder it created changed its parent.
+        // The write changed its folder, and any folder it created changed its parent.
         for (
           let folder = path.dirname(target);
           folder !== root && folder.startsWith(root);

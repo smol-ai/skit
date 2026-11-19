@@ -212,6 +212,7 @@
   },
   "dependencies": {
     "@effect/platform-node": "4.1.2",
+    "@effect/sql-sqlite-bun": "4.1.2",
     "@effect/sql-sqlite-node": "4.1.2",
     "acorn": "8.15.0",
     "effect": "4.1.2",

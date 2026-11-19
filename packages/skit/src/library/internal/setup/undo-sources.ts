@@ -2,9 +2,10 @@ import type { UndoConflict } from "../../recovery-facts.js";
 import { Clock, Effect } from "effect";
 import { makeImportId, type CollectionId, type MachineId } from "../../entity-ids.js";
 import { originalTreeHash, collectionVersionPath } from "../../collection-version.js";
+import { readCollectionVersion } from "../content/read-collection-version.js";
 import { sourceImports, type Import } from "../../library-contracts.js";
 import { type LibraryState } from "../../library-state.js";
-import { type SetupIntent } from "./intent.js";
+import { type SetupIntentChanges } from "../../store/setup-intent.js";
 
 export interface UndoSourceImport {
   readonly importId: Import["import_id"];
@@ -14,8 +15,7 @@ export interface UndoSourceImport {
 /** Re-observe verified retained source bytes, preserving all histories and ordinary refresh rules. */
 export const prepareSetupSourceUndo = Effect.fn("SetupUndo.prepareSources")(function* (
   state: LibraryState,
-  before: SetupIntent,
-  expected: SetupIntent,
+  changes: SetupIntentChanges,
   originalsPath: string,
   machineId: MachineId | undefined,
   observations: Map<CollectionId, UndoSourceImport>,
@@ -23,8 +23,10 @@ export const prepareSetupSourceUndo = Effect.fn("SetupUndo.prepareSources")(func
   const conflicts: UndoConflict[] = [];
   const restorations: Import[] = [];
   const evidence: { path: string; hash: string }[] = [];
-  for (const prior of before.sources ?? []) {
-    const after = expected.sources?.find((item) => item.collectionId === prior.collectionId);
+  for (const change of changes.sources) {
+    const prior = change.before;
+    const after = change.after;
+    if (!prior) continue;
     if (!after || after.collectionVersionId === prior.collectionVersionId) continue;
     const current = sourceImports(state, prior.collectionId)[0];
     if (current?.collection_version_id === prior.collectionVersionId) continue;
@@ -47,7 +49,11 @@ export const prepareSetupSourceUndo = Effect.fn("SetupUndo.prepareSources")(func
       continue;
     }
     const path = collectionVersionPath(originalsPath, copy.hash);
-    const verified = yield* Effect.result(originalTreeHash(path));
+    const verified = yield* Effect.result(
+      Effect.scoped(
+        readCollectionVersion(originalsPath, copy.hash).pipe(Effect.flatMap(originalTreeHash)),
+      ),
+    );
     if (verified._tag === "Failure" || verified.success !== copy.hash) {
       conflicts.push({ _tag: "SourceBytesChanged", collectionId: prior.collectionId });
       continue;

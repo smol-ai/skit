@@ -2,6 +2,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { DatabaseSync } from "node:sqlite";
 import { holdHomeLock } from "./helpers/home-lock.js";
 import { readAuthorAncestors } from "../src/platform/author-sync-fixture/history.js";
 import {
@@ -58,11 +59,17 @@ it.effect(
       expect(versions[0].treeHash).toBe(versions[1].treeHash);
       expect(versions[0].id).toBe(versions[1].id);
       expect(stored).toHaveLength(1);
-      for (const version of stored) {
-        const path = join(world.a.home, "history", "trees", `${version.hash.slice(7)}.json`);
+      for (const path of [
+        join(world.a.home, "library.sqlite"),
+        ...(yield* fs.readDirectory(join(world.a.home, "file-bytes"))).map((name) =>
+          join(world.a.home, "file-bytes", name),
+        ),
+      ]) {
         expect((yield* fs.stat(path)).mode & 0o777).toBe(0o600);
       }
       expect((yield* fs.stat(join(world.a.home, "history"))).mode & 0o777).toBe(0o700);
+      for (const folder of ["trees", "revisions"])
+        expect(yield* fs.exists(join(world.a.home, "history", folder))).toBe(false);
       expect(yield* world.missing(yield* world.copies())).toEqual([]);
     }).pipe(Effect.provide(testPlatformLayer)),
 );
@@ -131,18 +138,32 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const world = yield* makeAuthorSyncWorld();
-      const fs = yield* FileSystem.FileSystem;
       yield* Effect.gen(function* () {
         const version = yield* refreshWorkspace(world.a.workspace);
-        const path = join(world.a.home, "history", "trees", `${version.treeHash.slice(7)}.json`);
-        yield* fs.writeFileString(path, "corrupted");
+        const sql = new DatabaseSync(join(world.a.home, "library.sqlite"));
+        try {
+          sql
+            .prepare("UPDATE author_tree_entries SET path='corrupted' WHERE tree_hash=?")
+            .run(version.treeHash);
+        } finally {
+          sql.close();
+        }
         expect(yield* Effect.flip(storedTreesAt(world.a.home))).toMatchObject({
           _tag: "History.StoreCorrupt",
         });
         expect(yield* Effect.flip(refreshWorkspace(world.a.workspace))).toMatchObject({
           _tag: "AuthorHistoryInvalid",
         });
-        expect(yield* fs.readFileString(path)).toBe("corrupted");
+        const checked = new DatabaseSync(join(world.a.home, "library.sqlite"), { readOnly: true });
+        try {
+          expect(
+            checked
+              .prepare("SELECT path FROM author_tree_entries WHERE tree_hash=?")
+              .all(version.treeHash),
+          ).toContainEqual({ path: "corrupted" });
+        } finally {
+          checked.close();
+        }
       }).pipe(Effect.provide(authorLayer(world.a.home)));
     }).pipe(Effect.provide(testPlatformLayer)),
 );

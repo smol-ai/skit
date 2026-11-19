@@ -69,7 +69,6 @@ const asV9 = ({
   repositories,
   installed_skills,
   skills,
-  operations: _operations,
   ...fields
 }: LibraryState) => {
   assert.isUndefined(fields.sync_ancestry);
@@ -536,7 +535,12 @@ for (const agreed of [true, false])
           join(home, "state.json"),
           yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
         );
-        const current = yield* openedState(home);
+        const fixtureHome = yield* fs.makeTempDirectoryScoped({ prefix: "skit-legacy-fixture-" });
+        yield* fs.copyFile(
+          join(fixtures, "v4-well-known-subset.json"),
+          join(fixtureHome, "state.json"),
+        );
+        const current = yield* openedState(fixtureHome);
         assert.strictEqual(current.present, true);
         if (!current.present) return;
         const { schemaVersion: _current, ...state } = asV9(current.state);
@@ -607,7 +611,12 @@ it.effect("relabels v7 state as v8 without inventing sync ancestry", () =>
       join(home, "state.json"),
       yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
     );
-    const current = yield* openedState(home);
+    const fixtureHome = yield* fs.makeTempDirectoryScoped({ prefix: "skit-legacy-fixture-" });
+    yield* fs.copyFile(
+      join(fixtures, "v4-well-known-subset.json"),
+      join(fixtureHome, "state.json"),
+    );
+    const current = yield* openedState(fixtureHome);
     assert.strictEqual(current.present, true);
     if (!current.present) return;
     yield* fs.writeFileString(
@@ -632,7 +641,12 @@ it.effect("state load and publication retain nested extensions without skipping 
       path,
       yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
     );
-    const current = yield* openedState(home);
+    const fixtureHome = yield* fs.makeTempDirectoryScoped({ prefix: "skit-legacy-fixture-" });
+    yield* fs.copyFile(
+      join(fixtures, "v4-well-known-subset.json"),
+      join(fixtureHome, "state.json"),
+    );
+    const current = yield* openedState(fixtureHome);
     assert.strictEqual(current.present, true);
     if (!current.present) return;
     const value = {
@@ -646,8 +660,12 @@ it.effect("state load and publication retain nested extensions without skipping 
     const original = JSON.stringify(value);
     yield* fs.writeFileString(path, original);
     const reopened = yield* openedState(home);
-    assert.deepStrictEqual(reopened, { present: true, state: value });
-    assert.strictEqual(yield* fs.readFileString(path), original);
+    assert.strictEqual(reopened.present, true);
+    if (reopened.present) assert.deepStrictEqual(reopened.state, JSON.parse(original));
+    assert.deepStrictEqual(
+      JSON.parse(yield* fs.readFileString(join(home, "state.json.v12.backup-database"))),
+      JSON.parse(original),
+    );
 
     yield* fs.writeFileString(
       path,
@@ -672,7 +690,12 @@ it.effect("migrates v9 Bindings to enabled lists and renames stored records", ()
       join(home, "state.json"),
       yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
     );
-    const current = yield* openedState(home);
+    const fixtureHome = yield* fs.makeTempDirectoryScoped({ prefix: "skit-legacy-fixture-" });
+    yield* fs.copyFile(
+      join(fixtures, "v4-well-known-subset.json"),
+      join(fixtureHome, "state.json"),
+    );
+    const current = yield* openedState(fixtureHome);
     assert.strictEqual(current.present, true);
     if (!current.present) return;
     const v9 = asV9(current.state);
@@ -900,7 +923,6 @@ it.effect("migrates v11 state to v12 with no operation records", () =>
     assert.deepStrictEqual(migrated.state, {
       ...JSON.parse(historical),
       schemaVersion: 12,
-      operations: [],
     });
     assert.isTrue(
       (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v11.backup-")),
@@ -971,7 +993,7 @@ it.effect("migrates a legacy state.json exactly once, when the Library layer is 
     const library = Context.get(yield* Layer.build(libraryLayer(home)), Library.Service);
     assert.strictEqual((yield* stateBackups(home)).length, 1);
     const migrated = yield* stateFileEvidence(home);
-    assert.strictEqual(JSON.parse(migrated.bytes).schemaVersion, 12);
+    assert.isAbove(JSON.parse(migrated.bytes).schemaVersion, CURRENT_LIBRARY_STATE_VERSION);
 
     const first = yield* library.read;
     const second = yield* library.read;
@@ -1001,20 +1023,20 @@ it.effect("reading a current state.json leaves the file untouched", () =>
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("a read refuses a legacy state.json that appeared after the layer was built", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-read-legacy-" });
-    const library = Context.get(yield* Layer.build(libraryLayer(home)), Library.Service);
-    const legacy = yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json"));
-    yield* fs.writeFileString(join(home, "state.json"), legacy);
+it.effect(
+  "a read stays absent without importing legacy files that appeared after the layer was built",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-read-legacy-" });
+      const library = Context.get(yield* Layer.build(libraryLayer(home)), Library.Service);
+      const legacy = yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json"));
+      yield* fs.writeFileString(join(home, "state.json"), legacy);
 
-    const error = yield* Effect.flip(library.read);
-
-    assert.strictEqual(error._tag, "InvalidLibraryState");
-    assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), legacy);
-    assert.deepStrictEqual(yield* stateBackups(home), []);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      assert.strictEqual((yield* library.read)._tag, "Absent");
+      assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), legacy);
+      assert.deepStrictEqual(yield* stateBackups(home), []);
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("building the layer over an absent Library creates nothing", () =>

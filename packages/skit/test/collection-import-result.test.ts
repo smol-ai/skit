@@ -101,11 +101,11 @@ for (const kind of ["observed", "authored"] as const) {
           "Retain package documentation too.\n",
         );
 
-      const before = yield* fs.readFileString(join(home, "state.json"));
+      const before = yield* loadLibrary(home);
       const repeated = yield* importSource(source, "2026-10-16T01:00:00.000Z");
       assert.strictEqual(imported.action, "added");
       assert.deepStrictEqual(repeated, { ...imported, action: "unchanged" });
-      assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), before);
+      assert.deepStrictEqual(yield* loadLibrary(home), before);
 
       const otherSource = join(root, "other-source");
       yield* fs.copy(source, otherSource);

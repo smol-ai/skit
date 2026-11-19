@@ -4,7 +4,7 @@ import { StalePlan } from "../../library-plan.js";
 import { emptyLibraryState } from "../../library-state.js";
 import { InstalledSkillWouldDuplicate } from "../../library-plan.js";
 import type { SkillMetadata } from "./skill-metadata.js";
-import { collectionVersionPath } from "../../collection-version.js";
+import { readCollectionVersion } from "../content/read-collection-version.js";
 import { versionBacking } from "../../library-contracts.js";
 import { type InstallScope } from "../../scope.js";
 import { Effect, FileSystem, Result } from "effect";
@@ -152,12 +152,12 @@ export const readLibrarySkillContent = Effect.fn("LibrarySession.readSkillConten
   const fs = yield* FileSystem.FileSystem;
   return yield* fs.readFileString(
     join(
-      collectionVersionPath(join(home, "originals"), backing.copy.hash),
+      yield* readCollectionVersion(join(home, "originals"), backing.copy.hash),
       backing.member.source_path,
       "SKILL.md",
     ),
   );
-});
+}, Effect.scoped);
 
 export function libraryPolicyAfter(
   row: LibrarySkillRow,

@@ -1,4 +1,6 @@
-import { Effect, Option } from "effect";
+import { SyncAncestry } from "../../store/state-fields.js";
+import { prepareLibrarySide } from "../../store/difference.js";
+import { Effect, Option, Schema } from "effect";
 import { SyncEnablementIssue, type SyncIssue } from "../../sync-issues.js";
 import { stepError } from "../../store/step-error.js";
 import { sha256Hash } from "../../../shared/hash.js";
@@ -13,15 +15,19 @@ import { operationScope } from "../operations/operations.js";
 import { planIntent } from "../../plan-changes.js";
 import { currentSkillVersion, enabledSkillIds } from "../../library-contracts.js";
 import { InvalidLibraryState } from "../../failures.js";
-import { LibraryState } from "../../library-state.js";
+import { LibraryState, prepareLibrarySets } from "../../library-state.js";
 import { routedInstalledSkills } from "../../routing/recorded.js";
-import { libraryOriginalsPath, libraryStatePath, loadLibrary } from "../../store/library-store.js";
+import {
+  inspectLocalLibraryState,
+  libraryOriginalsPath,
+  libraryStatePath,
+  loadLibrary,
+} from "../../store/library-store.js";
 import type { OperationId } from "../../entity-ids.js";
 import {
   type RecordedSetupStep,
   type SetupStep,
   type SyncProgram,
-  type SyncPublication,
 } from "../../store/state-schema.js";
 
 export interface SyncStepResult {
@@ -32,14 +38,11 @@ export interface SyncStepResult {
   readonly issues: readonly SyncIssue[];
 }
 
-/** History is not part of a publication, or each Sync would recursively copy earlier operations. */
-export const syncPublication = ({
-  operations: _operations,
-  ...state
-}: LibraryState): SyncPublication => state;
-
 const same = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
-const body = ({ installed_skills: _copies, ...state }: SyncPublication) => state;
+const body = (value: LibraryState) => {
+  const { installed_skills: _copies, ...state } = prepareLibrarySets(value);
+  return state;
+};
 
 const programFor = (
   step: Extract<SetupStep, { readonly _tag: "Sync" }>,
@@ -56,6 +59,8 @@ const programFor = (
 const checkFolders = Effect.fn("Library.sync.checkRecordedFolders")(function* (
   program: SyncProgram,
   state: LibraryState,
+  beforeState: LibraryState,
+  afterState: LibraryState,
   installing: boolean,
   home: string,
 ) {
@@ -86,8 +91,8 @@ const checkFolders = Effect.fn("Library.sync.checkRecordedFolders")(function* (
     )
       continue;
     if (installing && row) {
-      const skill = program.after.skills.find((item) => item.skill_id === row.skill_id);
-      const selected = skill && currentSkillVersion(program.after, skill);
+      const skill = afterState.skills.find((item) => item.skill_id === row.skill_id);
+      const selected = skill && currentSkillVersion(afterState, skill);
       const routed = program.routing.destinations.some(
         (destination) =>
           destination.destination === row.destination && destination.root === row.root,
@@ -102,7 +107,7 @@ const checkFolders = Effect.fn("Library.sync.checkRecordedFolders")(function* (
             if (
               yield* files.backups.check(
                 backup,
-                { ...program.before, operations: [] },
+                beforeState,
                 libraryOriginalsPath(home),
                 row.installed_skill_id,
               )
@@ -141,30 +146,45 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
   const files = yield* routedInstalledSkills(program.routing);
   return yield* Effect.gen(function* () {
     let current = yield* loadLibrary(home);
-    if (Option.isSome(program.receipt)) {
-      const receipt = program.receipt.value;
+    const beforeState = yield* prepareLibrarySide(
+      program.difference,
+      current,
+      "before",
+      libraryStatePath(home),
+    ).pipe(Effect.mapError(() => new InstalledSkills.Changed({ path: libraryStatePath(home) })));
+    const afterState = yield* prepareLibrarySide(
+      program.difference,
+      current,
+      "after",
+      libraryStatePath(home),
+    ).pipe(Effect.mapError(() => new InstalledSkills.Changed({ path: libraryStatePath(home) })));
+    if (program.receiptAccepted) {
+      const accepted = afterState.sync_ancestry;
+      if (!accepted) return yield* new InstalledSkills.Changed({ path: libraryStatePath(home) });
+      // The receipt contract still selects its declared fields; compare it with the exact ancestry.
+      // Keeping that check matters when the ancestry contains extension fields.
+      const receipt = yield* Schema.decodeEffect(SyncAncestry)(accepted).pipe(
+        Effect.mapError(() => new InstalledSkills.Changed({ path: libraryStatePath(home) })),
+      );
       const hash = yield* sha256Hash(
         new TextEncoder().encode(canonicalJson(normalizeLibraryManifest(receipt.base_manifest))),
       );
-      if (hash !== program.manifestDigest || !same(receipt, program.after.sync_ancestry))
+      if (hash !== program.manifestDigest || !same(receipt, afterState.sync_ancestry))
         return yield* new InstalledSkills.Changed({ path: libraryStatePath(home) });
     }
-    const retained = yield* inspectContent(
-      home,
-      snapshotOf({ present: true, state: { ...program.after, operations: [] } }),
-    );
+    const retained = yield* inspectContent(home, snapshotOf({ present: true, state: afterState }));
     if (retained._tag === "Changed")
       return yield* new InstalledSkills.Changed({ path: libraryOriginalsPath(home) });
     const scope = yield* operationScope(operationId, index, program.routing);
     current = yield* loadLibrary(home);
-    const publication = syncPublication(current);
-    const expected = step.phase === "install" ? program.after : program.before;
-    const alreadyPublished = same(publication, program.after);
-    if (!same(body(publication), body(expected)) && !(step.phase !== "install" && alreadyPublished))
+    const expected =
+      step.phase === "install" || program.save === "before" ? afterState : beforeState;
+    const alreadyPublished = same(prepareLibrarySets(current), prepareLibrarySets(afterState));
+    if (!same(body(current), body(expected)) && !(step.phase !== "install" && alreadyPublished))
       return yield* new InstalledSkills.Changed({ path: libraryStatePath(home) });
-    if (step.phase !== "install" && !alreadyPublished) {
+    if (step.phase !== "install" && !alreadyPublished && program.save !== "before") {
       for (const copy of current.installed_skills) {
-        const before = program.before.installed_skills.find(
+        const before = beforeState.installed_skills.find(
           (item) => item.installed_skill_id === copy.installed_skill_id,
         );
         const retiring = program.retire.some(
@@ -176,7 +196,7 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
         )
           return yield* new InstalledSkills.Changed({ path: copy.path });
       }
-      for (const before of program.before.installed_skills)
+      for (const before of beforeState.installed_skills)
         if (
           !current.installed_skills.some(
             (item) => item.installed_skill_id === before.installed_skill_id,
@@ -187,10 +207,10 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
     }
     if (step.phase === "install") {
       for (const copy of current.installed_skills) {
-        const expected = program.after.installed_skills.find((item) => item.path === copy.path);
+        const expected = afterState.installed_skills.find((item) => item.path === copy.path);
         if (expected && same(copy, expected)) continue;
-        const skill = program.after.skills.find((item) => item.skill_id === copy.skill_id);
-        const selected = skill && currentSkillVersion(program.after, skill);
+        const skill = afterState.skills.find((item) => item.skill_id === copy.skill_id);
+        const selected = skill && currentSkillVersion(afterState, skill);
         const recordedPath = program.folders.some((item) => item.path === copy.path);
         const routed = program.routing.destinations.some(
           (item) => item.root === copy.root && item.destination === copy.destination,
@@ -203,7 +223,7 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
         )
           return yield* new InstalledSkills.Changed({ path: copy.path });
       }
-      for (const copy of program.after.installed_skills)
+      for (const copy of afterState.installed_skills)
         if (
           !current.installed_skills.some(
             (item) => item.installed_skill_id === copy.installed_skill_id,
@@ -211,11 +231,13 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
         )
           return yield* new InstalledSkills.Changed({ path: copy.path });
     }
-    yield* checkFolders(program, current, step.phase === "install", home);
+    yield* checkFolders(program, current, beforeState, afterState, step.phase === "install", home);
     let installed = 0;
     let uninstalled = 0;
     const issues: SyncIssue[] = [...program.issues];
-    if (step.phase === "retire" && !alreadyPublished) {
+    if (step.phase === "retire" && program.save === "before") {
+      uninstalled = yield* scope.uninstallCopies();
+    } else if (step.phase === "retire" && !alreadyPublished) {
       const live = program.retire.filter((copy) =>
         current.installed_skills.some((row) => row.installed_skill_id === copy.installed_skill_id),
       );
@@ -228,7 +250,10 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
               copies: live.map((copy) => copy.installed_skill_id),
               drop: program.drop,
             },
-            { home, base: snapshotOf({ present: true, state: current }) },
+            {
+              home,
+              base: snapshotOf(yield* inspectLocalLibraryState(home)),
+            },
           ),
         );
         if (outcome._tag === "Incomplete") return yield* outcome.cause;
@@ -243,21 +268,24 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
             "install",
             yield* planIntent(
               { _tag: "Install" },
-              { home, base: snapshotOf({ present: true, state: current }) },
+              {
+                home,
+                base: snapshotOf(yield* inspectLocalLibraryState(home)),
+              },
             ),
           );
         }),
       );
       if (attempt._tag === "Failure") {
         if (attempt.failure instanceof InstalledSkills.Changed) return yield* attempt.failure;
-        if (program.after.device_skill_selection?.mode !== "choose") return yield* attempt.failure;
+        if (afterState.device_skill_selection?.mode !== "choose") return yield* attempt.failure;
         issues.push(
           SyncEnablementIssue.cases.InstallationFailed.make({
             failure: stepError(attempt.failure),
           }),
         );
       } else if (attempt.success._tag === "Incomplete") {
-        if (program.after.device_skill_selection?.mode !== "choose")
+        if (afterState.device_skill_selection?.mode !== "choose")
           return yield* attempt.success.cause;
         issues.push(
           SyncEnablementIssue.cases.InstallationFailed.make({
@@ -267,9 +295,9 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
       } else {
         installed = attempt.success.copies.filter((copy) => copy._tag === "Installed").length;
         uninstalled = attempt.success.copies.filter((copy) => copy._tag === "Uninstalled").length;
-        if (program.after.device_skill_selection?.mode === "choose") {
+        if (afterState.device_skill_selection?.mode === "choose") {
           const selected = new Set(
-            enabledSkillIds(program.after, program.after.device_skill_selection.enabled),
+            enabledSkillIds(afterState, afterState.device_skill_selection.enabled),
           );
           for (const copy of (yield* loadLibrary(home)).installed_skills.filter(
             (copy) =>

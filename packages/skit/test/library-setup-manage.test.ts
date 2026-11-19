@@ -1,15 +1,15 @@
-import { describe } from "@effect/vitest";
-import { assert, it } from "@effect/vitest";
-import { Context, Effect, Exit, FileSystem, Layer, Option, Schema } from "effect";
+import { loadOperations } from "../src/library/store/library-store.js";
+import { describe, assert, it } from "@effect/vitest";
+
+import { Context, Effect, Exit, FileSystem, Layer, Option } from "effect";
 import { join } from "node:path";
+import { Digest } from "effect/crypto";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
 import { readPathEvidence } from "../src/library/folder-evidence.js";
 import { reviewInstalledSkillChanges } from "../src/library/installed-skill-review.js";
-import { LibraryState } from "../src/library/library-state.js";
 import * as Library from "../src/library/library.js";
 import {
-  OperationStatus,
   type FolderEvidence,
   type LinkEvidence,
   type SetupStep,
@@ -17,8 +17,7 @@ import {
 } from "../src/library/store/state-schema.js";
 import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { inspectLibrary, libraryLayer, saveLibrary } from "./helpers/library-store.js";
-import { testRoots } from "./helpers/library-store.js";
+import { inspectLibrary, libraryLayer, saveLibrary, testRoots } from "./helpers/library-store.js";
 
 const machineId = migratedMachineId("019950c0-4c00-7000-8000-000000000001", "setup-manage-test");
 const skill = "---\nname: review\n---\nReview.\n";
@@ -39,12 +38,69 @@ const crashingAt = (
 ) =>
   Layer.effect(
     FileSystem.FileSystem,
-    Effect.map(FileSystem.FileSystem, (fs) => {
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const digest = yield* Digest.Digest;
       let crashed = false;
       return {
         ...fs,
+        chmod: (path: string, mode: number) =>
+          Effect.gen(function* () {
+            if (!crashed) {
+              let stop = false;
+              if (path === join(home, "library.sqlite")) {
+                const inspected = yield* inspectLocalLibraryState(home).pipe(
+                  Effect.provideService(FileSystem.FileSystem, fs),
+                  Effect.provideService(Digest.Digest, digest),
+                  Effect.orDie,
+                );
+                if (!inspected.present) return yield* fs.chmod(path, mode);
+                const state = inspected.state;
+                const operation = (yield* loadOperations(home).pipe(
+                  Effect.provideService(FileSystem.FileSystem, fs),
+                  Effect.provideService(Digest.Digest, digest),
+                  Effect.orDie,
+                )).find((item) => item._tag === "Pending");
+                if (operation?._tag === "Pending") {
+                  stop ||=
+                    boundary === "import-done" &&
+                    operation.steps[0]?.step._tag === "Import" &&
+                    operation.steps[0].status === "Done";
+                  stop ||=
+                    boundary === "edit-imported" &&
+                    operation.steps.some(
+                      (step) => step.step._tag === "Update" && step.status === "Pending",
+                    ) &&
+                    state.imports.some((sourceImport) => sourceImport.kind === "edit");
+                  const step = operation.steps.find(
+                    (item) => item.step._tag === "Manage" || item.step._tag === "Update",
+                  );
+                  const batch = step?.applies?.at(-1)?.apply;
+                  stop ||=
+                    boundary === "intent" &&
+                    !!batch &&
+                    state.enabled.length > 0 &&
+                    state.installed_skills.length === 0;
+                  stop ||=
+                    boundary === "pending" &&
+                    state.installed_skills.some((row) => row.status === "pending");
+                  stop ||= boundary === "installed" && !!batch && batch.phase._tag === "Done";
+                  stop ||= boundary === "step" && step?.status === "Done";
+                }
+              }
+              if (stop) {
+                crashed = true;
+                return yield* Effect.die("crash at " + boundary);
+              }
+            }
+            yield* fs.chmod(path, mode);
+          }),
         rename: (from: string, to: string) =>
           Effect.gen(function* () {
+            if (!crashed && boundary === "pending" && to.endsWith("/.skit-ownership.json")) {
+              crashed = true;
+              return yield* Effect.die("crash before marker");
+            }
             yield* fs.rename(from, to);
             if (crashed) return;
             let stop = boundary === "marker" && to.endsWith("/.skit-ownership.json");
@@ -54,40 +110,6 @@ const crashingAt = (
               to.includes(".skit-backups/pending-");
             stop ||=
               boundary === "successor" && from.includes(".skit-stage-") && to.endsWith("/review");
-            if (to === join(home, "state.json")) {
-              const state = yield* Schema.decodeEffect(Schema.fromJsonString(LibraryState))(
-                yield* fs.readFileString(to),
-              ).pipe(Effect.orDie);
-              const operation = (yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
-                state.operations,
-              ).pipe(Effect.orDie)).find((item) => item._tag === "Pending");
-              if (operation?._tag === "Pending") {
-                stop ||=
-                  boundary === "import-done" &&
-                  operation.steps[0]?.step._tag === "Import" &&
-                  operation.steps[0].status === "Done";
-                stop ||=
-                  boundary === "edit-imported" &&
-                  operation.steps.some(
-                    (step) => step.step._tag === "Update" && step.status === "Pending",
-                  ) &&
-                  state.imports.some((sourceImport) => sourceImport.kind === "edit");
-                const step = operation.steps.find(
-                  (item) => item.step._tag === "Manage" || item.step._tag === "Update",
-                );
-                const batch = step?.applies?.at(-1)?.apply;
-                stop ||=
-                  boundary === "intent" &&
-                  !!batch &&
-                  state.enabled.length > 0 &&
-                  state.installed_skills.length === 0;
-                stop ||=
-                  boundary === "pending" &&
-                  state.installed_skills.some((row) => row.status === "pending");
-                stop ||= boundary === "installed" && !!batch && batch.phase._tag === "Done";
-                stop ||= boundary === "step" && step?.status === "Done";
-              }
-            }
             if (stop) {
               crashed = true;
               return yield* Effect.die("crash at " + boundary);
@@ -100,7 +122,7 @@ const crashingAt = (
 const withLibrary = <A, E, R>(
   home: string,
   use: (library: Library.Interface) => Effect.Effect<A, E, R>,
-  fileSystem?: Layer.Layer<FileSystem.FileSystem, never, FileSystem.FileSystem>,
+  fileSystem?: Layer.Layer<FileSystem.FileSystem, never, FileSystem.FileSystem | Digest.Digest>,
 ) =>
   Effect.gen(function* () {
     const owner = libraryLayer(home);
@@ -172,13 +194,11 @@ const fixture = Effect.gen(function* () {
 /** Build the Library over `home` as the next SKIT run would: what its startup recovery did. */
 const restart = (home: string) => withLibrary(home, (library) => Effect.succeed(library.startup));
 
-/** The operation records in `state.json`, read as a file: building a store would recover them. */
+/** The persisted operation records, read without recovery: building a store would recover them. */
 const recordedOperations = (home: string) =>
   Effect.gen(function* () {
     const inspected = yield* inspectLocalLibraryState(home);
-    return inspected.present
-      ? yield* Schema.decodeEffect(Schema.Array(OperationStatus))(inspected.state.operations)
-      : [];
+    return inspected.present ? yield* loadOperations(home) : [];
   });
 
 /** The copy is SKIT's now: recorded as installed where it was, with SKIT's marker in it. */
@@ -309,7 +329,11 @@ it.effect(
       );
       // Interrupt at the marker boundary, independent of how many journal checkpoints precede it.
       const change = (
-        fileSystem: Layer.Layer<FileSystem.FileSystem, never, FileSystem.FileSystem>,
+        fileSystem: Layer.Layer<
+          FileSystem.FileSystem,
+          never,
+          FileSystem.FileSystem | Digest.Digest
+        >,
       ) =>
         Effect.gen(function* () {
           const library = Context.get(yield* Layer.build(configured), Library.Service);

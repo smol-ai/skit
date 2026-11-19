@@ -4,7 +4,7 @@ import { assert, it } from "@effect/vitest";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { type LibraryManifest } from "@smolai/skit-core/library";
-import { captureDisk, diskChanges, noDiskChanges } from "./helpers/disk-snapshot.js";
+
 import { devices } from "./helpers/library-sync-devices.js";
 
 // An absent remote, an existing remote holding an empty Library, an absent state.json, an empty
@@ -25,41 +25,23 @@ const empty: LibraryManifest = {
   enabled: [],
 };
 
-/**
- * Assert that a sync published no local state, sent the Registry no write request, and left the
- * durable state of both unchanged. The counters see every save and write request, including
- * an identical rewrite in place or an idempotent write the Registry answers with its head. The
- * snapshot captures file identity, so it also sees an atomic replacement of identical bytes. Taking
- * the writer lock creates the home when it did not exist yet, as the fault-matrix rows allow; it
- * must stay empty.
+/** Pair domain/history equality with user-file identity and Registry write observations.
+ * SQLite reader-side WAL activity is allowed; no Library data change is allowed.
  */
-const unwritten = Effect.fn("Test.unwritten")(({ server }: Homes, device: Device) =>
-  Effect.map(captureDisk(device.disk, { identity: true }), (before) => {
-    const stored = server.stored;
-    const saves = device.saves;
-    const writeRequests = server.writeRequests;
-    return Effect.gen(function* () {
+const unwritten = Effect.fn("Test.unwritten")(function* ({ server }: Homes, device: Device) {
+  const unchanged = yield* device.unchanged;
+  const stored = server.stored;
+  const saves = device.saves;
+  const writeRequests = server.writeRequests;
+  return {
+    check: Effect.gen(function* () {
+      yield* unchanged.check;
       assert.strictEqual(device.saves, saves);
       assert.strictEqual(server.writeRequests, writeRequests);
-      const changes = yield* diskChanges(before);
-      assert.deepStrictEqual(
-        {
-          ...changes,
-          created: changes.created.filter(
-            (item) =>
-              !(
-                item.path.length === 1 &&
-                item.path[0] === device.home &&
-                item.after.type === "directory"
-              ),
-          ),
-        },
-        noDiskChanges,
-      );
       assert.deepStrictEqual(server.stored, stored);
-    });
-  }),
-);
+    }),
+  };
+});
 
 /** Another home commits a Library holding nothing, so the remote exists but is empty. */
 const emptyRemote = ({ server }: Homes) =>
@@ -99,7 +81,7 @@ describe("skit sync", () => {
           for (const apply of [false, true]) {
             const result = yield* a.sync({ apply });
             assert.deepStrictEqual(result, { status: "clean", changed: false });
-            yield* unchanged;
+            yield* unchanged.check;
           }
           // A clean sync with no local or remote Library does not acquire a writer or create home.
           assert.isFalse(yield* homes.fs.exists(a.home));
@@ -132,7 +114,7 @@ describe("skit sync", () => {
           const head = server.remote!;
           const unchanged = yield* unwritten(homes, a);
           assert.strictEqual((yield* a.sync({ apply: false })).status, "pull_ready");
-          yield* unchanged;
+          yield* unchanged.check;
           assert.strictEqual((yield* a.sync()).status, "pulled");
           const state = yield* a.state;
           assert.deepStrictEqual(
@@ -153,17 +135,18 @@ describe("skit sync", () => {
           const head = server.remote!;
           const unchanged = yield* unwritten(homes, a);
           assert.strictEqual((yield* a.sync({ apply: false })).status, "clean");
-          yield* unchanged;
-          const operations = (yield* a.state).operations;
+          yield* unchanged.check;
+          const history = yield* (yield* a.owner()).history;
           const writeRequests = server.writeRequests;
           assert.strictEqual((yield* a.sync()).status, "clean");
           const anchored = yield* a.state;
-          assert.strictEqual(anchored.operations.length, operations.length + 1);
-          assert.deepStrictEqual(anchored.operations.slice(0, -1), operations);
-          assert.strictEqual(anchored.operations.at(-1)?._tag, "Done");
-          assert.deepStrictEqual(
-            anchored.operations.at(-1)?.steps.map((step) => step.status),
-            ["Done", "Done", "Done"],
+          const anchoredHistory = yield* (yield* a.owner()).history;
+          assert.deepStrictEqual(anchoredHistory.operations, history.operations);
+          assert.strictEqual(anchoredHistory.events.length, history.events.length + 1);
+          assert.isTrue(
+            anchoredHistory.events
+              .at(-1)
+              ?.changes.some((change) => change.action === "operation-Done"),
           );
           assert.strictEqual(server.writeRequests, writeRequests);
           assert.strictEqual((yield* a.state).sync_ancestry?.revision_id, head.revision_id);
@@ -190,7 +173,7 @@ describe("skit sync", () => {
             installed: 0,
             uninstalled: 0,
           });
-          yield* unchanged;
+          yield* unchanged.check;
         }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
       );
 
@@ -208,7 +191,7 @@ describe("skit sync", () => {
           assert.strictEqual(preview.merge_base, "empty-first-sync");
           assert.ok("revision_id" in preview);
           assert.strictEqual(preview.revision_id, head.revision_id);
-          yield* unchanged;
+          yield* unchanged.check;
           // Merging against an empty base, so it only adds this home's records.
           const local = yield* a.state;
           assert.strictEqual((yield* a.sync()).status, "merged");
@@ -237,7 +220,7 @@ describe("skit sync", () => {
             assert.strictEqual(preview.merge_base, "empty-first-sync");
             assert.ok("revision_id" in preview);
             assert.strictEqual(preview.revision_id, head.revision_id);
-            yield* unchanged;
+            yield* unchanged.check;
             // An empty base never infers a deletion: merging keeps every remote Collection.
             assert.strictEqual((yield* b.sync()).status, "merged");
             assert.deepStrictEqual(server.remote, head);
@@ -293,7 +276,7 @@ describe("skit sync", () => {
             assert.strictEqual(preview.status, "merge_ready");
             assert.ok("merge_base" in preview);
             assert.strictEqual(preview.merge_base, "empty-different-library");
-            yield* unchanged;
+            yield* unchanged.check;
             assert.strictEqual((yield* a.sync()).status, "merged");
             const merged = yield* a.state;
             assert.strictEqual(merged.collections.length, 2);
@@ -319,22 +302,15 @@ describe("skit sync", () => {
             const homes = yield* devices;
             const { a, b } = homes;
             const first = yield* a.importSource("first");
-            yield* a.sync();
+            yield* a.sync({ origin: "https://another-registry.example" });
             yield* b.sync();
             yield* a.remove(first.collection.collection_id);
-            yield* a.edit((state) => ({
-              ...state,
-              sync_ancestry: {
-                ...state.sync_ancestry!,
-                origin: "https://another-registry.example",
-              },
-            }));
             const unchanged = yield* unwritten(homes, a);
             const preview = yield* a.sync({ apply: false });
             assert.strictEqual(preview.status, "merge_ready");
             assert.ok("merge_base" in preview);
             assert.strictEqual(preview.merge_base, "empty-different-library");
-            yield* unchanged;
+            yield* unchanged.check;
             assert.strictEqual((yield* a.sync()).status, "merged");
             const after = yield* a.state;
             assert.strictEqual(after.collections.length, 1);
@@ -397,7 +373,7 @@ describe("skit sync", () => {
 
           assert.strictEqual(preview.merge_base, "empty-different-library");
 
-          yield* unchanged;
+          yield* unchanged.check;
 
           assert.strictEqual(server.remote, null);
         }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -415,7 +391,7 @@ describe("skit sync", () => {
           yield* anchored(homes.a);
           const unchanged = yield* unwritten(homes, homes.a);
           assert.strictEqual((yield* homes.a.sync({ apply: false })).status, "clean");
-          yield* unchanged;
+          yield* unchanged.check;
         }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
       );
     });
@@ -445,3 +421,18 @@ describe("skit sync", () => {
     });
   });
 });
+
+it.effect(
+  "a device counts its final committed write before another writable connection opens",
+  () =>
+    Effect.gen(function* () {
+      const { a, events } = yield* devices;
+      assert.strictEqual(a.saves, 0);
+      yield* a.importSource("first");
+      assert.strictEqual(a.saves, 1);
+      assert.deepStrictEqual(events, ["save a"]);
+      const before = a.saves;
+      assert.strictEqual((yield* a.sync({ apply: false })).status, "push_ready");
+      assert.strictEqual(a.saves, before);
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);

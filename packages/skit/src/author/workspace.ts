@@ -46,6 +46,7 @@ import {
 import { AuthorVisibility, AuthorRemoteHome, normalizeRemote } from "./remote.js";
 
 import { writeWorkspaceTree } from "./write-tree.js";
+import { recoverFileReplacement, replacementPrefix } from "./file-replacement.js";
 import type { WriteCheckpoint } from "./history.js";
 import {
   WorkspaceId,
@@ -119,6 +120,7 @@ export type WorkspaceReadError =
   | PlatformError.PlatformError;
 
 type WriteTreeError =
+  | AuthorWorkspaceUnsafe
   | AuthorWorkspaceConflict
   | WorkspaceReadError
   | LocalFilesChangedDuringSync
@@ -385,9 +387,12 @@ const make = Effect.gen(function* () {
     );
     // Stage folders a crashed writeTree left behind. Nothing else writes under the lease yet.
     const directory = control(root);
-    for (const name of yield* fs.readDirectory(directory))
+    for (const name of yield* fs.readDirectory(directory)) {
+      if (name.startsWith(replacementPrefix))
+        yield* recoverFileReplacement(root, path.join(directory, name));
       if (name.startsWith("stage-"))
         yield* fs.remove(path.join(directory, name), { recursive: true });
+    }
     const ownerId = yield* random.uuidV4();
     const revision = yield* Ref.make(0);
     // The revision whose write checkpoint was last presented: each is good for one attempt.

@@ -1,5 +1,6 @@
+import { prepareSetupChanges } from "../src/library/store/setup-intent.js";
 import { describe } from "@effect/vitest";
-import { setupIntent } from "../src/library/internal/setup/intent.js";
+import { setupIntent } from "../src/library/store/intent.js";
 import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { it } from "@effect/vitest";
@@ -104,7 +105,10 @@ describe("skit library undo", () => {
               [f.later.skill_id]: "host-policy",
             },
           };
-          const inverse = reverseSetupIntent(current, setupIntent(before), setupIntent(after));
+          const inverse = reverseSetupIntent(
+            current,
+            yield* prepareSetupChanges(setupIntent(before), setupIntent(after), "fixture"),
+          );
           expect(inverse.conflicts).toEqual([]);
           expect(inverse.state.enabled).toEqual([
             { skill: f.existing.skill_id },
@@ -117,7 +121,10 @@ describe("skit library undo", () => {
           expect(inverse.state.imports).toEqual(current.imports);
           expect(inverse.state.collection_versions).toEqual(current.collection_versions);
           expect(
-            reverseSetupIntent(inverse.state, setupIntent(before), setupIntent(after)).changed,
+            reverseSetupIntent(
+              inverse.state,
+              yield* prepareSetupChanges(setupIntent(before), setupIntent(after), "fixture"),
+            ).changed,
           ).toBe(false);
           const edited = {
             ...current,
@@ -126,7 +133,10 @@ describe("skit library undo", () => {
               [f.existing.skill_id]: "host-policy" as const,
             },
           };
-          const conflict = reverseSetupIntent(edited, setupIntent(before), setupIntent(after));
+          const conflict = reverseSetupIntent(
+            edited,
+            yield* prepareSetupChanges(setupIntent(before), setupIntent(after), "fixture"),
+          );
           expect(conflict.conflicts).toContainEqual({
             _tag: "SelectionChanged",
             scope: { _tag: "Account" },
@@ -157,14 +167,16 @@ describe("skit library undo", () => {
               enabled: [{ skill: f.existing.skill_id }, { skill: f.chosen.skill_id }],
             },
           };
-          const inverse = reverseSetupIntent(after, setupIntent(before), setupIntent(after));
+          const inverse = reverseSetupIntent(
+            after,
+            yield* prepareSetupChanges(setupIntent(before), setupIntent(after), "fixture"),
+          );
           expect(inverse.conflicts).toEqual([]);
           expect(inverse.state.enabled).toEqual(before.enabled);
           expect(inverse.state.device_skill_selection).toEqual(before.device_skill_selection);
           const changedMode = reverseSetupIntent(
             { ...after, device_skill_selection: { mode: "follow-account" } },
-            setupIntent(before),
-            setupIntent(after),
+            yield* prepareSetupChanges(setupIntent(before), setupIntent(after), "fixture"),
           );
           expect(changedMode.conflicts).toContainEqual({ _tag: "DeviceModeChanged" });
           expect(changedMode.state.device_skill_selection).toEqual({ mode: "follow-account" });
@@ -182,12 +194,18 @@ describe("skit library undo", () => {
             enabled: [{ skill: f.chosen.skill_id }],
           };
           const later = Object.assign({}, after, { futureSetting: "keep" });
-          const inverse = reverseSetupIntent(later, setupIntent(before), setupIntent(after));
+          const inverse = reverseSetupIntent(
+            later,
+            yield* prepareSetupChanges(setupIntent(before), setupIntent(after), "fixture"),
+          );
           expect(inverse.conflicts).toEqual([]);
           expect(inverse.state.enabled).toEqual([]);
           expect(inverse.state).toHaveProperty("futureSetting", "keep");
           expect(
-            reverseSetupIntent(inverse.state, setupIntent(before), setupIntent(after)).changed,
+            reverseSetupIntent(
+              inverse.state,
+              yield* prepareSetupChanges(setupIntent(before), setupIntent(after), "fixture"),
+            ).changed,
           ).toBe(false);
         }).pipe(Effect.provide(skitLayer)),
     );
@@ -244,7 +262,10 @@ describe("skit library undo", () => {
 
         const current = yield* f.home.durable;
 
-        const conflict = reverseSetupIntent(current, setupIntent(before), setupIntent(after));
+        const conflict = reverseSetupIntent(
+          current,
+          yield* prepareSetupChanges(setupIntent(before), setupIntent(after), "fixture"),
+        );
 
         expect(conflict.conflicts).toContainEqual({
           _tag: "SkillVersionChanged",
@@ -302,7 +323,10 @@ describe("skit library undo", () => {
           const after = { ...(yield* home.durable), enabled };
           expect(enabledSkillIds(before, enabled)).toHaveLength(1);
           expect(enabledSkillIds(after, enabled)).toHaveLength(2);
-          const inverse = reverseSetupIntent(after, setupIntent(before), setupIntent(after));
+          const inverse = reverseSetupIntent(
+            after,
+            yield* prepareSetupChanges(setupIntent(before), setupIntent(after), "fixture"),
+          );
           expect(inverse.conflicts).toContainEqual({
             _tag: "CollectionMembershipChanged",
             collectionId: imported.collections[0].collection_id,
@@ -344,7 +368,10 @@ describe("skit library undo", () => {
 
         const initialVersion = currentSkillVersion(before, f.chosen)?.skill_version_id;
 
-        const inverse = reverseSetupIntent(after, setupIntent(before), setupIntent(after));
+        const inverse = reverseSetupIntent(
+          after,
+          yield* prepareSetupChanges(setupIntent(before), setupIntent(after), "fixture"),
+        );
 
         expect(inverse.conflicts).toEqual([]);
 
@@ -359,7 +386,10 @@ describe("skit library undo", () => {
         expect(inverse.state.imports).toEqual(after.imports);
 
         expect(
-          reverseSetupIntent(inverse.state, setupIntent(before), setupIntent(after)).changed,
+          reverseSetupIntent(
+            inverse.state,
+            yield* prepareSetupChanges(setupIntent(before), setupIntent(after), "fixture"),
+          ).changed,
         ).toBe(false);
       }).pipe(Effect.provide(skitLayer)),
     );

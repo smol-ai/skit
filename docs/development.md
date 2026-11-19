@@ -28,7 +28,7 @@ The repository is a pnpm workspace containing these application packages:
 | `packages/cli` (`@smolai/skit`)                              | The standalone CLI, command presentation, and harness projections   |
 | `packages/skit-server-effect` (`@smolai/skit-server-effect`) | The reference Cloudflare Worker registry backed by D1 and R2        |
 
-Core owns authoritative local-library state. CLI code should request core mutations rather than write `state.json` independently. Server code consumes core contracts but does not define local installation policy.
+Core owns authoritative local-library state. CLI code should request core mutations rather than write the Library database independently. Server code consumes core contracts but does not define local installation policy.
 
 ## Running the CLI locally
 

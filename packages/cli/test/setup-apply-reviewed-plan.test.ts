@@ -1,3 +1,4 @@
+import * as Library from "@smolai/skit-core/library";
 import { describe } from "@effect/vitest";
 import { recoveryInspection } from "./helpers/recovery.js";
 import { join } from "node:path";
@@ -15,7 +16,7 @@ import {
 } from "@smolai/skit-core/library/setup";
 import { SetupReviewInputInvalid } from "@smolai/skit-core/library/setup/failures";
 
-import { prepareSetupUndo } from "../src/library/setup/undo.js";
+import { prepareSetupUndo } from "@smolai/skit-core/library/setup";
 import { captureDisk, diskChanges, noDiskChanges } from "./helpers/disk-snapshot.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";
 import { withSandboxDenying } from "./helpers/sandbox.js";
@@ -222,9 +223,7 @@ describe("skit setup", () => {
             const changes = yield* diskChanges(before);
             assert.deepStrictEqual(
               changes.created.map(({ path }) => join(...path)).sort(),
-              ["audit.jsonl", "machine.json", "state.json"]
-                .map((name) => join(f.home.home, name))
-                .sort(),
+              ["library.sqlite", "state.json"].map((name) => join(f.home.home, name)).sort(),
             );
             assert.deepStrictEqual(changes.changed, []);
             assert.deepStrictEqual(changes.deleted, []);
@@ -232,7 +231,9 @@ describe("skit setup", () => {
             assert.deepStrictEqual(stopped.skills, []);
             assert.deepStrictEqual(stopped.installed_skills, []);
             assert.deepStrictEqual(
-              stopped.operations.map((operation) => operation._tag),
+              (yield* f.home.owned(
+                Effect.flatMap(Library.Service, (library) => library.history),
+              )).operations.map((operation) => operation._tag),
               ["Stopped"],
             );
             assert.isFalse(yield* fs.exists(join(f.root, ".agents")));

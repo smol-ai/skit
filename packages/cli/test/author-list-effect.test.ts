@@ -78,6 +78,13 @@ it.effect.each([
     exitCode: 1,
   },
   {
+    label: "no configured account",
+    authState: authState({}),
+    response: page(),
+    code: "AUTHENTICATION_REQUIRED",
+    exitCode: 1,
+  },
+  {
     label: "missing token",
     authState: authState({ origin: input.origin }),
     response: page(),

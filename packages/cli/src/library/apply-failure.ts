@@ -1,3 +1,5 @@
+import { libraryAuditFailure } from "./audit-failures.js";
+import { machineSettingsFailure } from "./machine-settings-failures.js";
 import { describeFailure } from "../terminal/failure.js";
 import { ApplyFailure } from "@smolai/skit-core/library/enable";
 import { Match } from "effect";
@@ -18,6 +20,9 @@ export const applyFailure = Match.type<ApplyFailure>().pipe(
         summary: [errorMessage(error)],
         next: ["Check the reported failure and retry."],
       }),
+    LibrarySqlError: libraryFailure,
+    LibraryAuditInvalid: libraryAuditFailure,
+    MachineSettingsUnusable: machineSettingsFailure,
     InvalidLibraryState: libraryFailure,
     "Library.InvalidIntent": libraryFailure,
     "Library.SetEnabledInvalid": libraryFailure,

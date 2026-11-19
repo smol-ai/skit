@@ -1,3 +1,4 @@
+import { loadLibrary } from "../src/library/store/library-store.js";
 import { describe } from "@effect/vitest";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
@@ -168,7 +169,7 @@ describe("skit check", () => {
               })),
             })),
           };
-          const beforeState = yield* fs.readFileString(join(home, "state.json"));
+          const beforeState = yield* loadLibrary(home);
           const discoveryClient = HttpClient.make((request) => {
             const digest = `sha256:${createHash("sha256").update(original).digest("hex")}`;
             const body = request.url.endsWith("/.well-known/agent-skills/index.json")
@@ -427,7 +428,7 @@ describe("skit check", () => {
             },
           });
           // Checking only reports: the Library it read is left exactly as it was.
-          expect(yield* fs.readFileString(join(home, "state.json"))).toBe(beforeState);
+          expect(yield* loadLibrary(home)).toEqual(beforeState);
           expect(yield* fs.readFileString(join(installed, "SKILL.md"))).toBe(original);
         }).pipe(
           Effect.provide(

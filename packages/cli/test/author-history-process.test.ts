@@ -1,6 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { Clock, Effect, Stream, FileSystem, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as Library from "@smolai/skit-core/library";
 import { join } from "node:path";
 import { readAuthorAncestors } from "../src/platform/author-sync-fixture/history.js";
 import {
@@ -12,7 +13,11 @@ import { makeAuthorSyncWorld } from "../src/platform/author-sync-fixture/world.j
 import { testPlatformLayer } from "./helpers/platform.js";
 
 const worker = join(process.cwd(), "dist/test/fixtures/author-history-worker.js");
-const command = (mode: "record" | "pause" | "hold" | "contend", root: string, home: string) =>
+const command = (
+  mode: "record" | "pause" | "hold" | "contend" | "stage",
+  root: string,
+  home: string,
+) =>
   ChildProcess.make(process.execPath, ["--no-warnings", worker, mode, root, home], {
     stdout: "pipe",
     stderr: "inherit",
@@ -55,8 +60,12 @@ it.live("independent recording processes deduplicate the same new observation", 
     const first = yield* spawner.spawn(command("hold", a.workspace, a.home));
     expect(yield* eventsFrom(first, 1)).toEqual([{ event: "paused" }]);
     const fs = yield* FileSystem.FileSystem;
-    for (const name of ["journal.sqlite", "journal.sqlite-wal", "journal.sqlite-shm"])
-      expect((yield* fs.stat(join(a.home, "history", name))).mode & 0o777).toBe(0o600);
+    for (const path of [join(a.home, "history", "lock.sqlite"), join(a.home, "library.sqlite")])
+      expect((yield* fs.stat(path)).mode & 0o777).toBe(0o600);
+    for (const sidecar of ["library.sqlite-wal", "library.sqlite-shm"]) {
+      const path = join(a.home, sidecar);
+      if (yield* fs.exists(path)) expect((yield* fs.stat(path)).mode & 0o777).toBe(0o600);
+    }
     const second = yield* spawner.spawn(command("contend", a.workspace, a.home));
     // A second connection attempt proves the first met the held write lock.
     expect(yield* eventsFrom(second, 1)).toEqual([{ event: "retrying" }]);
@@ -118,7 +127,7 @@ it.live("a fresh process resumes after SIGKILL during an uncommitted observation
     });
     expect(yield* paused.isRunning).toBe(false);
     const killedAt = yield* Clock.currentTimeMillis;
-    // No finalizers ran in the killed process. SQLite must roll back and release its lock.
+    // Metadata is durable, but no event was appended. SIGKILL releases the native scan lock.
     expect(yield* storedTreesAt(a.home)).toHaveLength(2);
     const resumed = yield* spawner.spawn(command("record", a.workspace, a.home));
     expect(yield* resumed.exitCode).toBe(0);
@@ -128,5 +137,57 @@ it.live("a fresh process resumes after SIGKILL during an uncommitted observation
     expect(saved.revision.author.at).toBeGreaterThanOrEqual(killedAt);
     expect(saved.recorded).toBe(2);
     expect(saved.revision.author.device).toBe(original.revision.author.device);
+  }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.live("a Library write completes while another process stages an Author byte batch", () =>
+  Effect.gen(function* () {
+    const { a } = yield* makeAuthorSyncWorld();
+    yield* a.registerAndEnable();
+    for (let index = 0; index < 12; index++)
+      yield* a.edit(`notes/${index}.txt`, `new bytes ${index}`);
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const capture = yield* spawner.spawn(command("stage", a.workspace, a.home));
+    expect(yield* eventsFrom(capture, 1)).toEqual([{ event: "paused" }]);
+    yield* Effect.gen(function* () {
+      const owner = yield* Library.Service;
+      const base = yield* owner.read;
+      if (base._tag !== "Present") return yield* Effect.die("Missing seeded Library");
+      const collection = base.state.collections[0];
+      if (!collection) return yield* Effect.die("Missing seeded collection");
+      const plan = yield* owner.plan(
+        {
+          _tag: "Enabled",
+          changes: [
+            {
+              _tag: "Disable",
+              subject: { _tag: "Collection", id: collection.collection_id },
+              members: "whole",
+              where: [{ kind: "global" }],
+            },
+          ],
+        },
+        { base },
+      );
+      yield* owner.apply({ _tag: "Apply", plan });
+      const after = yield* owner.read;
+      expect(after.revision).not.toBe(base.revision);
+    }).pipe(
+      Effect.provide(
+        Library.layer({
+          home: a.home,
+          roots: {
+            home: join(a.home, "isolated-home"),
+            configHome: join(a.home, "isolated-config"),
+            overrides: { codex: [join(a.home, "isolated-agents")] },
+          },
+        }),
+      ),
+    );
+    expect(yield* capture.isRunning).toBe(true);
+    yield* Stream.make(Buffer.from("release\n")).pipe(Stream.run(capture.stdin));
+    expect(yield* capture.exitCode).toBe(0);
+    const saved = yield* latest(a.workspace, a.home);
+    expect(saved.recorded).toBe(2);
   }).pipe(Effect.provide(testPlatformLayer)),
 );

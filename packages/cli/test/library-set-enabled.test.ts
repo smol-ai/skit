@@ -675,8 +675,6 @@ describe("skit enable", () => {
 
         const library = yield* libraryHome({ home });
 
-        const state = yield* library.durable;
-
         const base = {
           libraryHome: home,
           query: collection.collection?.collection_id ?? "",
@@ -707,7 +705,7 @@ describe("skit enable", () => {
           Effect.provide(layer),
         );
 
-        yield* library.writeDurable({ ...state, ownershipIssues: state.ownershipIssues ?? [] });
+        yield* library.owned(Effect.flatMap(Library.Service, (owner) => owner.inventory.refresh));
 
         const stale = yield* Effect.gen(function* () {
           const library = yield* Library.Service;
@@ -717,8 +715,6 @@ describe("skit enable", () => {
         }).pipe(withLibraryOwner(base.roots), Effect.provide(layer), Effect.flip);
 
         assert.strictEqual(stale._tag, "Library.StalePlan");
-
-        yield* library.writeDurable(state);
       }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
     );
   });

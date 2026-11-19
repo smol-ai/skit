@@ -1,3 +1,4 @@
+import { loadLibrary } from "../src/library/store/library-store.js";
 import { describe } from "@effect/vitest";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
@@ -57,7 +58,7 @@ describe("skit sync", () => {
             if (!copy) return yield* Effect.die("Expected an installed copy");
             const document = join(copy.path, "SKILL.md");
             yield* fs.writeFileString(document, "User's unimported edit.\n");
-            const before = yield* fs.readFileString(join(home, "state.json"));
+            const before = yield* loadLibrary(home);
             const marker = yield* fs.readFileString(join(copy.path, ".skit-ownership.json"));
             const aligned = { ...current, enabled: [] };
             const manifest = yield* libraryManifestFromLocalState(aligned);
@@ -99,7 +100,7 @@ describe("skit sync", () => {
               yield* fs.readFileString(join(copy.path, ".skit-ownership.json")),
               marker,
             );
-            assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), before);
+            assert.deepStrictEqual(yield* loadLibrary(home), before);
             assert.strictEqual(yield* fs.readFileString(join(source, "SKILL.md")), bytes);
             yield* fs.writeFileString(document, bytes);
             const clean = yield* previewSyncInstalledSkills(
@@ -112,7 +113,7 @@ describe("skit sync", () => {
             assert.deepEqual(clean.conflicts, []);
             assert.deepEqual(clean.retire, [copy.installed_skill_id]);
             assert.deepEqual(clean.remove, [copy.installed_skill_id]);
-            assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), before);
+            assert.deepStrictEqual(yield* loadLibrary(home), before);
             assert.strictEqual(yield* fs.readFileString(document), bytes);
           }).pipe(
             Effect.provide(
@@ -167,7 +168,7 @@ describe("skit sync", () => {
               ...snapshot.state,
               enabled: [{ skill: first.skill_id }, { skill: second.skill_id }],
             });
-            const before = yield* fs.readFileString(join(home, "state.json"));
+            const before = yield* loadLibrary(home);
             const rootFor = (destination: string) => (destination === "agents" ? alias : undefined);
             const collision = yield* resolveSyncInstalledSkillCollisions(manifest, rootFor);
             assert.lengthOf(collision.conflicts, 1);
@@ -183,7 +184,7 @@ describe("skit sync", () => {
               second.skill_id,
             ]);
             assert.isTrue(invalid.invalid);
-            assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), before);
+            assert.deepStrictEqual(yield* loadLibrary(home), before);
             assert.deepEqual(yield* fs.readDirectory(skills), []);
           }).pipe(Effect.provide(Library.layer({ home, roots: testRoots(home) })));
         }).pipe(Effect.provide(skitLayer), Effect.scoped),

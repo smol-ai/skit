@@ -1,5 +1,5 @@
 import { currentSkillVersion, versionBacking } from "../../library-contracts.js";
-import { collectionVersionPath } from "../../collection-version.js";
+import { readCollectionVersion } from "../content/read-collection-version.js";
 import { parseSkillFrontmatter } from "../../../harnesses/frontmatter.js";
 import { type LibraryState } from "../../library-state.js";
 import { Effect, FileSystem } from "effect";
@@ -20,20 +20,15 @@ export const readDescriptionLoad = Effect.fn("Library.descriptionLoad")(function
     const description =
       backing === undefined
         ? undefined
-        : yield* fs
-            .readFileString(
-              join(
-                collectionVersionPath(originalsPath, backing.copy.hash),
-                backing.member.source_path,
-                "SKILL.md",
-              ),
-            )
-            .pipe(
-              Effect.map((text) => parseSkillFrontmatter(text)?.description),
-              Effect.orElseSucceed(() => undefined),
-            );
+        : yield* Effect.gen(function* () {
+            const root = yield* readCollectionVersion(originalsPath, backing.copy.hash);
+            return yield* fs.readFileString(join(root, backing.member.source_path, "SKILL.md"));
+          }).pipe(
+            Effect.map((text) => parseSkillFrontmatter(text)?.description),
+            Effect.orElseSucceed(() => undefined),
+          );
     if (typeof description !== "string") unknown++;
     else characters += Array.from(description).length;
   }
   return { skills: skills.length, characters, unknown };
-});
+}, Effect.scoped);

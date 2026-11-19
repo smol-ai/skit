@@ -19,10 +19,5 @@ export const LibraryRecoveryNotice = Schema.TaggedUnion({
     operationId: OperationId,
     failure: Schema.Unknown,
   },
-  HistoryDeliveryPending: {
-    home: Schema.String,
-    actionId: Schema.optionalKey(OperationId),
-    failure: Schema.Unknown,
-  },
 });
 export type LibraryRecoveryNotice = typeof LibraryRecoveryNotice.Type;

@@ -727,20 +727,6 @@ it.effect(
     }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 describe("skit repository watch", () => {
   describe("Watching a repository saves this machine’s inclusion decision.", () => {
     it.effect("watching a repository saves the watched decision", () =>
@@ -793,7 +779,6 @@ describe("skit repository forget", () => {
   });
 });
 
-
 describe("skit setup", () => {
   describe("Finding and reviewing", () => {
     describe("Preview leaves the proposed setup unapplied.", () => {
@@ -806,7 +791,7 @@ describe("skit setup", () => {
           expect(yield* f.fs.exists(join(f.libraryHome, "machine.json"))).toBe(before);
           const first = yield* saveSettingsForSetup({ ...f.options, persistRoots: true });
           expect(first.machineConfig).toEqual({
-            path: join(f.libraryHome, "machine.json"),
+            path: join(f.libraryHome, "library.sqlite"),
             machineId: expect.any(String),
             displayName: "Test machine",
             repositoryRoots: [f.work],
@@ -982,7 +967,7 @@ describe("skit setup", () => {
 describe("skit setup", () => {
   describe("Finding and reviewing", () => {
     describe("Setup searches only the configured discovery folders.", () => {
-      it.effect("migrates the version-one machine config only when setup persists", () =>
+      it.effect("imports version-one machine config when setup first reads it", () =>
         Effect.gen(function* () {
           const f = yield* fixture();
           yield* f.fs.makeDirectory(f.libraryHome, { recursive: true });
@@ -997,13 +982,15 @@ describe("skit setup", () => {
             persistRoots: false,
           });
           expect(scan.machineConfig).toEqual({
-            path: join(f.libraryHome, "machine.json"),
+            path: join(f.libraryHome, "library.sqlite"),
             repositoryRoots: [f.work],
             repositoryDecisions: [],
             persisted: false,
           });
           expect(
-            JSON.parse(yield* f.fs.readFileString(join(f.libraryHome, "machine.json"))),
+            JSON.parse(
+              yield* f.fs.readFileString(join(f.libraryHome, "machine.json.backup-database")),
+            ),
           ).toEqual({
             schemaVersion: 1,
             repositoryRoots: [f.work],
@@ -1022,17 +1009,14 @@ describe("skit setup", () => {
           });
           // Saving roots decides nothing about repositories, so later scans still discover them.
           expect(
-            JSON.parse(yield* f.fs.readFileString(join(f.libraryHome, "machine.json"))),
-          ).toEqual({
-            schemaVersion: 6,
-            undoneSetups: [],
-            repositoryDecisionsInitialized: false,
-            machineId: migrated.machineConfig.machineId,
-            displayName: "Test machine",
-            discoveryRoots: [f.work],
-            repositories: [],
-            setups: [expect.objectContaining({ operationId: expect.any(String) })],
-          });
+            JSON.parse(
+              yield* f.fs.readFileString(join(f.libraryHome, "machine.json.backup-database")),
+            ),
+          ).toEqual({ schemaVersion: 1, repositoryRoots: [f.work] });
+          const stored = yield* MachineSettings.read(f.libraryHome);
+          expect(stored.discoveryRoots).toEqual([f.work]);
+          expect(stored.repositories).toEqual([]);
+          expect(stored.repositoryDecisionsInitialized).toBe(false);
         }).pipe(Effect.provide(testPlatformLayer)),
       );
 

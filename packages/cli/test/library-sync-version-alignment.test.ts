@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { inspectOwnershipMarker } from "@smolai/skit-core/library/inventory";
 import { LibraryManifest } from "@smolai/skit-core/library";
 import { makeSkillVersionId } from "@smolai/skit-core/universal/consumer";
-import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
+
 import { devices } from "./helpers/library-sync-devices.js";
 
 it.effect(
@@ -46,10 +46,10 @@ it.effect(
       assert.notStrictEqual(publishedId, bBefore.installed_skills[0]?.skill_version_id);
       assert.strictEqual((yield* a.sync()).status, "merged");
       const writesBeforePreview = server.writes;
-      const previewUntouched = yield* captureDisk(b.disk);
+      const previewUntouched = yield* b.unchanged;
       const markerBefore = yield* fs.readFileString(join(b.root, "review", ".skit-ownership.json"));
       assert.strictEqual((yield* b.sync({ apply: false })).status, "merge_ready");
-      yield* assertDiskUnchanged(previewUntouched);
+      yield* previewUntouched.check;
       assert.strictEqual(server.writes, writesBeforePreview);
       assert.deepEqual(yield* b.state, bBefore);
       assert.strictEqual(
@@ -101,11 +101,9 @@ it.effect(
               : version,
           ),
         })),
-        installed_skills: state.installed_skills.map((installedSkill) => ({
-          ...installedSkill,
-          skill_version_id: equivalentId,
-        })),
       }));
+      yield* b.project();
+      assert.strictEqual((yield* b.state).installed_skills[0]?.skill_version_id, equivalentId);
       const conflicted = yield* b.sync({ apply: false });
       assert.strictEqual(conflicted.status, "conflicted");
       if (conflicted.status === "conflicted")

@@ -9,27 +9,14 @@ import type {
 } from "./device-state.js";
 
 // The only places an installed copy's status changes. Each takes the statuses it may leave and
-// keeps only the fields its new status uses.
+// changes only status evidence, preserving identity and uninterpreted fields.
 
-const recorded = ({
-  installed_skill_id,
-  skill_id,
-  skill_version_id,
-  destination,
-  root,
-  path,
-  expected_hash,
-  installed_at,
-}: InstalledSkill) => ({
-  installed_skill_id,
-  skill_id,
-  skill_version_id,
-  destination,
-  root,
-  path,
-  expected_hash,
-  installed_at,
-});
+const recorded = (copy: InstalledSkill) => {
+  const { status: _status, ...fields } = copy;
+  for (const field of ["current_hash", "conflicts", "suppression_reason", "suppressed_at"])
+    Reflect.deleteProperty(fields, field);
+  return fields;
+};
 
 /** Its folder is exactly what SKIT wrote, `expected_hash` unless SKIT now expects another. */
 export const installed = (

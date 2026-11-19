@@ -18,6 +18,7 @@ import {
 import { planChanges, type PlannedChanges } from "../../plan-changes.js";
 import type { LibraryState } from "../../library-state.js";
 import type { Snapshot } from "../../snapshot.js";
+import type { Digest } from "effect/crypto";
 import type { Scope } from "effect";
 import type { PlanError } from "../../library-plan.js";
 
@@ -89,7 +90,7 @@ export const reviewApply = Effect.fn("Library.reviewApply")(function* (
 ): Effect.fn.Return<
   ReviewedApply,
   ReviewApplyError,
-  InstalledSkills.Service | FileSystem.FileSystem | Scope.Scope
+  InstalledSkills.Service | FileSystem.FileSystem | Scope.Scope | Digest.Digest
 > {
   const files = yield* InstalledSkills.Service;
   const input = structuredClone(reviewed);

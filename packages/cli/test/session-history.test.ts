@@ -4,7 +4,7 @@ import * as Library from "@smolai/skit-core/library";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import type { LibraryFixtureState as LibraryState } from "./helpers/library-home.js";
+
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { skitLayer } from "@smolai/skit-core/platform";
 import {
@@ -131,37 +131,14 @@ const twoScopeProposal = (scopeCount = 2) =>
     return { home, proposed };
   });
 
-/** A change from outside the confirming action: it toggles whether ownership issues were recorded. */
-const unplanned = (state: LibraryState): LibraryState => {
-  if (state.ownershipIssues === undefined) return { ...state, ownershipIssues: [] };
-  const { ownershipIssues: _custodyIssues, ...rest } = state;
-  return rest;
-};
-
 describe("skit disable", () => {
   describe("A changed selection must be reviewed again before disabling Skills.", () => {
     it.effect("refuses a confirmation when the Library changes after its revision check", () =>
       Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        let armed = false;
-        let changed = false;
-        let statePath = "";
-        const fixture = yield* twoScopeProposal().pipe(
-          Effect.provideService(FileSystem.FileSystem, {
-            ...fs,
-            readFileString: (...args: Parameters<typeof fs.readFileString>) =>
-              Effect.gen(function* () {
-                const text = yield* fs.readFileString(...args);
-                if (armed && !changed && args[0] === statePath) {
-                  changed = true;
-                  yield* fs.writeFileString(statePath, JSON.stringify(unplanned(JSON.parse(text))));
-                }
-                return text;
-              }),
-          }),
+        const fixture = yield* twoScopeProposal();
+        yield* fixture.home.owned(
+          Effect.flatMap(Library.Service, (library) => library.inventory.refresh),
         );
-        statePath = fixture.home.statePath;
-        armed = true;
         const confirmed = yield* fixture.home.owned(confirmLibraryChange(fixture.proposed));
         assert.strictEqual(confirmed.outcome?.kind, "failed");
         if (confirmed.outcome?.kind === "failed")
@@ -268,8 +245,6 @@ describe("skit enable", () => {
         assert.ok(yield* fs.exists(installedSkill.path));
 
         const withLeftover = yield* home.durable;
-        const beta = withLeftover.skills.find((skill) => skill.name === "beta")!;
-        yield* home.writeDurable({ ...withLeftover, enabled: [{ skill: beta.skill_id }] });
         const alphaRow = repaired.skills.find((row) => row.name === "alpha")!;
         const cleanup = yield* home.owned(
           proposeLibraryDisable(

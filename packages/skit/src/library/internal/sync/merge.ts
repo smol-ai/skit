@@ -18,7 +18,7 @@ import {
 } from "../../library-contracts.js";
 import { canonicalJson } from "../../../shared/json.js";
 import * as Merge from "../../../sync/merge.js";
-import { LibraryState, emptyLibraryState } from "../../library-state.js";
+import { type LibraryState, emptyLibraryState, decodeLibraryState } from "../../library-state.js";
 import { type CollectionId, type SkillId } from "../../entity-ids.js";
 import { Array, Data, Effect, Option, Order, Record, Result, Schema } from "effect";
 import { SyncConflictDetail } from "./conflict.js";
@@ -524,11 +524,13 @@ export const prepareLibraryMerge = Effect.fn("Library.prepareMerge")(function* (
   const aliases = alignLibrary(input.local, input.remote, input.base);
   const alignedLocal = aliasManifest(input.local, aliases);
   const alignedBase = aliasManifest(input.base, aliases);
-  // Rebuild through the schema so a prepared device carries only fields this CLI declares.
+  // Validate references without dropping fields this version does not read.
   const device =
     input.device === undefined
       ? emptyLibraryState()
-      : yield* LibraryState.makeEffect(aliasDevice(input.device, aliases));
+      : yield* decodeLibraryState(aliasDevice(input.device, aliases)).pipe(
+          Effect.mapError((error) => error.issue),
+        );
   const independentSkills = aliases.skills.map((alias) => alias.to);
   const independentCollections = aliases.collections.map((alias) => alias.to);
   const preliminary = mergeLibraryManifests(

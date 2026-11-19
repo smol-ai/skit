@@ -1,3 +1,5 @@
+import * as Library from "@smolai/skit-core/library";
+import { testRoots } from "./helpers/roots.js";
 import { describe } from "@effect/vitest";
 import { commandFailure } from "../src/commands/failure-classification.js";
 import { resultExitCode } from "../src/commands/exit-code.js";
@@ -199,9 +201,11 @@ describe("skit setup", () => {
               yield* f.fs.readFileString(join(recovered.data.entries[0].recoveryPath, "SKILL.md")),
             ).toContain("Original review bytes");
             // The Library holds only the setup's record: removing a copy imports nothing.
-            const state: { skills: readonly unknown[] } = JSON.parse(
-              yield* f.fs.readFileString(join(f.home, "state.json")),
+            const snapshot = yield* Effect.flatMap(Library.Service, (library) => library.read).pipe(
+              Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })),
             );
+            if (snapshot._tag !== "Present") return yield* Effect.die("Expected a Library");
+            const state = snapshot.state;
             expect(state.skills).toEqual([]);
           }).pipe(Effect.provide(skitLayer)),
       );

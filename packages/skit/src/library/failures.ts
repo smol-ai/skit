@@ -118,6 +118,24 @@ export class ImportContentInvalid
 
 /** Why something the Library stores cannot be used. Front ends write the words. */
 export const InvalidLibraryStateReason = Schema.TaggedUnion({
+  LegacySourceChanged: {
+    sourcePath: Schema.String,
+    backupPath: Schema.NullOr(Schema.String),
+    databasePath: Schema.String,
+  },
+  LegacyStateBesideDatabase: { statePath: Schema.String, databasePath: Schema.String },
+  ImportBackupChanged: {
+    sourcePath: Schema.String,
+    backupPath: Schema.String,
+    databasePath: Schema.String,
+  },
+  NewerDatabaseMigration: {
+    databasePath: Schema.String,
+    migration: Schema.Int,
+    supported: Schema.Int,
+  },
+  OperationStateMissing: { databasePath: Schema.String },
+  DatabaseIntegrityInvalid: { databasePath: Schema.String, result: Schema.Array(Schema.String) },
   SchemaInvalid: { failure: SchemaFailure },
   ArchiveInvalid: { failure: CollectionVersionArchiveInvalid },
   /** It does not decode. `issue` is what the decoder or reader reported, where there is one. */
@@ -166,6 +184,18 @@ export class InvalidLibraryState
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "VALIDATION_FAILED" as const;
+}
+
+/** SQLite or its migration failed; keep the original cause at the database boundary. */
+export class LibrarySqlError
+  extends Schema.TaggedError<LibrarySqlError, { readonly brand: unique symbol }>()(
+    "LibrarySqlError",
+    { path: Schema.String, cause: Schema.Defect() },
+  )
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
 }
 
 /** The Library moved on since the state a change was planned from; nothing was saved. */

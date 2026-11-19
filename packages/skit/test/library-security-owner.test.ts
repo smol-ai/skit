@@ -1,7 +1,11 @@
+import * as InstalledSkills from "../src/library/installed-skills.js";
+import { applyAcceptance } from "../src/library/internal/security/accept.js";
 import { describe } from "@effect/vitest";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option, Schema } from "effect";
-import { systemError } from "effect/PlatformError";
+import { SqlClient } from "effect/sql";
+import { LibraryWriter, writeLibrary, loadLibrary } from "../src/library/store/library-store.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
 import { TestClock } from "effect/testing";
 import { join } from "node:path";
 import { Hash } from "../src/shared/hash.js";
@@ -9,7 +13,7 @@ import * as Library from "../src/library/library.js";
 import { openLibraryView } from "../src/library/internal/session/library-view.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { testRoots } from "./helpers/library-store.js";
+import { saveLibrary, testRoots } from "./helpers/library-store.js";
 
 const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -48,27 +52,15 @@ it.effect("acceptance planning leaves saved state unchanged", () =>
 
       yield* library.import.collection(f.request);
 
-      const path = join(f.home, "state.json");
-
-      const saved = JSON.parse(yield* f.fs.readFileString(path));
-
-      yield* f.fs.writeFileString(
-        path,
-        JSON.stringify({ ...saved, future: { keep: "future data" } }),
-      );
-
-      const before = yield* f.fs.readFileString(path);
-
+      const saved = yield* loadLibrary(f.home);
+      const future = { ...saved, future: { keep: "future data" } };
+      yield* saveLibrary(f.home, future);
+      const before = yield* loadLibrary(f.home);
       const intent = yield* intentFor(f.home);
-
       const plan = yield* library.plan(intent, { base: yield* library.read });
-
       assert.isFalse("acceptedAt" in plan.change.acceptance);
-
-      assert.strictEqual(yield* f.fs.readFileString(path), before);
-
+      assert.deepStrictEqual(yield* loadLibrary(f.home), before);
       const codec = Schema.fromJsonString(Library.AcceptFindingPlan);
-
       const portable = yield* Schema.decodeEffect(codec)(yield* Schema.encodeEffect(codec)(plan));
 
       assert.isTrue(Option.isNone(portable.intent.expiresAt));
@@ -84,30 +76,22 @@ it.effect("acceptance leaves unknown saved fields intact", () =>
 
       yield* library.import.collection(f.request);
 
-      const path = join(f.home, "state.json");
-
-      const saved = JSON.parse(yield* f.fs.readFileString(path));
-
-      yield* f.fs.writeFileString(
-        path,
-        JSON.stringify({ ...saved, future: { keep: "future data" } }),
-      );
-
-      yield* f.fs.readFileString(path);
-
+      const saved = yield* loadLibrary(f.home);
+      const future = { ...saved, future: { keep: "future data" } };
+      yield* saveLibrary(f.home, future);
       const intent = yield* intentFor(f.home);
-
       const plan = yield* library.plan(intent, { base: yield* library.read });
-
       const codec = Schema.fromJsonString(Library.AcceptFindingPlan);
-
       const portable = yield* Schema.decodeEffect(codec)(yield* Schema.encodeEffect(codec)(plan));
 
       const result = (yield* library.apply({ _tag: "Apply", plan: portable })).result;
 
-      const after = JSON.parse(yield* f.fs.readFileString(path));
+      const after = yield* loadLibrary(f.home);
 
-      assert.deepStrictEqual(after.future, { keep: "future data" });
+      assert.deepStrictEqual(
+        yield* Schema.decodeUnknownEffect(Schema.Struct({ future: Schema.Unknown }))(after),
+        { future: { keep: "future data" } },
+      );
 
       assert.deepStrictEqual(after.assessmentAcceptances, [result.acceptance]);
     }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
@@ -126,7 +110,7 @@ describe("skit security accept", () => {
             yield* library.import.collection(f.request);
             const intent = yield* intentFor(f.home);
             const base = yield* library.read;
-            const before = yield* f.fs.readFileString(join(f.home, "state.json"));
+            const before = yield* loadLibrary(f.home);
             for (const [value, reason] of [
               ["later", "invalid-expiry"],
               ["1970-01-01T00:00:00Z", "expiry-in-past"],
@@ -159,7 +143,7 @@ describe("skit security accept", () => {
               if (expired.failure._tag === "AcceptanceIncomplete")
                 assert.strictEqual(expired.failure.reason, "expiry-in-past");
             }
-            assert.strictEqual(yield* f.fs.readFileString(join(f.home, "state.json")), before);
+            assert.deepStrictEqual(yield* loadLibrary(f.home), before);
           }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
         }).pipe(Effect.scoped, Effect.provide(skitLayer)),
     );
@@ -179,7 +163,7 @@ describe("skit security accept", () => {
             const intent = yield* intentFor(f.home);
             const base = yield* library.read;
             const plan = yield* library.plan(intent, { base });
-            const before = yield* f.fs.readFileString(join(f.home, "state.json"));
+            const before = yield* loadLibrary(f.home);
             const missing = yield* Effect.result(
               library.plan(
                 { ...intent, fingerprint: Hash.make(`sha256:${"0".repeat(64)}`) },
@@ -217,7 +201,7 @@ describe("skit security accept", () => {
               yield* f.fs.readFileString(original),
               "operator changed retained bytes\n",
             );
-            assert.strictEqual(yield* f.fs.readFileString(join(f.home, "state.json")), before);
+            assert.deepStrictEqual(yield* loadLibrary(f.home), before);
             yield* f.fs.writeFileString(original, f.bytes);
             yield* library.apply({
               _tag: "Apply",
@@ -241,36 +225,26 @@ describe("skit security accept", () => {
         yield* Effect.gen(function* () {
           yield* (yield* Library.Service).import.collection(f.request);
         }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
-        const statePath = join(f.home, "state.json");
-        const before = yield* f.fs.readFileString(statePath);
+        const before = yield* loadLibrary(f.home);
+        yield* withLibraryDatabase(
+          libraryDatabasePath(f.home),
+          Effect.gen(function* () {
+            const sql = yield* SqlClient.SqlClient;
+            yield* sql`CREATE TRIGGER refuse_acceptance BEFORE UPDATE ON library_device BEGIN SELECT RAISE(ABORT, 'fixture state failure'); END`;
+          }),
+        );
         yield* Effect.gen(function* () {
           const library = yield* Library.Service;
           const plan = yield* library.plan(yield* intentFor(f.home), { base: yield* library.read });
           const failed = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
           assert.strictEqual(failed._tag, "Failure");
-          if (failed._tag === "Failure") assert.strictEqual(failed.failure._tag, "PlatformError");
-          assert.strictEqual(yield* f.fs.readFileString(statePath), before);
+          if (failed._tag === "Failure") assert.strictEqual(failed.failure._tag, "LibrarySqlError");
+          assert.deepStrictEqual(yield* loadLibrary(f.home), before);
           assert.strictEqual(
             yield* f.fs.readFileString(join(plan.folders[0].path, "SKILL.md")),
             f.bytes,
           );
-        }).pipe(
-          Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })),
-          Effect.provideService(FileSystem.FileSystem, {
-            ...f.fs,
-            rename: (from, to) =>
-              to === statePath
-                ? Effect.fail(
-                    systemError({
-                      _tag: "PermissionDenied",
-                      module: "FileSystem",
-                      method: "rename",
-                      pathOrDescriptor: to,
-                    }),
-                  )
-                : f.fs.rename(from, to),
-          }),
-        );
+        }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
       }).pipe(Effect.scoped, Effect.provide(skitLayer)),
     );
   });
@@ -314,3 +288,49 @@ describe("skit security accept", () => {
     );
   });
 });
+
+it.effect("acceptance refuses a reentrant mutation after its final content check", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    yield* Effect.gen(function* () {
+      const owner = yield* Library.Service;
+      yield* owner.import.collection(f.request);
+      const plan = yield* owner.plan(yield* intentFor(f.home), { base: yield* owner.read });
+      const files = yield* InstalledSkills.make(testRoots(f.home));
+      const current = yield* loadLibrary(f.home);
+      const concurrent = { ...current, concurrent: { retained: true } };
+      let mutate = Effect.void;
+      let checks = 0;
+      const controlled = InstalledSkills.Service.of({
+        ...files,
+        check: (folders) =>
+          Effect.gen(function* () {
+            yield* files.check(folders);
+            checks++;
+            if (checks === 2) yield* mutate;
+          }),
+      });
+      const result = yield* Effect.result(
+        writeLibrary(
+          f.home,
+          Effect.gen(function* () {
+            const writer = yield* LibraryWriter;
+            mutate = writer.save(concurrent, current).pipe(Effect.asVoid, Effect.orDie);
+            return yield* applyAcceptance(f.home, plan).pipe(
+              Effect.provideService(InstalledSkills.Service, controlled),
+            );
+          }),
+        ),
+      );
+      assert.strictEqual(checks, 2);
+      assert.strictEqual(result._tag, "Failure");
+      if (result._tag === "Failure") assert.strictEqual(result.failure._tag, "LibraryChanged");
+      const saved = yield* loadLibrary(f.home);
+      assert.deepStrictEqual(saved.assessmentAcceptances ?? [], []);
+      assert.deepStrictEqual(
+        yield* Schema.decodeUnknownEffect(Schema.Struct({ concurrent: Schema.Unknown }))(saved),
+        { concurrent: { retained: true } },
+      );
+    }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);

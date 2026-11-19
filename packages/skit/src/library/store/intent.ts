@@ -5,17 +5,29 @@ import {
   currentCollectionSkills,
   currentSkillVersion,
   sourceImports,
-} from "../../library-contracts.js";
-import type { LibraryState } from "../../library-state.js";
-import type { RecordedLibrary, SetupIntent } from "../../store/state-schema.js";
+} from "../library-contracts.js";
+import type { LibraryState } from "../library-state.js";
+import type { RecordedLibrary, SetupIntent } from "./state-schema.js";
 
-export { SetupIntent, RecordedLibrary } from "../../store/state-schema.js";
+export { SetupIntent, RecordedLibrary } from "./state-schema.js";
 
 const withPolicies = (invocation_policies: LibraryState["invocation_policies"]) =>
-  invocation_policies === undefined ? {} : { invocation_policies };
+  Object.keys(invocation_policies ?? {}).length ? { invocation_policies } : {};
 
 /** The desired fields of `state` a setup can change. */
-export const setupIntent = (state: LibraryState): SetupIntent => ({
+export const setupIntent = (
+  state: Pick<
+    LibraryState,
+    | "collections"
+    | "skills"
+    | "collection_versions"
+    | "imports"
+    | "enabled"
+    | "invocation_policies"
+    | "repositories"
+    | "device_skill_selection"
+  >,
+): SetupIntent => ({
   global: { enabled: [...state.enabled], ...withPolicies(state.invocation_policies) },
   repositories: structuredClone(state.repositories),
   device: structuredClone(state.device_skill_selection ?? null),

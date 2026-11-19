@@ -1,5 +1,10 @@
-import { describe } from "@effect/vitest";
-import { assert, it } from "@effect/vitest";
+import { loadOperations, loadLibrary } from "../src/library/store/library-store.js";
+import { libraryDatabasePath } from "../src/library/store/database.js";
+import { saveLibrary, testRoots } from "./helpers/library-store.js";
+import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
+
+import { describe, assert, it } from "@effect/vitest";
+
 import { Effect, Exit, FileSystem, Option, Schema } from "effect";
 import { join } from "node:path";
 import * as Library from "../src/library/library.js";
@@ -8,7 +13,6 @@ import { readPathEvidence } from "../src/library/folder-evidence.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { systemError } from "effect/PlatformError";
-import { testRoots } from "./helpers/library-store.js";
 
 const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -82,7 +86,7 @@ it.effect(
         assert.strictEqual(history.operations.length, 1);
         assert.strictEqual(history.operations[0]._tag, "Done");
         assert.strictEqual(history.operations[0].steps[0].step._tag, "Import");
-        assert.strictEqual(history.operations[0].steps[0].after[0]._tag, "Retained");
+        assert.deepStrictEqual(history.operations[0].steps[0].after, []);
         assert.strictEqual(history.operations[0].steps[1].step._tag, "Manage");
       }).pipe(Effect.provide(Library.layer(f.config)));
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
@@ -96,13 +100,10 @@ it.effect(
       yield* Effect.gen(function* () {
         const library = yield* Library.Service;
         const imported = yield* library.import.collection(f.request);
-        const statePath = join(f.home, "state.json");
-        const saved = JSON.parse(yield* f.fs.readFileString(statePath));
-        yield* f.fs.writeFileString(
-          statePath,
-          JSON.stringify({ ...saved, future: { keep: "future data" } }),
-        );
-        const before = yield* f.fs.readFileString(statePath);
+        const saved = yield* loadLibrary(f.home);
+        const future = { ...saved, future: { keep: "future data" } };
+        yield* saveLibrary(f.home, future);
+        const before = yield* loadLibrary(f.home);
         const plan = yield* library.plan(
           {
             _tag: "Manage",
@@ -123,14 +124,17 @@ it.effect(
           { base: yield* library.read },
         );
         assert.isTrue(Option.isSome(plan.change.selections[0].enable));
-        assert.strictEqual(yield* f.fs.readFileString(statePath), before);
+        assert.deepStrictEqual(yield* loadLibrary(f.home), before);
         const outcome = yield* library.apply({ _tag: "Apply", plan: yield* portable(plan) });
         assert.strictEqual(outcome.result.imported.length, 0);
         assert.strictEqual(outcome.result.results.length, 1);
         assert.strictEqual(outcome.result.results[0].application.status, "complete");
         assert.strictEqual(yield* f.fs.readFileString(join(f.copy, "SKILL.md")), f.bytes);
-        const after = JSON.parse(yield* f.fs.readFileString(statePath));
-        assert.deepStrictEqual(after.future, { keep: "future data" });
+        const after = yield* loadLibrary(f.home);
+        assert.deepStrictEqual(
+          yield* Schema.decodeUnknownEffect(Schema.Struct({ future: Schema.Unknown }))(after),
+          { future: { keep: "future data" } },
+        );
         assert.strictEqual(after.installed_skills[0].status, "installed");
       }).pipe(Effect.provide(Library.layer(f.config)));
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
@@ -202,10 +206,10 @@ for (const edit of [false, true])
                 : f.fs.link(from, to),
           }),
         );
-        const state = JSON.parse(yield* f.fs.readFileString(join(f.home, "state.json")));
-        assert.strictEqual(state.operations[0]._tag, "Pending");
-        assert.strictEqual(state.operations[0].steps[0].status, "Done");
-        assert.strictEqual(state.operations[0].steps[1].status, "Pending");
+
+        assert.strictEqual((yield* loadOperations(f.home))[0]._tag, "Pending");
+        assert.strictEqual((yield* loadOperations(f.home))[0].steps[0].status, "Done");
+        assert.strictEqual((yield* loadOperations(f.home))[0].steps[1].status, "Pending");
         if (edit) yield* f.fs.writeFileString(join(f.copy, "SKILL.md"), "operator changed bytes\n");
         yield* Effect.gen(function* () {
           const library = yield* Library.Service;
@@ -244,7 +248,7 @@ it.effect("changed folders, altered plans and another Library are refused before
       const stale = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
       assert.strictEqual(stale._tag, "Failure");
       if (stale._tag === "Failure") assert.strictEqual(stale.failure._tag, "Library.StalePlan");
-      assert.isFalse(yield* f.fs.exists(join(f.home, "state.json")));
+      assert.isFalse((yield* inspectLocalLibraryState(join(f.home))).present);
       yield* f.fs.writeFileString(join(f.copy, "SKILL.md"), f.bytes);
       return plan;
     }).pipe(Effect.provide(Library.layer(f.config)));
@@ -253,7 +257,7 @@ it.effect("changed folders, altered plans and another Library are refused before
       const refused = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
       assert.strictEqual(refused._tag, "Failure");
       if (refused._tag === "Failure") assert.strictEqual(refused.failure._tag, "Library.StalePlan");
-      assert.isFalse(yield* f.fs.exists(join(f.root, "other-library", "state.json")));
+      assert.isFalse((yield* inspectLocalLibraryState(join(f.root, "other-library"))).present);
     }).pipe(Effect.provide(Library.layer({ ...f.config, home: join(f.root, "other-library") })));
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
@@ -269,7 +273,7 @@ it.effect(
         const result = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
         assert.strictEqual(result._tag, "Failure");
         if (result._tag === "Failure") assert.strictEqual(result.failure._tag, "PlatformError");
-        assert.isFalse(yield* f.fs.exists(join(f.home, "state.json")));
+        assert.isFalse((yield* inspectLocalLibraryState(join(f.home))).present);
         assert.isFalse(yield* f.fs.exists(join(f.home, "originals")));
         assert.isFalse(yield* f.fs.exists(join(f.copy, ".skit-ownership.json")));
         assert.strictEqual(yield* f.fs.readFileString(join(f.copy, "SKILL.md")), f.bytes);
@@ -277,17 +281,17 @@ it.effect(
         Effect.provide(Library.layer(f.config)),
         Effect.provideService(FileSystem.FileSystem, {
           ...f.fs,
-          rename: (from, to) =>
-            to === join(f.home, "state.json")
+          chmod: (path, mode) =>
+            path === libraryDatabasePath(f.home)
               ? Effect.fail(
                   systemError({
                     _tag: "PermissionDenied",
                     module: "FileSystem",
-                    method: "rename",
-                    pathOrDescriptor: to,
+                    method: "chmod",
+                    pathOrDescriptor: path,
                   }),
                 )
-              : f.fs.rename(from, to),
+              : f.fs.chmod(path, mode),
         }),
       );
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
@@ -422,7 +426,7 @@ it.effect("a newly introduced duplicate invalidates Manage without moving either
       const result = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
       assert.strictEqual(result._tag, "Failure");
       if (result._tag === "Failure") assert.strictEqual(result.failure._tag, "Library.StalePlan");
-      assert.isFalse(yield* f.fs.exists(join(f.home, "state.json")));
+      assert.isFalse((yield* inspectLocalLibraryState(join(f.home))).present);
       assert.strictEqual(yield* f.fs.readFileString(join(duplicate, "SKILL.md")), f.bytes);
       assert.strictEqual(yield* f.fs.readFileString(join(f.copy, "SKILL.md")), f.bytes);
     }).pipe(Effect.provide(Library.layer(config)));

@@ -1,10 +1,8 @@
-import { Effect, FileSystem, Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import type { Digest } from "effect/crypto";
 import type { HttpClient } from "effect/http";
 import type { TreeRequirements } from "../../../platform/tree-requirements.js";
 import { InvalidLibraryState, type ContentAddressCollision } from "../../failures.js";
-import { type HomeBusy } from "../../../platform/lock-failures.js";
-import type { PlatformError } from "effect/PlatformError";
 import type { TreeError } from "../../../shared/tree-error.js";
 import type { CollectionVersionArchiveInvalid } from "../../snapshot-archive-universal.js";
 import { withLock as withHomeLock } from "../../../platform/home-lock.js";
@@ -28,7 +26,11 @@ import type { RestoreProgress } from "../../restore-progress.js";
 import type { Snapshot } from "../../snapshot.js";
 import { planningState } from "../../reviewed-plan.js";
 import { readSnapshotArchive, verifySnapshotArchive } from "../../snapshot-archive.js";
-import { libraryOriginalsPath, libraryStatePath } from "../../store/library-store.js";
+import {
+  libraryOriginalsPath,
+  libraryStatePath,
+  type LibraryStateReadError,
+} from "../../store/library-store.js";
 import {
   completeRestoreArchives,
   importRestoreArchives,
@@ -37,7 +39,7 @@ import {
   RestoreInvalid,
   type SourceRestoreInvalid,
 } from "./restore.js";
-import { readCollectionVersion } from "./read-collection-version.js";
+import { hasCollectionVersion, readCollectionVersion } from "./read-collection-version.js";
 
 export interface StagedContent {
   readonly manifestDigest: Hash;
@@ -153,7 +155,6 @@ export const stageContent = Effect.fn("Library.content.stage")(function* <E = ne
   R | TreeRequirements | Digest.Digest | HttpClient.HttpClient
 > {
   const originalsPath = libraryOriginalsPath(home);
-  const fs = yield* FileSystem.FileSystem;
   const manifest = normalizeLibraryManifest(
     yield* Schema.decodeEffect(LibraryManifest, { onExcessProperty: "error" })(
       structuredClone(target),
@@ -201,7 +202,7 @@ export const stageContent = Effect.fn("Library.content.stage")(function* <E = ne
   const hashes = [...new Set(manifest.collection_versions.map((tree) => tree.hash))];
   const existing = new Set<Hash>();
   for (const hash of hashes)
-    if (yield* fs.exists(collectionVersionPath(originalsPath, hash))) existing.add(hash);
+    if (yield* hasCollectionVersion(originalsPath, hash)) existing.add(hash);
   const options = {
     originalsPath,
     registryBaseUrl: source.registry.origin,
@@ -227,6 +228,5 @@ export type ContentStageError =
   | SourceRestoreInvalid
   | CollectionVersionArchiveInvalid
   | ContentAddressCollision
-  | PlatformError
-  | TreeError
-  | HomeBusy;
+  | LibraryStateReadError
+  | TreeError;

@@ -2,12 +2,14 @@ import { expectTypeOf, test } from "vitest";
 import type { AuthorHistoryShape } from "../src/author/history.js";
 import { expect, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Option } from "effect";
-import { systemError } from "effect/PlatformError";
 import { join } from "node:path";
 import { backupAuthorHistory, backupAuthorWorkspace } from "../src/author/backup.js";
 import { AuthorHistory } from "../src/author/history.js";
 import { AuthorWorkspace, WorkspaceId, type WorkspaceLease } from "../src/author/workspace.js";
 import * as Sync from "../src/sync/sync.js";
+import { SqlClient } from "effect/sql";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import { prepareAuthorState } from "../src/author/state-store.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const ownerLayer = (home: string) =>
@@ -68,25 +70,25 @@ it.effect("backup checkpoints advance contiguous A-B-A observations and preserve
         from: Sync.Idle.make({ base: null }),
         to: sending,
       });
-      const before = yield* f.fs.readFileString(f.bindings);
+      const before = yield* history.syncState.read(key);
       expect(
         yield* Effect.flip(history.backupState.save(lease, key, { from: null, to: b.id })),
       ).toMatchObject({
         _tag: "AuthorHistoryInvalid",
         reason: { _tag: "BackupParentMismatch", expected: null, actual: [a.id] },
       });
-      expect(yield* f.fs.readFileString(f.bindings)).toBe(before);
+      expect(yield* history.syncState.read(key)).toEqual(before);
       yield* history.backupState.save(lease, key, { from: null, to: a.id });
       yield* history.backupState.save(lease, key, { from: a.id, to: b.id });
       yield* history.backupState.save(lease, key, { from: b.id, to: again.id });
       expect(again.id).not.toBe(a.id);
       expect(again.treeHash).toBe(a.treeHash);
       expect(yield* history.syncState.read(key)).toEqual(sending);
-      const saved = yield* f.fs.readFileString(f.bindings);
+      const saved = yield* history.syncState.read(key);
       const revision = yield* lease.revision;
       yield* history.backupState.save(lease, key, { from: again.id, to: again.id });
       expect(yield* lease.revision).toBe(revision);
-      expect(yield* f.fs.readFileString(f.bindings)).toBe(saved);
+      expect(yield* history.syncState.read(key)).toEqual(saved);
       expect(
         yield* Effect.flip(history.backupState.save(lease, key, { from: a.id, to: b.id })),
       ).toMatchObject({ _tag: "AuthorBackupStateConflict", found: again.id });
@@ -158,63 +160,58 @@ it.effect("first-connection reset clears only its backup checkpoint", () =>
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-for (const boundary of ["before-rename", "after-rename"] as const)
+for (const boundary of ["before-commit", "after-commit"] as const)
   it.effect(`backup acknowledgement survives restart ${boundary}`, () =>
     Effect.gen(function* () {
       const f = yield* fixture;
       const recorded = yield* Effect.gen(function* () {
-        const history = yield* AuthorHistory;
         const workspaces = yield* AuthorWorkspace;
         const root = yield* workspaces.resolveRoot(f.workspace);
         const lease = yield* workspaces.acquire(root);
         const { workspaceId } = yield* register(lease);
-        const observation = yield* history.refresh(root);
+        const observation = yield* (yield* AuthorHistory).refresh(root);
         return { key: { workspaceId, locator }, id: observation.id };
       }).pipe(Effect.provide(ownerLayer(f.home)), Effect.scoped);
-      let renamed = false;
-      let stopped = false;
-      const error = systemError({
-        _tag: "PermissionDenied",
-        module: "FileSystem",
-        method: "rename",
-        pathOrDescriptor: f.bindings,
-      });
-      const files = FileSystem.FileSystem.of({
-        ...f.fs,
-        rename: (from, to) =>
+      yield* prepareAuthorState(f.home, { create: true });
+      if (boundary === "before-commit")
+        yield* withLibraryDatabase(
+          libraryDatabasePath(f.home),
           Effect.gen(function* () {
-            if (to === f.bindings && boundary === "before-rename") {
-              stopped = true;
-              return yield* error;
-            }
-            yield* f.fs.rename(from, to);
-            if (to === f.bindings) renamed = true;
+            const sql = yield* SqlClient.SqlClient;
+            yield* sql`CREATE TRIGGER refuse_author_backup BEFORE INSERT ON author_backup_checkpoints BEGIN SELECT RAISE(ABORT, 'fixture refuses acknowledgement'); END`;
           }),
-        open: (path, options) =>
-          renamed && path === f.home
-            ? Effect.sync(() => {
-                stopped = true;
-              }).pipe(Effect.andThen(Effect.fail(error)))
-            : f.fs.open(path, options),
-      });
-      yield* Effect.gen(function* () {
+        );
+      let stopped = false;
+      const result = yield* Effect.gen(function* () {
         const workspaces = yield* AuthorWorkspace;
         const lease = yield* workspaces.acquire(yield* workspaces.resolveRoot(f.workspace));
-        yield* (yield* AuthorHistory).backupState.save(lease, recorded.key, {
+        const interrupted: WorkspaceLease =
+          boundary === "after-commit"
+            ? {
+                ...lease,
+                advance: Effect.sync(() => {
+                  stopped = true;
+                }).pipe(Effect.andThen(Effect.die(new Error("fixture stops after commit")))),
+              }
+            : lease;
+        yield* (yield* AuthorHistory).backupState.save(interrupted, recorded.key, {
           from: null,
           to: recorded.id,
         });
-      }).pipe(
-        Effect.provide(ownerLayer(f.home)),
-        Effect.provideService(FileSystem.FileSystem, files),
-        Effect.scoped,
-        Effect.flip,
-      );
-      expect(stopped).toBe(true);
+      }).pipe(Effect.provide(ownerLayer(f.home)), Effect.scoped, Effect.exit);
+      expect(result._tag).toBe("Failure");
+      if (boundary === "after-commit") expect(stopped).toBe(true);
+      if (boundary === "before-commit")
+        yield* withLibraryDatabase(
+          libraryDatabasePath(f.home),
+          Effect.gen(function* () {
+            yield* (yield* SqlClient.SqlClient)`DROP TRIGGER refuse_author_backup`;
+          }),
+        );
       yield* Effect.gen(function* () {
         const history = yield* AuthorHistory;
         const found = yield* history.backupState.read(recorded.key);
-        expect(found).toBe(boundary === "before-rename" ? null : recorded.id);
+        expect(found).toBe(boundary === "before-commit" ? null : recorded.id);
         const lease = yield* (yield* AuthorWorkspace).acquire(
           yield* (yield* AuthorWorkspace).resolveRoot(f.workspace),
         );
@@ -252,11 +249,11 @@ it.effect(
           to: writing,
         });
         expect(yield* history.syncState.read(key)).toEqual(writing);
-        const checkpoint = yield* f.fs.readFileString(f.bindings);
+        const checkpoint = yield* history.syncState.read(key);
         expect(
           yield* Effect.flip(history.syncState.save(lease, key, { from: idle, to: sending })),
         ).toMatchObject({ _tag: "AuthorSyncStateConflict", found: writing });
-        expect(yield* f.fs.readFileString(f.bindings)).toBe(checkpoint);
+        expect(yield* history.syncState.read(key)).toEqual(checkpoint);
         const resumed = yield* history.syncState.prepareWrite(lease, key, {
           from: writing,
           trees: { from: observation.treeHash, to: observation.treeHash },
@@ -331,7 +328,7 @@ it.effect("backup refuses BackupNotAncestor before posting an older observation"
       const second = yield* history.refresh(root);
       yield* history.backupState.save(lease, key, { from: null, to: first.id });
       yield* history.backupState.save(lease, key, { from: first.id, to: second.id });
-      const before = yield* f.fs.readFileString(f.bindings);
+      const before = yield* history.syncState.read(key);
       const posts: string[] = [];
       expect(
         yield* Effect.flip(
@@ -347,7 +344,7 @@ it.effect("backup refuses BackupNotAncestor before posting an older observation"
         reason: { _tag: "BackupNotAncestor", acknowledged: second.id, observation: first.id },
       });
       expect(posts).toEqual([]);
-      expect(yield* f.fs.readFileString(f.bindings)).toBe(before);
+      expect(yield* history.syncState.read(key)).toEqual(before);
       expect(yield* history.backupState.read(key)).toBe(second.id);
       expect(yield* f.fs.readFileString(join(root, "notes.txt"))).toBe("B");
     }).pipe(Effect.provide(ownerLayer(f.home)));

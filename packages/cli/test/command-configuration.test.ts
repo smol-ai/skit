@@ -2,12 +2,13 @@ import { expect, it } from "@effect/vitest";
 import { Layer, Cause, ConfigProvider, Effect, Exit, FileSystem } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { Command } from "effect/cli";
-import { SkitConfiguration, resolveSkitConfiguration } from "@smolai/skit-core/platform";
+import { SkitConfiguration, resolveSkitConfiguration, skitLayer } from "@smolai/skit-core/platform";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import { skitCommand } from "../src/commands/tree.js";
 import type { CommandFailure } from "../src/commands/types.js";
 import { join } from "node:path";
+import * as MachineSettings from "@smolai/skit-core/machine-settings";
 
 it.effect("an interrupted command propagates interruption without rendering a failure", () =>
   Effect.gen(function* () {
@@ -97,7 +98,9 @@ it.effect("grouped commands inherit home before or after the child without openi
       first: "https://first.example",
       second: "https://second.example",
     });
-    expect(yield* fs.exists(join(home, "machine.json"))).toBe(true);
+    expect(
+      (yield* MachineSettings.read(home).pipe(Effect.provide(skitLayer))).repositories,
+    ).toEqual([{ path: join(root, "repository"), status: "watched" }]);
     expect(yield* fs.readFileString(join(home, "state.json"))).toBe(
       "invalid Library must not be opened",
     );

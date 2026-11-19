@@ -118,8 +118,8 @@ it.effect("several successful source updates are one composed history action", (
     const first = f.urls[0];
     assert.ok(first);
     f.bodies.set(first, yield* f.archive("broken", false, "after"));
-    const auditPath = join(f.home, "audit.jsonl");
-    const before = (yield* f.fs.readFileString(auditPath)).trim().split("\n").length;
+    const before = (yield* f.run(Effect.flatMap(Library.Service, (library) => library.history)))
+      .events.length;
     const outcomes = yield* f.run(
       Effect.flatMap(Library.Service, (library) =>
         Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
@@ -127,7 +127,8 @@ it.effect("several successful source updates are one composed history action", (
     );
     assert.strictEqual(outcomes.length, 2);
     assert.isTrue(outcomes.every((item) => "changed" in item && item.changed));
-    const after = (yield* f.fs.readFileString(auditPath)).trim().split("\n").length;
+    const after = (yield* f.run(Effect.flatMap(Library.Service, (library) => library.history)))
+      .events.length;
     assert.strictEqual(after, before + 1);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
@@ -414,7 +415,7 @@ describe("skit update", () => {
           const f = yield* fixture;
           f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "after"));
           yield* f.fs.writeFileString(join(f.home, "machine.json"), "invalid machine settings");
-          const before = yield* f.fs.readFileString(join(f.home, "state.json"));
+          const before = yield* f.run(Effect.flatMap(Library.Service, (library) => library.read));
           const error = yield* f
             .run(
               Effect.flatMap(Library.Service, (library) =>
@@ -422,9 +423,14 @@ describe("skit update", () => {
               ),
             )
             .pipe(Effect.flip);
-          assert.strictEqual(error._tag, "MachineSettingsUnusable");
+          assert.strictEqual(error._tag, "InvalidLibraryState");
+          if (error._tag === "InvalidLibraryState")
+            assert.strictEqual(error.reason._tag, "LegacySourceChanged");
           assert.deepStrictEqual(f.requests, [f.urls[0]]);
-          assert.strictEqual(yield* f.fs.readFileString(join(f.home, "state.json")), before);
+          assert.deepStrictEqual(
+            yield* f.run(Effect.flatMap(Library.Service, (library) => library.read)),
+            before,
+          );
         }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
       );
 
@@ -464,7 +470,8 @@ describe("skit update", () => {
       it.effect("aborts the batch on typed shared state failures", () =>
         Effect.gen(function* () {
           const f = yield* fixture;
-          const statePath = join(f.home, "state.json");
+          const statePath = join(f.home, "library.sqlite");
+          let corrupted = false;
           const exit = yield* Effect.exit(
             f
               .run(
@@ -476,12 +483,13 @@ describe("skit update", () => {
                 Effect.provideService(FileSystem.FileSystem, {
                   ...f.fs,
                   readFileString: (path, options) =>
-                    path === statePath && f.requests.length > 0
-                      ? Effect.as(
-                          f.fs.writeFileString(statePath, "invalid state bytes\n"),
-                          "invalid state bytes\n",
-                        )
-                      : f.fs.readFileString(path, options),
+                    Effect.gen(function* () {
+                      if (!corrupted && path.includes("skit-source-") && f.requests.length > 0) {
+                        corrupted = true;
+                        yield* f.fs.writeFileString(statePath, "invalid database bytes\n");
+                      }
+                      return yield* f.fs.readFileString(path, options);
+                    }),
                 }),
               ),
           );
@@ -489,12 +497,12 @@ describe("skit update", () => {
           if (Exit.isFailure(exit))
             assert.isTrue(
               exit.cause.reasons.some(
-                (r) => Cause.isFailReason(r) && r.error._tag === "InvalidLibraryState",
+                (r) => Cause.isFailReason(r) && r.error._tag === "LibrarySqlError",
               ),
             );
           // Corruption arrives after the first fetch, inside the owner batch; no later Source runs.
           assert.deepStrictEqual(f.requests, [f.urls[0]]);
-          assert.strictEqual(yield* f.fs.readFileString(statePath), "invalid state bytes\n");
+          assert.strictEqual(yield* f.fs.readFileString(statePath), "invalid database bytes\n");
         }).pipe(Effect.provide(testPlatformLayer)),
       );
 
@@ -502,9 +510,8 @@ describe("skit update", () => {
         Effect.gen(function* () {
           const f = yield* fixture;
           f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "after"));
-          const statePath = join(f.home, "state.json");
           const library = yield* f.run(Effect.service(Library.Service));
-          let changed: string | undefined;
+          let changed: Library.Snapshot | undefined;
           const failure = yield* Effect.flip(
             f.run(
               Effect.flatMap(Library.Service, (library) =>
@@ -516,14 +523,8 @@ describe("skit update", () => {
                       typeof status !== "string" &&
                       status.pending.endsWith("Updating installed skills")
                         ? Effect.gen(function* () {
-                            const current = yield* library.read;
-                            if (current._tag !== "Present")
-                              return yield* Effect.die("Expected a Library");
-                            changed = JSON.stringify({
-                              ...current.state,
-                              repositories: [{ root: join(f.root, "later-project"), enabled: [] }],
-                            });
-                            yield* f.fs.writeFileString(statePath, changed);
+                            yield* library.inventory.refresh;
+                            changed = yield* library.read;
                           }).pipe(Effect.orDie, Effect.andThen(operation))
                         : operation,
                   }),
@@ -533,7 +534,7 @@ describe("skit update", () => {
           );
           assert.strictEqual(failure._tag, "Library.StalePlan");
           assert.deepStrictEqual(f.requests, [f.urls[0]]);
-          assert.strictEqual(yield* f.fs.readFileString(statePath), changed);
+          assert.deepStrictEqual(yield* library.read, changed);
         }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
       );
 

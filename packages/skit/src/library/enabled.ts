@@ -1,3 +1,5 @@
+import { enabledItemKey } from "./library-contracts.js";
+import { canonicalJson } from "../shared/json.js";
 import { resolve } from "node:path";
 import type { InstallScope } from "./scope.js";
 import type { Enabled, LibraryManifest } from "./library-contracts.js";
@@ -11,6 +13,36 @@ export interface EnabledAtScope {
   readonly enabled: readonly Enabled[];
   readonly invocation_policies?: InvocationPolicies;
 }
+
+/** Fixed read/hash representation of keyed selection rows, with one empty policy representation. */
+export const prepareEnabledSet = <
+  A extends {
+    readonly enabled: readonly Enabled[];
+    readonly invocation_policies?: InvocationPolicies;
+  },
+>(
+  value: A,
+) => {
+  const { enabled, invocation_policies, ...kept } = value;
+  return {
+    ...kept,
+    enabled: [...enabled].sort((left, right) => {
+      const a = enabledItemKey(left),
+        b = enabledItemKey(right);
+      return a < b ? -1 : a > b ? 1 : 0;
+    }),
+    ...(Object.keys(invocation_policies ?? {}).length ? { invocation_policies } : {}),
+  };
+};
+
+export const enabledSetsEqual = (before: readonly Enabled[], after: readonly Enabled[]) => {
+  const rows = new Map(before.map((item) => [enabledItemKey(item), canonicalJson(item)]));
+  return (
+    before.length === after.length &&
+    rows.size === before.length &&
+    after.every((item) => rows.get(enabledItemKey(item)) === canonicalJson(item))
+  );
+};
 
 const GLOBAL = { kind: "global" } as const;
 
@@ -95,37 +127,44 @@ export function skillsToCheckForDuplicates(
     : newlyEnabled;
 }
 
+type EnabledState = Pick<
+  LibraryState,
+  "enabled" | "invocation_policies" | "repositories" | "device_skill_selection"
+>;
+
 type EnabledList = {
   readonly enabled: readonly Enabled[];
   readonly invocation_policies?: InvocationPolicies;
 };
 
 /** Transform every place a list is stored together: the account, each repository, the device choice. */
-function mapEnabled(
-  state: LibraryState,
+function mapEnabled<A extends EnabledState>(
+  state: A,
   transform: (list: EnabledList) => EnabledList,
-): LibraryState {
+) {
   const global = transform({
     enabled: state.enabled,
     ...withPolicies(state.invocation_policies),
   });
   const { invocation_policies: _policies, ...rest } = state;
+  let selection: DeviceSkillSelection | undefined;
+  if (state.device_skill_selection?.mode === "choose") {
+    const {
+      enabled: _enabled,
+      invocation_policies: _devicePolicies,
+      ...kept
+    } = state.device_skill_selection;
+    selection = { ...kept, ...transform(state.device_skill_selection) };
+  }
   return {
     ...rest,
     enabled: [...global.enabled],
     ...withPolicies(global.invocation_policies),
-    repositories: state.repositories.map((repository) => ({
-      root: repository.root,
-      ...transform(repository),
-    })),
-    ...(state.device_skill_selection?.mode === "choose"
-      ? {
-          device_skill_selection: {
-            mode: "choose" as const,
-            ...transform(state.device_skill_selection),
-          },
-        }
-      : {}),
+    repositories: state.repositories.map((repository) => {
+      const { enabled: _enabled, invocation_policies: _policies, ...kept } = repository;
+      return { ...kept, ...transform(repository) };
+    }),
+    ...(selection === undefined ? {} : { device_skill_selection: selection }),
   };
 }
 
@@ -140,8 +179,12 @@ export function remapEnabled(
   return mapEnabled(state, (list) => ({
     enabled: list.enabled.map((item): Enabled =>
       "skill" in item
-        ? { skill: aliases.skills.find((alias) => alias.from === item.skill)?.to ?? item.skill }
+        ? {
+            ...item,
+            skill: aliases.skills.find((alias) => alias.from === item.skill)?.to ?? item.skill,
+          }
         : {
+            ...item,
             collection:
               aliases.collections.find((alias) => alias.from === item.collection)?.to ??
               item.collection,
@@ -161,13 +204,13 @@ export function remapEnabled(
 }
 
 /** Local removal intentionally prunes explicit choices, unlike unresolved remote removals. */
-export function removeFromEnabled(
-  state: LibraryState,
+export function removeFromEnabled<A extends EnabledState>(
+  state: A,
   removed: {
     readonly skills: ReadonlySet<string>;
     readonly collections: ReadonlySet<string>;
   },
-): LibraryState {
+) {
   return pruneEmptyEnabled(
     mapEnabled(state, (list) => {
       const invocation_policies = Object.fromEntries(
@@ -186,7 +229,9 @@ export function removeFromEnabled(
 }
 
 /** What is enabled for every project on this device: its own choice, else the account's. */
-export const globalEnabled = (state: LibraryState): EnabledList =>
+export const globalEnabled = (
+  state: Pick<LibraryState, "device_skill_selection" | "enabled" | "invocation_policies">,
+): EnabledList =>
   state.device_skill_selection?.mode === "choose"
     ? state.device_skill_selection
     : { enabled: state.enabled, ...withPolicies(state.invocation_policies) };
@@ -227,8 +272,14 @@ export function setEnabledAt(
 ): LibraryState {
   const next = { enabled: [...list.enabled], ...withPolicies(list.invocation_policies) };
   if (scope.kind === "global") {
-    if (state.device_skill_selection?.mode === "choose")
-      return { ...state, device_skill_selection: { mode: "choose", ...next } };
+    if (state.device_skill_selection?.mode === "choose") {
+      const {
+        enabled: _enabled,
+        invocation_policies: _policies,
+        ...kept
+      } = state.device_skill_selection;
+      return { ...state, device_skill_selection: { ...kept, ...next } };
+    }
     const { invocation_policies: _policies, ...rest } = state;
     return { ...rest, ...next };
   }
@@ -236,7 +287,10 @@ export function setEnabledAt(
   const repositories = [...state.repositories];
   const index = repositories.findIndex((item) => resolve(item.root) === resolve(scope.root));
   if (index < 0) repositories.push(repository);
-  else repositories[index] = repository;
+  else {
+    const { enabled: _enabled, invocation_policies: _policies, ...kept } = repositories[index]!;
+    repositories[index] = { ...kept, ...repository };
+  }
   return { ...state, repositories };
 }
 
@@ -246,7 +300,7 @@ export function setEnabledAt(
  * means "enable nothing", so it survives rather than fall back to the account. Return the original
  * state when nothing needs saving.
  */
-export function pruneEmptyEnabled(state: LibraryState): LibraryState {
+export function pruneEmptyEnabled<A extends EnabledState>(state: A) {
   const repositories = state.repositories.filter((repository) => repository.enabled.length > 0);
   const clearPolicies = state.enabled.length === 0 && state.invocation_policies !== undefined;
   if (repositories.length === state.repositories.length && !clearPolicies) return state;

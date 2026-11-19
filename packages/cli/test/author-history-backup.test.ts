@@ -1,8 +1,8 @@
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Fiber, FileSystem, Schema } from "effect";
+import { Effect, Fiber, FileSystem } from "effect";
 import { TestClock } from "effect/testing";
 import { join } from "node:path";
-import { systemError } from "effect/PlatformError";
+import { DatabaseSync } from "node:sqlite";
 import { authorLayer, refreshWorkspace } from "../src/platform/author-sync-fixture/history.js";
 import { makeAuthorSyncWorld } from "../src/platform/author-sync-fixture/world.js";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -76,52 +76,34 @@ describe("skit author sync", () => {
             const current = yield* world.server.current();
             if (interruption === "lost-response")
               yield* world.server.dropNextResponse("a", "after-post");
-            const fs = yield* FileSystem.FileSystem;
-            let refused = false;
-            const result = yield* world.a.sync().pipe(
-              Effect.provideService(FileSystem.FileSystem, {
-                ...fs,
-                rename: Effect.fn(function* (from: string, to: string) {
-                  if (
-                    interruption === "lost-acknowledgement" &&
-                    !refused &&
-                    to === join(world.a.home, "author-sync.json")
-                  ) {
-                    const document = yield* Schema.decodeEffect(
-                      Schema.fromJsonString(
-                        Schema.Struct({
-                          backups: Schema.optionalKey(
-                            Schema.Record(
-                              Schema.String,
-                              Schema.Record(Schema.String, Schema.NullOr(Schema.String)),
-                            ),
-                          ),
-                        }),
-                      ),
-                    )(yield* fs.readFileString(from)).pipe(Effect.orDie);
-                    // The chain can contain older unacknowledged observations. Interrupt the save
-                    // that acknowledges this edit, after its POST has actually succeeded.
-                    if (
-                      Object.values(document.backups ?? {}).some((entries) =>
-                        Object.values(entries).includes(observation.id),
-                      )
-                    ) {
-                      refused = true;
-                      return yield* systemError({
-                        _tag: "PermissionDenied",
-                        module: "FileSystem",
-                        method: "rename",
-                        pathOrDescriptor: to,
-                      });
-                    }
-                  }
-                  return yield* fs.rename(from, to);
-                }),
-              }),
-              Effect.result,
-            );
+            if (interruption === "lost-acknowledgement")
+              yield* Effect.sync(() => {
+                const database = new DatabaseSync(join(world.a.home, "library.sqlite"));
+                try {
+                  database.exec("CREATE TABLE fixture_refused_backup (revision TEXT PRIMARY KEY)");
+                  database
+                    .prepare("INSERT INTO fixture_refused_backup VALUES (?)")
+                    .run(observation.id);
+                  database.exec(
+                    "CREATE TRIGGER refuse_fixture_backup BEFORE INSERT ON author_backup_checkpoints WHEN EXISTS (SELECT 1 FROM fixture_refused_backup WHERE revision=NEW.revision) BEGIN SELECT RAISE(ABORT, 'fixture refuses acknowledgement'); END",
+                  );
+                } finally {
+                  database.close();
+                }
+              });
+            const result = yield* Effect.result(world.a.sync());
             expect(result._tag).toBe("Failure");
-            expect(refused).toBe(interruption === "lost-acknowledgement");
+            if (interruption === "lost-acknowledgement")
+              yield* Effect.sync(() => {
+                const database = new DatabaseSync(join(world.a.home, "library.sqlite"));
+                try {
+                  database.exec(
+                    "DROP TRIGGER refuse_fixture_backup; DROP TABLE fixture_refused_backup",
+                  );
+                } finally {
+                  database.close();
+                }
+              });
             expect(yield* world.server.current()).toBe(current);
             expect(
               (yield* world.server.revisions()).filter(({ id }) => id === observation.id),

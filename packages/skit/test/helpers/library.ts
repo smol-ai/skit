@@ -4,7 +4,7 @@ import * as Library from "../../src/library/library.js";
 import { CollectionRemovalMissing } from "../../src/library/installation/remove.js";
 import { emptyLibraryState, type LibraryState } from "../../src/library/library-state.js";
 import { type InstalledSkill } from "../../src/library/device-state.js";
-import { snapshotOf } from "../../src/library/snapshot.js";
+import { snapshotOf, snapshotDatabaseRevision } from "../../src/library/snapshot.js";
 
 import type { ManageApproval } from "../../src/installed-skills/files.js";
 import type { OwnershipMarker } from "../../src/installed-skills/ownership-marker.js";
@@ -79,7 +79,13 @@ export const removeCollection = (home: string, state: LibraryState, collectionId
       _tag: "Apply",
       plan: yield* owner.plan(
         { _tag: "Remove", collectionId: id },
-        { base: snapshotOf({ present: true, state }) },
+        {
+          base: snapshotOf({
+            present: true,
+            state,
+            revision: snapshotDatabaseRevision((yield* owner.read).revision),
+          }),
+        },
       ),
     })).result;
   });
@@ -201,7 +207,13 @@ export const uninstallCopies = (
           copies: copies.map((copy) => copy.installed_skill_id),
           drop: [],
         },
-        { base: snapshotOf({ present: true, state }) },
+        {
+          base: snapshotOf({
+            present: true,
+            state,
+            revision: snapshotDatabaseRevision((yield* owner.read).revision),
+          }),
+        },
       ),
     })).result;
   });

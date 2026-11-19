@@ -303,7 +303,6 @@ export {
   renderSetupReview,
   renderSetupFailed,
 } from "./setup/present.js";
-export { prepareSetupUndo } from "./setup/undo.js";
 
 export { openSetupCommandReview } from "./setup/apply.js";
 

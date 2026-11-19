@@ -1,39 +1,30 @@
-import { LibraryRecoveryNotice } from "../src/library/recovery-notice.js";
+import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
+import { snapshotOf } from "../src/library/snapshot.js";
 import { assert, it } from "@effect/vitest";
-import {
-  Cause,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  FileSystem,
-  Layer,
-  Logger,
-  Option,
-  Schema,
-} from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Option } from "effect";
+import { SqlClient } from "effect/sql";
 import { join } from "node:path";
-import { systemError } from "effect/PlatformError";
 import * as Library from "../src/library/library.js";
-import { LibraryState } from "../src/library/library-state.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
-import { StateEnvelope } from "../src/library/store/history-delivery.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
 import {
-  inspectLocalLibraryState,
+  loadLibrary,
+  loadOperations,
   writeLibrary,
   LibraryWriter,
-  recoverLibraryHistory,
 } from "../src/library/store/library-store.js";
-import { snapshotOf } from "../src/library/snapshot.js";
+import { libraryHistoryAction } from "../src/library/store/state-file.js";
+import { readLibraryAudit } from "../src/library/audit/audit-log.js";
+import { makeOperationId } from "../src/library/entity-ids.js";
+import { OperationStatus } from "../src/library/store/state-schema.js";
+import { recordedLibrary } from "../src/library/store/intent.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { lockFile } from "../src/platform/file-lock.js";
-import { deliverLibraryHistory } from "../src/library/store/state-file.js";
 
-const readEnvelope = Schema.decodeUnknownEffect(Schema.fromJsonString(StateEnvelope));
-const fixture = Effect.fn("test.historyDelivery.fixture")(function* () {
+const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const root = yield* fs.realPath(
-    yield* fs.makeTempDirectoryScoped({ prefix: "skit-history-delivery-" }),
+    yield* fs.makeTempDirectoryScoped({ prefix: "skit-history-transaction-" }),
   );
   const home = join(root, "home");
   const source = join(root, "source");
@@ -46,420 +37,200 @@ const fixture = Effect.fn("test.historyDelivery.fixture")(function* () {
   );
   const request = yield* localImportRequest(source, "2026-11-05T00:00:00.000Z");
   if (Option.isNone(request)) return yield* Effect.die("Missing fixture source");
+  const path = libraryDatabasePath(home);
   const layer = Library.layer({
     home,
     roots: { home: root, configHome: root, overrides: { codex: [skills] } },
   });
-  return {
-    fs,
-    home,
-    source,
-    skills,
-    request: request.value,
-    layer,
-    statePath: join(home, "state.json"),
-    logPath: join(home, "audit.jsonl"),
-  };
+  return { fs, home, path, layer, request: request.value };
 });
 
-for (const delivery of ["absent", "empty"] as const)
-  it.effect(
-    `opens a Library with ${delivery} history delivery while another holder owns its lock`,
-    () =>
-      Effect.gen(function* () {
-        const f = yield* fixture();
-        yield* Effect.flatMap(Library.Service, (owner) => owner.import.collection(f.request)).pipe(
-          Effect.provide(f.layer),
-        );
-        if (delivery === "empty") {
-          const state = yield* readEnvelope(yield* f.fs.readFileString(f.statePath));
-          yield* f.fs.writeFileString(
-            f.statePath,
-            JSON.stringify({ ...state, historyDelivery: { schemaVersion: 1, pending: [] } }),
-          );
-        }
-        const state = yield* f.fs.readFileString(f.statePath);
-        const audit = yield* f.fs.readFileString(f.logPath);
-        // A native hold supplies no reentrant HomeLock authority to the Library.
-        yield* lockFile(join(f.home, "lock.sqlite"));
-        yield* deliverLibraryHistory(f.home);
-        yield* Effect.gen(function* () {
-          const owner = yield* Library.Service;
-          assert.strictEqual((yield* owner.read)._tag, "Present");
-          assert.strictEqual((yield* owner.history).events.length, 1);
-        }).pipe(Effect.provide(f.layer));
-        assert.strictEqual(
-          (yield* Effect.flip(writeLibrary(f.home, Effect.void)))._tag,
-          "HomeBusy",
-        );
-        assert.strictEqual(yield* f.fs.readFileString(f.statePath), state);
-        assert.strictEqual(yield* f.fs.readFileString(f.logPath), audit);
-      }).pipe(Effect.provide(skitLayer), Effect.scoped),
-  );
-
-it.effect(
-  "queued history still requires the writer and delivers after its holder releases it",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const event = yield* Effect.gen(function* () {
-        const owner = yield* Library.Service;
-        yield* owner.import.collection(f.request);
-        return (yield* owner.history).events[0];
-      }).pipe(Effect.provide(f.layer));
-      const state = yield* readEnvelope(yield* f.fs.readFileString(f.statePath));
-      const queued = JSON.stringify({
-        ...state,
-        historyDelivery: { schemaVersion: 1, pending: [{ event, operationIds: [] }] },
-      });
-      yield* f.fs.writeFileString(f.statePath, queued);
-      yield* f.fs.writeFileString(f.logPath, "");
-      yield* Effect.scoped(
-        Effect.gen(function* () {
-          yield* lockFile(join(f.home, "lock.sqlite"));
-          assert.strictEqual((yield* Effect.flip(deliverLibraryHistory(f.home)))._tag, "HomeBusy");
-          assert.strictEqual(yield* f.fs.readFileString(f.statePath), queued);
-          assert.strictEqual(yield* f.fs.readFileString(f.logPath), "");
-        }),
-      );
-      yield* deliverLibraryHistory(f.home);
-      assert.isUndefined(
-        (yield* readEnvelope(yield* f.fs.readFileString(f.statePath))).historyDelivery,
-      );
-      yield* Effect.gen(function* () {
-        const owner = yield* Library.Service;
-        assert.deepStrictEqual((yield* owner.history).events, [event]);
-      }).pipe(Effect.provide(f.layer));
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-for (const boundary of ["state", "before-log", "after-log", "after-ack"] as const)
-  it.effect(`delivers one history event after interruption at ${boundary}`, () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      let interrupted = false;
-      const files: FileSystem.FileSystem = {
-        ...f.fs,
-        rename: (from, to) =>
-          Effect.gen(function* () {
-            if (to === f.logPath && (boundary === "before-log" || boundary === "state")) {
-              interrupted = true;
-              return yield* Effect.die("Process exited before audit publication");
-            }
-            const stored =
-              to === f.statePath
-                ? yield* readEnvelope(yield* f.fs.readFileString(from)).pipe(Effect.orDie)
-                : undefined;
-            yield* f.fs.rename(from, to);
-            if (
-              boundary === "state" &&
-              stored?.historyDelivery?.pending.some((item) => item.event.changes.length)
-            ) {
-              interrupted = true;
-              return yield* Effect.die("Process exited after state publication");
-            }
-            if (boundary === "after-log" && to === f.logPath) {
-              interrupted = true;
-              return yield* Effect.die("Process exited after audit publication");
-            }
-            if (
-              boundary === "after-ack" &&
-              stored &&
-              !stored.historyDelivery &&
-              (yield* f.fs.exists(f.logPath))
-            ) {
-              interrupted = true;
-              return yield* Effect.die("Process exited after audit acknowledgement");
-            }
-          }),
-      };
-      const owner = yield* Effect.flatMap(Library.Service, Effect.succeed).pipe(
-        Effect.provide(f.layer.pipe(Layer.provide(Layer.succeed(FileSystem.FileSystem, files)))),
-      );
-      const outcome = yield* Effect.exit(owner.import.collection(f.request));
-      assert.strictEqual(outcome._tag, "Failure");
-      if (Exit.isFailure(outcome)) assert.isTrue(Cause.hasDies(outcome.cause));
-      assert.isTrue(interrupted);
-      const beforeText = yield* f.fs.readFileString(f.statePath);
-      const before = snapshotOf(yield* inspectLocalLibraryState(f.home));
-      assert.strictEqual(before._tag, "Present");
-      // Passive reads do not deliver or acknowledge, and expose no private storage metadata.
-      const passive = yield* owner.read;
-      assert.strictEqual(passive.revision, before.revision);
-      if (passive._tag === "Present")
-        assert.isFalse(Object.hasOwn(passive.state, "historyDelivery"));
-      assert.strictEqual(yield* f.fs.readFileString(f.statePath), beforeText);
-      const queued = (yield* readEnvelope(beforeText)).historyDelivery?.pending[0]?.event;
-      for (let attempt = 0; attempt < 2; attempt++)
-        yield* Effect.gen(function* () {
-          const recovered = yield* Library.Service;
-          assert.strictEqual((yield* recovered.read).revision, before.revision);
-          const events = (yield* recovered.history).events;
-          assert.strictEqual(events.length, 1);
-          if (queued) assert.strictEqual(events[0]?.eventId, queued.eventId);
-          assert.strictEqual(events[0]?.changes[0]?.action, "added");
-          assert.isUndefined(
-            (yield* readEnvelope(yield* f.fs.readFileString(f.statePath))).historyDelivery,
-          );
-        }).pipe(Effect.provide(f.layer));
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
-  );
-
-it.effect("resumes a Pending operation into its original action event", () =>
+it.effect("opens a settled Library without its home lock and keeps passive reads unchanged", () =>
   Effect.gen(function* () {
-    const f = yield* fixture();
-    const plan = yield* Effect.gen(function* () {
-      const owner = yield* Library.Service;
-      const imported = yield* owner.import.collection(f.request);
-      return yield* owner.plan(
-        {
-          _tag: "Enabled",
-          changes: [
-            {
-              _tag: "Enable",
-              subject: { _tag: "Skill", id: imported.skills[0]!.skill_id },
-              where: [{ kind: "global" }],
-            },
-          ],
-        },
-        { base: yield* owner.read },
-      );
-    }).pipe(Effect.provide(f.layer));
-    let interrupted = false;
-    const files: FileSystem.FileSystem = {
-      ...f.fs,
-      rename: (from, to) =>
-        Effect.gen(function* () {
-          const next =
-            to === f.statePath
-              ? yield* Schema.decodeEffect(Schema.fromJsonString(LibraryState))(
-                  yield* f.fs.readFileString(from),
-                ).pipe(Effect.orDie)
-              : undefined;
-          yield* f.fs.rename(from, to);
-          if (
-            !interrupted &&
-            next?.enabled.length &&
-            next.operations.some((item) => item._tag === "Pending")
-          ) {
-            interrupted = true;
-            return yield* Effect.die("Process exited during recorded Enable");
-          }
-        }),
-    };
-    const exit = yield* Effect.exit(
-      Effect.flatMap(Library.Service, (owner) => owner.apply({ _tag: "Apply", plan: plan })).pipe(
-        Effect.annotateLogs({ "skit.library.workflow": "test-apply" }),
-        Effect.provide(f.layer.pipe(Layer.provide(Layer.succeed(FileSystem.FileSystem, files)))),
-      ),
-    );
-    assert.strictEqual(exit._tag, "Failure");
-    assert.isTrue(interrupted);
-    const queue = (yield* readEnvelope(yield* f.fs.readFileString(f.statePath))).historyDelivery;
-    assert.strictEqual(queue?.pending.length, 1);
-    const expected = queue?.pending[0]?.event;
+    const f = yield* fixture;
     yield* Effect.gen(function* () {
-      const owner = yield* Library.Service;
-      assert.strictEqual(owner.startup.finished.length, 1);
-      const events = (yield* owner.history).events;
-      assert.strictEqual(events.length, 2);
-      assert.strictEqual(events[1]?.eventId, expected?.eventId);
-      assert.strictEqual(events[1]?.workflow, "test-apply");
-      assert.isTrue(
-        events[1]?.changes.some((item) => item.entity === "binding" && item.action === "enabled"),
-      );
-      assert.isTrue(events[1]?.changes.some((item) => item.entity === "projection"));
-    }).pipe(Effect.provide(f.layer));
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("constructing an owner inside a composed write cannot deliver its unfinished event", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    yield* writeLibrary(
-      f.home,
-      Effect.gen(function* () {
-        yield* Effect.flatMap(Library.Service, (owner) => owner.import.collection(f.request)).pipe(
-          Effect.provide(f.layer),
-        );
-        // Construction is legal inside a write, but this first checkpoint is not the whole action.
-        const snapshot = yield* Effect.flatMap(Library.Service, (owner) => owner.read).pipe(
-          Effect.provide(f.layer),
-        );
-        if (snapshot._tag !== "Present") return yield* Effect.die("Missing imported state");
-        const writer = yield* LibraryWriter;
-        yield* writer.save(
-          { ...snapshot.state, enabled: [{ skill: snapshot.state.skills[0]!.skill_id }] },
-          snapshot.state,
-        );
-      }),
-    );
-    yield* Effect.gen(function* () {
-      const events = (yield* (yield* Library.Service).history).events;
-      assert.strictEqual(events.length, 1);
-      assert.deepStrictEqual(
-        events[0]?.changes.map((item) => `${item.entity}:${item.action}`),
-        ["collection:added", "skill:added", "binding:enabled"],
-      );
-      assert.isUndefined(
-        (yield* readEnvelope(yield* f.fs.readFileString(f.statePath))).historyDelivery,
-      );
-    }).pipe(Effect.provide(f.layer));
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("retains failed delivery for a later healthy owner", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    yield* f.fs.makeDirectory(f.logPath, { recursive: true });
-    const failure = systemError({
-      _tag: "PermissionDenied",
-      module: "FileSystem",
-      method: "readFileString",
-      pathOrDescriptor: f.logPath,
-    });
-    const notices: LibraryRecoveryNotice[] = [];
-    const files = FileSystem.FileSystem.of({
-      ...f.fs,
-      readFileString: (path, ...args) =>
-        path === f.logPath ? Effect.fail(failure) : f.fs.readFileString(path, ...args),
-    });
-    const revision = yield* Effect.gen(function* () {
       const owner = yield* Library.Service;
       yield* owner.import.collection(f.request);
-      return (yield* owner.read).revision;
-    }).pipe(
-      Effect.provide(
-        Layer.mergeAll(
-          f.layer.pipe(Layer.provide(Layer.succeed(FileSystem.FileSystem, files))),
-          Logger.layer([
-            Logger.make((entry) => {
-              const values: readonly unknown[] = Array.isArray(entry.message)
-                ? entry.message
-                : [entry.message];
-              for (const value of values)
-                if (Schema.is(LibraryRecoveryNotice)(value)) notices.push(value);
-            }),
-          ]),
-        ),
-      ),
-    );
-    assert.isAtLeast(notices.length, 1);
-    assert.isTrue(
-      notices.every(
-        (notice) =>
-          notice._tag === "HistoryDeliveryPending" &&
-          notice.home === f.home &&
-          notice.failure === failure,
-      ),
-    );
-    const queue = (yield* readEnvelope(yield* f.fs.readFileString(f.statePath))).historyDelivery;
-    assert.strictEqual(queue?.pending.length, 1);
-    yield* f.fs.remove(f.logPath, { recursive: true });
+    }).pipe(Effect.provide(f.layer));
+    const state = yield* loadLibrary(f.home);
+    const events = yield* readLibraryAudit(f.home);
+    yield* lockFile(join(f.home, "lock.sqlite"));
     yield* Effect.gen(function* () {
       const owner = yield* Library.Service;
-      assert.strictEqual((yield* owner.read).revision, revision);
-      assert.strictEqual(
-        (yield* owner.history).events[0]?.eventId,
-        queue?.pending[0]?.event.eventId,
-      );
-      assert.isUndefined(
-        (yield* readEnvelope(yield* f.fs.readFileString(f.statePath))).historyDelivery,
-      );
+      const snapshot = yield* owner.read;
+      if (snapshot._tag !== "Present") return yield* Effect.die("Missing saved state");
+      assert.deepStrictEqual(snapshot.state, state);
+      assert.deepStrictEqual((yield* owner.history).events, events);
     }).pipe(Effect.provide(f.layer));
+    assert.strictEqual((yield* Effect.flip(writeLibrary(f.home, Effect.void)))._tag, "HomeBusy");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("refuses an unsupported delivery format without changing its state file", () =>
+it.effect("each accepted save commits the same cumulative event before the writer ends", () =>
   Effect.gen(function* () {
-    const f = yield* fixture();
-    yield* Effect.flatMap(Library.Service, (owner) => owner.import.collection(f.request)).pipe(
-      Effect.provide(f.layer),
-    );
-    const state = yield* readEnvelope(yield* f.fs.readFileString(f.statePath));
-    const invalid = JSON.stringify({
-      ...state,
-      historyDelivery: { schemaVersion: 999, pending: [] },
-    });
-    yield* f.fs.writeFileString(f.statePath, invalid);
-    assert.strictEqual(
-      (yield* Effect.flip(inspectLocalLibraryState(f.home)))._tag,
-      "InvalidLibraryState",
-    );
-    assert.strictEqual(yield* f.fs.readFileString(f.statePath), invalid);
+    const f = yield* fixture;
+    yield* Effect.gen(function* () {
+      const owner = yield* Library.Service;
+      yield* writeLibrary(
+        f.home,
+        Effect.gen(function* () {
+          yield* owner.import.collection(f.request);
+          const first = yield* readLibraryAudit(f.home);
+          assert.strictEqual(first.length, 1);
+          const state = yield* loadLibrary(f.home);
+          yield* (yield* LibraryWriter).save(
+            { ...state, enabled: [{ skill: state.skills[0]!.skill_id }] },
+            state,
+          );
+          const second = yield* readLibraryAudit(f.home);
+          assert.strictEqual(second.length, 1);
+          assert.strictEqual(second[0]?.eventId, first[0]?.eventId);
+          assert.deepStrictEqual(
+            second[0]?.changes.slice(0, first[0]!.changes.length),
+            first[0]?.changes,
+          );
+          assert.strictEqual(second[0]?.changes.at(-1)?.action, "enabled");
+          return yield* Effect.fail("failed after two accepted saves");
+        }),
+      ).pipe(Effect.flip);
+    }).pipe(Effect.provide(f.layer));
+    assert.strictEqual((yield* loadLibrary(f.home)).enabled.length, 1);
+    assert.strictEqual((yield* readLibraryAudit(f.home)).length, 1);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-for (const failure of ["storage", "defect"] as const)
-  it.effect(`retains committed state and settles the writer after history ${failure}`, () =>
+it.effect(
+  "resume keeps one action identity and gates its event until every operation settles",
+  () =>
     Effect.gen(function* () {
-      const f = yield* fixture();
-      const defect = new Error("history publication defect");
-      const files: FileSystem.FileSystem = {
-        ...f.fs,
-        rename: (from, to) =>
-          to === f.logPath
-            ? failure === "storage"
-              ? Effect.fail(
-                  systemError({
-                    _tag: "PermissionDenied",
-                    module: "FileSystem",
-                    method: "rename",
-                    pathOrDescriptor: to,
-                  }),
-                )
-              : Effect.die(defect)
-            : f.fs.rename(from, to),
-      };
-      const owner = yield* Effect.flatMap(Library.Service, Effect.succeed).pipe(
-        Effect.provide(f.layer.pipe(Layer.provide(Layer.succeed(FileSystem.FileSystem, files)))),
-      );
-      const exit = yield* Effect.exit(owner.import.collection(f.request));
-      assert.strictEqual(exit._tag, failure === "storage" ? "Success" : "Failure");
-      if (Exit.isFailure(exit))
-        assert.isTrue(
-          exit.cause.reasons.some(
-            (reason) => Cause.isDieReason(reason) && reason.defect === defect,
-          ),
-        );
-      const committed = yield* inspectLocalLibraryState(f.home);
-      assert.isTrue(committed.present);
-      if (committed.present) assert.strictEqual(committed.state.collections.length, 1);
-      const revision = snapshotOf(committed).revision;
-      const queued = (yield* readEnvelope(yield* f.fs.readFileString(f.statePath))).historyDelivery;
-      assert.strictEqual(queued?.pending.length, 1);
-      if (failure === "defect") {
-        // Startup recovery must expose the same defect, rather than hiding it as a warning.
-        const startup = yield* Effect.exit(
-          Effect.flatMap(Library.Service, Effect.succeed).pipe(
-            Effect.provide(
-              f.layer.pipe(Layer.provide(Layer.succeed(FileSystem.FileSystem, files))),
-            ),
-          ),
-        );
-        assert.isTrue(Exit.isFailure(startup) && Cause.hasDies(startup.cause));
-      }
-      // Acquiring a fresh writer proves both the home and replacement locks settled.
-      yield* writeLibrary(f.home, Effect.void);
+      const f = yield* fixture;
       yield* Effect.gen(function* () {
-        const recovered = yield* Library.Service;
-        assert.strictEqual((yield* recovered.read).revision, revision);
-        assert.strictEqual((yield* recovered.history).events.length, 1);
-        assert.strictEqual(
-          (yield* recovered.history).events[0]?.eventId,
-          queued?.pending[0]?.event.eventId,
-        );
+        yield* (yield* Library.Service).import.collection(f.request);
       }).pipe(Effect.provide(f.layer));
+      const state = yield* loadLibrary(f.home);
+      const pending = OperationStatus.cases.Pending.make({
+        operationId: makeOperationId(),
+        steps: [],
+        before: recordedLibrary(state),
+      });
+      const other = { ...pending, operationId: makeOperationId() };
+      yield* writeLibrary(
+        f.home,
+        Effect.gen(function* () {
+          const writer = yield* LibraryWriter;
+          const base = snapshotOf(yield* inspectLocalLibraryState(f.home));
+          yield* writer.recordOperation(pending, base, "apply");
+          yield* writer.recordOperation(other, base, "sync");
+        }),
+      ).pipe(Effect.annotateLogs({ "skit.library.workflow": "test-action" }));
+      const action = yield* libraryHistoryAction(f.home, "startup", pending.operationId);
+      assert.strictEqual(action.workflow, "test-action");
+      assert.deepStrictEqual(
+        yield* libraryHistoryAction(f.home, "other", other.operationId),
+        action,
+      );
+      assert.strictEqual((yield* readLibraryAudit(f.home)).length, 1);
+      yield* writeLibrary(
+        f.home,
+        Effect.gen(function* () {
+          yield* (yield* LibraryWriter).settleOperation(pending);
+        }),
+        { resume: pending.operationId },
+      );
+      assert.strictEqual((yield* readLibraryAudit(f.home)).length, 1);
+      assert.deepStrictEqual(
+        (yield* loadOperations(f.home)).map((row) => row.operationId),
+        [other.operationId],
+      );
+      yield* writeLibrary(
+        f.home,
+        Effect.gen(function* () {
+          yield* (yield* LibraryWriter).settleOperation(other);
+        }),
+        { resume: other.operationId },
+      );
+      const events = yield* readLibraryAudit(f.home);
+      assert.strictEqual(events.length, 2);
+      assert.strictEqual(events[1]?.eventId, action.eventId);
+      assert.strictEqual(events[1]?.occurredAt, action.occurredAt);
+      assert.strictEqual(events[1]?.workflow, action.workflow);
+      assert.deepStrictEqual(
+        events[1]?.changes.map((change) => change.action),
+        ["operation-Pending", "operation-Pending", "operation-Done", "operation-Done"],
+      );
+      assert.deepStrictEqual(yield* loadOperations(f.home), []);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
-  );
+);
 
-it.effect("preserves caller interruption after committed state and settles history locks", () =>
+it.effect(
+  "a failed event update rolls back settlement and leaves the original action resumable",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      yield* Effect.gen(function* () {
+        yield* (yield* Library.Service).import.collection(f.request);
+      }).pipe(Effect.provide(f.layer));
+      const state = yield* loadLibrary(f.home);
+      const pending = OperationStatus.cases.Pending.make({
+        operationId: makeOperationId(),
+        steps: [],
+        before: recordedLibrary(state),
+      });
+      yield* writeLibrary(
+        f.home,
+        Effect.gen(function* () {
+          yield* (yield* LibraryWriter).recordOperation(
+            pending,
+            snapshotOf(yield* inspectLocalLibraryState(f.home)),
+            "apply",
+          );
+        }),
+      );
+      const action = yield* libraryHistoryAction(f.home, "resume", pending.operationId);
+      yield* withLibraryDatabase(
+        f.path,
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          yield* sql`CREATE TRIGGER audit_failure BEFORE UPDATE ON library_audit_events BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END`;
+        }),
+      );
+      const failed = yield* writeLibrary(
+        f.home,
+        Effect.gen(function* () {
+          yield* (yield* LibraryWriter).settleOperation(pending);
+        }),
+        { resume: pending.operationId },
+      ).pipe(Effect.flip);
+      assert.strictEqual(failed._tag, "LibrarySqlError");
+      assert.deepStrictEqual(yield* loadOperations(f.home), [pending]);
+      assert.strictEqual((yield* readLibraryAudit(f.home)).length, 1);
+      assert.deepStrictEqual(
+        yield* libraryHistoryAction(f.home, "resume", pending.operationId),
+        action,
+      );
+      yield* withLibraryDatabase(
+        f.path,
+        Effect.gen(function* () {
+          yield* (yield* SqlClient.SqlClient)`DROP TRIGGER audit_failure`;
+        }),
+      );
+      yield* writeLibrary(
+        f.home,
+        Effect.gen(function* () {
+          yield* (yield* LibraryWriter).settleOperation(pending);
+        }),
+        { resume: pending.operationId },
+      );
+      assert.deepStrictEqual(yield* loadOperations(f.home), []);
+      assert.strictEqual((yield* readLibraryAudit(f.home))[1]?.eventId, action.eventId);
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("interruption after committed state needs no delivery finalizer or startup retry", () =>
   Effect.gen(function* () {
-    const f = yield* fixture();
+    const f = yield* fixture;
     const committed = yield* Deferred.make<void>();
-    const owner = yield* Effect.flatMap(Library.Service, Effect.succeed).pipe(
-      Effect.provide(f.layer),
-    );
+    const owner = yield* Library.Service.pipe(Effect.provide(f.layer));
     const writing = yield* writeLibrary(
       f.home,
       Effect.gen(function* () {
@@ -469,95 +240,53 @@ it.effect("preserves caller interruption after committed state and settles histo
       }),
     ).pipe(Effect.forkChild);
     yield* Deferred.await(committed);
+    assert.strictEqual((yield* readLibraryAudit(f.home)).length, 1);
     yield* Fiber.interrupt(writing);
     const exit = yield* Fiber.await(writing);
     assert.isTrue(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause));
     yield* writeLibrary(f.home, Effect.void);
-    const after = yield* owner.read;
-    assert.strictEqual(after._tag, "Present");
-    if (after._tag === "Present") assert.strictEqual(after.state.collections.length, 1);
-    assert.strictEqual((yield* owner.history).events.length, 1);
-    assert.isUndefined(
-      (yield* readEnvelope(yield* f.fs.readFileString(f.statePath))).historyDelivery,
-    );
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("does not recover an interrupted history delivery as a successful retry", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    // A known storage failure keeps a committed event queued.
-    yield* f.fs.makeDirectory(f.logPath, { recursive: true });
-    yield* Effect.flatMap(Library.Service, (owner) => owner.import.collection(f.request)).pipe(
-      Effect.provide(f.layer),
-    );
-    yield* f.fs.remove(f.logPath, { recursive: true });
-    const exit = yield* Effect.exit(
-      recoverLibraryHistory(f.home).pipe(
-        Effect.provideService(FileSystem.FileSystem, {
-          ...f.fs,
-          readFileString: (path, ...args) =>
-            path === f.logPath ? Effect.interrupt : f.fs.readFileString(path, ...args),
-        }),
-      ),
-    );
-    assert.isTrue(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause));
-    assert.strictEqual(
-      (yield* readEnvelope(yield* f.fs.readFileString(f.statePath))).historyDelivery?.pending
-        .length,
-      1,
-    );
-    yield* recoverLibraryHistory(f.home);
-    assert.isUndefined(
-      (yield* readEnvelope(yield* f.fs.readFileString(f.statePath))).historyDelivery,
-    );
+    assert.strictEqual((yield* loadLibrary(f.home)).collections.length, 1);
+    assert.strictEqual((yield* readLibraryAudit(f.home)).length, 1);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect(
-  "external audit corruption preserves committed writes and replays queued identities after archival",
+  "a normal owner mutation checks its own audit identity without reading unrelated corrupt history",
   () =>
     Effect.gen(function* () {
-      const f = yield* fixture();
-      const owner = yield* Library.Service.pipe(Effect.provide(f.layer));
-      yield* owner.import.collection(f.request);
-      const delivered = (yield* owner.history).events;
-      const damaged = `${yield* f.fs.readFileString(f.logPath)}{ externally damaged tail`;
-      yield* f.fs.writeFileString(f.logPath, damaged);
-
-      // Two actual owner mutations still commit; only their history delivery is blocked.
-      yield* owner.remove({ query: "review", dryRun: false });
-      yield* owner.import.collection(f.request);
-      const before = yield* owner.read;
-      assert.strictEqual(before._tag, "Present");
-      const queued = (yield* readEnvelope(yield* f.fs.readFileString(f.statePath))).historyDelivery!
-        .pending;
-      assert.strictEqual(queued.length, 2);
-      assert.strictEqual(new Set(queued.map((item) => item.event.eventId)).size, 2);
-      const failure = yield* Effect.flip(owner.history);
-      assert.strictEqual(failure._tag, "LibraryAuditInvalid");
-      if (failure._tag === "LibraryAuditInvalid") {
-        assert.strictEqual(failure.path, f.logPath);
-        assert.strictEqual(failure.line, delivered.length + 1);
-      }
-      assert.deepStrictEqual(yield* owner.recovery.list, []);
-      assert.strictEqual(yield* f.fs.readFileString(f.logPath), damaged);
-
-      // Execute the reported recovery contract explicitly; SKIT never discards damaged bytes itself.
-      const archive = `${f.logPath}.damaged`;
-      yield* f.fs.rename(f.logPath, archive);
-      const recovered = yield* Library.Service.pipe(Effect.provide(f.layer));
-      assert.strictEqual((yield* recovered.read).revision, before.revision);
-      assert.deepStrictEqual(
-        (yield* recovered.history).events,
-        queued.map((item) => item.event),
-      );
-      assert.strictEqual(yield* f.fs.readFileString(archive), damaged);
-      assert.isUndefined(
-        (yield* readEnvelope(yield* f.fs.readFileString(f.statePath))).historyDelivery,
-      );
-      const log = yield* f.fs.readFileString(f.logPath);
-      yield* recoverLibraryHistory(f.home);
-      assert.strictEqual(yield* f.fs.readFileString(f.logPath), log);
+      const f = yield* fixture;
+      yield* Effect.gen(function* () {
+        const owner = yield* Library.Service;
+        yield* owner.import.collection(f.request);
+        const original = (yield* readLibraryAudit(f.home))[0];
+        if (!original) return assert.fail("Missing imported audit");
+        yield* withLibraryDatabase(
+          f.path,
+          Effect.gen(function* () {
+            const sql = yield* SqlClient.SqlClient;
+            yield* sql`UPDATE library_audit_events SET document='{' WHERE event_id=${original.eventId}`;
+          }),
+        );
+        const result = yield* owner.setup([], { base: yield* owner.read });
+        assert.strictEqual(result._tag, "Done");
+        assert.strictEqual(
+          (yield* Effect.flip(readLibraryAudit(f.home)))._tag,
+          "LibraryAuditInvalid",
+        );
+        yield* withLibraryDatabase(
+          f.path,
+          Effect.gen(function* () {
+            const sql = yield* SqlClient.SqlClient;
+            assert.deepStrictEqual(
+              yield* sql`SELECT document FROM library_audit_events WHERE event_id=${original.eventId}`,
+              [{ document: "{" }],
+            );
+            const rows =
+              yield* sql`SELECT document FROM library_audit_events WHERE event_id<>${original.eventId}`;
+            assert.strictEqual(rows.length, 1);
+          }),
+          true,
+        );
+      }).pipe(Effect.provide(f.layer));
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
