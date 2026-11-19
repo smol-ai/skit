@@ -72,6 +72,7 @@ describe("skit author sync", () => {
             const revision: History.Revision = {
               tree: yield* History.treeHash([]),
               parents: [],
+              edits: {},
               author: { device: makeMachineId(), at: 0 },
             };
             const id = yield* History.revisionId(revision);

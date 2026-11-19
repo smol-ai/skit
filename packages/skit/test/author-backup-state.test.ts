@@ -273,7 +273,7 @@ it.effect(
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-test("sync checkpoint types exclude null-base completion and caller-selected recovery destinations", () => {
+test("sync checkpoint types exclude null-base completion and caller-selected recovery states", () => {
   type Change = Parameters<AuthorHistoryShape["syncState"]["save"]>[2];
   type Normal = Extract<Change, { readonly to: unknown }>;
   expectTypeOf<Extract<Normal["from"], typeof Sync.Writing.Type>>().toBeNever();
@@ -285,6 +285,7 @@ test("sync checkpoint types exclude null-base completion and caller-selected rec
       readonly from: (typeof Sync.Writing.Type)["from"];
       readonly to: (typeof Sync.Writing.Type)["to"];
     };
+    readonly mergedRevision?: (typeof Sync.Sending.Type)["revision"];
   }>();
 });
 

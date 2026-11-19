@@ -215,7 +215,12 @@ it.effect("records a revision once, reads it back, and never moves current", () 
   withRegistry(({ skits }) =>
     Effect.gen(function* () {
       yield* skits.create({ payload: { ...params, visibility: "private" } });
-      const posted = yield* revisionRequest();
+      const request = yield* revisionRequest();
+      const revision = {
+        ...request.revision,
+        edits: { "skit.json": 1, "skills/review/SKILL.md": 2 },
+      };
+      const posted = { ...request, revision, id: yield* History.revisionId(revision) };
       expect(yield* skits.post({ params, payload: posted })).toEqual({
         id: posted.id,
         diagnostics: [],
@@ -278,6 +283,24 @@ it.effect("rejects a tree or revision whose identity does not match", () =>
         ),
       ).toEqual({ error: "PARENT_MISSING" });
       expect(yield* countRows("revisions")).toBe(0);
+    }),
+  ),
+);
+
+it.effect("rejects missing or unrelated path edit times before recording revisions", () =>
+  withRegistry(({ skits }) =>
+    Effect.gen(function* () {
+      yield* skits.create({ payload: { ...params, visibility: "private" } });
+      const request = yield* revisionRequest();
+      for (const edits of [{}, { ...request.revision.edits, unrelated: 1000 }]) {
+        const revision = { ...request.revision, edits };
+        const payload = { ...request, revision, id: yield* History.revisionId(revision) };
+        expect(yield* Effect.flip(skits.post({ params, payload }))).toEqual({
+          error: "EDIT_TIMES_MISMATCH",
+        });
+      }
+      expect(yield* countRows("revisions")).toBe(0);
+      expect(yield* countRows("revision_trees")).toBe(0);
     }),
   ),
 );

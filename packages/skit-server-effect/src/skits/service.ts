@@ -60,6 +60,7 @@ class InvalidRevision extends Schema.TaggedError<
     "PATH_COLLISION",
     "TREE_HASH_MISMATCH",
     "REVISION_ID_MISMATCH",
+    "EDIT_TIMES_MISMATCH",
     "PARENT_MISSING",
     "REVISION_MISSING",
   ]),
@@ -169,6 +170,7 @@ const StoredRevision = Schema.Struct({
   tree_hash: Schema.String,
   author_device: Schema.String,
   author_at: Schema.Int,
+  edits_json: Schema.fromJsonString(History.EditTimes),
   diagnostics_json: Schema.fromJsonString(skitValidationDiagnosticsSchema),
 });
 const StoredParent = Schema.Struct({ revision_id: Schema.String, parent_id: Schema.String });
@@ -253,6 +255,7 @@ export const layer = Layer.effect(
             .filter(({ revision_id }) => revision_id === row.revision_id)
             .map(({ parent_id }) => parent_id),
           author: { device: row.author_device, at: row.author_at },
+          edits: row.edits_json,
         }).pipe(
           databaseError("decode revision"),
           Effect.map((revision) => ({
@@ -333,6 +336,8 @@ export const layer = Layer.effect(
           return yield* new InvalidRevision({ code: "TREE_HASH_MISMATCH" });
         if ((yield* History.revisionId(revision)) !== id)
           return yield* new InvalidRevision({ code: "REVISION_ID_MISMATCH" });
+        if (History.editTimePaths(tree, revision.edits).length)
+          return yield* new InvalidRevision({ code: "EDIT_TIMES_MISMATCH" });
 
         const recorded = yield* db(
           "find recorded revision",
@@ -414,10 +419,10 @@ export const layer = Layer.effect(
                   ),
                 ]),
             sql`INSERT INTO revisions
-                (owner_slug, skit_slug, revision_id, tree_hash, author_device, author_at,
+                (owner_slug, skit_slug, revision_id, tree_hash, author_device, author_at, edits_json,
                  descriptor_json, diagnostics_json, credential_id, created_at)
                 VALUES (${owner}, ${slug}, ${id}, ${revision.tree}, ${revision.author.device},
-                  ${revision.author.at}, ${JSON.stringify(descriptor)},
+                  ${revision.author.at}, ${JSON.stringify(revision.edits)}, ${JSON.stringify(descriptor)},
                   ${JSON.stringify(diagnostics)}, ${credentialId ?? null}, ${now})
                 ON CONFLICT DO NOTHING`,
             ...revision.parents.map(
@@ -462,7 +467,7 @@ export const layer = Layer.effect(
       function* (owner: string, slug: string, id: History.RevisionId) {
         const rows = yield* db(
           "read revision",
-          sql`SELECT revision_id, tree_hash, author_device, author_at, diagnostics_json,
+          sql`SELECT revision_id, tree_hash, author_device, author_at, edits_json, diagnostics_json,
                 descriptor_json
               FROM revisions
               WHERE owner_slug = ${owner} AND skit_slug = ${slug} AND revision_id = ${id}`,
@@ -531,7 +536,7 @@ export const layer = Layer.effect(
                 JOIN reachable r ON p.revision_id = r.revision_id
                 WHERE p.owner_slug = ${owner} AND p.skit_slug = ${slug}
             )
-            SELECT d.revision_id, d.tree_hash, d.author_device, d.author_at, d.diagnostics_json
+            SELECT d.revision_id, d.tree_hash, d.author_device, d.author_at, d.edits_json, d.diagnostics_json
             FROM revisions d JOIN reachable USING (revision_id)
             WHERE d.owner_slug = ${owner} AND d.skit_slug = ${slug}
             ORDER BY d.author_at DESC, d.revision_id DESC

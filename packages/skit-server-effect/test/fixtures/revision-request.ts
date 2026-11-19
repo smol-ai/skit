@@ -33,6 +33,11 @@ export const revisionRequest = Effect.fn("Fixture.revisionRequest")(function* (
   parents: ReadonlyArray<History.RevisionId> = [],
   at = 1,
 ) {
-  const revision = { tree: yield* History.treeHash(tree), parents, author: { device, at } };
+  const revision = {
+    tree: yield* History.treeHash(tree),
+    parents,
+    author: { device, at },
+    edits: Object.fromEntries(tree.map((entry) => [entry.path.normalize("NFC"), at])),
+  };
   return { id: yield* History.revisionId(revision), revision, tree };
 });

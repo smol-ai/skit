@@ -47,10 +47,11 @@ separate decision record, and no single winner per file.
 ### Store: trees and revisions
 
 A `Tree` maps normalized paths to file contents and modes. Its identity is its hash. A
-`Revision` is `{ tree, parents, author }`, where `author` is `{ device, at }`. An edit has one
+`Revision` is `{ tree, parents, author, edits }`, where `author` is `{ device, at }` and
+`edits` records each path's observed edit time. An edit has one
 parent, a merge has two, and the first revision has none.
 
-A revision's identity is the hash of its tree, parents and author. Recording the same revision
+A revision's identity is the hash of its tree, parents, author and edit times. Recording the same revision
 twice yields the same identity, so retries are idempotent by construction. Because `author`
 includes the time, A → B → A is three revisions that share two trees, as ADR-0025 requires.
 
@@ -58,6 +59,14 @@ One `Store` interface (`put`, `get`, `commit`, `revision`, `ancestors`) serves b
 and the Registry. On the device it holds observations, sync bases and ADR-0026 compositions. On
 the Registry it holds Draft history. The edit time of each path is read from the history,
 rather than taken from the latest observation of the whole workspace.
+
+Recording an observation carries forward the time of each unchanged path. Normalizing an
+observation for upload and scanning files copied by sync inherit those paths' times from the
+source revision. A merge inherits the times of matching parent entries; synthesized content
+uses the latest contributing path edit, not the merge's wall-clock time. Structural overlaps
+use the latest edit within the conflicting subtree. These times travel with the revision, so
+a shallow device history does not change the winner. They are device-observed times, not
+server ordering, and do not correct clock skew between devices.
 
 ### Remote: the Registry protocol
 
@@ -141,11 +150,13 @@ ADR-0026 is unchanged, except that compositions are trees in the device `Store`.
 Rows written before this branch become revisions whose only parent is the previous accepted
 row. Their author is unknown, as ADR-0025 already notes.
 
-## Open question
+## Overlap policy
 
-The overlap rule is now one chooser that `Sync` passes to `Merge.resolve`. Choosing it
-(latest edit or later sync) remains a separate product decision. The rule itself stays behind
-that one boundary, as ADR-0025 requires.
+The current author overlap rule uses the later observed edit at the conflicting path,
+with an edit winning over a concurrent deletion and this device breaking equal-time ties.
+Sync and server order do not renew an edit. Skill moves align the files and their edit times
+together. The author merge owns this rule and the resulting provenance; the generic sync
+engine records its result. Product confirmation with swyx remains separately tracked in Arc.
 
 ## Consequences
 

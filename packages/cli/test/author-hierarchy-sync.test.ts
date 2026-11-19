@@ -9,6 +9,134 @@ import { testPlatformLayer } from "./helpers/platform.js";
 
 describe("skit author sync", () => {
   describe("Combining edits", () => {
+    describe("An unrelated later edit does not renew an older conflicting file.", () => {
+      for (const first of ["a", "b"] as const)
+        for (const interrupted of [false, true])
+          it.effect(
+            `the later edit to X wins with ${first} first, interrupted=${interrupted}`,
+            () =>
+              Effect.gen(function* () {
+                const world = yield* makeAuthorSyncWorld();
+                yield* world.connect();
+                yield* world.a.edit("x.txt", "base X\n");
+                yield* world.a.edit("y.txt", "base Y\n");
+                yield* world.a.sync();
+                yield* world.b.sync();
+                yield* world.c.sync();
+                yield* TestClock.adjust("1 minute");
+                yield* world.a.edit("x.txt", "A older X\n");
+                yield* refreshWorkspace(world.a.workspace).pipe(
+                  Effect.provide(authorLayer(world.a.home)),
+                );
+                yield* TestClock.adjust("1 minute");
+                yield* world.b.edit("x.txt", "B later X\n");
+                yield* refreshWorkspace(world.b.workspace).pipe(
+                  Effect.provide(authorLayer(world.b.home)),
+                );
+                yield* TestClock.adjust("30 seconds");
+                yield* world.c.edit("x.txt", "C latest X\n");
+                yield* refreshWorkspace(world.c.workspace).pipe(
+                  Effect.provide(authorLayer(world.c.home)),
+                );
+                yield* TestClock.adjust("30 seconds");
+                yield* world.a.edit("y.txt", "A latest Y\n");
+                yield* refreshWorkspace(world.a.workspace).pipe(
+                  Effect.provide(authorLayer(world.a.home)),
+                );
+                yield* world.a.restart();
+                yield* world.b.restart();
+                const second = first === "a" ? "b" : "a";
+                yield* world[first].sync();
+                if (interrupted) {
+                  const fs = yield* FileSystem.FileSystem;
+                  const target = join(world[second].workspace, first === "a" ? "y.txt" : "x.txt");
+                  let stopped = false;
+                  const result = yield* Effect.exit(
+                    world[second].sync().pipe(
+                      Effect.provideService(FileSystem.FileSystem, {
+                        ...fs,
+                        link: Effect.fn(function* (from, to) {
+                          yield* fs.link(from, to);
+                          if (to === target && !stopped) {
+                            stopped = true;
+                            return yield* Effect.die("fixture exited after replacing a file");
+                          }
+                        }),
+                      }),
+                    ),
+                  );
+                  expect(stopped).toBe(true);
+                  expect(result).toMatchObject({
+                    _tag: "Failure",
+                    cause: {
+                      reasons: [
+                        {
+                          _tag: "Die",
+                          defect: "fixture exited after replacing a file",
+                        },
+                      ],
+                    },
+                  });
+                  yield* world[second].restart();
+                }
+                yield* world[second].sync();
+                yield* world[first].sync();
+                for (const device of [world.a, world.b]) {
+                  expect(yield* device.read("x.txt")).toBe("B later X\n");
+                  expect(yield* device.read("y.txt")).toBe("A latest Y\n");
+                }
+                // C's edit predates the merge/pull but follows B's edit. Sync's own
+                // writes must not make B's older X appear newly authored.
+                yield* TestClock.adjust("1 minute");
+                yield* world.c.restart();
+                yield* world.c.sync();
+                yield* world.a.sync();
+                yield* world.b.sync();
+                for (const device of [world.a, world.b, world.c]) {
+                  expect(yield* device.read("x.txt")).toBe("C latest X\n");
+                  expect(yield* device.read("y.txt")).toBe("A latest Y\n");
+                }
+                expect(yield* world.missing(yield* world.copies())).toEqual([]);
+              }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+          );
+    });
+    describe("Per-path times follow a skill rename during a conflicting edit.", () => {
+      for (const first of ["a", "b"] as const)
+        it.effect(`the later edit follows the renamed skill with ${first} syncing first`, () =>
+          Effect.gen(function* () {
+            const world = yield* makeAuthorSyncWorld();
+            const fs = yield* FileSystem.FileSystem;
+            const skill = (name: string, body: string) =>
+              `---\nname: ${name}\ndescription: Release notes.\n---\n# Notes\n${body}\nKeep them short.\n`;
+            yield* world.connect();
+            yield* world.a.edit("extra/notes/SKILL.md", skill("notes", "base"));
+            yield* world.a.sync();
+            yield* world.b.sync();
+            yield* TestClock.adjust("1 minute");
+            yield* fs.rename(
+              join(world.a.workspace, "extra/notes"),
+              join(world.a.workspace, "extra/changelog"),
+            );
+            yield* world.a.edit("extra/changelog/SKILL.md", skill("changelog", "A older body"));
+            yield* refreshWorkspace(world.a.workspace).pipe(
+              Effect.provide(authorLayer(world.a.home)),
+            );
+            yield* TestClock.adjust("1 minute");
+            yield* world.b.edit("extra/notes/SKILL.md", skill("notes", "B later body"));
+            yield* refreshWorkspace(world.b.workspace).pipe(
+              Effect.provide(authorLayer(world.b.home)),
+            );
+            const second = first === "a" ? "b" : "a";
+            yield* world[first].sync(false, true);
+            yield* world[second].sync(false, true);
+            yield* world[first].sync(false, true);
+            for (const device of [world.a, world.b])
+              expect(yield* device.read("extra/changelog/SKILL.md")).toBe(
+                skill("changelog", "B later body"),
+              );
+          }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+        );
+    });
     describe("For overlapping edits, the version observed later wins.", () => {
       for (const winner of ["file", "directory"] as const)
         for (const first of ["a", "b"] as const)

@@ -52,6 +52,7 @@ import {
   type WorkspaceLease,
   type WorkspaceRoot,
 } from "./workspace.js";
+import { AuthorWorkspaceInvariantFailed } from "./workspace-contracts.js";
 import { makeHistoryStore } from "./history-store.js";
 import { fileBytesPath } from "../artifact/file-bytes.js";
 import { writeHistoryEvent } from "./history-journal.js";
@@ -127,10 +128,14 @@ export interface AuthorHistoryShape {
   };
   /**
    * Scan the workspace verbatim until stable, store its tree, and record a revision when the tree
-   * changed, with a journal event in one SQLite transaction. An unchanged scan returns the latest
-   * revision and records nothing. Needs no lease: it writes only home state.
+   * changed, with a journal event in one SQLite transaction. An ordinary unchanged scan records
+   * nothing. After sync, source supplies copied paths' times, correcting an earlier background
+   * scan if needed. Needs no lease: it writes only home state.
    */
-  readonly refresh: (root: WorkspaceRoot) => Effect.Effect<SavedRevision, RefreshError>;
+  readonly refresh: (
+    root: WorkspaceRoot,
+    source?: History.RevisionId,
+  ) => Effect.Effect<SavedRevision, RefreshError>;
   /** Store a tree (immutable, content-addressed, idempotent). */
   readonly saveTree: (
     tree: History.Tree,
@@ -264,7 +269,10 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
    * .gitignore remain in effect. Returning to older content records a new revision that shares
    * the older tree.
    */
-  const refresh = Effect.fn("AuthorHistory.refresh")(function* (root: WorkspaceRoot) {
+  const refresh = Effect.fn("AuthorHistory.refresh")(function* (
+    root: WorkspaceRoot,
+    source?: History.RevisionId,
+  ) {
     const insideRoot = (candidatePath: string) =>
       candidatePath === root || candidatePath.startsWith(`${root}${path.sep}`);
     if (insideRoot(home))
@@ -324,12 +332,18 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
         if (unchanged || Result.isFailure(identity)) {
           // Verify the stored tree, and keep the bytes even when there is no device to record as.
           yield* engineStore.putTree(tree);
-          if (previous && unchanged) return { ...previous, treeHash };
+          if (previous && unchanged && source === undefined) return { ...previous, treeHash };
         }
-        const recorded = yield* History.record(engineStore, tree, previous ? [previous.id] : [], {
-          device: yield* Effect.fromResult(identity),
-          at: yield* Clock.currentTimeMillis,
-        });
+        const recorded = yield* History.record(
+          engineStore,
+          tree,
+          previous ? [previous.id] : [],
+          {
+            device: yield* Effect.fromResult(identity),
+            at: yield* Clock.currentTimeMillis,
+          },
+          { source },
+        );
         return { ...recorded, treeHash };
       }).pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure));
 
@@ -447,15 +461,33 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
     request: Sync.WriteRequest,
   ) {
     const change = structuredClone(request);
-    const writing =
-      "trees" in change
-        ? Sync.Writing.make({ ...change.from, ...change.trees, merged: true })
-        : change.to;
     const savedKey = { ...key };
     yield* lease.revision;
     const workspace = yield* workspaces.read(lease.root);
     if (!Option.exists(workspace.identity, (identity) => identity.workspaceId === key.workspaceId))
       return yield* new AuthorWorkspaceConflict({ root: lease.root, found: workspace });
+    let resumed = "trees" in change ? change.from.next : undefined;
+    if ("trees" in change && change.mergedRevision !== undefined) {
+      const result = yield* engineStore
+        .revision(change.mergedRevision)
+        .pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure));
+      const target =
+        change.from.next._tag === "Sending" ? change.from.next.revision : change.from.next.base;
+      if (result.tree !== change.trees.to || !result.parents.includes(target))
+        return yield* Effect.die(
+          new AuthorWorkspaceInvariantFailed({
+            root: lease.root,
+            reason: { _tag: "TreesDiffer", key: savedKey },
+          }),
+        );
+      // Recovery can advance only a descendant of its original destination;
+      // callers cannot choose a different compare-and-swap base or completion state.
+      resumed = Sync.Sending.make({ base: change.from.next.base, revision: change.mergedRevision });
+    }
+    const writing =
+      "trees" in change
+        ? Sync.Writing.make({ ...change.from, ...change.trees, next: resumed!, merged: true })
+        : change.to;
     // Load the exact saved trees once. They remain private to the returned operation.
     const trees = yield* Effect.all({
       from: engineStore.tree(writing.from),
@@ -539,8 +571,8 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
         ),
       reset: resetRemovalGrace,
     },
-    refresh: (root) =>
-      refresh(root).pipe(
+    refresh: (root, source) =>
+      refresh(root, source).pipe(
         Effect.onError(() => resetRemovalGrace(root)),
         Effect.provide(context),
       ),

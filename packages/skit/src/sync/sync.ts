@@ -17,7 +17,7 @@
  * - the state names the revision being sent before the move, so an unknown outcome is retried;
  * - Writing is saved before files change, and stays saved until the write finishes.
  */
-import { Clock, DateTime, Effect, Option, Schema, Stream } from "effect";
+import { Clock, Effect, Option, Schema, Stream } from "effect";
 import * as History from "../history/history.js";
 import * as Merge from "./merge.js";
 import { TreeEntry } from "../artifact/tree-entry.js";
@@ -232,7 +232,15 @@ const loadRevision = Effect.fn("Sync.loadRevision")(function* (
   id: History.RevisionId,
 ) {
   const revision = yield* store.revision(id);
-  return { id, revision, tree: yield* store.tree(revision.tree) } satisfies LoadedRevision;
+  const tree = yield* store.tree(revision.tree);
+  const paths = History.editTimePaths(tree, revision.edits);
+  if (paths.length)
+    return yield* new History.StoreCorrupt({
+      kind: "revision",
+      hash: id,
+      reason: { _tag: "EditTimesMismatch", paths },
+    });
+  return { id, revision, tree } satisfies LoadedRevision;
 });
 
 /**
@@ -345,46 +353,6 @@ const loadCurrentInput = Effect.fn("Sync.loadCurrentInput")(function* <E>({
   return landed ? { _tag: "Idle", ...common, base: sent } : { _tag: "Sending", ...common, sent };
 });
 
-/**
- * When a revision's content was last edited, in milliseconds. An edit was made when it was
- * recorded; a merge was not authored at one time, so it is as recent as its latest parent. Unknown
- * while a parent is missing from `known`.
- */
-const lastEdit = (
-  known: ReadonlyMap<History.RevisionId, History.Revision>,
-  id: History.RevisionId,
-): Option.Option<number> =>
-  Option.flatMap(Option.fromUndefinedOr(known.get(id)), (revision) =>
-    revision.parents.length < 2
-      ? Option.some(revision.author.at)
-      : Option.map(Option.all(revision.parents.map((parent) => lastEdit(known, parent))), (times) =>
-          Math.max(...times),
-        ),
-  );
-
-/** {@link lastEdit} for a revision, reading a merge's ancestry from the Registry as needed. */
-const editedAt = Effect.fn("Sync.editedAt")(function* <E>(
-  remote: Remote<E>,
-  start: LoadedRevision,
-) {
-  if (start.revision.parents.length < 2) return DateTime.makeUnsafe(start.revision.author.at);
-  const known = yield* remote.ancestors(start.id).pipe(
-    Stream.scan(
-      (): ReadonlyMap<History.RevisionId, History.Revision> => new Map(),
-      (known, entry) => new Map(known).set(entry.id, entry.revision),
-    ),
-    Stream.takeUntil((known) => Option.isSome(lastEdit(known, start.id))),
-    Stream.runLast,
-  );
-  // An incomplete history leaves only the merge's own time.
-  return DateTime.makeUnsafe(
-    Option.getOrElse(
-      Option.flatMap(known, (found) => lastEdit(found, start.id)),
-      () => start.revision.author.at,
-    ),
-  );
-});
-
 type Outcome =
   | { readonly status: "up_to_date"; readonly revision: History.RevisionId }
   | {
@@ -403,12 +371,13 @@ type Outcome =
     }
   | { readonly status: "blocked"; readonly removal: Removal };
 
-/** A fresh write selects its destination; recovery can only replace the pending trees. */
+/** Recovery keeps the pending destination, or records a merged send before changing files. */
 export type WriteRequest =
   | { readonly from: typeof Idle.Type | typeof Sending.Type; readonly to: typeof Writing.Type }
   | {
       readonly from: typeof Writing.Type;
       readonly trees: { readonly from: History.TreeHash; readonly to: History.TreeHash };
+      readonly mergedRevision?: History.RevisionId;
     };
 
 export interface RunOptions<Prepared, SaveError, WriteError, R, RemoteError> {
@@ -419,15 +388,15 @@ export interface RunOptions<Prepared, SaveError, WriteError, R, RemoteError> {
   readonly state: SyncState;
   /** The device's tree, already in its store. */
   readonly local: History.TreeHash;
+  /** Raw observation whose unchanged paths supply the normalized send's edit times. */
+  readonly observation?: History.RevisionId;
   /** Who records the device's revision: this device, and when it first saw its files. */
   readonly author: History.Author;
-  /** How trees merge. */
-  readonly merger: Merge.Merger<History.Tree>;
-  /** The rule that decides every conflict, given when each side last edited. */
-  readonly decide: (editedAt: {
-    readonly ours: DateTime.Utc;
-    readonly theirs: DateTime.Utc;
-  }) => Merge.Decider;
+  /** Merge contents and their per-path provenance together. */
+  readonly merge: (
+    versions: Merge.Versions<History.Tree>,
+    editedAt: { readonly ours: History.EditTimes; readonly theirs: History.EditTimes },
+  ) => Merge.Clean<History.Tree> & { readonly edits: History.EditTimes };
   /** A removal the user approved; it applies only if the removal is exactly this one. */
   readonly approved?: Removal;
   /** Save a normal checkpoint transition; finishing Writing belongs to the prepared operation. */
@@ -522,7 +491,9 @@ export const run = <Prepared, SaveError, WriteError, R, RemoteError>(
 
     const send = Effect.fn("Sync.send")(function* (ours: LocalRevision, local: History.Tree) {
       if (ours._tag === "Sent") return ours.sent;
-      const recorded = yield* History.record(store, local, ours.parents, options.author);
+      const recorded = yield* History.record(store, local, ours.parents, options.author, {
+        source: options.observation,
+      });
       yield* remote.post(recorded.id, recorded.revision, local);
       return { ...recorded, tree: local } satisfies LoadedRevision;
     });
@@ -552,13 +523,18 @@ export const run = <Prepared, SaveError, WriteError, R, RemoteError>(
           // A real edit made during an unfinished write keeps its original ancestry, without
           // claiming the already downloaded files as new authored content.
           const edited = (yield* store.putTree(authored)) !== state.from;
+          let authoredEdits: History.EditTimes = {};
+          let authoredRevision: History.RevisionId | undefined;
           if (edited) {
             const recorded = yield* History.record(
               store,
               authored,
               state.base === null ? [] : [state.base],
               options.author,
+              { source: options.observation },
             );
+            authoredEdits = recorded.revision.edits;
+            authoredRevision = recorded.id;
             yield* remote.post(recorded.id, recorded.revision, authored);
           }
           // Apply pending changes to the authored input, not our own partial application.
@@ -568,26 +544,44 @@ export const run = <Prepared, SaveError, WriteError, R, RemoteError>(
             store,
             state.next._tag === "Sending" ? state.next.revision : state.next.base,
           );
-          const merged = Merge.runDecided(
-            options.merger,
+          const merged = options.merge(
             {
               base: Option.some(input.from),
               ours: Option.some(authored),
               theirs: Option.some(input.to),
             },
-            options.decide({
-              ours: DateTime.makeUnsafe(options.author.at),
-              theirs: yield* editedAt(remote, target),
-            }),
+            {
+              ours: authoredEdits,
+              theirs: target.revision.edits,
+            },
           );
           const files = History.sortTree(Option.getOrElse(merged.value, () => []));
           yield* checkTree(files);
           const hash = yield* store.putTree(files);
+          let mergedRevision: History.RevisionId | undefined;
+          if (
+            hash !== target.revision.tree ||
+            !Schema.toEquivalence(History.EditTimes)(merged.edits, target.revision.edits)
+          ) {
+            // The replay can combine an editor's changes with the downloaded tree.
+            // Save that result's provenance before files or the checkpoint advance;
+            // otherwise a restart would timestamp the merge as another authored edit.
+            const recorded = yield* History.record(
+              store,
+              files,
+              [target.id, ...(authoredRevision === undefined ? [] : [authoredRevision])],
+              { device: options.author.device, at: yield* Clock.currentTimeMillis },
+              { edits: merged.edits },
+            );
+            yield* remote.post(recorded.id, recorded.revision, files);
+            mergedRevision = recorded.id;
+          }
           // The merged tree is not the one the interrupted Writing names: save a Writing for
           // exactly this write before it starts, so it is recoverable too (A12).
           const prepared = yield* options.prepareWrite({
             from: state,
             trees: { from: progress.local.hash, to: hash },
+            ...(mergedRevision === undefined ? {} : { mergedRevision }),
           });
           const completed = yield* options.write(prepared, progress.local.tree, files);
           return yield* step(
@@ -688,24 +682,26 @@ export const run = <Prepared, SaveError, WriteError, R, RemoteError>(
             // LocalRevision is posted first, so the side a merge does not keep stays on the Registry.
             const ours = yield* send(next.ours, progress.local.tree);
             const theirs = next.theirs;
-            const merged = Merge.runDecided(
-              options.merger,
+            const merged = options.merge(
               {
                 base: Option.map(Option.fromNullishOr(next.base), (base) => base.tree),
                 ours: Option.some(ours.tree),
                 theirs: Option.some(theirs.tree),
               },
-              options.decide({
-                ours: yield* editedAt(remote, ours),
-                theirs: yield* editedAt(remote, theirs),
-              }),
+              {
+                ours: ours.revision.edits,
+                theirs: theirs.revision.edits,
+              },
             );
             const tree = History.sortTree(Option.getOrElse(merged.value, () => []));
             yield* checkTree(tree);
-            const recorded = yield* History.record(store, tree, [theirs.id, ours.id], {
-              device: options.author.device,
-              at: yield* Clock.currentTimeMillis,
-            });
+            const recorded = yield* History.record(
+              store,
+              tree,
+              [theirs.id, ours.id],
+              { device: options.author.device, at: yield* Clock.currentTimeMillis },
+              { edits: merged.edits },
+            );
             yield* remote.post(recorded.id, recorded.revision, tree);
             // Keep the file write recoverable before it can change anything. Once complete,
             // the merge is a send whose base is theirs until its move lands.

@@ -58,7 +58,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        include:
+          - { lane: unit, shard: 1, shards: 4 }
+          - { lane: unit, shard: 2, shards: 4 }
+          - { lane: unit, shard: 3, shards: 4 }
+          - { lane: unit, shard: 4, shards: 4 }
+          - { lane: subprocess, shard: 1, shards: 2 }
+          - { lane: subprocess, shard: 2, shards: 2 }
+          - { lane: author-sync, shard: 1, shards: 1 }
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -69,7 +76,7 @@ jobs:
           node-version: 24.22.1
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @smolai/skit exec vitest run --shard=${{ matrix.shard }}/4
+      - run: pnpm --filter @smolai/skit exec vitest run --config vitest.${{ matrix.lane }}.config.ts --shard=${{ matrix.shard }}/${{ matrix.shards }}
 
   package:
     runs-on: ubuntu-latest

@@ -55,13 +55,14 @@ const nativeMetadata = Effect.fn("Fixture.nativeHistoryEvidence")(
             if (hash === undefined) return { known, text: undefined, hashes };
             if (kind === "revision") {
               const rows =
-                yield* sql`SELECT tree_hash,author_device,author_at FROM author_revisions WHERE hash=${hash}`;
+                yield* sql`SELECT tree_hash,author_device,author_at,extra FROM author_revisions WHERE hash=${hash}`;
               if (rows[0] !== undefined) {
                 const row = yield* Schema.decodeUnknownEffect(
                   Schema.Struct({
                     tree_hash: Schema.String,
                     author_device: Schema.String,
                     author_at: Schema.Int,
+                    extra: Schema.String,
                   }),
                 )(rows[0]);
                 const parents = yield* Schema.decodeUnknownEffect(
@@ -75,6 +76,9 @@ const nativeMetadata = Effect.fn("Fixture.nativeHistoryEvidence")(
                   known: true,
                   hashes,
                   text: JSON.stringify({
+                    edits: (yield* Schema.decodeUnknownEffect(
+                      Schema.fromJsonString(Schema.Struct({ edits: History.EditTimes })),
+                    )(row.extra)).edits,
                     tree: row.tree_hash,
                     parents: parents.map((parent) => parent.parent_hash),
                     author: { device: row.author_device, at: row.author_at },

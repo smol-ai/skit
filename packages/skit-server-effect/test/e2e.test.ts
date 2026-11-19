@@ -350,6 +350,9 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
         const revision = {
           tree: yield* History.treeHash(remoteTree),
           parents: [current],
+          edits: Object.fromEntries(
+            remoteTree.map((entry) => [entry.path.normalize("NFC"), Date.now()]),
+          ),
           author: { device: remote.revision.author.device, at: Date.now() },
         };
         return { id: yield* History.revisionId(revision), revision, tree: remoteTree };

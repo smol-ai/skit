@@ -26,6 +26,8 @@ export const historyStoreFailure = Match.type<History.StoreError>().pipe(
             ContentHashMismatch: ({ actual }) => `content has hash ${actual}`,
             BlobMissing: ({ blob }) => `file blob ${blob} is missing`,
             BlobHashMismatch: ({ blob, actual }) => `file blob ${blob} has content hash ${actual}`,
+            EditTimesMismatch: ({ paths }) =>
+              `edit times do not match tree paths: ${paths.join(", ")}`,
           })}`,
         ],
         next: ["Keep the history files and restore the invalid content before syncing again."],

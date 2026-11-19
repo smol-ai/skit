@@ -200,16 +200,15 @@ save the Pending operation, routing and recovery evidence
 prepare recorded roots and execute recorded steps with durable checkpoints
         ↓
 save Done or Stopped, retaining evidence for recovery
-        ↓
-deliver the recorded history event and acknowledge it
 ```
 
-State saves include pending history-delivery evidence. Startup retries unfinished
-delivery with stable event identities, so interruption after appending an event
-does not duplicate it. Startup also resumes recorded Pending operations; changed
-user files cause a stopped outcome instead of silently acquiring new consent.
-This protocol can save several checkpoints. It is not a single final state write
-after all filesystem changes.
+Each accepted state or progress write accumulates its audit event in the same
+SQLite transaction. History hides an event while an operation it covers is
+Pending. There is no separate event delivery or acknowledgment. Legacy pending
+history-delivery evidence is handled only when importing released state files.
+Startup resumes recorded Pending operations; changed user files cause a stopped
+outcome instead of silently acquiring new consent. This protocol can save several
+checkpoints. It is not a single final state write after all filesystem changes.
 
 Foreign or drifted content is not silently overwritten. Materialization uses ownership markers and observed hashes to decide whether an operation is safe, a no-op, or a conflict.
 

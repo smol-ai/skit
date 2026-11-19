@@ -26,7 +26,8 @@ export const invariantFailure = (error: unknown) => {
           WriteNotOwned: () => "An author write used a checkpoint from another workspace lease",
           CheckpointChanged: () => "An author write used a checkpoint after another state change",
           WriteAlreadyUsed: () => "An author write operation was applied more than once",
-          TreesDiffer: () => "An author write supplied files outside its saved checkpoint",
+          TreesDiffer: () =>
+            "An author write supplied files or history outside its saved checkpoint",
         }),
       ],
       details: [Block.Fields({ rows: [{ label: "Workspace", value: [{ path: error.root }] }] })],

@@ -220,12 +220,7 @@ export const mergeAuthorTree: Merge.Merger<History.Tree> = Merge.via<
       ours: index(versions.ours),
       theirs: index(versions.theirs),
     };
-    const moved = followSkillMoves(trees);
-    // A rename into the other side's file must stay an explicit path conflict. Alignment
-    // must not invent a side containing both that file and the relocated descendants.
-    const aligned = Object.values(moved).some((side) => History.treePathIssue(Object.values(side)))
-      ? trees
-      : moved;
+    const aligned = followSkillMoves(trees);
     const files = (side: Readonly<Record<string, TreeFile>>) =>
       Object.values(side).sort((left, right) => left.path.localeCompare(right.path));
     return subtree(

@@ -97,8 +97,8 @@ it.effect(
             "INSERT INTO revision_tree_entries VALUES ('tree_fixture', 'skills/review/SKILL.md', 'file', 420, 'blob_fixture', 12, NULL)",
           ),
           env.DB.prepare(`INSERT INTO revisions VALUES
-        ('alice', 'tools', 'rev_one', 'tree_fixture', 'device_fixture', 1, 'null', '[]', 'pat_fixture', 'first'),
-        ('alice', 'tools', 'rev_two', 'tree_fixture', 'device_fixture', 2, 'null', '[]', 'pat_fixture', 'second')`),
+        ('alice', 'tools', 'rev_one', 'tree_fixture', 'device_fixture', 1, '{}', 'null', '[]', 'pat_fixture', 'first'),
+        ('alice', 'tools', 'rev_two', 'tree_fixture', 'device_fixture', 2, '{}', 'null', '[]', 'pat_fixture', 'second')`),
           env.DB.prepare(
             "INSERT INTO revision_parents VALUES ('alice', 'tools', 'rev_two', 0, 'rev_one')",
           ),

@@ -58,6 +58,7 @@ const prepared = Effect.gen(function* () {
   const revision: History.Revision = {
     tree: hash,
     parents: [missing, missing],
+    edits: Object.fromEntries(tree.map((entry) => [entry.path.normalize("NFC"), -100])),
     author: { device: makeMachineId(), at: -100 },
   };
   const id = yield* History.revisionId(revision);
@@ -188,7 +189,10 @@ it.effect(
             extra: string;
             author_extra: string;
           }>`SELECT extra,author_extra FROM author_revisions`)[0]!;
-          assert.strictEqual(revision.extra, JSON.stringify({ extension: { kept: null } }));
+          assert.strictEqual(
+            revision.extra,
+            JSON.stringify({ edits: f.revision.edits, extension: { kept: null } }),
+          );
           assert.strictEqual(
             revision.author_extra,
             JSON.stringify({ extension: { clock: "backwards" } }),

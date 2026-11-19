@@ -204,6 +204,7 @@ export const loadRevisionRows = Effect.fn("AuthorHistory.loadRevisionRows")(func
     }),
   );
   const revision = yield* Schema.decodeUnknownEffect(History.Revision)({
+    edits: extra.edits,
     tree: header.tree_hash,
     parents,
     author: { device: header.author_device, at: header.author_at },

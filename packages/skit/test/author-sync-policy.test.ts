@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { DateTime, Option } from "effect";
+import { Option } from "effect";
 import type * as History from "../src/history/history.js";
 import * as Merge from "../src/sync/merge.js";
-import { authorDecider, authorTree } from "../src/author/sync-policy.js";
+import { authorDecider, authorTree, mergeAuthorRevisions } from "../src/author/sync-policy.js";
 
 const entry = (path: string, text: string): History.Tree[number] => ({
   path,
@@ -15,7 +15,7 @@ const merge = (
   ours: History.Tree,
   theirs: History.Tree,
   exclusions: { excluded?: ReadonlyArray<string>; previouslyExcluded?: ReadonlyArray<string> } = {},
-  editedAt = { ours: DateTime.makeUnsafe(1), theirs: DateTime.makeUnsafe(1) },
+  editedAt = { ours: 1, theirs: 1 },
 ) =>
   Merge.runDecided(
     authorTree({
@@ -23,7 +23,10 @@ const merge = (
       previouslyExcluded: new Set(exclusions.previouslyExcluded),
     }),
     { base: Option.some(base), ours: Option.some(ours), theirs: Option.some(theirs) },
-    authorDecider(editedAt),
+    authorDecider({
+      ours: Object.fromEntries(ours.map((entry) => [entry.path, editedAt.ours])),
+      theirs: Object.fromEntries(theirs.map((entry) => [entry.path, editedAt.theirs])),
+    }),
   );
 const paths = (result: Merge.Clean<History.Tree>) =>
   Option.map(result.value, (tree) => tree.map((item) => item.path).sort());
@@ -84,13 +87,41 @@ describe("skit author sync", () => {
   });
   describe("Combining edits", () => {
     describe("For overlapping edits, the version observed later wins.", () => {
+      test("a renamed synthesized file carries the latest contributing path time", () => {
+        const skill = (name: string, body: string) =>
+          `---\nname: ${name}\ndescription: Release notes.\n---\n# Notes\n${body}\nKeep them short.\n`;
+        const result = mergeAuthorRevisions(
+          {
+            base: Option.some([entry("notes/SKILL.md", skill("notes", "base"))]),
+            ours: Option.some([entry("changelog/SKILL.md", skill("changelog", "older body"))]),
+            theirs: Option.some([entry("notes/SKILL.md", skill("notes", "later body"))]),
+          },
+          { ours: { "changelog/SKILL.md": 1 }, theirs: { "notes/SKILL.md": 2 } },
+        );
+        expect(result.value).toEqual(
+          Option.some([entry("changelog/SKILL.md", skill("changelog", "later body"))]),
+        );
+        expect(result.edits).toEqual({ "changelog/SKILL.md": 2 });
+      });
+      test("each conflicting path uses its own time", () => {
+        const result = Merge.runDecided(
+          authorTree({ excluded: new Set(), previouslyExcluded: new Set() }),
+          {
+            base: Option.some([entry("a", "base"), entry("b", "base")]),
+            ours: Option.some([entry("a", "ours"), entry("b", "ours")]),
+            theirs: Option.some([entry("a", "theirs"), entry("b", "theirs")]),
+          },
+          authorDecider({ ours: { a: 1, b: 4 }, theirs: { a: 2, b: 3 } }),
+        );
+        expect(result.value).toEqual(Option.some([entry("a", "theirs"), entry("b", "ours")]));
+      });
       test("an overlap keeps the later observed edit", () => {
         const later = merge(
           [entry("a.md", "base")],
           [entry("a.md", "ours")],
           [entry("a.md", "theirs")],
           {},
-          { ours: DateTime.makeUnsafe(1), theirs: DateTime.makeUnsafe(2) },
+          { ours: 1, theirs: 2 },
         );
         expect(later.value).toEqual(Option.some([entry("a.md", "theirs")]));
       });
@@ -102,7 +133,7 @@ describe("skit author sync", () => {
           [],
           [entry("a.md", "theirs")],
           {},
-          { ours: DateTime.makeUnsafe(5), theirs: DateTime.makeUnsafe(2) },
+          { ours: 5, theirs: 2 },
         );
         expect(deleted.value).toEqual(Option.some([entry("a.md", "theirs")]));
       });

@@ -5,6 +5,7 @@
  * the renamed skill.
  */
 import { Array, Equal, Option, Order, TextDiff } from "effect";
+import { treePathIssue } from "../../history/history.js";
 import type { TreeFile } from "../../artifact/tree-entry.js";
 import { decodeUtf8 } from "../../shared/text.js";
 
@@ -109,10 +110,10 @@ const skillMoves = (
 };
 
 /** Readonly<Record<string, TreeFile>> under each move's old folder, moved under its new one. A tree with files already there is left alone. */
-const relocate = (
-  files: Readonly<Record<string, TreeFile>>,
+const relocate = <A extends TreeFile>(
+  files: Readonly<Record<string, A>>,
   moves: ReadonlyArray<SkillMove>,
-): Readonly<Record<string, TreeFile>> => {
+): Readonly<Record<string, A>> => {
   const applicable = moves.filter((move) => within(files, move.to).size === 0);
   return Object.fromEntries(
     Object.entries(files).map(([path, file]) => {
@@ -128,10 +129,10 @@ const relocate = (
  * by old path. When both sides moved the same folder to different places, our move wins: the
  * device merging now breaks the tie.
  */
-export const followSkillMoves = (trees: {
-  base: Readonly<Record<string, TreeFile>>;
-  ours: Readonly<Record<string, TreeFile>>;
-  theirs: Readonly<Record<string, TreeFile>>;
+export const followSkillMoves = <A extends TreeFile>(trees: {
+  base: Readonly<Record<string, A>>;
+  ours: Readonly<Record<string, A>>;
+  theirs: Readonly<Record<string, A>>;
 }) => {
   const ours = skillMoves(trees.base, trees.ours);
   const theirsMoves = skillMoves(trees.base, trees.theirs);
@@ -143,9 +144,11 @@ export const followSkillMoves = (trees: {
       .map((other) => ({ from: move.to, to: other.to })),
   );
   const moves = [...ours, ...theirs];
-  return {
+  const moved = {
     base: relocate(trees.base, moves),
     ours: relocate(trees.ours, moves),
     theirs: relocate(trees.theirs, [...moves, ...renamedTwice]),
   };
+  // Alignment must not put a relocated child beneath the other side's file.
+  return Object.values(moved).some((side) => treePathIssue(Object.values(side))) ? trees : moved;
 };

@@ -4,8 +4,8 @@
 > replace this ADR's two pointers, retained alternatives, retry keys and revision kinds. The
 > recovery requirements here still stand.
 
-Status: accepted direction; client integration is in progress. The overlap winner
-rule remains provisional pending product confirmation (tracked in Arc).
+Status: accepted direction; client integration is in progress. ADR-0027 describes the
+current per-path observed-edit winner rule; product confirmation with swyx remains tracked in Arc.
 
 This builds on ADR-0012's device-local Author Workspace identity. An Author
 Workspace is a human-owned folder, independent of installed copies and any Git
@@ -67,15 +67,15 @@ today's head alone cannot prove an old operation was never accepted. First
 creation, unavailable ancestry and explicit restore/ABA intent remain hardening
 work.
 
-## Provisional conflict policy
+## Conflict policy
 
 First merge independent text changes. If a synthesized structured file fails
 syntax while both inputs parse, hand it to the overlap rule. Do not turn this
 check into a validation gate on independently authored invalid content.
 
-The provisional overlap rule is **the later synchronizing authored intent wins**,
-not the edit with a later device timestamp. A day-old offline edit can therefore
-win when it reconnects. Causal descendants win; edit beats concurrent deletion.
+The overlap rule is **the later observed edit at the conflicting path wins**,
+using the times stored with the revision. Synchronizing an old offline edit does
+not make it newer. Causal descendants win; edit beats concurrent deletion.
 The winner rule must remain replaceable behind one domain boundary. Same-point
 insertion union and agent-assisted merging are deferred product choices.
 
@@ -96,9 +96,8 @@ push that already retains the exact observation should not perform a duplicate
 retention round trip. A clean/no-op pass must not upload identical content.
 
 The acceptance chain orders backup acknowledgements. It must not be substituted
-for the provisional winner policy merely because an old archive uploads late.
-If a future confirmed policy needs per-path accepted authored ordering, its
-relationship to archival order must be decided explicitly.
+for the winner policy merely because an old archive uploads late. Per-path edit
+times remain independent of archival upload and acknowledgement order.
 
 ## Validation and remaining implementation
 

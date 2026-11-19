@@ -1,13 +1,13 @@
 import { NodeCrypto } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Data, DateTime, Effect, Option, Stream } from "effect";
+import { Data, Effect, Option, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { describe as group, expect as check, test } from "vitest";
 import * as History from "../src/history/history.js";
 import * as Sync from "../src/sync/sync.js";
-import type * as Merge from "../src/sync/merge.js";
+import * as Merge from "../src/sync/merge.js";
 import { FailureTypeId, type SkitFailure } from "../src/shared/failure.js";
-import { mergeAuthorTree } from "../src/author/merge/files.js";
+import { mergeAuthorRevisions } from "../src/author/sync-policy.js";
 import { makeMachineId } from "../src/library/entity-ids.js";
 import { type TreeEntry } from "../src/artifact/tree-entry.js";
 import { memoryStore } from "./helpers/memory-store.js";
@@ -33,7 +33,7 @@ describe("plan", () => {
     parents: ReadonlyArray<string> = [],
   ): Sync.LoadedRevision => ({
     id: revisionId(name),
-    revision: { tree: treeHash(name), parents: parents.map(revisionId), author },
+    revision: { tree: treeHash(name), parents: parents.map(revisionId), author, edits: {} },
     tree,
   });
   const local = (name: string, tree: History.Tree = []) => ({ hash: treeHash(name), tree });
@@ -318,10 +318,23 @@ const makeDevice = Effect.fn("Test.makeDevice")(function* (
           state: self.state,
           local,
           author: { device, at: options.at },
-          merger: options.merger ?? mergeAuthorTree,
-          // The later edit wins; this device breaks a tie.
-          decide: (editedAt) => () =>
-            DateTime.isGreaterThan(editedAt.theirs, editedAt.ours) ? "theirs" : "ours",
+          merge:
+            options.merger === undefined
+              ? mergeAuthorRevisions
+              : (versions, times) => {
+                  const merged = Merge.runDecided(options.merger!, versions, () => "ours");
+                  return {
+                    ...merged,
+                    edits: History.editTimes(
+                      Option.getOrElse(merged.value, () => []),
+                      [
+                        { tree: Option.getOrElse(versions.ours, () => []), edits: times.ours },
+                        { tree: Option.getOrElse(versions.theirs, () => []), edits: times.theirs },
+                      ],
+                      options.at,
+                    ),
+                  };
+                },
           ...(options.approved === undefined ? {} : { approved: options.approved }),
           save: ({ from, to: state }) =>
             Effect.sync(() => {
@@ -334,7 +347,18 @@ const makeDevice = Effect.fn("Test.makeDevice")(function* (
               expect(change.from).toEqual(self.state);
               const state =
                 "trees" in change
-                  ? Sync.Writing.make({ ...change.from, ...change.trees, merged: true })
+                  ? Sync.Writing.make({
+                      ...change.from,
+                      ...change.trees,
+                      next:
+                        change.mergedRevision === undefined
+                          ? change.from.next
+                          : Sync.Sending.make({
+                              base: change.from.next.base,
+                              revision: change.mergedRevision,
+                            }),
+                      merged: true,
+                    })
                   : change.to;
               self.state = state;
               saved.push(state);
@@ -409,8 +433,7 @@ describe("run", () => {
           state: b.state,
           local: yield* b.store.putTree(b.files),
           author: { device: makeMachineId(), at: 1 },
-          merger: mergeAuthorTree,
-          decide: () => () => "ours",
+          merge: mergeAuthorRevisions,
           save: ({ to: state }) =>
             Effect.sync(() => {
               b.state = state;
@@ -421,7 +444,18 @@ describe("run", () => {
               : Effect.sync(() => {
                   const state =
                     "trees" in change
-                      ? Sync.Writing.make({ ...change.from, ...change.trees, merged: true })
+                      ? Sync.Writing.make({
+                          ...change.from,
+                          ...change.trees,
+                          next:
+                            change.mergedRevision === undefined
+                              ? change.from.next
+                              : Sync.Sending.make({
+                                  base: change.from.next.base,
+                                  revision: change.mergedRevision,
+                                }),
+                          merged: true,
+                        })
                       : change.to;
                   b.state = state;
                   return state;
@@ -668,6 +702,7 @@ describe("run", () => {
             tree: yield* History.treeHash(tree),
             parents: [registry.registry.current!],
             author: { device: other, at: 100 + n },
+            edits: Object.fromEntries(tree.map((entry) => [entry.path, 100 + n])),
           };
           const id = yield* History.revisionId(revision);
           registry.registry.revisions.set(id, { revision, tree: History.sortTree(tree) });

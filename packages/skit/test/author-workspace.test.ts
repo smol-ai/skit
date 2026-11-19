@@ -6,6 +6,7 @@ import { Deferred, Effect, Exit, Fiber, FileSystem, Layer, Option, Scope, Schema
 import { join } from "node:path";
 import * as History from "../src/history/history.js";
 import * as Sync from "../src/sync/sync.js";
+import { makeMachineId } from "../src/library/entity-ids.js";
 import { scanAuthorSyncTree } from "../src/author/index.js";
 
 import { authorLayer } from "./helpers/author-history.js";
@@ -269,11 +270,12 @@ it.effect("preparation returns a write bound to its lease and private saved tree
       yield* history.saveTree(from);
       yield* history.saveTree(to);
       const idle = Sync.Idle.make({ base: null });
+      const pendingRevision = History.RevisionId.make(toHash);
       const writing = Sync.Writing.make({
         base: null,
         from: fromHash,
         to: toHash,
-        next: Sync.Sending.make({ base: null, revision: History.RevisionId.make(toHash) }),
+        next: Sync.Sending.make({ base: null, revision: pendingRevision }),
         merged: false,
       });
       const stale = yield* history.syncState.prepareWrite(lease, key, { from: idle, to: writing });
@@ -304,9 +306,41 @@ it.effect("preparation returns a write bound to its lease and private saved tree
         ),
       ).toMatchObject({ _tag: "AuthorWorkspaceConflict" });
       expect(yield* history.syncState.read(key)).toEqual(checkpoint);
+      const unrelated = yield* History.record(history.engineStore, to, [], {
+        device: makeMachineId(),
+        at: 1,
+      });
+      expect(
+        yield* Effect.exit(
+          history.syncState.prepareWrite(lease, key, {
+            from: writing,
+            trees: { from: fromHash, to: toHash },
+            mergedRevision: unrelated.id,
+          }),
+        ),
+      ).toMatchObject({
+        _tag: "Failure",
+        cause: {
+          reasons: [
+            {
+              _tag: "Die",
+              defect: {
+                _tag: "AuthorWorkspaceInvariantFailed",
+                reason: { _tag: "TreesDiffer" },
+              },
+            },
+          ],
+        },
+      });
+      expect(yield* history.syncState.read(key)).toEqual(checkpoint);
+      const mergedRevision = yield* history.engineStore.commit({
+        ...unrelated.revision,
+        parents: [pendingRevision],
+      });
       const current = yield* history.syncState.prepareWrite(lease, key, {
         from: writing,
         trees: { from: fromHash, to: toHash },
+        mergedRevision,
       });
       // Neither caller-owned tree data nor another lease can redirect the bound write.
       for (const tree of [from, to])
@@ -316,7 +350,9 @@ it.effect("preparation returns a write bound to its lease and private saved tree
         { concurrency: "unbounded" },
       );
       expect(attempts.map((exit) => exit._tag).sort()).toEqual(["Failure", "Success"]);
-      expect(yield* history.syncState.read(key)).toEqual(writing.next);
+      expect(yield* history.syncState.read(key)).toEqual(
+        Sync.Sending.make({ base: null, revision: mergedRevision }),
+      );
       expect(yield* f.fs.readFileString(join(f.root, "notes.txt"))).toBe("after\n");
       expect(yield* f.fs.exists(join(other.root, "notes.txt"))).toBe(false);
       expect(
