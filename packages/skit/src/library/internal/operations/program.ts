@@ -16,7 +16,7 @@ import type {
 
 export type ApplyStep = InstalledApply;
 export const same = (a: unknown, b: unknown) => canonicalJson(a) === canonicalJson(b);
-export const body = (value: LibraryState) => {
+const body = (value: LibraryState) => {
   const { installed_skills: _rows, ...state } = prepareLibrarySets(value);
   return state;
 };

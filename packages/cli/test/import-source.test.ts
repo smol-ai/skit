@@ -1,11 +1,11 @@
-import { describe } from "@effect/vitest";
+import { describe, it } from "@effect/vitest";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { Effect } from "effect";
+import { Effect, FileSystem } from "effect";
 import { savedLibrary } from "./helpers/saved-library.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
@@ -320,74 +320,77 @@ describe("skit add", () => {
       });
     });
 
-    test("GitHub add retains the Collection identity and label", async () => {
-      const workspace = await mkdtemp(join(tmpdir(), "skit-github-identity-e2e-"));
+    it.live("GitHub add retains the Collection identity and label", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const workspace = yield* fs.makeTempDirectoryScoped({
+          prefix: "skit-github-identity-e2e-",
+        });
 
-      const fixture = join(workspace, "fixture");
+        const fixture = join(workspace, "fixture");
 
-      const home = join(workspace, "home");
+        const home = join(workspace, "home");
 
-      const codexRoot = join(workspace, "codex");
+        const codexRoot = join(workspace, "codex");
 
-      await mkdir(join(fixture, "code-review"), { recursive: true });
+        yield* fs.makeDirectory(join(fixture, "code-review"), { recursive: true });
 
-      await writeFile(
-        join(fixture, "code-review", "SKILL.md"),
-        "---\nname: code-review\ndescription: Review code.\n---\n\n# Code Review\n",
-      );
-
-      for (const args of [
-        ["init", "-q"],
-        ["add", "."],
-        [
-          "-c",
-          "user.name=Test",
-          "-c",
-          "user.email=test@example.invalid",
-          "commit",
-          "-qm",
-          "fixture",
-        ],
-      ]) {
-        const committed = spawnSync("git", args, { cwd: fixture, encoding: "utf8" });
-        expect(committed.status, committed.stderr).toBe(0);
-      }
-
-      const run = (...args: string[]) =>
-        spawnSync(
-          process.execPath,
-          [bin, ...args, "--home", home, "--codex-root", codexRoot, "--json"],
-          {
-            encoding: "utf8",
-            env: {
-              ...process.env,
-              GIT_CONFIG_NOSYSTEM: "1",
-              GIT_CONFIG_GLOBAL: "/dev/null",
-              GIT_CONFIG_COUNT: "1",
-              GIT_CONFIG_KEY_0: `url.${fixture}.insteadOf`,
-              GIT_CONFIG_VALUE_0: "https://github.com/mattpocock/skills",
-            },
-          },
+        yield* fs.writeFileString(
+          join(fixture, "code-review", "SKILL.md"),
+          "---\nname: code-review\ndescription: Review code.\n---\n\n# Code Review\n",
         );
 
-      const added = run("add", "https://github.com/mattpocock/skills");
+        for (const args of [
+          ["init", "-q"],
+          ["add", "."],
+          [
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-qm",
+            "fixture",
+          ],
+        ]) {
+          const committed = spawnSync("git", args, { cwd: fixture, encoding: "utf8" });
+          expect(committed.status, committed.stderr).toBe(0);
+        }
 
-      expect(added.status, added.stderr).toBe(0);
+        const run = (...args: string[]) =>
+          spawnSync(
+            process.execPath,
+            [bin, ...args, "--home", home, "--codex-root", codexRoot, "--json"],
+            {
+              encoding: "utf8",
+              env: {
+                ...process.env,
+                GIT_CONFIG_NOSYSTEM: "1",
+                GIT_CONFIG_GLOBAL: "/dev/null",
+                GIT_CONFIG_COUNT: "1",
+                GIT_CONFIG_KEY_0: `url.${fixture}.insteadOf`,
+                GIT_CONFIG_VALUE_0: "https://github.com/mattpocock/skills",
+              },
+            },
+          );
 
-      const addedCollection = JSON.parse(added.stdout).data;
+        const added = run("add", "https://github.com/mattpocock/skills");
 
-      expect(addedCollection.collection_id).toEqual(expect.any(String));
+        expect(added.status, added.stderr).toBe(0);
 
-      const persisted = await Effect.runPromise(
-        savedLibrary(home).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-      );
+        const addedCollection = JSON.parse(added.stdout).data;
 
-      expect(
-        persisted.state.collections.some(
-          (entry: { label?: string }) => entry.label === "mattpocock/skills",
-        ),
-      ).toBe(true);
-    });
+        expect(addedCollection.collection_id).toEqual(expect.any(String));
+
+        const persisted = yield* savedLibrary(home);
+
+        expect(
+          persisted.state.collections.some(
+            (entry: { label?: string }) => entry.label === "mattpocock/skills",
+          ),
+        ).toBe(true);
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+    );
   });
 });
 

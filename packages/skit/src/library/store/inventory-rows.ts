@@ -25,7 +25,7 @@ const readExtra = (value: unknown) =>
     : Schema.decodeUnknownEffect(Schema.fromJsonString(JsonObject))(value);
 
 /** Duplicate scan results and child values retain their positions. */
-export const createInventoryTables = Effect.gen(function* () {
+const createInventoryTables = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`CREATE TABLE library_inventory (
     id INTEGER PRIMARY KEY CHECK(id=1),

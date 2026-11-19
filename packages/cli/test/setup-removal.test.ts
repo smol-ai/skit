@@ -96,15 +96,6 @@ const stepsAndPrompts = (events: ReadonlyArray<InteractionEvent>) =>
         : [],
   );
 
-
-
-
-
-
-
-
-
-
 describe("skit setup", () => {
   describe("Finding and reviewing", () => {
     describe("Preview leaves the proposed setup unapplied.", () => {

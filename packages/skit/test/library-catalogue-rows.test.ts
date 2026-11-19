@@ -15,7 +15,11 @@ import {
 } from "../src/library/store/library-store.js";
 import { readCatalogue } from "../src/library/store/catalogue.js";
 import { migrateLocalLibraryState } from "../src/library/store/state-file.js";
-import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import {
+  libraryDatabasePath,
+  withLibraryDatabase,
+  prepareLibraryDatabase,
+} from "../src/library/store/database.js";
 import { readLibraryAudit } from "../src/library/audit/audit-log.js";
 import { canonicalJson } from "../src/shared/json.js";
 import { decodeLibraryState, emptyLibraryState } from "../src/library/library-state.js";
@@ -480,3 +484,38 @@ for (const rollback of [false, true])
         }
       }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
+
+it.effect(
+  "renaming stored copy fields keeps the complete catalogue, audit and Library revision",
+  () =>
+    Effect.gen(function* () {
+      const { home, path } = yield* prepared;
+      const before = yield* loadLibrary(home);
+      const audit = yield* readLibraryAudit(home);
+      yield* withLibraryDatabase(
+        path,
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          for (const table of ["library_skill_versions", "library_collection_version_members"])
+            yield* sql`ALTER TABLE ${sql(table)} RENAME COLUMN copy_format TO ${sql("materialization_profile")}`;
+          yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id=12`;
+        }),
+      );
+      yield* prepareLibraryDatabase(home);
+      assert.deepStrictEqual(yield* loadLibrary(home), before);
+      assert.deepStrictEqual(yield* readLibraryAudit(home), audit);
+      yield* withLibraryDatabase(
+        path,
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          for (const table of ["library_skill_versions", "library_collection_version_members"]) {
+            const columns = yield* sql<{ name: string }>`PRAGMA table_info(${sql(table)})`;
+            assert.isTrue(columns.some(({ name }) => name === "copy_format"));
+            assert.isFalse(columns.some(({ name }) => name === "materialization_profile"));
+          }
+          assert.deepStrictEqual(yield* sql`PRAGMA foreign_key_check`, []);
+        }),
+        true,
+      );
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);

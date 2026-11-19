@@ -3,7 +3,7 @@ import {
   createLegacyHistoryTables,
   prepareLegacyHistorySummaries,
   removeLegacyPrograms,
-} from "./legacy-history.js";
+} from "./legacy-history-tables.js";
 import { Context, Effect, FileSystem, Option, Schema } from "effect";
 import { InvalidLibraryState, LibrarySqlError } from "../failures.js";
 import { Migrator, SqlClient } from "effect/sql";
@@ -14,7 +14,7 @@ import { withLibraryStateReplacement } from "./writer-lock.js";
 import { syncPaths } from "../../platform/atomic-write.js";
 import { sqliteLayer } from "../../platform/sqlite.js";
 import { createAuthorStateTables } from "../../author/state-tables.js";
-import { createFileBytesTable } from "../../artifact/file-bytes.js";
+import { createFileBytesTable } from "../../artifact/file-bytes-table.js";
 import {
   createAuthorHistoryTables,
   createAuthorMetadataTables,
@@ -69,14 +69,6 @@ export const withLibraryDatabase = <A, E, R>(
     Effect.catchTag("SqlError", (cause) => Effect.fail(new LibrarySqlError({ path, cause }))),
   );
 
-/** Recovery may read complete bytes before the writer can advance an older database. */
-export const fileBytesAvailable = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
-  return (
-    (yield* sql`SELECT name FROM sqlite_master WHERE type='table' AND name='file_bytes'`).length > 0
-  );
-});
-
 // The ordered registry is the authority for both execution and readiness validation.
 // Keep it lazy because table owners also use the scoped database connection functions above.
 const libraryMigrations = () => ({
@@ -120,6 +112,15 @@ const libraryMigrations = () => ({
   "009_file_bytes": createFileBytesTable,
   "010_legacy_history_summaries": prepareLegacyHistorySummaries,
   "011_legacy_history_programs": removeLegacyPrograms,
+  "012_skill_copy_format": Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    // Existing Libraries keep their values; released document field names stay at the codec.
+    for (const table of ["library_skill_versions", "library_collection_version_members"]) {
+      const columns = yield* sql<{ name: string }>`PRAGMA table_info(${sql(table)})`;
+      if (columns.some((column) => column.name === "materialization_profile"))
+        yield* sql`ALTER TABLE ${sql(table)} RENAME COLUMN ${sql("materialization_profile")} TO copy_format`;
+    }
+  }),
 });
 
 /** Schema changes load only the owner rows whose layout changes; never legacy files. */

@@ -170,7 +170,7 @@ it.effect("existing dev databases discard raw programs and reclaim their pages",
         yield* sql`ALTER TABLE library_legacy_operations ADD COLUMN document TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(document))`;
         yield* sql`UPDATE library_legacy_operations SET document=${JSON.stringify({ raw: "x".repeat(3_000_000) })}`;
         yield* sql`DROP TABLE library_history_compaction`;
-        yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id=11`;
+        yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id>=11`;
       }),
     );
     const before = (yield* fs.stat(path)).size;

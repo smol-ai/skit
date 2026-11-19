@@ -813,7 +813,7 @@ it.effect("refuses newer database migrations with the known and observed version
       path,
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
-        yield* sql`UPDATE effect_sql_migrations SET migration_id = 12 WHERE migration_id = 1`;
+        yield* sql`UPDATE effect_sql_migrations SET migration_id = 13 WHERE migration_id = 1`;
       }),
     );
     const error = yield* Effect.flip(migrateLocalLibraryState(home));
@@ -822,8 +822,8 @@ it.effect("refuses newer database migrations with the known and observed version
       assert.deepStrictEqual(error.reason, {
         _tag: "NewerDatabaseMigration",
         databasePath: path,
-        migration: 12,
-        supported: 11,
+        migration: 13,
+        supported: 12,
       });
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

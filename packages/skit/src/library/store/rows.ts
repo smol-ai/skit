@@ -38,13 +38,10 @@ const skills: Table = {
 const versions: Table = {
   name: "library_skill_versions",
   keys: ["skill_version_id"],
-  fields: fields(
-    "skill_version_id",
-    "source_hash",
-    "artifact_hash",
-    "validation_identity_hash",
-    "materialization_profile",
-  ),
+  fields: [
+    ...fields("skill_version_id", "source_hash", "artifact_hash", "validation_identity_hash"),
+    { field: "materialization_profile", column: "copy_format" },
+  ],
 };
 const collectionVersions: Table = {
   name: "library_collection_versions",
@@ -54,7 +51,10 @@ const collectionVersions: Table = {
 const members: Table = {
   name: "library_collection_version_members",
   keys: ["collection_version_id", "source_path"],
-  fields: fields("source_path", "source_hash", "artifact_hash", "materialization_profile"),
+  fields: [
+    ...fields("source_path", "source_hash", "artifact_hash"),
+    { field: "materialization_profile", column: "copy_format" },
+  ],
 };
 const imports: Table = {
   name: "library_imports",

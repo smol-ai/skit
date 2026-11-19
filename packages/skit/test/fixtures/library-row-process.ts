@@ -1,3 +1,4 @@
+import { NodeRuntime } from "@effect/platform-node";
 // Test protocol and pause points only. Every Library function below comes from the compiled core.
 import { systemError } from "effect/PlatformError";
 import { Clock, Effect, FileSystem, Layer, Option, Schema } from "effect";
@@ -242,7 +243,7 @@ const program = Effect.gen(function* () {
       const [text] = statement.compile();
       if (input.mode === "save") {
         if (/UPDATE library_device\b/u.test(text)) {
-          if (input.point === "before-rows") yield* pause(input.point);
+          if (input.point === "before-rows") return yield* pause(input.point);
           moved = true;
         }
         if (
@@ -252,14 +253,14 @@ const program = Effect.gen(function* () {
             text.trim().replace(/\s+/gu, " "),
           )
         )
-          yield* pause(input.point);
+          return yield* pause(input.point);
       }
       if (text === "SELECT 1 AS test_acknowledgement" && input.point === "after-commit")
-        yield* pause(input.point);
+        return yield* pause(input.point);
       if (text === "SELECT 1 AS test_import_link" && input.point === "before-link")
-        yield* pause(input.point);
+        return yield* pause(input.point);
       if (text === "SELECT 1 AS test_import_fence" && input.point === "after-link")
-        yield* pause(input.point);
+        return yield* pause(input.point);
       return statement;
     });
   const files: FileSystem.FileSystem = {
@@ -363,17 +364,19 @@ const program = Effect.gen(function* () {
 
 // An Effect.never pause must keep the process alive until the parent sends SIGKILL.
 const keepAlive = setInterval(() => {}, 60_000);
-try {
-  const selected = Effect.gen(function* () {
-    if (process.argv[2] === "sync-undo")
-      return yield* applySyncUndoProcess(
-        process.argv[3] ?? "",
-        process.argv[4] ?? "",
-        process.argv[5] ?? "",
-      );
-    return yield* program;
-  });
-  await Effect.runPromise(selected.pipe(Effect.provide(skitLayer), Effect.scoped));
-} finally {
-  clearInterval(keepAlive);
-}
+const selected = Effect.gen(function* () {
+  if (process.argv[2] === "sync-undo")
+    return yield* applySyncUndoProcess(
+      process.argv[3] ?? "",
+      process.argv[4] ?? "",
+      process.argv[5] ?? "",
+    );
+  return yield* program;
+});
+NodeRuntime.runMain(
+  selected.pipe(
+    Effect.provide(skitLayer),
+    Effect.scoped,
+    Effect.ensuring(Effect.sync(() => clearInterval(keepAlive))),
+  ),
+);

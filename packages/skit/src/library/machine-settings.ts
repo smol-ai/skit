@@ -12,7 +12,6 @@ import { Hash } from "../shared/hash.js";
 import { canonicalJson } from "../shared/json.js";
 import { LibraryChanged } from "./failures.js";
 import { Unusable } from "./machine-settings-failures.js";
-export { Unusable } from "./machine-settings-failures.js";
 import { makeMachineId } from "./entity-ids.js";
 import {
   emptyMachineDocument,
@@ -196,7 +195,7 @@ const equal = (left: unknown, right: unknown) =>
   canonicalJson(left ?? null) === canonicalJson(right ?? null);
 
 /** Plain review data; apply recomputes it before saving anything. */
-export interface DiscoveryRestorePlan {
+interface DiscoveryRestorePlan {
   readonly operationId: string;
   readonly planId: Hash;
   readonly before: Settings;

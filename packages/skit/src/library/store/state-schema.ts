@@ -37,7 +37,7 @@ import { HarnessName } from "../../harnesses/contracts.js";
 import { InstallDestination } from "../../installed-skills/destination.js";
 import { InstallScope } from "../scope.js";
 
-export { InventoryScanIssue, SyncAncestry, CURRENT_LIBRARY_STATE_VERSION } from "./state-fields.js";
+export { InventoryScanIssue, SyncAncestry } from "./state-fields.js";
 
 import { LibraryDifference } from "./difference.js";
 /** Where states before v11 recorded a copy, including former per-Harness folders. */
@@ -413,7 +413,7 @@ export const SetupPreparation = Schema.Struct({
 });
 export type SetupPreparation = typeof SetupPreparation.Type;
 
-export const SetupRecord = Schema.Struct({
+const SetupRecord = Schema.Struct({
   changes: SetupIntentChanges,
   discovery: Schema.optionalKey(
     Schema.Struct({ before: DiscoveryEvidence, expectedAfter: DiscoveryEvidence }),

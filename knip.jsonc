@@ -14,6 +14,17 @@
       "entry": ["src/{index,main}.{ts,tsx}"],
       "project": ["src/**/*.{ts,tsx}", "test/**/*.{ts,tsx}"],
     },
+    "packages/skit": {
+      "includeEntryExports": true,
+      // Crash-recovery tests spawn these executable roots by filesystem path.
+      "entry": [
+        "src/{index,main}.{ts,tsx}",
+        "test/fixtures/library-apply-process.ts",
+        "test/fixtures/library-row-process.ts",
+        "test/fixtures/library-setup-machine-process.ts",
+      ],
+      "project": ["src/**/*.{ts,tsx}", "test/**/*.{ts,tsx}"],
+    },
     "packages/cli": {
       // The published Storybook API has external consumers; retain its entry exports.
       "includeEntryExports": false,

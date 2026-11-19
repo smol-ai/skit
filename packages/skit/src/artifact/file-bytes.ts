@@ -1,3 +1,4 @@
+import { fileBytesAvailable } from "./file-bytes-table.js";
 import { Effect, FileSystem, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import { SqlClient } from "effect/sql";
@@ -6,7 +7,6 @@ import { Hash, hashHex, sha256Hash } from "../shared/hash.js";
 import { syncPaths } from "../platform/atomic-write.js";
 import {
   libraryDatabasePath,
-  fileBytesAvailable,
   withDatabaseTransaction,
   withLibraryDatabase,
 } from "../library/store/database.js";
@@ -21,11 +21,6 @@ export class FileBytesInvalid extends Schema.TaggedError<FileBytesInvalid>()("Fi
     SizeMismatch: { expected: Schema.Int, actual: Schema.Int },
   }),
 }) {}
-
-export const createFileBytesTable = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
-  yield* sql`CREATE TABLE file_bytes(hash TEXT PRIMARY KEY,size INTEGER NOT NULL CHECK(size>=0 AND size<=9007199254740991)) STRICT`;
-});
 
 export const fileBytesPath = (home: string, hash: Hash) =>
   join(resolve(home), "file-bytes", hashHex(hash));

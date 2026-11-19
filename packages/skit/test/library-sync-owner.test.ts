@@ -318,10 +318,7 @@ describe("skit sync", () => {
                 )).at(-1)?._tag,
                 "Pending",
               );
-              assert.strictEqual(
-                saved.sync_ancestry?.revision_id,
-                "revision_fixture",
-              );
+              assert.strictEqual(saved.sync_ancestry?.revision_id, "revision_fixture");
               const file = join(skills, "review", "SKILL.md");
               if (retiring || boundary === "published") assert.isFalse(yield* fs.exists(file));
               else assert.strictEqual(yield* fs.readFileString(file), bytes);

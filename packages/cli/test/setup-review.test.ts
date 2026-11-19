@@ -83,13 +83,6 @@ const fixture = Effect.gen(function* () {
   };
 });
 
-
-
-
-
-
-
-
 describe("skit setup", () => {
   describe("Finding and reviewing", () => {
     describe("A changed setup must be reviewed again before it can change files.", () => {
