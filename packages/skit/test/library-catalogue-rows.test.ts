@@ -1,3 +1,4 @@
+import { database012 } from "./helpers/library-database-012.js";
 import { normalizeCatalogue } from "../src/library/manifest.js";
 import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
 import { SkillVersion } from "../src/library/library-contracts.js";
@@ -492,6 +493,7 @@ it.effect(
       const { home, path } = yield* prepared;
       const before = yield* loadLibrary(home);
       const audit = yield* readLibraryAudit(home);
+      yield* database012(home);
       yield* withLibraryDatabase(
         path,
         Effect.gen(function* () {

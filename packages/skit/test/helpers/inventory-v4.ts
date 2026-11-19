@@ -1,3 +1,4 @@
+import { schema012 } from "./library-database-012.js";
 import { Effect } from "effect";
 import { SqlClient } from "effect/sql";
 import type { LibraryState } from "../../src/library/library-state.js";
@@ -8,6 +9,7 @@ export const writeInventoryV4 = (
 ) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
+    yield* schema012;
     yield* sql`DROP TABLE library_unmanaged_paths`;
     yield* sql`DROP TABLE library_unmanaged_harnesses`;
     yield* sql`DROP TABLE library_ownership_issue_harnesses`;

@@ -1,3 +1,4 @@
+import { database012 } from "./helpers/library-database-012.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { SqlClient } from "effect/sql";
@@ -88,6 +89,7 @@ it.effect(
 it.effect("schema-five homes recover completed source history once from the verified backup", () =>
   Effect.gen(function* () {
     const { home, path, state, operations } = yield* prepared;
+    yield* database012(home);
     yield* withLibraryDatabase(
       path,
       Effect.gen(function* () {
@@ -162,6 +164,7 @@ it.effect("existing dev databases discard raw programs and reclaim their pages",
   Effect.gen(function* () {
     const { home, path } = yield* prepared;
     const history = yield* loadOperationHistory(home);
+    yield* database012(home);
     const fs = yield* FileSystem.FileSystem;
     yield* withLibraryDatabase(
       path,

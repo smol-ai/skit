@@ -1,3 +1,4 @@
+import { database012 } from "./helpers/library-database-012.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Schema, Layer } from "effect";
 import { SqlClient } from "effect/sql";
@@ -188,11 +189,10 @@ it.effect(
           const revision = (yield* sql<{
             extra: string;
             author_extra: string;
-          }>`SELECT extra,author_extra FROM author_revisions`)[0]!;
-          assert.strictEqual(
-            revision.extra,
-            JSON.stringify({ edits: f.revision.edits, extension: { kept: null } }),
-          );
+            edits_json: string;
+          }>`SELECT extra,author_extra,edits_json FROM author_revisions`)[0]!;
+          assert.strictEqual(revision.extra, JSON.stringify({ extension: { kept: null } }));
+          assert.deepStrictEqual(JSON.parse(revision.edits_json), f.revision.edits);
           assert.strictEqual(
             revision.author_extra,
             JSON.stringify({ extension: { clock: "backwards" } }),
@@ -419,6 +419,96 @@ it.effect(
           assert.deepStrictEqual([...revisions], [hashes[501]!]);
           assert.strictEqual((yield* knownHistoryRows("tree", [])).size, 0);
         }),
+      );
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect(
+  "013 keeps duplicate paths and extensions after a cold reopen without loose sources",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* prepared;
+      const store = yield* Effect.map(AuthorHistory, (history) => history.engineStore).pipe(
+        Effect.provide(owner(f.home)),
+      );
+      assert.deepStrictEqual(yield* store.tree(f.hash), f.tree);
+      assert.deepStrictEqual(yield* store.revision(f.id), f.revision);
+      yield* database012(f.home);
+      yield* f.fs.rename(join(f.directory, "trees"), join(f.directory, "trees-hidden"));
+      yield* f.fs.rename(join(f.directory, "revisions"), join(f.directory, "revisions-hidden"));
+      const cold = yield* Effect.map(AuthorHistory, (history) => history.engineStore).pipe(
+        Effect.provide(owner(f.home)),
+      );
+      assert.deepStrictEqual(yield* cold.revision(f.id), f.revision);
+      assert.deepStrictEqual(yield* cold.tree(f.hash), f.tree);
+      assert.deepStrictEqual(yield* cold.trees, [f.hash]);
+      yield* withLibraryDatabase(
+        f.path,
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          assert.deepStrictEqual(yield* sql`PRAGMA foreign_key_check`, []);
+          assert.deepStrictEqual(yield* sql`PRAGMA integrity_check`, [{ integrity_check: "ok" }]);
+          const row = (yield* sql<{
+            extra: string;
+            author_extra: string;
+            edits_json: string;
+          }>`SELECT * FROM author_revisions WHERE hash=${f.id}`)[0]!;
+          assert.deepStrictEqual(JSON.parse(row.extra), { extension: { kept: null } });
+          assert.deepStrictEqual(JSON.parse(row.author_extra), {
+            extension: { clock: "backwards" },
+          });
+          assert.deepStrictEqual(JSON.parse(row.edits_json), f.revision.edits);
+        }),
+        true,
+      );
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect(
+  "revision-only and invalid loose history keep their exact documents and remain readable without fake trees",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* prepared;
+      // This valid revision has no tree file. Its shallow/duplicate parents and edit times remain exact.
+      yield* f.fs.remove(join(f.directory, "trees", `${f.hash.slice(7)}.json`));
+      const invalidId = History.RevisionId.make("sha256:" + "e".repeat(64));
+      const invalid = ' { "edits": null, "extension": [false, false] }  \n';
+      yield* f.fs.writeFileString(
+        join(f.directory, "revisions", `${invalidId.slice(7)}.json`),
+        invalid,
+      );
+      const store = yield* Effect.map(AuthorHistory, (history) => history.engineStore).pipe(
+        Effect.provide(owner(f.home)),
+      );
+      assert.deepStrictEqual(yield* store.revision(f.id), f.revision);
+      assert.strictEqual(
+        (yield* Effect.flip(store.revision(invalidId)))._tag,
+        "History.StoreCorrupt",
+      );
+      yield* f.fs.rename(join(f.directory, "revisions"), join(f.directory, "revisions-hidden"));
+      const cold = yield* Effect.map(AuthorHistory, (history) => history.engineStore).pipe(
+        Effect.provide(owner(f.home)),
+      );
+      assert.deepStrictEqual(yield* cold.revision(f.id), f.revision);
+      assert.strictEqual(
+        (yield* Effect.flip(cold.revision(invalidId)))._tag,
+        "History.StoreCorrupt",
+      );
+      assert.deepStrictEqual(yield* cold.trees, []);
+      yield* withLibraryDatabase(
+        f.path,
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          assert.deepStrictEqual(yield* sql`SELECT * FROM author_revisions`, []);
+          const rows = yield* sql<{
+            hash: string;
+            document: string;
+          }>`SELECT hash,document FROM author_history_legacy_documents WHERE kind='revision'`;
+          assert.strictEqual(rows.find((row) => row.hash === f.id)?.document, f.revisionSource);
+          assert.strictEqual(rows.find((row) => row.hash === invalidId)?.document, invalid);
+          assert.deepStrictEqual(yield* sql`PRAGMA foreign_key_check`, []);
+        }),
+        true,
       );
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

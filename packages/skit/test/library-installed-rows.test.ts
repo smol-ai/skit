@@ -300,7 +300,9 @@ it.effect("bulk publication rejects a remaining orphan but permits removing it",
       path,
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
+        yield* sql`PRAGMA foreign_keys=OFF`;
         yield* sql`UPDATE library_installed_skills SET skill_id=${orphan.skill_id} WHERE installed_skill_id=${first.installed_skill_id}`;
+        yield* sql`PRAGMA foreign_keys=ON`;
       }),
     );
     const base = [orphan, ...state.installed_skills.slice(1)];

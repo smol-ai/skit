@@ -288,31 +288,41 @@ for (const refusal of ["audit", "revision"])
       }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 
-it.effect("inventory mutation needs no catalogue, security or ancestry tables", () =>
-  Effect.gen(function* () {
-    const { home, state, path } = yield* prepared;
-    yield* withLibraryDatabase(
-      path,
-      Effect.gen(function* () {
-        const sql = yield* SqlClient.SqlClient;
-        yield* sql`DROP TABLE library_skill_versions`;
-        yield* sql`DROP TABLE library_collection_version_members`;
-        yield* sql`DROP TABLE library_assessment_acceptances`;
-        yield* sql`DROP TABLE library_sync_base`;
-        yield* sql`DROP TABLE library_sync`;
-      }),
-    );
-    const next = { ...state, unmanaged: [] };
-    yield* writeLibrary(
-      home,
-      Effect.gen(function* () {
-        const writer = yield* LibraryWriter;
-        yield* writer.saveInventory(next, state, yield* writer.revision);
-      }),
-    );
-    assert.deepStrictEqual((yield* readInventoryState(home)).value.unmanaged, []);
-    assert.strictEqual((yield* Effect.flip(loadLibrary(home)))._tag, "LibrarySqlError");
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+it.effect(
+  "inventory mutation needs only catalogue FK keys, not catalogue payload, security or ancestry",
+  () =>
+    Effect.gen(function* () {
+      const { home, state, path } = yield* prepared;
+      yield* withLibraryDatabase(
+        path,
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          // Keep FK metadata and ownership keys; make every catalogue payload column unavailable.
+          for (const column of [
+            "source_hash",
+            "artifact_hash",
+            "validation_identity_hash",
+            "skill_format",
+            "extra",
+          ])
+            yield* sql`ALTER TABLE library_skill_versions DROP COLUMN ${sql(column)}`;
+          yield* sql`DROP TABLE library_assessment_acceptances`;
+          yield* sql`DROP TABLE library_collection_version_members`;
+          yield* sql`DROP TABLE library_sync_base`;
+          yield* sql`DROP TABLE library_sync`;
+        }),
+      );
+      const next = { ...state, unmanaged: [] };
+      yield* writeLibrary(
+        home,
+        Effect.gen(function* () {
+          const writer = yield* LibraryWriter;
+          yield* writer.saveInventory(next, state, yield* writer.revision);
+        }),
+      );
+      assert.deepStrictEqual((yield* readInventoryState(home)).value.unmanaged, []);
+      assert.strictEqual((yield* Effect.flip(loadLibrary(home)))._tag, "LibrarySqlError");
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("an unset issue-presence flag cannot hide existing observation rows", () =>

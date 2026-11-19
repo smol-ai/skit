@@ -244,7 +244,7 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
     const author = yield* Schema.decodeUnknownEffect(JsonObject)(value.author);
     return {
       revision,
-      extra: extra(value, ["tree", "parents", "author"]),
+      extra: extra(value, ["tree", "parents", "author", "edits"]),
       authorExtra: extra(author, ["device", "at"]),
     } satisfies StoredRevision;
   });
@@ -340,14 +340,16 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
         const sql = yield* SqlClient.SqlClient;
         // Another owner may have completed the import while this one decoded immutable sources.
         const exists = (yield* sql`SELECT id FROM author_metadata_import WHERE id=1`).length > 0;
-        for (const document of documents) {
+        for (const document of documents.toSorted(
+          (left, right) => (left?.kind === "tree" ? 0 : 1) - (right?.kind === "tree" ? 0 : 1),
+        )) {
           if (!document) continue;
           if (exists && !recoveries.some((source) => source.file === document.file)) continue;
           if ("tree" in document && document.tree) {
             yield* document.tree.register;
             yield* saveTreeRows(document.hash, document.tree.tree);
           } else if ("revision" in document && document.revision)
-            yield* saveRevisionRows(document.hash, document.revision);
+            yield* saveRevisionRows(document.hash, document.revision, document.text);
           else yield* saveLegacyHistoryDocument(document.kind, document.hash, document.text);
         }
         if (!exists)

@@ -1,3 +1,5 @@
+import { migrateLibraryRelationships } from "./relationships.js";
+import { migrateAuthorRevisionRows } from "../../author/history-migration.js";
 import { migrateInventoryRows } from "./inventory-rows.js";
 import {
   createLegacyHistoryTables,
@@ -120,6 +122,23 @@ const libraryMigrations = () => ({
       if (columns.some((column) => column.name === "materialization_profile"))
         yield* sql`ALTER TABLE ${sql(table)} RENAME COLUMN ${sql("materialization_profile")} TO skill_format`;
     }
+  }),
+  "013_relationships_and_revision_edits": Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    yield* sql`PRAGMA defer_foreign_keys = ON`;
+    yield* migrateLibraryRelationships;
+    yield* migrateAuthorRevisionRows;
+    const foreignKeys = yield* sql`PRAGMA foreign_key_check`;
+    const integrity = yield* sql<{ integrity_check: string }>`PRAGMA integrity_check`;
+    if (foreignKeys.length > 0 || integrity.length !== 1 || integrity[0]?.integrity_check !== "ok")
+      return yield* new InvalidLibraryState({
+        path: "library.sqlite",
+        reason: {
+          _tag: "InvalidData",
+          issue:
+            "Migration 013 found invalid relationships or database integrity; original rows kept",
+        },
+      });
   }),
 });
 

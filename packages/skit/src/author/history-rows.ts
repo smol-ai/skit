@@ -179,6 +179,7 @@ export const loadRevisionRows = Effect.fn("AuthorHistory.loadRevisionRows")(func
         author_at: Schema.Int,
         extra: Schema.String,
         author_extra: Schema.String,
+        edits_json: Schema.String,
       }),
     ),
   )(yield* sql`SELECT * FROM author_revisions WHERE hash=${hash}`))[0];
@@ -204,7 +205,7 @@ export const loadRevisionRows = Effect.fn("AuthorHistory.loadRevisionRows")(func
     }),
   );
   const revision = yield* Schema.decodeUnknownEffect(History.Revision)({
-    edits: extra.edits,
+    edits: yield* Schema.decodeEffect(Schema.fromJsonString(History.EditTimes))(header.edits_json),
     tree: header.tree_hash,
     parents,
     author: { device: header.author_device, at: header.author_at },
@@ -215,12 +216,27 @@ export const loadRevisionRows = Effect.fn("AuthorHistory.loadRevisionRows")(func
 export const saveRevisionRows = Effect.fn("AuthorHistory.saveRevisionRows")(function* (
   hash: Hash,
   stored: StoredRevision,
+  source?: string,
 ) {
   const sql = yield* SqlClient.SqlClient;
   if (yield* hasHistoryRows("revision", hash)) return;
   const revision = stored.revision;
-  yield* sql`INSERT INTO author_revisions(hash,tree_hash,author_device,author_at,extra,author_extra)
-    VALUES(${hash},${revision.tree},${revision.author.device},${revision.author.at},${JSON.stringify(stored.extra)},${JSON.stringify(stored.authorExtra)})`;
+  // Revision-only imports remain readable evidence. No tree identity is inferred or invented.
+  if ((yield* sql`SELECT hash FROM author_trees WHERE hash=${revision.tree}`).length === 0) {
+    yield* saveLegacyHistoryDocument(
+      "revision",
+      hash,
+      source ??
+        JSON.stringify({
+          ...stored.extra,
+          ...revision,
+          author: { ...stored.authorExtra, ...revision.author },
+        }),
+    );
+    return;
+  }
+  yield* sql`INSERT INTO author_revisions(hash,tree_hash,author_device,author_at,extra,author_extra,edits_json)
+    VALUES(${hash},${revision.tree},${revision.author.device},${revision.author.at},${JSON.stringify(stored.extra)},${JSON.stringify(stored.authorExtra)},${JSON.stringify(revision.edits)})`;
   for (const [position, parent] of revision.parents.entries())
     yield* sql`INSERT INTO author_revision_parents(revision_hash,position,parent_hash) VALUES(${hash},${position},${parent})`;
 });
