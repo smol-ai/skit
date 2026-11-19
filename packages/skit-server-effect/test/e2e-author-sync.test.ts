@@ -9,7 +9,7 @@ import { Effect, Layer, Schema } from "effect";
 import { createServer } from "node:net";
 import { authorLayer, initializeAuthorWorkspace } from "@smolai/skit-core/author";
 import * as Library from "@smolai/skit-core/library";
-import { skitLayer, skitConfigurationLayer, sqliteLayer } from "@smolai/skit-core/platform";
+import { skitLayer, skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { createTestHarness } from "wrangler";
 import { expect, test } from "vitest";
 import * as History from "@smolai/skit-core/history";
@@ -92,7 +92,7 @@ test("separate author processes back up offline history and converge through rea
     const { token } = Schema.decodeUnknownSync(CreatedPat)(await issued.json());
     const run = async (
       device: typeof a,
-      mode: "capture" | "sync",
+      mode: "capture" | "sync" | "sync-count-posts",
       first = false,
     ): Promise<unknown> => {
       const result = await execute(
@@ -166,6 +166,28 @@ test("separate author processes back up offline history and converge through rea
     );
     expect(await run(b, "sync")).toMatchObject({ _tag: "Success" });
     expect(await readFile(join(b.root, "notes.txt"), "utf8")).toBe("A");
+    const env = await worker.getEnv();
+    const revisionCount = async () =>
+      (await env.DB.prepare("SELECT COUNT(*) count FROM revisions").first<{ count: number }>())
+        ?.count;
+    // Best-effort completion only: interruption between pull and completion may still
+    // create one redundant backup. An uninterrupted verified pure pull must make zero POSTs,
+    // including idempotent POSTs which would not increase the Registry row count.
+    await writeFile(join(a.root, "pure-pull.txt"), "received without a new B revision");
+    expect(await run(a, "sync")).toMatchObject({ _tag: "Success" });
+    const received = await current();
+    const beforePullCount = await revisionCount();
+    expect(await run(b, "sync-count-posts")).toMatchObject({
+      _tag: "Success",
+      value: { status: "pulled" },
+      posts: 0,
+    });
+    expect(await current()).toBe(received);
+    expect(await revisionCount()).toBe(beforePullCount);
+    expect(await readFile(join(b.root, "pure-pull.txt"), "utf8")).toBe(
+      "received without a new B revision",
+    );
+
     await writeFile(join(a.root, "a.txt"), "independent A");
     await writeFile(join(b.root, "b.txt"), "independent B");
     expect(await run(a, "sync")).toMatchObject({ _tag: "Success" });
@@ -175,10 +197,6 @@ test("separate author processes back up offline history and converge through rea
       expect(await readFile(join(device.root, "a.txt"), "utf8")).toBe("independent A");
       expect(await readFile(join(device.root, "b.txt"), "utf8")).toBe("independent B");
     }
-    const env = await worker.getEnv();
-    const revisionCount = async () =>
-      (await env.DB.prepare("SELECT COUNT(*) count FROM revisions").first<{ count: number }>())
-        ?.count;
     await writeFile(join(a.root, "crash.txt"), "kept after SIGKILL");
     const interruptedObservation = Schema.decodeUnknownSync(Captured)(await run(a, "capture"));
     const beforeInterruptedPost = await current();
@@ -214,8 +232,10 @@ test("separate author processes back up offline history and converge through rea
     const acceptedCount = await revisionCount();
     expect(acceptedCount).toBeDefined();
     expect(await run(a, "sync")).toMatchObject({ _tag: "Success", value: { status: "pushed" } });
-    // Replaying the raw observation is idempotent: only the separate canonical revision is new.
-    expect(await revisionCount()).toBe((acceptedCount ?? 0) + 1);
+    // The preceding pull saved the remote head, so this raw edit already has the canonical
+    // parent. Replaying its accepted POST needs no duplicate or separate canonical revision.
+    expect(await current()).toBe(interruptedObservation.value.id);
+    expect(await revisionCount()).toBe(acceptedCount);
     expect(text((await revision(interruptedObservation.value.id)).tree, "crash.txt")).toBe(
       "kept after SIGKILL",
     );

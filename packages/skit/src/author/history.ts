@@ -55,7 +55,7 @@ import {
 import { AuthorWorkspaceInvariantFailed } from "./workspace-contracts.js";
 import { makeHistoryStore } from "./history-store.js";
 import { fileBytesPath } from "../artifact/file-bytes.js";
-import { writeHistoryEvent } from "./history-journal.js";
+import { saveReceivedHistory, writeHistoryEvent } from "./history-journal.js";
 import { libraryDatabasePath } from "../library/store/database.js";
 import * as AuthorState from "./state-store.js";
 import { makeRemovalCheck, scanAuthorInventory, type RemovalDecision } from "./inventory.js";
@@ -136,6 +136,12 @@ export interface AuthorHistoryShape {
     root: WorkspaceRoot,
     source?: History.RevisionId,
   ) => Effect.Effect<SavedRevision, RefreshError>;
+  /** Save a verified pure pull as the local head and ACK, only if its guards still hold. */
+  readonly saveReceived: (
+    lease: WorkspaceLease,
+    key: SyncKey,
+    change: { readonly before: History.RevisionId; readonly received: History.RevisionId },
+  ) => Effect.Effect<boolean, RefreshError | SyncStateError | WorkspaceReadError>;
   /** Store a tree (immutable, content-addressed, idempotent). */
   readonly saveTree: (
     tree: History.Tree,
@@ -360,6 +366,40 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
     return { id: saved.id, revision: saved.revision, treeHash: saved.treeHash };
   });
 
+  const saveReceived = Effect.fn("AuthorHistory.saveReceived")(function* (
+    lease: WorkspaceLease,
+    key: SyncKey,
+    change: { readonly before: History.RevisionId; readonly received: History.RevisionId },
+  ) {
+    const revision = yield* lease.revision;
+    const identity = yield* workspaces.readIdentity(lease.root);
+    if (Option.isNone(identity) || identity.value.workspaceId !== key.workspaceId) return false;
+    const received = yield* engineStore
+      .revision(change.received)
+      .pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure));
+    const tree = yield* engineStore
+      .tree(received.tree)
+      .pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure));
+    const saved = yield* saveReceivedHistory(
+      writers,
+      home,
+      lease.root,
+      key,
+      change,
+      Effect.gen(function* () {
+        const actual = yield* scanAuthorWorkspace(lease.root);
+        return (
+          (yield* lease.revision) === revision &&
+          actual.treeHash === received.tree &&
+          Schema.toEquivalence(History.Tree)(History.sortTree(actual.tree), History.sortTree(tree))
+        );
+      }).pipe(Effect.catchTag("LocalFilesChangedDuringSync", () => Effect.succeed(false))),
+      lease.revision.pipe(Effect.map((current) => current === revision)),
+    );
+    if (saved) yield* lease.advance;
+    return saved;
+  });
+
   const read = (key: SyncKey) => AuthorState.readAuthorSyncState(home, key);
   const readBackup = (key: SyncKey) => AuthorState.readAuthorBackup(home, key);
 
@@ -576,6 +616,8 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
         Effect.onError(() => resetRemovalGrace(root)),
         Effect.provide(context),
       ),
+    saveReceived: (lease, key, change) =>
+      saveReceived(lease, key, change).pipe(Effect.provide(context)),
     saveTree: (tree) =>
       engineStore.putTree(tree).pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure)),
     engineStore,

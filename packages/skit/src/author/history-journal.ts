@@ -14,7 +14,8 @@ import { syncPaths } from "../platform/atomic-write.js";
 import { LinkStat } from "../platform/link-stat.js";
 import { AuthorHistoryBusy, AuthorHistoryInvalid } from "./history-failures.js";
 import { AuthorWorkspaceAlreadyRegistered } from "./failures.js";
-import { AuthorWorkspace } from "./workspace.js";
+import { AuthorWorkspace, type SyncKey } from "./workspace.js";
+import * as AuthorState from "./state-store.js";
 import { LibrarySqlError } from "../library/failures.js";
 import {
   currentLibraryTransaction,
@@ -305,16 +306,10 @@ const retryable = (error: unknown) =>
     error.cause.reason._tag === "LockTimeoutError");
 
 /** Serialize scans with an OS lock; the shared database never holds a writer through file work. */
-export const writeHistoryEvent = Effect.fn("AuthorHistory.writeHistoryEvent")(function* <
-  A extends { readonly id: History.RevisionId },
-  E,
-  R,
->(
+const withHistoryWriter = Effect.fn("AuthorHistory.withHistoryWriter")(function* <A, E, R>(
   writers: Semaphore.Semaphore,
   home: string,
-  root: string,
-  workspaceId: string | undefined,
-  save: (latest: History.RevisionId | undefined) => Effect.Effect<A, E, R>,
+  program: Effect.Effect<A, E, R>,
 ) {
   const path = libraryDatabasePath(home);
   const directory = join(home, "history");
@@ -341,35 +336,7 @@ export const writeHistoryEvent = Effect.fn("AuthorHistory.writeHistoryEvent")(fu
           yield* lockFile(lockPath);
           yield* fs.chmod(lockPath, 0o600);
           yield* prepareHistoryJournal(home);
-          const { key, last } = yield* withDatabaseTransaction(
-            home,
-            Effect.gen(function* () {
-              const key =
-                (yield* resolveWorkspace(root, workspaceId, path)) ??
-                (yield* addWorkspace(root, workspaceId));
-              return { key, last: yield* latestEvent(key) };
-            }),
-          );
-          // Tree scanning, immutable byte writes, fsync and revision creation are outside SQL transactions.
-          const saved = yield* save(last?.revision);
-          if (last?.revision === saved.id) return saved;
-          yield* withDatabaseTransaction(
-            home,
-            Effect.gen(function* () {
-              const current = yield* latestEvent(key);
-              if (canonicalJson(current) !== canonicalJson(last))
-                return yield* invalid(path, { _tag: "JournalHeadChanged" });
-              yield* saveEvent({
-                schema: "skit.author-history-event.v1",
-                workspace_key: key,
-                sequence: (last?.sequence ?? 0) + 1,
-                revision: saved.id,
-                root,
-                ...(workspaceId === undefined ? {} : { workspace_id: workspaceId }),
-              });
-            }),
-          );
-          return saved;
+          return yield* program;
         }),
       ),
     )
@@ -391,3 +358,98 @@ export const writeHistoryEvent = Effect.fn("AuthorHistory.writeHistoryEvent")(fu
       ),
     );
 });
+
+/** Tree work stays outside SQL, while both processes and this owner serialize journal writes. */
+export const writeHistoryEvent = <A extends { readonly id: History.RevisionId }, E, R>(
+  writers: Semaphore.Semaphore,
+  home: string,
+  root: string,
+  workspaceId: string | undefined,
+  save: (latest: History.RevisionId | undefined) => Effect.Effect<A, E, R>,
+) =>
+  withHistoryWriter(
+    writers,
+    home,
+    Effect.gen(function* () {
+      const path = libraryDatabasePath(home);
+      const { key, last } = yield* withDatabaseTransaction(
+        home,
+        Effect.gen(function* () {
+          const key =
+            (yield* resolveWorkspace(root, workspaceId, path)) ??
+            (yield* addWorkspace(root, workspaceId));
+          return { key, last: yield* latestEvent(key) };
+        }),
+      );
+      // Tree scanning, immutable byte writes, fsync and revision creation are outside SQL transactions.
+      const saved = yield* save(last?.revision);
+      if (last?.revision === saved.id) return saved;
+      yield* withDatabaseTransaction(
+        home,
+        Effect.gen(function* () {
+          const current = yield* latestEvent(key);
+          if (canonicalJson(current) !== canonicalJson(last))
+            return yield* invalid(path, { _tag: "JournalHeadChanged" });
+          yield* saveEvent({
+            schema: "skit.author-history-event.v1",
+            workspace_key: key,
+            sequence: (last?.sequence ?? 0) + 1,
+            revision: saved.id,
+            root,
+            ...(workspaceId === undefined ? {} : { workspace_id: workspaceId }),
+          });
+        }),
+      );
+      return saved;
+    }),
+  );
+
+/**
+ * Best-effort pure-pull completion. The head and ACK move together; their guards and the lease
+ * are checked again in the committing transaction. A crash before this step may still cause one redundant
+ * backup, through the ordinary refresh path. No recovery or authored input is discarded.
+ */
+export const saveReceivedHistory = <E, R>(
+  writers: Semaphore.Semaphore,
+  home: string,
+  root: string,
+  key: SyncKey,
+  change: { readonly before: History.RevisionId; readonly received: History.RevisionId },
+  checkTree: Effect.Effect<boolean, E, R>,
+  checkLease: Effect.Effect<boolean>,
+) =>
+  withHistoryWriter(
+    writers,
+    home,
+    Effect.gen(function* () {
+      const check = Effect.gen(function* () {
+        const workspace = yield* resolveWorkspace(root, key.workspaceId, libraryDatabasePath(home));
+        if (workspace === undefined) return undefined;
+        const last = yield* latestEvent(workspace);
+        if (last?.revision !== change.before) return undefined;
+        const state = yield* AuthorState.readAuthorSyncState(home, key);
+        if (state._tag !== "Idle" || state.base !== change.received) return undefined;
+        if ((yield* AuthorState.readAuthorBackup(home, key)) !== change.before) return undefined;
+        return { workspace, last };
+      });
+      if ((yield* withDatabaseTransaction(home, check)) === undefined) return false;
+      if (!(yield* checkTree)) return false;
+      return yield* withDatabaseTransaction(
+        home,
+        Effect.gen(function* () {
+          const found = yield* check;
+          if (found === undefined || !(yield* checkLease)) return false;
+          yield* saveEvent({
+            schema: "skit.author-history-event.v1",
+            workspace_key: found.workspace,
+            sequence: found.last.sequence + 1,
+            revision: change.received,
+            root,
+            workspace_id: key.workspaceId,
+          });
+          yield* AuthorState.saveAuthorBackup(key, change.received);
+          return true;
+        }),
+      );
+    }),
+  );

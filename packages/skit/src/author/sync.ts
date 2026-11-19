@@ -430,6 +430,18 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
     }).pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure));
     if (outcome.status === "blocked")
       return { status: "blocked", changed: false, ...outcome.removal } satisfies AuthorSyncResult;
+    // This completion is best-effort: a crash before it still uses the ordinary backup path.
+    // Never skip an authored input, a merge, or recovery from Sending/Writing.
+    if (
+      savedState._tag === "Idle" &&
+      planned._tag === "Pull" &&
+      outcome.status === "pulled" &&
+      outcome.revision === planned.current.id
+    )
+      yield* history.saveReceived(applying.lease, key, {
+        before: applying.observation.id,
+        received: outcome.revision,
+      });
     // Record what sync wrote as this workspace's latest observation.
     const completed = yield* history.refresh(root, outcome.revision);
     yield* backupAuthorHistory(applying.lease, key, completed, registry).pipe(

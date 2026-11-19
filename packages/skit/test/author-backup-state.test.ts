@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { backupAuthorHistory, backupAuthorWorkspace } from "../src/author/backup.js";
 import { AuthorHistory } from "../src/author/history.js";
 import { AuthorWorkspace, WorkspaceId, type WorkspaceLease } from "../src/author/workspace.js";
+import * as History from "../src/history/history.js";
 import * as Sync from "../src/sync/sync.js";
 import { SqlClient } from "effect/sql";
 import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
@@ -349,5 +350,159 @@ it.effect("backup refuses BackupNotAncestor before posting an older observation"
       expect(yield* history.backupState.read(key)).toBe(second.id);
       expect(yield* f.fs.readFileString(join(root, "notes.txt"))).toBe("B");
     }).pipe(Effect.provide(ownerLayer(f.home)));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+// This is a completion fast path, not crash recovery: interruption before it may upload
+// one redundant revision through refresh. Head and ACK must never be partially advanced.
+for (const mismatch of [
+  "none",
+  "bytes",
+  "mode",
+  "directory",
+  "head",
+  "ack",
+  "state",
+  "sql",
+] as const)
+  it.effect(`pure-pull completion: ${mismatch}`, () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      yield* Effect.gen(function* () {
+        const history = yield* AuthorHistory;
+        const workspaces = yield* AuthorWorkspace;
+        const root = yield* workspaces.resolveRoot(f.workspace);
+        const lease = yield* workspaces.acquire(root);
+        const { workspaceId } = yield* register(lease);
+        const key = { workspaceId, locator };
+        const before = yield* history.refresh(root);
+        if (mismatch !== "ack")
+          yield* history.backupState.save(lease, key, { from: null, to: before.id });
+        const oldTree = yield* history.engineStore.tree(before.treeHash);
+        const tree = oldTree.map((entry) =>
+          entry.kind === "file" ? { ...entry, bytes: new TextEncoder().encode("received") } : entry,
+        );
+        const received = yield* History.record(history.engineStore, tree, [before.id], {
+          ...before.revision.author,
+          at: before.revision.author.at + 1000,
+        });
+        yield* history.syncState.save(lease, key, {
+          from: Sync.Idle.make({ base: null }),
+          to: { _tag: "Idle", base: mismatch === "state" ? before.id : received.id },
+        });
+        yield* f.fs.writeFileString(
+          join(root, "notes.txt"),
+          mismatch === "bytes" ? "different" : "received",
+        );
+        if (mismatch === "mode") yield* f.fs.chmod(join(root, "notes.txt"), 0o755);
+        if (mismatch === "directory") yield* f.fs.makeDirectory(join(root, "empty"));
+        const latest = mismatch === "head" ? yield* history.refresh(root) : before;
+        const ack = yield* history.backupState.read(key);
+        const state = yield* history.syncState.read(key);
+        const leaseRevision = yield* lease.revision;
+        if (mismatch === "sql")
+          yield* withLibraryDatabase(
+            libraryDatabasePath(f.home),
+            Effect.gen(function* () {
+              yield* (yield* SqlClient.SqlClient)`CREATE TRIGGER refuse_received_ack BEFORE UPDATE ON author_backup_checkpoints BEGIN SELECT RAISE(ABORT,'fixture'); END`;
+            }),
+          );
+        const result = yield* Effect.result(
+          history.saveReceived(lease, key, {
+            before: before.id,
+            received: received.id,
+          }),
+        );
+        if (mismatch === "sql") {
+          expect(result._tag).toBe("Failure");
+          yield* withLibraryDatabase(
+            libraryDatabasePath(f.home),
+            Effect.gen(function* () {
+              yield* (yield* SqlClient.SqlClient)`DROP TRIGGER refuse_received_ack`;
+            }),
+          );
+        } else expect(result).toMatchObject({ _tag: "Success", success: mismatch === "none" });
+        expect(yield* history.syncState.read(key)).toEqual(state);
+        expect(yield* history.backupState.read(key)).toBe(mismatch === "none" ? received.id : ack);
+        expect(yield* lease.revision).toBe(leaseRevision + (mismatch === "none" ? 1 : 0));
+        const rows = yield* withLibraryDatabase(
+          libraryDatabasePath(f.home),
+          Effect.gen(function* () {
+            return yield* (yield* SqlClient.SqlClient)<{
+              revision: string;
+            }>`SELECT revision FROM author_history_events ORDER BY sequence DESC LIMIT 1`;
+          }),
+          true,
+        );
+        expect(rows[0]?.revision).toBe(mismatch === "none" ? received.id : latest.id);
+        // Immutable prior history is still available even after the head moves to the remote.
+        expect(yield* history.engineStore.revision(before.id)).toEqual(before.revision);
+        if (mismatch !== "none") return;
+        const completed = yield* history.refresh(root, received.id);
+        expect(completed.id).toBe(received.id);
+        const posts: string[] = [];
+        const remote = {
+          post: (id: History.RevisionId) =>
+            Effect.sync(() => {
+              posts.push(id);
+            }),
+        };
+        yield* backupAuthorHistory(lease, key, completed, remote);
+        expect(posts).toEqual([]);
+        yield* f.fs.writeFileString(join(root, "notes.txt"), "B's later edit");
+        const next = yield* history.refresh(root);
+        expect(next.revision.parents).toEqual([received.id]);
+        yield* backupAuthorHistory(lease, key, next, remote);
+        expect(posts).toEqual([next.id]);
+      }).pipe(Effect.provide(ownerLayer(f.home)));
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  );
+
+it.effect("a crash before pure-pull completion keeps the ordinary redundant-backup path", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const pulled = yield* Effect.gen(function* () {
+      const history = yield* AuthorHistory;
+      const workspaces = yield* AuthorWorkspace;
+      const root = yield* workspaces.resolveRoot(f.workspace);
+      const lease = yield* workspaces.acquire(root);
+      const { workspaceId } = yield* register(lease);
+      const key = { workspaceId, locator };
+      const before = yield* history.refresh(root);
+      yield* history.backupState.save(lease, key, { from: null, to: before.id });
+      const tree = (yield* history.engineStore.tree(before.treeHash)).map((entry) =>
+        entry.kind === "file" ? { ...entry, bytes: new TextEncoder().encode("received") } : entry,
+      );
+      const received = yield* History.record(history.engineStore, tree, [before.id], {
+        ...before.revision.author,
+        at: before.revision.author.at + 1000,
+      });
+      yield* f.fs.writeFileString(join(root, "notes.txt"), "received");
+      yield* history.syncState.save(lease, key, {
+        from: Sync.Idle.make({ base: null }),
+        to: { _tag: "Idle", base: received.id },
+      });
+      // The write/checkpoint committed, but the process stopped before saveReceived.
+      return { key, received };
+    }).pipe(Effect.provide(ownerLayer(f.home)), Effect.scoped);
+    yield* Effect.gen(function* () {
+      const history = yield* AuthorHistory;
+      const workspaces = yield* AuthorWorkspace;
+      const root = yield* workspaces.resolveRoot(f.workspace);
+      const lease = yield* workspaces.acquire(root);
+      const completed = yield* history.refresh(root, pulled.received.id);
+      expect(completed.id).not.toBe(pulled.received.id);
+      expect(completed.treeHash).toBe(pulled.received.revision.tree);
+      const posts: string[] = [];
+      yield* backupAuthorHistory(lease, pulled.key, completed, {
+        post: (id) =>
+          Effect.sync(() => {
+            posts.push(id);
+          }),
+      });
+      expect(posts).toEqual([completed.id]);
+      expect(yield* history.backupState.read(pulled.key)).toBe(completed.id);
+      expect(yield* f.fs.readFileString(join(root, "notes.txt"))).toBe("received");
+    }).pipe(Effect.provide(ownerLayer(f.home)), Effect.scoped);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

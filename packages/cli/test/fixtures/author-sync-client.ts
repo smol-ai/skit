@@ -1,5 +1,5 @@
 import { NodeRuntime } from "@effect/platform-node";
-import { Console, Effect, Layer, Result, Schema } from "effect";
+import { Console, Effect, Layer, Ref, Result, Schema } from "effect";
 import * as Library from "@smolai/skit-core/library";
 import {
   authorLayer,
@@ -15,7 +15,14 @@ import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { testRoots } from "../helpers/roots.js";
 
 const Arguments = Schema.Struct({
-  mode: Schema.Literals(["capture", "sync", "hold-post", "watch-hold-post", "watch-offline"]),
+  mode: Schema.Literals([
+    "capture",
+    "sync",
+    "sync-count-posts",
+    "hold-post",
+    "watch-hold-post",
+    "watch-offline",
+  ]),
   root: Schema.String,
   home: Schema.String,
   first: Schema.Boolean,
@@ -39,31 +46,46 @@ NodeRuntime.runMain(
           )).origin
         : undefined;
     const registryOrigin = process.env.SKIT_SERVER_URL ?? "";
+    const posts = yield* Ref.make(0);
     const transport =
-      mode === "hold-post" || mode === "watch-hold-post" || mode === "watch-offline"
+      mode === "hold-post" ||
+      mode === "watch-hold-post" ||
+      mode === "watch-offline" ||
+      mode === "sync-count-posts"
         ? Layer.effect(
             HttpClient.HttpClient,
             Effect.map(HttpClient.HttpClient, (client) =>
-              mode === "watch-offline" && offlineOrigin !== undefined
-                ? // API clients append their base URL during preprocessing. Gate the final
-                  // request, after that step, and never evaluate the real Registry request.
-                  HttpClient.transform(client, (_response, request) =>
-                    client.execute(
-                      HttpClientRequest.setUrl(
-                        request,
-                        request.url.replace(registryOrigin, offlineOrigin),
-                      ),
-                    ),
+              mode === "sync-count-posts"
+                ? HttpClient.transform(client, (response, request) =>
+                    Effect.gen(function* () {
+                      if (
+                        request.method === "POST" &&
+                        new URL(request.url).pathname.endsWith("/revisions")
+                      )
+                        yield* Ref.update(posts, (count) => count + 1);
+                      return yield* response;
+                    }),
                   )
-                : HttpClient.tap(client, (response) =>
-                    response.status === 200 &&
-                    response.request.method === "POST" &&
-                    new URL(response.request.url).pathname.endsWith("/revisions")
-                      ? Console.log(JSON.stringify({ event: "revision-accepted" })).pipe(
-                          Effect.andThen(Effect.never),
-                        )
-                      : Effect.void,
-                  ),
+                : mode === "watch-offline" && offlineOrigin !== undefined
+                  ? // API clients append their base URL during preprocessing. Gate the final
+                    // request, after that step, and never evaluate the real Registry request.
+                    HttpClient.transform(client, (_response, request) =>
+                      client.execute(
+                        HttpClientRequest.setUrl(
+                          request,
+                          request.url.replace(registryOrigin, offlineOrigin),
+                        ),
+                      ),
+                    )
+                  : HttpClient.tap(client, (response) =>
+                      response.status === 200 &&
+                      response.request.method === "POST" &&
+                      new URL(response.request.url).pathname.endsWith("/revisions")
+                        ? Console.log(JSON.stringify({ event: "revision-accepted" })).pipe(
+                            Effect.andThen(Effect.never),
+                          )
+                        : Effect.void,
+                    ),
             ),
           ).pipe(Layer.provide(FetchHttpClient.layer))
         : FetchHttpClient.layer;
@@ -112,7 +134,11 @@ NodeRuntime.runMain(
     yield* Console.log(
       JSON.stringify(
         Result.isSuccess(outcome)
-          ? { _tag: "Success", value: outcome.success }
+          ? {
+              _tag: "Success",
+              value: outcome.success,
+              ...(mode === "sync-count-posts" ? { posts: yield* Ref.get(posts) } : {}),
+            }
           : {
               _tag: "Failure",
               failure: {
