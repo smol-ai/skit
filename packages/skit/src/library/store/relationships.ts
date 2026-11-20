@@ -19,15 +19,6 @@ export const migrateLibraryRelationships = Effect.gen(function* () {
   yield* sql`INSERT INTO library_installed_skills_next SELECT * FROM library_installed_skills`;
   yield* sql`DROP TABLE library_installed_skills`;
   yield* sql`ALTER TABLE library_installed_skills_next RENAME TO library_installed_skills`;
-  yield* sql`CREATE TABLE library_assessment_acceptances_next (
-    fingerprint TEXT NOT NULL,artifact_content_hash TEXT NOT NULL,
-    skill_version_id TEXT NOT NULL REFERENCES library_skill_versions(skill_version_id)
-      DEFERRABLE INITIALLY DEFERRED,
-    context TEXT NOT NULL,principal TEXT NOT NULL,rationale TEXT NOT NULL,accepted_at TEXT NOT NULL,
-    expires_at TEXT,extra TEXT
-  ) STRICT`;
-  // Row order is part of the owner's ordered acceptance document.
-  yield* sql`INSERT INTO library_assessment_acceptances_next SELECT * FROM library_assessment_acceptances ORDER BY rowid`;
-  yield* sql`DROP TABLE library_assessment_acceptances`;
-  yield* sql`ALTER TABLE library_assessment_acceptances_next RENAME TO library_assessment_acceptances`;
+  // Assessment acceptances are consent evidence kept after their Version is removed.
+  // They deliberately have no foreign key to the live catalogue.
 });

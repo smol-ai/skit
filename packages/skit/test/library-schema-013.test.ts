@@ -139,7 +139,7 @@ it.effect(
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-for (const failure of ["installed-owner", "acceptance", "edits"] as const)
+for (const failure of ["installed-owner", "edits"] as const)
   it.effect(`013 refuses ${failure} without changing source rows, schema or ledger`, () =>
     Effect.gen(function* () {
       const f = yield* prepared;
@@ -150,8 +150,6 @@ for (const failure of ["installed-owner", "acceptance", "edits"] as const)
           const sql = yield* SqlClient.SqlClient;
           if (failure === "installed-owner")
             yield* sql`UPDATE library_installed_skills SET skill_version_id=${f.state.skills[1]!.versions[0]!.skill_version_id} WHERE installed_skill_id=${f.state.installed_skills[0]!.installed_skill_id}`;
-          if (failure === "acceptance")
-            yield* sql`UPDATE library_assessment_acceptances SET skill_version_id='absent'`;
           if (failure === "edits") {
             const hash = "sha256:" + "a".repeat(64);
             yield* sql`INSERT INTO author_trees(hash,extra) VALUES(${hash},'{}')`;
@@ -191,7 +189,7 @@ for (const failure of ["installed-owner", "acceptance", "edits"] as const)
   );
 
 it.effect(
-  "direct SQL rejects wrong ownership and missing acceptance/tree references, but deferred imports work in either order",
+  "direct SQL keeps historical consent references, rejects wrong ownership and missing trees, and defers imports",
   () =>
     Effect.gen(function* () {
       const f = yield* prepared;
@@ -210,11 +208,10 @@ it.effect(
             yield* sql`SELECT * FROM library_installed_skills ORDER BY rowid`,
             before,
           );
-          assert.strictEqual(
-            (yield* Effect.result(
-              sql`UPDATE library_assessment_acceptances SET skill_version_id='absent'`,
-            ))._tag,
-            "Failure",
+          yield* sql`UPDATE library_assessment_acceptances SET skill_version_id='absent'`;
+          assert.deepStrictEqual(
+            yield* sql`SELECT DISTINCT skill_version_id FROM library_assessment_acceptances`,
+            [{ skill_version_id: "absent" }],
           );
           for (const reverse of [false, true]) {
             const hash = "sha256:" + (reverse ? "b" : "c").repeat(64);
