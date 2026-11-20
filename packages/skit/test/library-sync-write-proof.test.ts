@@ -2,7 +2,9 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option, Result, Schema } from "effect";
 import { join } from "node:path";
 import * as Library from "../src/library/library.js";
-import { currentLibraryManifest } from "../src/library/library-contracts.js";
+import { libraryManifestFromLocalState } from "../src/library/library-state.js";
+import { canonicalJson } from "../src/shared/json.js";
+import { currentLibraryManifest, type SnapshotArchive } from "../src/library/library-contracts.js";
 import type { RemoteLibrary } from "../src/library/internal/sync/library-sync.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
@@ -36,6 +38,10 @@ for (const outcome of [
         if (Option.isNone(request)) return yield* Effect.die("Missing source");
         yield* library.import.collection(request.value);
         const before = yield* library.read;
+        if (before._tag !== "Present") return yield* Effect.die("Missing imported Library");
+        const beforeArchives = yield* library.content.pack(before);
+        const beforeBytes = yield* fs.readFile(join(source, "SKILL.md"));
+        const localManifest = yield* libraryManifestFromLocalState(before.state);
         let head: RemoteLibrary = {
           library_id: "library-proof",
           revision_id: "revision-before",
@@ -48,6 +54,8 @@ for (const outcome of [
             snapshot_digests: [],
           }),
         };
+        let fetched: RemoteLibrary | undefined;
+        let attemptedBase: RemoteLibrary | undefined;
         let reads = 0;
         let writes = 0;
         const lostResponse = { _tag: "LostResponse" };
@@ -59,12 +67,14 @@ for (const outcome of [
                 reads++;
                 if (reads > 1 && outcome === "unreadable-head")
                   return yield* Effect.fail({ _tag: "ReadFailed" });
+                fetched = structuredClone(head);
                 return structuredClone(head);
               }),
               upload: () => Effect.void,
               download: () => Effect.die("No download expected"),
               write: (expected, manifest) =>
                 Effect.gen(function* () {
+                  attemptedBase = structuredClone(fetched);
                   writes++;
                   assert.strictEqual(expected, head.revision_id);
                   head = {
@@ -134,7 +144,6 @@ for (const outcome of [
         } else if (outcome === "different-known-field") {
           assert.isTrue(Result.isSuccess(result));
           if (Result.isSuccess(result)) assert.strictEqual(result.success.status, "conflicted");
-          assert.deepStrictEqual(yield* library.read, before);
         } else if (outcome === "concurrent-sync") {
           assert.isTrue(Result.isFailure(result));
           if (Result.isFailure(result) && Schema.is(StalePlan)(result.failure))
@@ -156,7 +165,62 @@ for (const outcome of [
                 });
             } else assert.strictEqual(result.failure, lostResponse);
           }
-          assert.deepStrictEqual(yield* library.read, before);
+        }
+        if (
+          outcome !== "accepted-without-response" &&
+          outcome !== "concurrent-local-edit" &&
+          outcome !== "concurrent-sync"
+        ) {
+          const after = yield* library.read;
+          if (after._tag !== "Present") return yield* Effect.die("Lost local Library");
+          const { sync_ancestry: _beforeBase, ...beforeContent } = before.state;
+          const { sync_ancestry: savedBase, ...afterContent } = after.state;
+          assert.deepStrictEqual(afterContent, beforeContent);
+          assert.strictEqual(canonicalJson(afterContent), canonicalJson(beforeContent));
+          assert.deepStrictEqual(yield* library.content.pack(after), beforeArchives);
+          assert.deepStrictEqual(yield* fs.readFile(join(source, "SKILL.md")), beforeBytes);
+          const base = attemptedBase;
+          if (!base) return yield* Effect.die("Missing fetched base for attempted upload");
+          assert.deepStrictEqual(savedBase, {
+            origin: "https://registry.test",
+            library_id: base.library_id,
+            revision_id: base.revision_id,
+            base_manifest: base.manifest,
+          });
+          assert.notStrictEqual(
+            canonicalJson(savedBase?.base_manifest),
+            canonicalJson(localManifest),
+          );
+          // Recover transport availability with the last verified head still current. Every local
+          // change must still be pending: the failed target was never an acknowledged merge base.
+          let retryWrites = 0;
+          const uploaded: SnapshotArchive[] = [];
+          const retried = yield* library.sync(
+            { origin: "https://registry.test", apply: true },
+            {
+              read: Effect.succeed(structuredClone(base)),
+              upload: (archive) =>
+                Effect.sync(() => {
+                  uploaded.push(archive);
+                }),
+              download: () => Effect.die("No download expected on retry"),
+              write: (expected, manifest) =>
+                Effect.sync(() => {
+                  retryWrites++;
+                  assert.strictEqual(expected, base.revision_id);
+                  assert.deepStrictEqual(manifest, localManifest);
+                  return { library_id: base.library_id, revision_id: "revision-retry", manifest };
+                }),
+            },
+          );
+          assert.strictEqual(retried.status, "merged");
+          assert.strictEqual(retryWrites, 1);
+          assert.deepStrictEqual(uploaded, beforeArchives);
+          const recovered = yield* library.read;
+          if (recovered._tag !== "Present") return yield* Effect.die("Missing recovered Library");
+          assert.deepStrictEqual(recovered.state.sync_ancestry?.base_manifest, localManifest);
+          assert.strictEqual(recovered.state.sync_ancestry?.revision_id, "revision-retry");
+          assert.deepStrictEqual(yield* library.content.pack(recovered), beforeArchives);
         }
         return result;
       }).pipe(Effect.provide(Library.layer({ home, roots: testRoots(home) })));
