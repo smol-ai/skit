@@ -1,11 +1,16 @@
 import { loadInventoryRows, saveInventoryRows, decodeInventoryScan } from "./inventory-rows.js";
-import { Enabled, enabledItemKey } from "../library-contracts.js";
+import {
+  Enabled,
+  enabledItemKey,
+  HistoricalLocator,
+  LibraryManifest,
+} from "../library-contracts.js";
 import { canonicalJson } from "../../shared/json.js";
 import { Array as EffectArray, Effect, Schema, Struct } from "effect";
 import { prepareRowDifference, prepareManifestRows, readManifestRows } from "./difference.js";
 import { SqlClient } from "effect/sql";
 import { arrayAt, isJsonObject, objectAt, JsonObject } from "../../shared/json.js";
-import { InstalledSkill } from "../device-state.js";
+import { InstalledSkill, DeviceSkillSelection } from "../device-state.js";
 import type { InstalledSkillId } from "../entity-ids.js";
 import { InvalidLibraryState } from "../failures.js";
 import { LibraryStateFields } from "./state-fields.js";
@@ -154,9 +159,6 @@ const libraryTables = [
   sync,
   base,
 ];
-const knownFields = new Map(
-  libraryTables.map((table) => [table, new Set(table.fields.map((field) => field.field))]),
-);
 const entities = [
   { field: "collections", id: "collection_id", table: collections },
   { field: "skills", id: "skill_id", table: skills },
@@ -164,50 +166,41 @@ const entities = [
   { field: "imports", id: "import_id", table: imports },
 ];
 
-/** A row's extra has original field names, including nested objects' remaining fields.
- * A null scalar also stays in extra, so SQL NULL never conflates null with absence. */
-function rowOf(value: JsonObject, table: Table, omitted: readonly string[] = []): Row {
-  const known = knownFields.get(table);
-  const extra = Object.fromEntries(
-    Object.entries(value).filter(([key]) => !known?.has(key) && !omitted.includes(key)),
-  );
+/** Validate every named field; there is no residual representation for invalid values. */
+const rowOf = Effect.fn("Library.rowOf")(function* (
+  value: JsonObject,
+  table: Table,
+  omitted: readonly string[] = [],
+) {
+  const names = [...table.fields.map((field) => field.field), ...omitted];
+  yield* Schema.decodeUnknownEffect(
+    Schema.Struct(
+      Object.fromEntries(names.map((name) => [name, Schema.optionalKey(Schema.Unknown)])),
+    ),
+    { onExcessProperty: "error" },
+  )(value);
   const row: Row = {};
   for (const field of table.fields) {
     const child = value[field.field];
-    if (child === undefined) row[field.column] = null;
-    else if (field.json) row[field.column] = JSON.stringify(child);
-    else if (typeof child === "string") row[field.column] = child;
-    else {
-      row[field.column] = null;
-      Object.defineProperty(extra, field.field, {
-        value: child,
-        enumerable: true,
-        configurable: true,
-      });
-    }
+    row[field.column] =
+      child === undefined
+        ? null
+        : field.json
+          ? JSON.stringify(yield* Schema.decodeUnknownEffect(Schema.Json)(child))
+          : yield* Schema.decodeUnknownEffect(Schema.String)(child);
   }
-  row.extra = Object.keys(extra).length ? JSON.stringify(extra) : null;
   return row;
-}
+});
 const objectOf = Effect.fn("Library.readRow")(function* (row: Row, table: Table) {
-  const value = yield* Schema.decodeEffect(Schema.fromJsonString(JsonObject))(
-    typeof row.extra === "string" ? row.extra : "{}",
-  );
+  const value: JsonObject = {};
   for (const field of table.fields) {
     const child = row[field.column];
-    if (child !== null && child !== undefined && !Object.hasOwn(value, field.field))
-      value[field.field] =
-        field.json && typeof child === "string"
-          ? yield* Schema.decodeEffect(Schema.fromJsonString(Schema.MutableJson))(child)
-          : child;
+    if (child !== null && child !== undefined)
+      value[field.field] = field.json
+        ? yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.MutableJson))(child)
+        : yield* Schema.decodeUnknownEffect(Schema.String)(child);
   }
   return value;
-});
-const extras = Effect.fn("Library.saveRowExtras")(function* (row: Row, value: JsonObject) {
-  const prior = yield* Schema.decodeEffect(Schema.fromJsonString(JsonObject))(
-    typeof row.extra === "string" ? row.extra : "{}",
-  );
-  return { ...row, extra: JSON.stringify({ ...prior, ...value }) };
 });
 function objects(value: JsonObject, field: string): JsonObject[] {
   return arrayAt(value, field).filter(isJsonObject);
@@ -227,26 +220,15 @@ const splitEnabledRows = Effect.fn("Library.splitEnabledRows")(function* (value:
   for (const repository of objects(value, "repositories")) {
     const root = typeof repository.root === "string" ? repository.root : "";
     owners.push({ scope: "repository", root, value: repository });
-    add(
-      repositories,
-      yield* extras(
-        rowOf(repository, repositories, ["enabled", "invocation_policies"]),
-        Object.hasOwn(repository, "invocation_policies")
-          ? {
-              invocation_policies: Object.fromEntries(
-                Object.entries(objectAt(repository, "invocation_policies") ?? {}).filter(
-                  ([, value]) => typeof value !== "string",
-                ),
-              ),
-            }
-          : {},
-      ),
-    );
+    add(repositories, {
+      ...(yield* rowOf(repository, repositories, ["enabled", "invocation_policies"])),
+      invocation_policies_present: Number(Object.hasOwn(repository, "invocation_policies")),
+    });
   }
   for (const owner of owners) {
     for (const entry of objects(owner.value, "enabled"))
       add(enabled, {
-        ...rowOf(entry, enabled),
+        ...(yield* rowOf(entry, enabled)),
         scope: owner.scope,
         root: owner.root,
         item_key:
@@ -261,6 +243,7 @@ const splitEnabledRows = Effect.fn("Library.splitEnabledRows")(function* (value:
         add(policies, { scope: owner.scope, root: owner.root, skill_id: skill, policy });
   }
   const omitted = [
+    "schemaVersion",
     "collections",
     "skills",
     "collection_versions",
@@ -276,45 +259,24 @@ const splitEnabledRows = Effect.fn("Library.splitEnabledRows")(function* (value:
     "device_skill_selection",
     "invocation_policies",
   ];
-  let deviceRow = rowOf(value, device, omitted);
-  if (Object.hasOwn(value, "invocation_policies"))
-    deviceRow = yield* extras(deviceRow, {
-      invocation_policies: Object.fromEntries(
-        Object.entries(objectAt(value, "invocation_policies") ?? {}).filter(
-          ([, value]) => typeof value !== "string",
-        ),
-      ),
-    });
-  if (Object.hasOwn(value, "assessmentAcceptances"))
-    deviceRow = yield* extras(deviceRow, { assessmentAcceptances: [] });
+  const deviceRow = yield* rowOf(value, device, omitted);
   if (selection)
-    deviceRow = yield* extras(deviceRow, {
-      device_skill_selection: Object.fromEntries(
-        Object.entries(selection).filter(
-          ([key]) =>
-            key !== "mode" &&
-            (selection.mode !== "choose" || (key !== "enabled" && key !== "invocation_policies")),
-        ),
-      ),
-    });
-  if (selection?.mode === "choose" && Object.hasOwn(selection, "invocation_policies")) {
-    const extra = yield* Schema.decodeEffect(Schema.fromJsonString(JsonObject))(
-      typeof deviceRow.extra === "string" ? deviceRow.extra : "{}",
+    yield* Schema.decodeUnknownEffect(DeviceSkillSelection, { onExcessProperty: "error" })(
+      selection,
     );
-    deviceRow = yield* extras(deviceRow, {
-      device_skill_selection: {
-        ...objectAt(extra, "device_skill_selection"),
-        invocation_policies: Object.fromEntries(
-          Object.entries(objectAt(selection, "invocation_policies") ?? {}).filter(
-            ([, value]) => typeof value !== "string",
-          ),
-        ),
-      },
-    });
-  }
   add(device, {
     ...deviceRow,
     id: 1,
+    schema_version: yield* Schema.decodeUnknownEffect(Schema.Literal(12))(
+      value.schemaVersion === undefined ? 12 : value.schemaVersion,
+    ),
+    assessment_acceptances_present: Number(Object.hasOwn(value, "assessmentAcceptances")),
+    invocation_policies_present: Number(Object.hasOwn(value, "invocation_policies")),
+    device_invocation_policies_present: Number(
+      selection !== undefined &&
+        selection !== null &&
+        Object.hasOwn(selection, "invocation_policies"),
+    ),
     device_skill_selection: typeof selection?.mode === "string" ? selection.mode : null,
   });
   return rows;
@@ -327,8 +289,14 @@ const splitCatalogueRows = Effect.fn("Library.splitCatalogueRows")(function* (va
   const add = (table: Table, row: Row) => rows.get(table.name)?.push(row);
   for (const entity of entities)
     for (const item of objects(value, entity.field)) {
-      let row = rowOf(
-        item,
+      const input =
+        entity.table === imports
+          ? yield* Schema.decodeUnknownEffect(HistoricalLocator, { onExcessProperty: "error" })(
+              item.input,
+            )
+          : undefined;
+      const row = yield* rowOf(
+        input ? { ...item, input: input.value } : item,
         entity.table,
         entity.table === skills
           ? ["versions"]
@@ -336,24 +304,17 @@ const splitCatalogueRows = Effect.fn("Library.splitCatalogueRows")(function* (va
             ? ["members"]
             : [],
       );
-      if (entity.table === imports) {
-        const input = objectAt(item, "input") ?? {};
-        row = yield* extras(
-          { ...row, input: typeof input.value === "string" ? input.value : null },
-          { input: Object.fromEntries(Object.entries(input).filter(([key]) => key !== "value")) },
-        );
-      }
       add(entity.table, row);
       if (entity.table === skills)
         for (const version of objects(item, "versions"))
           add(versions, {
-            ...rowOf(version, versions),
+            ...(yield* rowOf(version, versions)),
             skill_id: typeof item.skill_id === "string" ? item.skill_id : null,
           });
       if (entity.table === collectionVersions)
         for (const member of objects(item, "members"))
           add(members, {
-            ...rowOf(member, members),
+            ...(yield* rowOf(member, members)),
             collection_version_id:
               typeof item.collection_version_id === "string" ? item.collection_version_id : null,
           });
@@ -367,22 +328,21 @@ const splitLibraryRows = Effect.fn("Library.splitRows")(function* (value: JsonOb
   const add = (table: Table, row: Row) => rows.get(table.name)?.push(row);
   for (const [table, entries] of yield* splitCatalogueRows(value)) rows.set(table, entries);
   for (const [table, entries] of yield* splitEnabledRows(value)) rows.set(table, entries);
-  for (const entry of objects(value, "installed_skills")) add(installed, rowOf(entry, installed));
+  for (const entry of objects(value, "installed_skills"))
+    add(installed, yield* rowOf(entry, installed));
   for (const entry of objects(value, "assessmentAcceptances"))
-    add(acceptances, rowOf(entry, acceptances));
+    add(acceptances, yield* rowOf(entry, acceptances));
   const ancestry = objectAt(value, "sync_ancestry");
   if (ancestry) {
-    const manifest = objectAt(ancestry, "base_manifest") ?? {};
-    add(
-      sync,
-      yield* extras(rowOf(ancestry, sync, ["base_manifest"]), {
-        base_manifest: Object.fromEntries(
-          Object.entries(manifest).filter(
-            ([key]) => !entities.some((entity) => entity.field === key) && key !== "enabled",
-          ),
-        ),
-      }),
+    yield* Schema.decodeUnknownEffect(LibraryManifest, { onExcessProperty: "error" })(
+      ancestry.base_manifest,
     );
+    const manifest = yield* Schema.decodeUnknownEffect(JsonObject)(ancestry.base_manifest);
+    add(sync, {
+      ...(yield* rowOf(ancestry, sync, ["base_manifest"])),
+      base_schema: yield* Schema.decodeUnknownEffect(Schema.String)(manifest.schema),
+      snapshot_digests: JSON.stringify(manifest.snapshot_digests),
+    });
     const syncRows = rows.get(sync.name);
     if (syncRows?.[0]) syncRows[0] = { ...syncRows[0], id: 1 };
     for (const difference of prepareManifestRows(value, manifest)) add(base, { ...difference });
@@ -408,6 +368,13 @@ const assembleLibraryListing = Effect.fn("Library.assembleListing")(function* (
   }
   const first = list(device)[0];
   const value = first ? yield* objectOf(first, device) : {};
+  if (first) {
+    value.schemaVersion = yield* Schema.decodeUnknownEffect(Schema.Literal(12))(
+      first.schema_version,
+    );
+    if (first.assessment_acceptances_present) value.assessmentAcceptances = [];
+    if (first.invocation_policies_present) value.invocation_policies = {};
+  }
   for (const entity of entities)
     value[entity.field] = yield* Effect.forEach(list(entity.table), (row) =>
       Effect.gen(function* () {
@@ -416,8 +383,7 @@ const assembleLibraryListing = Effect.fn("Library.assembleListing")(function* (
           item.versions = children.get(versions)?.get(row.skill_id) ?? [];
         if (entity.table === collectionVersions)
           item.members = children.get(members)?.get(row.collection_version_id) ?? [];
-        if (entity.table === imports)
-          item.input = { value: row.input ?? "", ...objectAt(item, "input") };
+        if (entity.table === imports) item.input = { value: row.input ?? "" };
         return item;
       }),
     );
@@ -438,15 +404,18 @@ const assembleLibraryListing = Effect.fn("Library.assembleListing")(function* (
   yield* owner("account", "", value);
   if (first?.device_skill_selection !== null && first?.device_skill_selection !== undefined) {
     const selection = {
-      ...objectAt(value, "device_skill_selection"),
       mode: first.device_skill_selection,
     };
+    if (first.device_invocation_policies_present)
+      Object.assign(selection, { invocation_policies: {} });
     value.device_skill_selection =
       selection.mode === "choose" ? yield* owner("device", "", selection) : selection;
   }
   value.repositories = yield* Effect.forEach(list(repositories), (row) =>
     Effect.gen(function* () {
-      return yield* owner("repository", String(row.root), yield* objectOf(row, repositories));
+      const repository = yield* objectOf(row, repositories);
+      if (row.invocation_policies_present) repository.invocation_policies = {};
+      return yield* owner("repository", String(row.root), repository);
     }),
   );
   value.installed_skills = yield* Effect.forEach(list(installed), (row) =>
@@ -467,7 +436,12 @@ const assembleLibraryRows = Effect.fn("Library.assembleRows")(function* (
   const syncRow = list(sync)[0];
   if (syncRow) {
     const ancestry = yield* objectOf(syncRow, sync);
-    const manifest = objectAt(ancestry, "base_manifest") ?? {};
+    const manifest = {
+      schema: yield* Schema.decodeUnknownEffect(Schema.String)(syncRow.base_schema),
+      snapshot_digests: yield* Schema.decodeUnknownEffect(
+        Schema.fromJsonString(Schema.mutable(Schema.Array(Schema.String))),
+      )(syncRow.snapshot_digests),
+    };
     value.sync_ancestry = {
       ...ancestry,
       base_manifest: yield* readManifestRows(value, manifest, list(base)),
@@ -639,26 +613,25 @@ export const loadLibraryListing = Effect.fn("Library.loadListing")(function* (pa
       reason: { _tag: "ContentMissing", entry: "library_device" },
     });
   return yield* assembleLibraryListing(rows).pipe(
-    Effect.flatMap(
-      Schema.decodeUnknownEffect(
-        Schema.declare(
-          Schema.is(
-            Schema.Struct(
-              Struct.pick(LibraryStateFields, [
-                "collections",
-                "skills",
-                "collection_versions",
-                "imports",
-                "enabled",
-                "repositories",
-                "installed_skills",
-                "device_skill_selection",
-                "invocation_policies",
-              ]),
-            ),
-          ),
-        ),
-      ),
+    Effect.flatMap((value) =>
+      Effect.gen(function* () {
+        const fields = [
+          "collections",
+          "skills",
+          "collection_versions",
+          "imports",
+          "enabled",
+          "repositories",
+          "installed_skills",
+          "device_skill_selection",
+          "invocation_policies",
+        ] as const;
+        const checked = yield* Schema.decodeUnknownEffect(
+          Schema.Struct(Struct.pick(LibraryStateFields, fields)),
+          { onExcessProperty: "error" },
+        )(Struct.pick(value, fields));
+        return { ...value, ...checked };
+      }),
     ),
     Effect.mapError(
       (failure) => new InvalidLibraryState({ path, reason: { _tag: "SchemaInvalid", failure } }),
@@ -676,7 +649,7 @@ export const loadInstalledSkillRow = Effect.fn("Library.loadInstalledSkillRow")(
     yield* sql<Row>`SELECT * FROM library_installed_skills WHERE installed_skill_id=${id}`;
   if (!rows[0]) return undefined;
   return yield* objectOf(rows[0], installed).pipe(
-    Effect.flatMap(Schema.decodeUnknownEffect(Schema.declare(Schema.is(InstalledSkill)))),
+    Effect.flatMap(Schema.decodeUnknownEffect(InstalledSkill, { onExcessProperty: "error" })),
     Effect.mapError(
       (failure) => new InvalidLibraryState({ path, reason: { _tag: "SchemaInvalid", failure } }),
     ),
@@ -696,7 +669,7 @@ export const saveInstalledSkillRow = Effect.fn("Library.saveInstalledSkillRow")(
     return;
   }
   const value = yield* Schema.decodeUnknownEffect(JsonObject)(next).pipe(
-    Effect.flatMap(Schema.decodeUnknownEffect(Schema.declare(Schema.is(InstalledSkill)))),
+    Effect.flatMap(Schema.decodeUnknownEffect(InstalledSkill, { onExcessProperty: "error" })),
     Effect.mapError(
       (failure) => new InvalidLibraryState({ path, reason: { _tag: "SchemaInvalid", failure } }),
     ),
@@ -706,7 +679,7 @@ export const saveInstalledSkillRow = Effect.fn("Library.saveInstalledSkillRow")(
       (failure) => new InvalidLibraryState({ path, reason: { _tag: "SchemaInvalid", failure } }),
     ),
   );
-  const row = rowOf(document, installed);
+  const row = yield* rowOf(document, installed);
   if (exists)
     yield* sql`UPDATE library_installed_skills SET ${sql.update(row)} WHERE installed_skill_id=${id}`;
   else yield* sql`INSERT INTO library_installed_skills ${sql.insert(row)}`;
@@ -746,10 +719,12 @@ export const saveEnabledRows = Effect.fn("Library.saveEnabledRows")(function* (
       const rows = yield* sql<{
         value: string;
       }>`SELECT value FROM library_sync_base WHERE entity='enabled' AND key=''`;
-      const decode = Schema.Array(Schema.declare(Schema.is(Enabled)));
+      const decode = Schema.Array(Enabled);
       const agreed = rows[0]
-        ? yield* Schema.decodeEffect(Schema.fromJsonString(decode))(rows[0].value)
-        : yield* Schema.decodeUnknownEffect(decode)(current.enabled);
+        ? yield* Schema.decodeEffect(Schema.fromJsonString(decode), { onExcessProperty: "error" })(
+            rows[0].value,
+          )
+        : yield* Schema.decodeUnknownEffect(decode, { onExcessProperty: "error" })(current.enabled);
       const after = [...(yield* Schema.decodeUnknownEffect(decode)(desired.enabled))].sort(
         (a, b) =>
           enabledItemKey(a) < enabledItemKey(b)
@@ -780,7 +755,7 @@ export const loadInstalledSkillRows = Effect.fn("Library.loadInstalledSkillRows"
     objectOf(row, installed),
   ).pipe(
     Effect.flatMap(
-      Schema.decodeUnknownEffect(Schema.Array(Schema.declare(Schema.is(InstalledSkill)))),
+      Schema.decodeUnknownEffect(Schema.Array(InstalledSkill), { onExcessProperty: "error" }),
     ),
     Effect.mapError(
       (failure) => new InvalidLibraryState({ path, reason: { _tag: "SchemaInvalid", failure } }),
@@ -795,8 +770,9 @@ export const saveInstalledSkillRows = Effect.fn("Library.saveInstalledSkillRows"
 ) {
   const encode = (items: readonly InstalledSkill[]) =>
     Effect.forEach(items, (item) =>
-      Schema.decodeUnknownEffect(JsonObject)(item).pipe(
-        Effect.map((document) => rowOf(document, installed)),
+      Schema.decodeUnknownEffect(InstalledSkill, { onExcessProperty: "error" })(item).pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(JsonObject)),
+        Effect.flatMap((document) => rowOf(document, installed)),
       ),
     );
   yield* saveRows(
@@ -837,7 +813,12 @@ export const loadSyncAncestryRows = Effect.fn("Library.loadSyncAncestryRows")(fu
   const ancestry = yield* objectOf(header, sync);
   ancestry.base_manifest = yield* readManifestRows(
     local,
-    objectAt(ancestry, "base_manifest") ?? {},
+    {
+      schema: yield* Schema.decodeUnknownEffect(Schema.String)(header.base_schema),
+      snapshot_digests: yield* Schema.decodeUnknownEffect(
+        Schema.fromJsonString(Schema.mutable(Schema.Array(Schema.String))),
+      )(header.snapshot_digests),
+    },
     rows.get(base.name) ?? [],
   );
   return { local, ancestry };
@@ -848,16 +829,15 @@ export const saveSyncAncestryRows = Effect.fn("Library.saveSyncAncestryRows")(fu
   local: JsonObject,
   ancestry: JsonObject,
 ) {
-  const manifest = objectAt(ancestry, "base_manifest") ?? {};
-  const header = yield* extras(rowOf(ancestry, sync, ["base_manifest"]), {
-    base_manifest: Object.fromEntries(
-      Object.entries(manifest).filter(
-        ([key]) => !entities.some((entity) => entity.field === key) && key !== "enabled",
-      ),
-    ),
-  });
   const sql = yield* SqlClient.SqlClient;
-  yield* sql`INSERT INTO library_sync ${sql.insert({ ...header, id: 1 })} ON CONFLICT(id) DO UPDATE SET origin=excluded.origin,library_id=excluded.library_id,revision_id=excluded.revision_id,extra=excluded.extra`;
+  const manifest = objectAt(ancestry, "base_manifest") ?? {};
+  yield* Schema.decodeUnknownEffect(LibraryManifest, { onExcessProperty: "error" })(manifest);
+  const header = {
+    ...(yield* rowOf(ancestry, sync, ["base_manifest"])),
+    base_schema: yield* Schema.decodeUnknownEffect(Schema.String)(manifest.schema),
+    snapshot_digests: JSON.stringify(manifest.snapshot_digests),
+  };
+  yield* sql`INSERT INTO library_sync ${sql.insert({ ...header, id: 1 })} ON CONFLICT(id) DO UPDATE SET origin=excluded.origin,library_id=excluded.library_id,revision_id=excluded.revision_id,base_schema=excluded.base_schema,snapshot_digests=excluded.snapshot_digests`;
   yield* sql`DELETE FROM library_sync_base`;
   for (const row of prepareManifestRows(local, manifest))
     yield* sql`INSERT INTO library_sync_base ${sql.insert(row)}`;
@@ -868,5 +848,5 @@ export const insertAcceptanceRow = Effect.fn("Library.insertAcceptanceRow")(func
   value: JsonObject,
 ) {
   const sql = yield* SqlClient.SqlClient;
-  yield* sql`INSERT INTO library_assessment_acceptances ${sql.insert(rowOf(value, acceptances))}`;
+  yield* sql`INSERT INTO library_assessment_acceptances ${sql.insert(yield* rowOf(value, acceptances))}`;
 });

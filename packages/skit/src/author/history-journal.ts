@@ -39,18 +39,14 @@ const Workspace = Schema.Struct({
   workspace_id: Schema.NullOr(Schema.String),
   root: Schema.String,
 });
-const fields = ["schema", "workspace_key", "sequence", "revision", "root", "workspace_id"];
 const invalid = (path: string, cause: unknown) =>
   new AuthorHistoryInvalid({ path, reason: { _tag: "JournalFailure", cause } });
 
 const saveEvent = Effect.fn("AuthorHistory.saveEvent")(function* (event: HistoryEvent) {
   const sql = yield* SqlClient.SqlClient;
-  const document = yield* Schema.decodeUnknownEffect(JsonObject)(event);
-  const extra = Object.fromEntries(
-    Object.entries(document).filter(([key]) => !fields.includes(key)),
-  );
-  yield* sql`INSERT INTO author_history_events(workspace_key,sequence,revision,root,workspace_id,extra)
-    VALUES(${event.workspace_key},${event.sequence},${event.revision},${event.root},${event.workspace_id ?? null},${JSON.stringify(extra)})`;
+  yield* Schema.decodeUnknownEffect(HistoryEvent, { onExcessProperty: "error" })(event);
+  yield* sql`INSERT INTO author_history_events(workspace_key,sequence,revision,root,workspace_id)
+    VALUES(${event.workspace_key},${event.sequence},${event.revision},${event.root},${event.workspace_id ?? null})`;
 });
 
 const latestEvent = Effect.fn("AuthorHistory.latestEvent")(function* (key: Hash) {
@@ -61,12 +57,9 @@ const latestEvent = Effect.fn("AuthorHistory.latestEvent")(function* (key: Hash)
     revision: string;
     root: string;
     workspace_id: string | null;
-    extra: string;
   }>`SELECT * FROM author_history_events WHERE workspace_key=${key} ORDER BY sequence DESC LIMIT 1`)[0];
   if (!row) return undefined;
-  const extra = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(JsonObject))(row.extra);
-  return yield* Schema.decodeUnknownEffect(Schema.declare(Schema.is(HistoryEvent)))({
-    ...extra,
+  return yield* Schema.decodeUnknownEffect(HistoryEvent, { onExcessProperty: "error" })({
     schema: "skit.author-history-event.v1",
     workspace_key: row.workspace_key,
     sequence: row.sequence,
@@ -138,15 +131,19 @@ const loadLegacyJournal = Effect.fn("AuthorHistory.loadLegacyJournal")(function*
             : [];
           const keys = new Set<string>();
           for (const workspace of workspaces)
-            keys.add((yield* Schema.decodeUnknownEffect(Workspace)(workspace)).workspace_key);
+            keys.add(
+              (yield* Schema.decodeUnknownEffect(Workspace, { onExcessProperty: "error" })(
+                workspace,
+              )).workspace_key,
+            );
           const decoded = yield* Effect.forEach(events, (row) =>
             Effect.gen(function* () {
               const value = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(JsonObject))(
                 row.event_json,
               );
-              const event = yield* Schema.decodeUnknownEffect(
-                Schema.declare(Schema.is(HistoryEvent)),
-              )(value);
+              const event = yield* Schema.decodeUnknownEffect(HistoryEvent, {
+                onExcessProperty: "error",
+              })(value);
               if (
                 event.workspace_key !== row.workspace_key ||
                 event.sequence !== row.sequence ||
@@ -217,12 +214,8 @@ export const prepareHistoryJournal = Effect.fn("AuthorHistory.prepareJournal")(f
           if ((yield* sql`SELECT id FROM author_history_import WHERE id=1`).length) return;
           for (const raw of snapshot.workspaces) {
             const row = yield* Schema.decodeUnknownEffect(Workspace)(raw);
-            const extra = Object.fromEntries(
-              Object.entries(raw).filter(
-                ([key]) => !["workspace_key", "workspace_id", "root"].includes(key),
-              ),
-            );
-            yield* sql`INSERT INTO author_history_workspaces(workspace_key,workspace_id,root,extra) VALUES(${row.workspace_key},${row.workspace_id},${row.root},${JSON.stringify(extra)})`;
+            yield* Schema.decodeUnknownEffect(Workspace, { onExcessProperty: "error" })(raw);
+            yield* sql`INSERT INTO author_history_workspaces(workspace_key,workspace_id,root) VALUES(${row.workspace_key},${row.workspace_id},${row.root})`;
           }
           for (const event of snapshot.events) yield* saveEvent(event);
           yield* sql`INSERT INTO author_history_import(id,source_hash) VALUES(1,${snapshot.hash})`;
@@ -291,8 +284,8 @@ const addWorkspace = Effect.fn("AuthorHistory.addWorkspace")(function* (
   // Keep the existing Hash encoding, but identify an alias with a random nonce rather
   // than a reusable root or workspace ID. Existing keys and event documents stay valid.
   const key = yield* sha256Hash(yield* (yield* SecureRandom.SecureRandom).randomBytes(32));
-  yield* sql`INSERT INTO author_history_workspaces (workspace_key, workspace_id, root, extra)
-    VALUES (${key}, ${workspaceId ?? null}, ${root}, '{}')`;
+  yield* sql`INSERT INTO author_history_workspaces (workspace_key, workspace_id, root)
+    VALUES (${key}, ${workspaceId ?? null}, ${root})`;
   return key;
 });
 

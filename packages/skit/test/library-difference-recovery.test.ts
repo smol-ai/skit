@@ -11,7 +11,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import * as Library from "../src/library/library.js";
-import { fixture } from "./helpers/library-values.js";
+import { declaredFixture as fixture } from "./helpers/library-values.js";
 import { saveLibrary, testRoots } from "./helpers/library-store.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { canonicalJson } from "../src/shared/json.js";
@@ -74,7 +74,10 @@ for (const kind of ["Sync", "Undo"] as const) {
         steps: [{ step, before: [], after: [], status: "Pending" }],
       });
       yield* saveLibrary(home, state);
-      const changed = { ...state, probeExtension: { user: ["new", null] } };
+      const changed = {
+        ...state,
+        collections: state.collections.map((row) => ({ ...row, label: "Unrecorded user change" })),
+      };
       yield* writeLibrary(
         home,
         Effect.gen(function* () {

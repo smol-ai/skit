@@ -131,8 +131,6 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
     );
   const writeRows = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) =>
     provideStorage(withDatabaseTransaction(home, effect));
-  const extra = (value: JsonObject, known: readonly string[]) =>
-    Object.fromEntries(Object.entries(value).filter(([key]) => !known.includes(key)));
   const keepFiles = Effect.fn("AuthorHistory.keepFiles")(function* (
     hash: Hash,
     tree: History.Tree,
@@ -165,14 +163,15 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
       Schema.fromJsonString(Schema.Union([Schema.Array(JsonObject), JsonObject])),
     )(text);
     let entries: readonly StoredEntry[];
-    let metadata: JsonObject = {};
     let register: Effect.Effect<
       void,
       FileBytesInvalid | SqlError | Schema.SchemaError,
       SqlClient.SqlClient
     > = Effect.void;
     if (Array.isArray(value)) {
-      const tree = yield* Schema.decodeUnknownEffect(TreeDocument)(text);
+      const tree = yield* Schema.decodeUnknownEffect(TreeDocument, { onExcessProperty: "error" })(
+        text,
+      );
       const batch = yield* keepFiles(hash, tree);
       register = batch.register;
       entries = yield* Effect.forEach(tree, (entry, index) =>
@@ -185,21 +184,19 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
               path: entry.path,
               mode: entry.mode,
               blob: yield* batch.blob(entry.bytes),
-              extra: extra(raw, ["kind", "path", "mode", "bytes"]),
             };
           return entry.kind === "directory"
-            ? { kind: entry.kind, path: entry.path, extra: extra(raw, ["kind", "path"]) }
+            ? { kind: entry.kind, path: entry.path }
             : {
                 kind: entry.kind,
                 path: entry.path,
                 target: entry.target,
-                extra: extra(raw, ["kind", "path", "target"]),
               };
         }),
       );
     } else {
       const manifest = yield* Schema.decodeUnknownEffect(JsonObject)(value);
-      yield* Schema.decodeUnknownEffect(TreeManifest)(manifest);
+      yield* Schema.decodeUnknownEffect(TreeManifest, { onExcessProperty: "error" })(manifest);
       const rawEntries = yield* Schema.decodeUnknownEffect(Schema.Array(JsonObject))(
         manifest.entries,
       );
@@ -207,6 +204,7 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
         Effect.gen(function* () {
           const entry = yield* Schema.decodeUnknownEffect(
             Schema.Union([TreeDirectory, StoredFile, TreeSymlink]),
+            { onExcessProperty: "error" },
           )(raw);
           if (entry.kind === "file")
             return {
@@ -214,15 +212,13 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
               path: entry.path,
               mode: entry.mode,
               blob: entry.blob,
-              extra: extra(raw, ["kind", "path", "mode", "blob"]),
             };
           return entry.kind === "directory"
-            ? { kind: entry.kind, path: entry.path, extra: extra(raw, ["kind", "path"]) }
+            ? { kind: entry.kind, path: entry.path }
             : {
                 kind: entry.kind,
                 path: entry.path,
                 target: entry.target,
-                extra: extra(raw, ["kind", "path", "target"]),
               };
         }),
       );
@@ -234,19 +230,15 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
         ),
       );
       register = batch.register;
-      metadata = extra(manifest, ["schema", "entries"]);
     }
-    return { tree: { entries, extra: metadata } satisfies StoredTree, register };
+    return { tree: { entries } satisfies StoredTree, register };
   });
   const prepareRevision = Effect.fn("AuthorHistory.prepareRevisionRows")(function* (text: string) {
     const value = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(JsonObject))(text);
-    const revision = yield* Schema.decodeUnknownEffect(History.Revision)(value);
-    const author = yield* Schema.decodeUnknownEffect(JsonObject)(value.author);
-    return {
-      revision,
-      extra: extra(value, ["tree", "parents", "author", "edits"]),
-      authorExtra: extra(author, ["device", "at"]),
-    } satisfies StoredRevision;
+    const revision = yield* Schema.decodeUnknownEffect(History.Revision, {
+      onExcessProperty: "error",
+    })(value);
+    return { revision } satisfies StoredRevision;
   });
   const sourceFiles = Effect.fn("AuthorHistory.sourceFiles")(function* (
     folder: string,
@@ -385,25 +377,33 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
     yield* flush(recoveryDirectory);
     prepared = false;
   });
+  const readLegacy = (kind: History.Kind, hash: Hash) =>
+    Effect.gen(function* () {
+      const text = yield* readRows(loadLegacyHistoryDocument(kind, hash));
+      if (text === undefined) return Option.none<string>();
+      if (kind === "revision")
+        yield* Schema.decodeEffect(Schema.fromJsonString(History.Revision), {
+          onExcessProperty: "error",
+        })(text);
+      else yield* Schema.decodeEffect(TreeDocument, { onExcessProperty: "error" })(text);
+      return Option.some(text);
+    });
   const store = yield* History.makeStore({
     read: (kind, hash) =>
       Effect.gen(function* () {
         if (!(yield* ensureMetadata())) return Option.none<string>();
         if (kind === "revision") {
           const value = yield* readRows(loadRevisionRows(hash));
-          if (!value)
-            return Option.fromUndefinedOr(yield* readRows(loadLegacyHistoryDocument(kind, hash)));
+          if (!value) return yield* readLegacy(kind, hash);
           return Option.some(
             JSON.stringify({
-              ...value.extra,
               ...value.revision,
-              author: { ...value.authorExtra, ...value.revision.author },
+              author: value.revision.author,
             }),
           );
         }
         const value = yield* readRows(loadTreeRows(hash));
-        if (!value)
-          return Option.fromUndefinedOr(yield* readRows(loadLegacyHistoryDocument(kind, hash)));
+        if (!value) return yield* readLegacy(kind, hash);
         const files = value.entries.filter((entry) => entry.kind === "file");
         const contents = yield* readBlobs(
           hash,
@@ -421,7 +421,6 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
               const content = loaded.get(entry.blob);
               if (content === undefined) return yield* Effect.die("Author file missing from batch");
               return {
-                ...entry.extra,
                 path: entry.path,
                 kind: entry.kind,
                 mode: entry.mode,
@@ -429,8 +428,8 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
               };
             }
             return entry.kind === "directory"
-              ? { ...entry.extra, path: entry.path, kind: entry.kind }
-              : { ...entry.extra, path: entry.path, kind: entry.kind, target: entry.target };
+              ? { path: entry.path, kind: entry.kind }
+              : { path: entry.path, kind: entry.kind, target: entry.target };
           }),
         );
         return Option.some(yield* Schema.encodeEffect(TreeDocument)(tree));
@@ -451,7 +450,9 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
         // Readback must see existing corruption; a repeated save never repairs an immutable value.
         if ((yield* ensureMetadata()) && (yield* readRows(hasHistoryRows(kind, hash)))) return;
         if (kind === "tree") {
-          const tree = yield* Schema.decodeUnknownEffect(TreeDocument)(text);
+          const tree = yield* Schema.decodeUnknownEffect(TreeDocument, {
+            onExcessProperty: "error",
+          })(text);
           const batch = yield* keepFiles(hash, tree);
           const entries: StoredEntry[] = yield* Effect.forEach(tree, (entry) =>
             Effect.gen(function* () {
@@ -461,11 +462,10 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
                   path: entry.path,
                   mode: entry.mode,
                   blob: yield* batch.blob(entry.bytes),
-                  extra: {},
                 };
               return entry.kind === "directory"
-                ? { kind: entry.kind, path: entry.path, extra: {} }
-                : { kind: entry.kind, path: entry.path, target: entry.target, extra: {} };
+                ? { kind: entry.kind, path: entry.path }
+                : { kind: entry.kind, path: entry.path, target: entry.target };
             }),
           );
 
@@ -473,7 +473,7 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
           yield* writeRows(
             Effect.gen(function* () {
               yield* batch.register;
-              yield* saveTreeRows(hash, { entries, extra: {} });
+              yield* saveTreeRows(hash, { entries });
             }),
           );
         } else {
@@ -491,8 +491,24 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
         return (yield* ensureMetadata()) ? yield* readRows(listHistoryRows(kind)) : [];
       }).pipe(Effect.mapError(failed)),
   });
+  // Validate before the shared content-addressed encoder can discard an excess property.
+  // This is the client store boundary; the shared History/wire contract stays unchanged.
+  const checkTree = (tree: History.Tree) =>
+    Schema.decodeUnknownEffect(History.Tree, { onExcessProperty: "error" })(tree).pipe(
+      Effect.mapError(failed),
+    );
+  const checked: History.Store = {
+    ...store,
+    putTree: (tree) => checkTree(tree).pipe(Effect.flatMap(store.putTree)),
+    commit: (revision) =>
+      Schema.decodeUnknownEffect(History.Revision, { onExcessProperty: "error" })(revision).pipe(
+        Effect.mapError(failed),
+        Effect.flatMap(store.commit),
+      ),
+  };
   return {
-    store,
-    keepTree: (tree: History.Tree) => keepTree(tree).pipe(Effect.mapError(storageError)),
+    store: checked,
+    keepTree: (tree: History.Tree) =>
+      checkTree(tree).pipe(Effect.flatMap(keepTree), Effect.mapError(storageError)),
   };
 });

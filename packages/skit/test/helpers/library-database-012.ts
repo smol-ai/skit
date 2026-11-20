@@ -1,5 +1,8 @@
+import { schema013 } from "./library-database-013.js";
 import { Effect } from "effect";
-import { SqlClient } from "effect/sql";
+import { migrateLibraryRelationships } from "../../src/library/store/relationships.js";
+import { migrateAuthorRevisionRows } from "../../src/author/history-migration.js";
+import { Migrator, SqlClient } from "effect/sql";
 import { libraryDatabasePath, withLibraryDatabase } from "../../src/library/store/database.js";
 
 /** Reconstruct the three pre-013 tables, keeping the fixture's other owner data intact. */
@@ -7,6 +10,7 @@ export const schema012 = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql.withTransaction(
     Effect.gen(function* () {
+      yield* schema013;
       yield* sql`ALTER TABLE author_history_legacy_documents DROP COLUMN source_rows`;
       yield* sql`CREATE TEMP TABLE installed_012 AS SELECT * FROM library_installed_skills`;
       yield* sql`CREATE TEMP TABLE acceptances_012 AS SELECT * FROM library_assessment_acceptances ORDER BY rowid`;
@@ -54,3 +58,21 @@ export const schema012 = Effect.gen(function* () {
 
 export const database012 = (home: string) =>
   withLibraryDatabase(libraryDatabasePath(home), schema012);
+
+/** Exercise the frozen 013 conversion before the current loader can apply 014. */
+export const migration013 = (home: string) =>
+  withLibraryDatabase(
+    libraryDatabasePath(home),
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* Migrator.make({})({
+        loader: Migrator.fromRecord({
+          "013_relationships_and_revision_edits": Effect.gen(function* () {
+            yield* sql`PRAGMA defer_foreign_keys=ON`;
+            yield* migrateLibraryRelationships;
+            yield* migrateAuthorRevisionRows;
+          }),
+        }),
+      });
+    }),
+  );

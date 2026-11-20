@@ -1,3 +1,4 @@
+import { migrateDeclaredColumns } from "./declared-columns.js";
 import { migrateLibraryRelationships } from "./relationships.js";
 import { migrateAuthorRevisionRows } from "../../author/history-migration.js";
 import { migrateInventoryRows } from "./inventory-rows.js";
@@ -140,6 +141,7 @@ const libraryMigrations = () => ({
         },
       });
   }),
+  "014_declared_columns": migrateDeclaredColumns,
 });
 
 /** Schema changes load only the owner rows whose layout changes; never legacy files. */

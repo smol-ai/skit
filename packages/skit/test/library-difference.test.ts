@@ -2,7 +2,6 @@ import { assert, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { fixture } from "./helpers/library-values.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { decodeCurrentState } from "../src/library/store/state-file.js";
 import {
   decodeLibraryState,
   libraryManifestFromLocalState,
@@ -121,7 +120,6 @@ it.effect("shuffled catalogue rows leave revision, merge and recovery unchanged"
 
 const richPair = Effect.gen(function* () {
   const { state } = yield* fixture;
-  const path = "/unused-library-difference";
   const skill = state.skills[0]!;
   const source = state.imports[0]!;
   const extension = { absent: null, empty: [], nested: { ["__proto__"]: [true, false] } };
@@ -153,7 +151,7 @@ const richPair = Effect.gen(function* () {
     },
     extension,
   };
-  const next = yield* decodeCurrentState(path, {
+  const next = yield* decodeLibraryState({
     ...state,
     collections: state.collections.toReversed().map((item) => ({
       ...item,
@@ -235,7 +233,7 @@ const richPair = Effect.gen(function* () {
     ),
   });
   const manifest = yield* libraryManifestFromLocalState(next);
-  const target = yield* decodeCurrentState(path, {
+  const target = yield* decodeLibraryState({
     ...next,
     sync_ancestry: {
       ...next.sync_ancestry,

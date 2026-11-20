@@ -124,9 +124,9 @@ export const saveInstalledSkills = Effect.fn("Library.saveInstalledSkills")(func
         return yield* new LibraryChanged({ path });
       if (canonicalJson(current) === canonicalJson(change.installedSkills.next))
         return change.revision;
-      const next = yield* Schema.decodeUnknownEffect(
-        Schema.Array(Schema.declare(Schema.is(InstalledSkill))),
-      )(change.installedSkills.next);
+      const next = yield* Schema.decodeUnknownEffect(Schema.Array(InstalledSkill), {
+        onExcessProperty: "error",
+      })(change.installedSkills.next);
       yield* checkInstalledSkills(path, next);
       yield* saveInstalledSkillRows(next, current);
       const accepted = yield* advanceLibraryRevision(path);

@@ -27,11 +27,12 @@ export const saveSyncAncestry = Effect.fn("Library.saveSyncAncestry")(function* 
   yield* withLibraryTransaction(
     home,
     Effect.gen(function* () {
-      const decode = Schema.declare(Schema.is(SyncAncestry));
+      const decode = SyncAncestry;
       const next = yield* Schema.decodeUnknownEffect(JsonObject)(request.ancestry);
-      yield* Schema.decodeUnknownEffect(decode)(next);
+      yield* Schema.decodeUnknownEffect(decode, { onExcessProperty: "error" })(next);
       const { local, ancestry } = yield* loadSyncAncestryRows();
-      if (ancestry !== undefined) yield* Schema.decodeUnknownEffect(decode)(ancestry);
+      if (ancestry !== undefined)
+        yield* Schema.decodeUnknownEffect(decode, { onExcessProperty: "error" })(ancestry);
       const { revision } = yield* readDatabaseStateRevision(path);
       if (
         revision === null &&

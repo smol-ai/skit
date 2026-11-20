@@ -3,7 +3,7 @@ import { Effect, FileSystem, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import { fixture } from "./helpers/library-values.js";
+import { declaredFixture as fixture } from "./helpers/library-values.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { decodeLibraryState } from "../src/library/library-state.js";
 import { makeOperationId, makeImportId } from "../src/library/entity-ids.js";

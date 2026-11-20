@@ -303,7 +303,9 @@ it.effect("operation readers do not decode an unrelated corrupt domain document"
       libraryDatabasePath(home),
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
-        yield* sql`UPDATE library_device SET extra=json_set(COALESCE(extra,'{}'),'$.schemaVersion','corrupt') WHERE id=1`;
+        yield* sql`PRAGMA ignore_check_constraints=ON`;
+        yield* sql`UPDATE library_device SET schema_version=99 WHERE id=1`;
+        yield* sql`PRAGMA ignore_check_constraints=OFF`;
       }),
     );
     const failure = yield* Effect.flip(inspectLocalLibraryState(home));

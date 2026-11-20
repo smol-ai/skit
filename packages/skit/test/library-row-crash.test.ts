@@ -7,7 +7,7 @@ import { SqlClient } from "effect/sql";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { skitLayer } from "../src/platform/layer.js";
-import { fixture as valuesFixture } from "./helpers/library-values.js";
+import { declaredFixture as valuesFixture } from "./helpers/library-values.js";
 import {
   emptyLibraryState,
   decodeLibraryState,

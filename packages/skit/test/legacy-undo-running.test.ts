@@ -12,7 +12,7 @@ import { prepareLibrarySide } from "../src/library/store/difference.js";
 import { recover } from "../src/library/internal/setup/run.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { libraryLayer } from "./helpers/library-store.js";
-import { fixture } from "./helpers/library-values.js";
+import { declaredFixture as fixture } from "./helpers/library-values.js";
 
 for (const status of ["Pending", "Stopped"] as const)
   it.effect(

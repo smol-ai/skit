@@ -14,7 +14,11 @@ import {
 import { loadMachineRows, saveMachineRows } from "./machine-rows.js";
 import { LegacyMachineId, MachineId, migratedMachineId } from "../entity-ids.js";
 import { Unusable } from "../machine-settings-failures.js";
-import { CurrentMachineDocument, MachineRepositoryDecision } from "../machine-document.js";
+import {
+  CurrentMachineDocument,
+  MachineRepositoryDecision,
+  MachineDocumentShape,
+} from "../machine-document.js";
 
 const MachineDocumentV1 = Schema.Struct({
   schemaVersion: Schema.Literal(1),
@@ -209,6 +213,15 @@ export const loadMachineSettings = Effect.fn("MachineSettings.load")(function* (
             !record && original !== undefined
               ? yield* loadMachineFile(source, original)
               : undefined;
+          if (document !== undefined)
+            yield* Schema.decodeUnknownEffect(MachineDocumentShape, { onExcessProperty: "error" })(
+              document,
+            ).pipe(
+              Effect.mapError(
+                (failure) =>
+                  new Unusable({ path: source, reason: { _tag: "InvalidData", failure } }),
+              ),
+            );
           if (live !== machineStub && original !== undefined) {
             const existing = yield* readMachineText(backup);
             if (existing !== undefined && existing !== original)

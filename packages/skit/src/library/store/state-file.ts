@@ -1,3 +1,4 @@
+import { LibraryStateFields } from "./state-fields.js";
 import { canonicalJson, isJsonObject, arrayAt, objectAt, stringAt } from "../../shared/json.js";
 import type { HistoryAction } from "./history-action.js";
 import { classifyLibraryAuditEvent, diffLibraryState } from "../audit/state-diff.js";
@@ -86,7 +87,14 @@ export const decodeCurrentState = Effect.fn("Library.decodeCurrentState")(functi
   path: string,
   value: unknown,
 ) {
-  const state = yield* decodeLibraryState(value).pipe(
+  const decoded = yield* Schema.decodeUnknownEffect(Schema.Struct(LibraryStateFields), {
+    onExcessProperty: "error",
+  })(value).pipe(
+    Effect.mapError(
+      (failure) => new InvalidLibraryState({ path, reason: { _tag: "SchemaInvalid", failure } }),
+    ),
+  );
+  const state = yield* decodeLibraryState(decoded).pipe(
     Effect.mapError(
       (failure) => new InvalidLibraryState({ path, reason: { _tag: "SchemaInvalid", failure } }),
     ),

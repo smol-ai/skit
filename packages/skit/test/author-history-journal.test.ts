@@ -32,7 +32,6 @@ const prepared = Effect.gen(function* () {
     sequence: index === 0 ? 1 : 3,
     revision,
     root,
-    extension: { kept: [null, false, index] },
   }));
   yield* Effect.scoped(
     Effect.gen(function* () {
@@ -63,7 +62,7 @@ const sourceRows = (source: string) =>
   );
 
 it.effect(
-  "legacy journal rows migrate exactly once, keeping sequence gaps, absence and unknown evidence",
+  "legacy journal rows migrate exactly once, keeping sequence gaps and optional identity presence",
   () =>
     provide(
       Effect.gen(function* () {
@@ -87,22 +86,19 @@ it.effect(
             const events = yield* sql<{
               sequence: number;
               workspace_id: null;
-              extra: string;
-            }>`SELECT sequence,workspace_id,extra FROM author_history_events ORDER BY sequence`;
+            }>`SELECT sequence,workspace_id FROM author_history_events ORDER BY sequence`;
             assert.deepStrictEqual(
               events.map((row) => row.sequence),
               [1, 3, 4],
-            );
-            assert.deepStrictEqual(
-              events.slice(0, 2).map((row) => row.extra),
-              f.events.map((row) => JSON.stringify({ extension: row.extension })),
             );
             assert.deepStrictEqual(
               events.map((row) => row.workspace_id),
               [null, null, null],
             );
             const columns = yield* sql<{ name: string }>`PRAGMA table_info(author_history_events)`;
-            assert.isFalse(columns.some((row) => row.name === "event_json"));
+            assert.isFalse(
+              columns.some((row) => row.name === "event_json" || row.name === "extra"),
+            );
           }),
           true,
         );
@@ -270,6 +266,36 @@ it.live("Author publication retries a transient Library home writer and appends 
             yield* sql`SELECT sequence FROM author_history_events ORDER BY sequence`,
             [{ sequence: 1 }, { sequence: 3 }, { sequence: 4 }],
           );
+        }),
+        true,
+      );
+    }),
+  ),
+);
+
+it.effect("unknown journal fields are refused while exact source events remain evidence", () =>
+  provide(
+    Effect.gen(function* () {
+      const f = yield* prepared;
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          yield* sql`UPDATE author_history_events SET event_json=json_set(event_json,'$.future',json('{"kept":[null,false]}'))`;
+        }).pipe(Effect.provide(sqliteLayer({ filename: f.source }))),
+      );
+      const before = (yield* sourceRows(f.source)).events;
+      const writers = yield* Semaphore.make(1);
+      const result = yield* Effect.result(
+        writeHistoryEvent(writers, f.home, f.root, undefined, () => Effect.succeed({ id: next })),
+      );
+      assert.strictEqual(result._tag, "Failure");
+      assert.deepStrictEqual((yield* sourceRows(f.source)).events, before);
+      yield* withLibraryDatabase(
+        f.path,
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          assert.deepStrictEqual(yield* sql`SELECT * FROM author_history_events`, []);
+          assert.deepStrictEqual(yield* sql`SELECT * FROM author_history_import`, []);
         }),
         true,
       );

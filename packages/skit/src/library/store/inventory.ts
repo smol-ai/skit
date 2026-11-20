@@ -20,7 +20,7 @@ import type { HistoryAction } from "./history-action.js";
 const fields = ["unmanaged", "ownershipIssues", "scanIssues", "installed_skills"] as const;
 const InventoryFields = Schema.Struct(Struct.pick(LibraryStateFields, fields));
 export type InventoryState = typeof InventoryFields.Type;
-const InventoryState = Schema.declare(Schema.is(InventoryFields));
+const InventoryState = InventoryFields;
 const decodeInventoryState = Effect.fn("Inventory.decodeState")(function* (
   path: string,
   input: InventoryState,
@@ -35,7 +35,7 @@ const decodeInventoryState = Effect.fn("Inventory.decodeState")(function* (
       }),
   });
   const value = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(JsonObject))(text);
-  return yield* Schema.decodeUnknownEffect(InventoryState)(value);
+  return yield* Schema.decodeUnknownEffect(InventoryState, { onExcessProperty: "error" })(value);
 });
 
 /** One snapshot of the scan and installed rows, without catalogue or ancestry reads. */

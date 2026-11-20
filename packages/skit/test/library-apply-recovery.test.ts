@@ -5,7 +5,7 @@ import { Cause, Effect, FileSystem, Layer, Option, Schema } from "effect";
 import { systemError } from "effect/PlatformError";
 import { join } from "node:path";
 import * as Library from "../src/library/library.js";
-import { fixture as valuesFixture } from "./helpers/library-values.js";
+import { declaredFixture as valuesFixture } from "./helpers/library-values.js";
 import { LibraryStateFields } from "../src/library/store/state-fields.js";
 import { LibraryStateDocument, libraryStateRevision } from "../src/library/library-state.js";
 

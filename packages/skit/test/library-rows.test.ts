@@ -3,7 +3,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { SqlClient } from "effect/sql";
 import { join } from "node:path";
-import { fixture } from "./helpers/library-values.js";
+import { declaredFixture as fixture } from "./helpers/library-values.js";
 import { skitLayer } from "../src/platform/layer.js";
 import {
   canonicalJson,
@@ -34,7 +34,7 @@ import { diffLibraryState } from "../src/library/audit/state-diff.js";
 import { makeCollectionId, makeSkillId, makeOperationId } from "../src/library/entity-ids.js";
 
 it.effect(
-  "round trips unknown fields at every object depth, unrelated repetitions and keyed selections",
+  "round trips declared fields, arbitrary original evidence, repetitions and keyed selections",
   () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -44,12 +44,12 @@ it.effect(
       const skill = state.skills[0]!;
       const source = state.imports[0]!;
       const extension = { absent: null, empty: [], nested: { ["__proto__"]: [true, false] } };
-      const enabled = { skill: skill.skill_id, collection: skill.collection_id, extension };
+      const enabled = { skill: skill.skill_id };
       const lock = {
         type: "skills.sh-lock",
         machine_id: source.machine_id,
         read_at: "",
-        lock_path: { value: "/lock", extension },
+        lock_path: { value: "/lock" },
         lock_version: 1,
         lock_scope: "project",
         lock_content_hash: skill.versions[0]!.source_hash,
@@ -68,9 +68,7 @@ it.effect(
           verification: "lock-only",
           established_at: "",
           search_scope: "ref-path-history",
-          extension,
         },
-        extension,
       };
       const next = yield* decodeCurrentState(path, {
         ...state,
@@ -79,12 +77,10 @@ it.effect(
           upstream: {
             source_identity: {
               kind: "git",
-              remote: { value: "git://example/" + item.collection_id, extension },
+              remote: { value: "git://example/" + item.collection_id },
               collection_root: ".",
-              extension,
             },
-            tracking: { kind: "default", extension },
-            extension,
+            tracking: { kind: "default" },
           },
         })),
         skills: state.skills.toReversed().map((item) => ({
@@ -94,35 +90,32 @@ it.effect(
         })),
         collection_versions: state.collection_versions
           .toReversed()
-          .map((item) => ({ ...item, extension, members: item.members.toReversed() })),
+          .map((item) => ({ ...item, members: item.members.toReversed() })),
         imports: state.imports.toReversed().map((item) => ({
           ...item,
-          extension,
+
           source_identity: {
             ...item.source_identity,
-            path: { value: "/source/" + item.import_id, extension },
-            extension,
+            path: { value: "/source/" + item.import_id },
           },
           lock_file_entries: [lock, lock],
         })),
         device_skill_selection: {
           mode: "choose",
-          enabled: [enabled, { skill: makeSkillId(), extension }],
-          invocation_policies: { unknown: { extension }, null: null },
-          extension,
+          enabled: [enabled, { skill: makeSkillId() }],
+          invocation_policies: { [skill.skill_id]: "explicit" },
         },
         repositories: [
           {
             root: "/repo-z",
             enabled: [enabled],
-            invocation_policies: { unknown: { extension }, null: null },
-            extension,
+            invocation_policies: { [skill.skill_id]: "explicit" },
           },
           ...state.repositories,
         ],
         unmanaged: state.unmanaged.map((item) => ({ ...item, harnesses: ["codex", "codex"] })),
         ownershipIssues: [...(state.ownershipIssues ?? []), ...(state.ownershipIssues ?? [])].map(
-          (item) => ({ ...item, markerReason: { _tag: "NotObject", extension }, extension }),
+          (item) => ({ ...item, markerReason: { _tag: "NotObject" } }),
         ),
         installed_skills: state.installed_skills.toReversed().map((item, index) =>
           index === 0
@@ -131,15 +124,14 @@ it.effect(
                 status: "conflicted",
                 current_hash: item.expected_hash,
                 conflicts: [
-                  { _tag: "MarkerMissing", extension },
-                  { _tag: "MarkerMissing", extension },
+                  { _tag: "MarkerMissing" },
+                  { _tag: "MarkerMissing" },
                   {
                     _tag: "InstalledSkillMismatch",
                     actual: item.installed_skill_id,
                     expected: item.installed_skill_id,
-                    extension,
                   },
-                  { _tag: "MarkerInvalid", reason: { _tag: "NotObject", extension }, extension },
+                  { _tag: "MarkerInvalid", reason: { _tag: "NotObject" } },
                 ],
               }
             : index === 1
@@ -148,9 +140,8 @@ it.effect(
                   status: "suppressed",
                   suppression_reason: "native_delete",
                   suppressed_at: "",
-                  current_hash: null,
                 }
-              : { ...item, current_hash: null, suppressed_at: null },
+              : item,
         ),
       });
       const manifest = yield* libraryManifestFromLocalState(next);
@@ -164,14 +155,12 @@ it.effect(
               ...manifest.collections
                 .toReversed()
                 .map((item, index) => (index === 0 ? { ...item, label: "remote" } : item)),
-              { collection_id: makeCollectionId(), label: "remote-only", extension },
+              { collection_id: makeCollectionId(), label: "remote-only" },
             ],
             skills: manifest.skills.toReversed().slice(1),
             collection_versions: manifest.collection_versions.toReversed(),
             imports: manifest.imports.toReversed(),
-            extension,
           },
-          extension,
         },
       });
       yield* withLibraryDatabase(
@@ -261,9 +250,6 @@ it.effect(
             repositories: target.repositories.toReversed(),
             device_skill_selection: {
               mode: "follow-account",
-              enabled: null,
-              invocation_policies: null,
-              extension,
             },
           });
           yield* sql.withTransaction(saveDatabaseState(path, reordered, base));
@@ -343,7 +329,7 @@ it.effect("a load refuses malformed rows without changing operation data", () =>
         const sql = yield* SqlClient.SqlClient;
         yield* migrateLibraryDatabase(path);
         yield* sql.withTransaction(saveDatabaseState(path, state, null));
-        yield* sql`UPDATE library_collections SET extra=json_set(COALESCE(extra,'{}'),'$.label',null) WHERE collection_id = ${state.collections[0]!.collection_id}`;
+        yield* sql`UPDATE library_collections SET label='' WHERE collection_id = ${state.collections[0]!.collection_id}`;
         const failed = yield* Effect.flip(readDatabaseState(path));
         assert.strictEqual(failed._tag, "InvalidLibraryState");
         assert.strictEqual(failed.reason._tag, "SchemaInvalid");

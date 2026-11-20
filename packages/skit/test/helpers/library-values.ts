@@ -1,3 +1,5 @@
+import { LibraryStateFields } from "../../src/library/store/state-fields.js";
+import { SkillVersion } from "../../src/library/library-contracts.js";
 import { Effect, Schema } from "effect";
 import { Hash } from "../../src/shared/hash.js";
 import {
@@ -188,4 +190,20 @@ export const fixture = Effect.gen(function* () {
     },
   });
   return { state: full, future: futureVersions[0] };
+});
+
+/** A separate fixture for the closed store contract. Pure domain/record codecs still use
+ * fixture above to prove their existing extension behavior; only declared fields go live. */
+export const declaredFixture = Effect.gen(function* () {
+  const value = yield* fixture;
+  const declared = yield* Schema.decodeUnknownEffect(Schema.Struct(LibraryStateFields))(
+    value.state,
+  );
+  return {
+    state: yield* decodeLibraryState(declared),
+    future:
+      value.future === undefined
+        ? undefined
+        : yield* Schema.decodeUnknownEffect(SkillVersion)(value.future),
+  };
 });

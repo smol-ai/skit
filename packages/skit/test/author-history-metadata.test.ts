@@ -44,15 +44,7 @@ const prepared = Effect.gen(function* () {
   const entries = yield* Schema.decodeUnknownEffect(
     Schema.fromJsonString(Schema.Array(JsonObject)),
   )(encoded);
-  const raw = entries.map((entry, index) => ({
-    ...entry,
-    extension: { index, ordered: [null, false, false] },
-    ...(index === 0
-      ? { mode: { unknown: true }, blob: null }
-      : index === 1
-        ? { blob: { legacyUnknown: true } }
-        : {}),
-  }));
+  const raw = entries;
   const source = JSON.stringify(raw, null, 2) + "\n";
   yield* fs.writeFileString(join(directory, "trees", `${hash.slice(7)}.json`), source);
   const missing = History.RevisionId.make("sha256:" + "d".repeat(64));
@@ -63,11 +55,7 @@ const prepared = Effect.gen(function* () {
     author: { device: makeMachineId(), at: -100 },
   };
   const id = yield* History.revisionId(revision);
-  const revisionRaw = {
-    ...revision,
-    extension: { kept: null },
-    author: { ...revision.author, extension: { clock: "backwards" } },
-  };
+  const revisionRaw = revision;
   const revisionSource = JSON.stringify(revisionRaw, null, 2) + "\n";
   yield* fs.writeFileString(join(directory, "revisions", `${id.slice(7)}.json`), revisionSource);
   return {
@@ -85,40 +73,44 @@ const prepared = Effect.gen(function* () {
   };
 });
 
-it.effect("manifest header extensions stay native after the original document changes", () =>
-  Effect.gen(function* () {
-    const f = yield* prepared;
-    const hash = yield* History.treeHash([]);
-    const file = join(f.directory, "trees", `${hash.slice(7)}.json`);
-    yield* f.fs.writeFileString(
-      file,
-      JSON.stringify({
-        schema: "skit.author-tree.v1",
-        entries: [],
-        extension: { empty: [], kept: null },
-      }),
-    );
-    const store = yield* Effect.map(AuthorHistory, (history) => history.engineStore).pipe(
-      Effect.provide(owner(f.home)),
-    );
-    assert.deepStrictEqual(yield* store.tree(hash), []);
-    yield* withLibraryDatabase(
-      f.path,
-      Effect.gen(function* () {
-        const sql = yield* SqlClient.SqlClient;
-        assert.deepStrictEqual(yield* sql`SELECT extra FROM author_trees WHERE hash=${hash}`, [
-          { extra: JSON.stringify({ extension: { empty: [], kept: null } }) },
-        ]);
-      }),
-      true,
-    );
-    yield* f.fs.writeFileString(file, "changed backup evidence");
-    const cold = yield* Effect.map(AuthorHistory, (history) => history.engineStore).pipe(
-      Effect.provide(owner(f.home)),
-    );
-    assert.deepStrictEqual(yield* cold.tree(hash), []);
-    assert.strictEqual(yield* f.fs.readFileString(file), "changed backup evidence");
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+it.effect(
+  "unknown manifest fields are refused and their exact evidence survives source changes",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* prepared;
+      const hash = yield* History.treeHash([]);
+      const file = join(f.directory, "trees", `${hash.slice(7)}.json`);
+      yield* f.fs.writeFileString(
+        file,
+        JSON.stringify({
+          schema: "skit.author-tree.v1",
+          entries: [],
+          extension: { empty: [], kept: null },
+        }),
+      );
+      const store = yield* Effect.map(AuthorHistory, (history) => history.engineStore).pipe(
+        Effect.provide(owner(f.home)),
+      );
+      assert.strictEqual((yield* Effect.flip(store.tree(hash)))._tag, "History.StoreCorrupt");
+      yield* withLibraryDatabase(
+        f.path,
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          const original = yield* f.fs.readFileString(file);
+          assert.deepStrictEqual(
+            yield* sql`SELECT document FROM author_history_legacy_documents WHERE kind='tree' AND hash=${hash}`,
+            [{ document: original }],
+          );
+        }),
+        true,
+      );
+      yield* f.fs.writeFileString(file, "changed backup evidence");
+      const cold = yield* Effect.map(AuthorHistory, (history) => history.engineStore).pipe(
+        Effect.provide(owner(f.home)),
+      );
+      assert.strictEqual((yield* Effect.flip(cold.tree(hash)))._tag, "History.StoreCorrupt");
+      assert.strictEqual(yield* f.fs.readFileString(file), "changed backup evidence");
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("a stored directory cannot hide invalid file-only columns", () =>
@@ -143,7 +135,7 @@ it.effect("a stored directory cannot hide invalid file-only columns", () =>
 );
 
 it.effect(
-  "metadata migration keeps duplicate paths, parent order, shallow ancestry and every extension",
+  "metadata migration keeps duplicate paths, modes, parent order, shallow ancestry and exact edit times",
   () =>
     Effect.gen(function* () {
       const f = yield* prepared;
@@ -165,20 +157,20 @@ it.effect(
         Effect.gen(function* () {
           const sql = yield* SqlClient.SqlClient;
           const rows = yield* sql<{
-            extra: string;
-          }>`SELECT extra FROM author_tree_entries ORDER BY position`;
-          const extras = yield* Effect.forEach(rows, (row) =>
-            Schema.decodeUnknownEffect(Schema.fromJsonString(JsonObject))(row.extra),
+            path: string;
+            kind: string;
+            mode: number | null;
+          }>`SELECT path,kind,mode FROM author_tree_entries ORDER BY position`;
+          assert.deepStrictEqual(
+            rows,
+            f.tree.map((entry) => ({
+              path: entry.path,
+              kind: entry.kind,
+              mode: entry.kind === "file" ? entry.mode : null,
+            })),
           );
-          assert.deepStrictEqual(extras[0], {
-            extension: f.raw[0]!.extension,
-            mode: { unknown: true },
-            blob: null,
-          });
-          assert.deepStrictEqual(extras[1], {
-            extension: f.raw[1]!.extension,
-            blob: { legacyUnknown: true },
-          });
+          const columns = yield* sql<{ name: string }>`PRAGMA table_info(author_tree_entries)`;
+          assert.isFalse(columns.some((column) => column.name === "extra"));
           const parents = yield* sql<{
             parent_hash: string;
           }>`SELECT parent_hash FROM author_revision_parents ORDER BY position`;
@@ -187,16 +179,9 @@ it.effect(
             [...f.revision.parents],
           );
           const revision = (yield* sql<{
-            extra: string;
-            author_extra: string;
             edits_json: string;
-          }>`SELECT extra,author_extra,edits_json FROM author_revisions`)[0]!;
-          assert.strictEqual(revision.extra, JSON.stringify({ extension: { kept: null } }));
+          }>`SELECT edits_json FROM author_revisions`)[0]!;
           assert.deepStrictEqual(JSON.parse(revision.edits_json), f.revision.edits);
-          assert.strictEqual(
-            revision.author_extra,
-            JSON.stringify({ extension: { clock: "backwards" } }),
-          );
         }),
         true,
       );
@@ -363,7 +348,7 @@ it.effect(
 it.effect("a quiescent home copy restores Library rows and native Author revision bytes", () =>
   Effect.gen(function* () {
     const f = yield* prepared;
-    const state = { ...emptyLibraryState(), extension: { keep: [null, {}, []] } };
+    const state = emptyLibraryState();
     yield* f.fs.writeFileString(join(f.home, "state.json"), JSON.stringify(state));
     yield* migrateLocalLibraryState(f.home);
     yield* MachineSettings.updateDiscovery(f.home, { discoveryRoots: ["/keep"] });
@@ -408,7 +393,7 @@ it.effect(
           const sql = yield* SqlClient.SqlClient;
           yield* sql.withTransaction(
             Effect.gen(function* () {
-              const [first, ...rest] = hashes.slice(0, 500).map((hash) => ({ hash, extra: "{}" }));
+              const [first, ...rest] = hashes.slice(0, 500).map((hash) => ({ hash }));
               if (first) yield* sql`INSERT INTO author_trees ${sql.insert([first, ...rest])}`;
               yield* sql`INSERT INTO author_history_legacy_documents(kind,hash,document) VALUES('tree',${hashes[500]!},'unreadable'),('revision',${hashes[501]!},'unreadable')`;
             }),
@@ -424,7 +409,7 @@ it.effect(
 );
 
 it.effect(
-  "013 keeps duplicate paths and extensions after a cold reopen without loose sources",
+  "013 and 014 keep duplicate paths and declared metadata after a cold reopen without loose sources",
   () =>
     Effect.gen(function* () {
       const f = yield* prepared;
@@ -449,14 +434,8 @@ it.effect(
           assert.deepStrictEqual(yield* sql`PRAGMA foreign_key_check`, []);
           assert.deepStrictEqual(yield* sql`PRAGMA integrity_check`, [{ integrity_check: "ok" }]);
           const row = (yield* sql<{
-            extra: string;
-            author_extra: string;
             edits_json: string;
           }>`SELECT * FROM author_revisions WHERE hash=${f.id}`)[0]!;
-          assert.deepStrictEqual(JSON.parse(row.extra), { extension: { kept: null } });
-          assert.deepStrictEqual(JSON.parse(row.author_extra), {
-            extension: { clock: "backwards" },
-          });
           assert.deepStrictEqual(JSON.parse(row.edits_json), f.revision.edits);
         }),
         true,

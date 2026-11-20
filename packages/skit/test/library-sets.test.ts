@@ -17,7 +17,7 @@ import {
 } from "../src/library/store/database.js";
 import { migrateLocalLibraryState } from "../src/library/store/state-file.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { fixture } from "./helpers/library-values.js";
+import { fixture, declaredFixture } from "./helpers/library-values.js";
 
 it.effect("selection hashes ignore set order and preserve unknown nested values", () =>
   Effect.gen(function* () {
@@ -85,7 +85,7 @@ it.effect("reordering selections updates no enabled rows", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-keyed-enabled-" });
-    const { state } = yield* fixture;
+    const { state } = yield* declaredFixture;
     const next = yield* decodeLibraryState({
       ...state,
       enabled: [{ skill: state.skills[0]!.skill_id }, { skill: state.skills[1]!.skill_id }],

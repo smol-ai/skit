@@ -3,7 +3,7 @@ import { Effect, FileSystem, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { fixture } from "./helpers/library-values.js";
+import { declaredFixture as fixture } from "./helpers/library-values.js";
 import { edit } from "../src/library/library-edit.js";
 import { decodeLibraryState, libraryStateRevision } from "../src/library/library-state.js";
 import { compileApply, prepareApplyState } from "../src/library/internal/operations/program.js";

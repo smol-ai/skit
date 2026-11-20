@@ -7,22 +7,15 @@ import { InvalidLibraryState } from "../failures.js";
 const fields = ["unmanaged", "ownershipIssues", "scanIssues"] as const;
 const InventoryScanFields = Schema.Struct(Struct.pick(LibraryStateFields, fields));
 export type InventoryScan = typeof InventoryScanFields.Type;
-const InventoryScan = Schema.declare(Schema.is(InventoryScanFields));
+const InventoryScan = InventoryScanFields;
 
 /** Decode only scan results; refining keeps every uninterpreted child field intact. */
 export const decodeInventoryScan = Effect.fn("Inventory.decodeScan")(function* (input: unknown) {
   const document = yield* Schema.decodeUnknownEffect(JsonObject)(input);
-  return yield* Schema.decodeUnknownEffect(InventoryScan)(Struct.pick(document, fields));
+  return yield* Schema.decodeUnknownEffect(InventoryScan, { onExcessProperty: "error" })(
+    Struct.pick(document, fields),
+  );
 });
-
-const extra = (value: JsonObject, known: readonly string[]) => {
-  const kept = Object.fromEntries(Object.entries(value).filter(([key]) => !known.includes(key)));
-  return Object.keys(kept).length ? JSON.stringify(kept) : null;
-};
-const readExtra = (value: unknown) =>
-  value === null || value === undefined
-    ? Effect.succeed<JsonObject>({})
-    : Schema.decodeUnknownEffect(Schema.fromJsonString(JsonObject))(value);
 
 /** Duplicate scan results and child values retain their positions. */
 const createInventoryTables = Effect.gen(function* () {
@@ -73,6 +66,7 @@ export const saveInventoryRows = Effect.fn("Inventory.saveRows")(function* (
   next: InventoryScan,
   base?: InventoryScan,
 ) {
+  yield* decodeInventoryScan(next);
   if (base !== undefined && canonicalJson(next) === canonicalJson(base)) return false;
   const sql = yield* SqlClient.SqlClient;
   yield* sql`DELETE FROM library_unmanaged_skills`;
@@ -85,7 +79,6 @@ export const saveInventoryRows = Effect.fn("Inventory.saveRows")(function* (
   };
   yield* sql`INSERT INTO library_inventory ${sql.insert(header)} ON CONFLICT(id) DO UPDATE SET ownership_issues_present=excluded.ownership_issues_present,scan_issues_present=excluded.scan_issues_present`;
   for (const [position, item] of next.unmanaged.entries()) {
-    const value = yield* Schema.decodeUnknownEffect(JsonObject)(item);
     yield* sql`INSERT INTO library_unmanaged_skills ${sql.insert({
       position,
       harness: item.harness,
@@ -94,7 +87,6 @@ export const saveInventoryRows = Effect.fn("Inventory.saveRows")(function* (
       last_hash: item.lastHash ?? null,
       paths_present: Object.hasOwn(item, "paths") ? 1 : 0,
       harnesses_present: Object.hasOwn(item, "harnesses") ? 1 : 0,
-      extra: extra(value, ["harness", "path", "currentHash", "lastHash", "paths", "harnesses"]),
     })}`;
     for (const [at, path] of (item.paths ?? []).entries())
       yield* sql`INSERT INTO library_unmanaged_paths ${sql.insert({ unmanaged_position: position, position: at, path })}`;
@@ -102,7 +94,6 @@ export const saveInventoryRows = Effect.fn("Inventory.saveRows")(function* (
       yield* sql`INSERT INTO library_unmanaged_harnesses ${sql.insert({ unmanaged_position: position, position: at, harness })}`;
   }
   for (const [position, item] of (next.ownershipIssues ?? []).entries()) {
-    const value = yield* Schema.decodeUnknownEffect(JsonObject)(item);
     yield* sql`INSERT INTO library_ownership_issues ${sql.insert({
       position,
       code: item.code,
@@ -117,37 +108,17 @@ export const saveInventoryRows = Effect.fn("Inventory.saveRows")(function* (
       expected_hash: item.expectedHash ?? null,
       matches_expected_hash:
         item.matchesExpectedHash === undefined ? null : item.matchesExpectedHash ? 1 : 0,
-      extra: extra(value, [
-        "code",
-        "path",
-        "canonicalPath",
-        "currentHash",
-        "markerReason",
-        "collectionId",
-        "skillId",
-        "installedSkillId",
-        "expectedHash",
-        "matchesExpectedHash",
-        "harnesses",
-      ]),
     })}`;
     for (const [at, harness] of item.harnesses.entries())
       yield* sql`INSERT INTO library_ownership_issue_harnesses ${sql.insert({ issue_position: position, position: at, harness })}`;
   }
   for (const [position, item] of (next.scanIssues ?? []).entries()) {
-    const value = yield* Schema.decodeUnknownEffect(JsonObject)(item);
     yield* sql`INSERT INTO library_scan_issues ${sql.insert({
       position,
       code: item.code,
       path: item.path,
       harness: item.harness,
       target: item.code === "DANGLING_SYMLINK" ? item.target : null,
-      extra: extra(value, [
-        "code",
-        "path",
-        "harness",
-        ...(item.code === "DANGLING_SYMLINK" ? ["target"] : []),
-      ]),
     })}`;
   }
   return true;
@@ -226,7 +197,6 @@ export const loadInventoryRows = Effect.fn("Inventory.loadRows")(function* (path
     )
       return yield* invalid();
     const item: JsonObject = {
-      ...(yield* readExtra(row.extra)),
       harness: row.harness,
       path: row.path,
       currentHash: row.current_hash,
@@ -242,7 +212,6 @@ export const loadInventoryRows = Effect.fn("Inventory.loadRows")(function* (path
       const names = issueHarnesses.filter((child) => child.issue_position === row.position);
       if (names.some((child, index) => child.position !== index)) return yield* invalid();
       const item: JsonObject = {
-        ...(yield* readExtra(row.extra)),
         code: row.code,
         path: row.path,
         canonicalPath: row.canonical_path,
@@ -271,7 +240,6 @@ export const loadInventoryRows = Effect.fn("Inventory.loadRows")(function* (path
     value.scanIssues = [];
     for (const row of issues) {
       const item = {
-        ...(yield* readExtra(row.extra)),
         code: row.code,
         path: row.path,
         harness: row.harness,

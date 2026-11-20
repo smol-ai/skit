@@ -7,7 +7,7 @@ import {
 } from "../src/library/store/database.js";
 import { prepareLibraryDifference } from "../src/library/store/difference.js";
 import { canonicalJson } from "../src/shared/json.js";
-import { fixture as valuesFixture } from "./helpers/library-values.js";
+import { declaredFixture as valuesFixture } from "./helpers/library-values.js";
 import { snapshotOf, Revision } from "../src/library/snapshot.js";
 import {
   loadOperations,
@@ -409,13 +409,12 @@ it.effect(
       };
       const original = JSON.stringify({
         ...current,
-        extension: { keep: true },
         operations,
         historyDelivery,
       });
       yield* fs.writeFileString(join(home, "state.json"), original);
       yield* migrateLocalLibraryState(home);
-      const expected = { ...current, extension: { keep: true } };
+      const expected = current;
       assert.deepStrictEqual(yield* loadLibrary(home), expected);
       const imported = yield* loadOperations(home);
       assert.deepStrictEqual(
@@ -813,7 +812,7 @@ it.effect("refuses newer database migrations with the known and observed version
       path,
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
-        yield* sql`UPDATE effect_sql_migrations SET migration_id = 14 WHERE migration_id = 1`;
+        yield* sql`UPDATE effect_sql_migrations SET migration_id = 15 WHERE migration_id = 1`;
       }),
     );
     const error = yield* Effect.flip(migrateLocalLibraryState(home));
@@ -822,8 +821,8 @@ it.effect("refuses newer database migrations with the known and observed version
       assert.deepStrictEqual(error.reason, {
         _tag: "NewerDatabaseMigration",
         databasePath: path,
-        migration: 14,
-        supported: 13,
+        migration: 15,
+        supported: 14,
       });
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

@@ -28,9 +28,9 @@ export const saveAcceptance = Effect.fn("Library.saveAcceptance")(function* (
       if ((yield* readDatabaseStateRevision(path)).revision !== revision)
         return yield* new LibraryChanged({ path });
       const document = yield* Schema.decodeUnknownEffect(JsonObject)(input);
-      const acceptance = yield* Schema.decodeUnknownEffect(
-        Schema.declare(Schema.is(SkillAssessmentAcceptance)),
-      )(document);
+      const acceptance = yield* Schema.decodeUnknownEffect(SkillAssessmentAcceptance, {
+        onExcessProperty: "error",
+      })(document);
       const sql = yield* SqlClient.SqlClient;
       const versions =
         yield* sql`SELECT artifact_hash FROM library_skill_versions WHERE skill_version_id=${acceptance.skill_version_id}`;
@@ -42,7 +42,7 @@ export const saveAcceptance = Effect.fn("Library.saveAcceptance")(function* (
       yield* insertAcceptanceRow(document);
       // Remember presence even if a document-boundary operation later empties this list.
       yield* sql`UPDATE library_device
-        SET extra=json_set(COALESCE(extra,'{}'),'$.assessmentAcceptances',json('[]')) WHERE id=1`;
+        SET assessment_acceptances_present=1 WHERE id=1`;
       const accepted = yield* advanceLibraryRevision(path);
       yield* saveLibraryHistory(path, action, [
         {

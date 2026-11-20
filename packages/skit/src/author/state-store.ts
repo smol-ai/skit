@@ -1,9 +1,8 @@
-import { Effect, FileSystem, Schema, Struct } from "effect";
+import { Effect, FileSystem, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { join } from "node:path";
 import * as History from "../history/history.js";
 import * as Sync from "../sync/sync.js";
-import { JsonObject, objectAt } from "../shared/json.js";
 import { sha256Hash } from "../shared/hash.js";
 import { withLock } from "../platform/home-lock.js";
 import { syncPaths, writeRawAtomic } from "../platform/atomic-write.js";
@@ -30,12 +29,8 @@ type AuthorState = typeof LegacyState.Type;
 const empty = (): AuthorState => ({ schema: "skit.author-sync.v1", workspaces: {} });
 const invalid = (path: string, failure: Schema.SchemaError) =>
   new AuthorSyncStateInvalid({ path, reason: { _tag: "InvalidData", failure } });
-const json = (path: string, text: string) =>
-  Schema.decodeEffect(Schema.fromJsonString(JsonObject))(text).pipe(
-    Effect.mapError((error) => invalid(path, error)),
-  );
 const decodeState = (path: string, value: unknown) =>
-  Schema.decodeUnknownEffect(Schema.declare(Schema.is(Sync.SyncState)))(value).pipe(
+  Schema.decodeUnknownEffect(Sync.SyncState, { onExcessProperty: "error" })(value).pipe(
     Effect.mapError((error) => invalid(path, error)),
   );
 const failed = (path: string, cause: unknown) =>
@@ -100,8 +95,6 @@ export const readAuthorSyncState = (home: string, key: SyncKey) =>
             next_status: Schema.NullOr(Schema.Literals(["Idle", "Sending"])),
             next_base: Schema.NullOr(Schema.String),
             next_revision: Schema.NullOr(Schema.String),
-            extra: Schema.String,
-            next_extra: Schema.NullOr(Schema.String),
           }),
         ),
       )(
@@ -109,9 +102,7 @@ export const readAuthorSyncState = (home: string, key: SyncKey) =>
       ).pipe(Effect.mapError((error) => invalid(libraryDatabasePath(home), error)));
       const row = rows[0];
       if (!row) return Sync.Idle.make({ base: null });
-      const extra = yield* json(libraryDatabasePath(home), row.extra);
       return yield* decodeState(libraryDatabasePath(home), {
-        ...extra,
         _tag: row.status,
         base: row.base,
         ...(row.status === "Sending" ? { revision: row.revision } : {}),
@@ -124,12 +115,6 @@ export const readAuthorSyncState = (home: string, key: SyncKey) =>
                   Effect.mapError((error) => invalid(libraryDatabasePath(home), error)),
                 )) === 1,
               next: {
-                ...(yield* json(
-                  libraryDatabasePath(home),
-                  yield* Schema.decodeUnknownEffect(Schema.String)(row.next_extra).pipe(
-                    Effect.mapError((error) => invalid(libraryDatabasePath(home), error)),
-                  ),
-                )),
                 _tag: row.next_status,
                 base: row.next_base,
                 ...(row.next_status === "Sending" ? { revision: row.next_revision } : {}),
@@ -149,35 +134,7 @@ export const saveAuthorSyncState = Effect.fn("AuthorState.saveSync")(function* (
   resetBackup = false,
 ) {
   const sql = yield* SqlClient.SqlClient;
-  const raw = yield* Schema.decodeUnknownEffect(JsonObject)(state).pipe(
-    Effect.mapError((error) => invalid(libraryDatabasePath(home), error)),
-  );
-  const prior = (yield* Schema.decodeUnknownEffect(
-    Schema.Array(Schema.Struct({ extra: Schema.String, next_extra: Schema.NullOr(Schema.String) })),
-  )(
-    yield* sql`SELECT extra,next_extra FROM author_sync_checkpoints WHERE workspace_id=${key.workspaceId} AND locator=${key.locator}`,
-  ).pipe(Effect.mapError((error) => invalid(libraryDatabasePath(home), error))))[0];
-  const extra = {
-    ...(prior ? yield* json(libraryDatabasePath(home), prior.extra) : {}),
-    ...Struct.omit(
-      raw,
-      state._tag === "Idle"
-        ? ["_tag", "base"]
-        : state._tag === "Sending"
-          ? ["_tag", "base", "revision"]
-          : ["_tag", "base", "from", "to", "merged", "next"],
-    ),
-  };
-  const next = objectAt(raw, "next") ?? {};
-  const nextExtra = {
-    ...(prior?.next_extra ? yield* json(libraryDatabasePath(home), prior.next_extra) : {}),
-    ...Struct.omit(
-      next,
-      state._tag === "Writing" && state.next._tag === "Sending"
-        ? ["_tag", "base", "revision"]
-        : ["_tag", "base"],
-    ),
-  };
+  yield* decodeState(libraryDatabasePath(home), state);
   yield* sql`INSERT INTO author_workspace_state (workspace_id,sync_present,backup_present) VALUES (${key.workspaceId},1,0) ON CONFLICT(workspace_id) DO UPDATE SET sync_present=1`;
   yield* sql`DELETE FROM author_sync_checkpoints WHERE workspace_id=${key.workspaceId} AND locator=${key.locator}`;
   yield* sql`INSERT INTO author_sync_checkpoints ${sql.insert({
@@ -193,8 +150,6 @@ export const saveAuthorSyncState = Effect.fn("AuthorState.saveSync")(function* (
     next_base: state._tag === "Writing" ? state.next.base : null,
     next_revision:
       state._tag === "Writing" && state.next._tag === "Sending" ? state.next.revision : null,
-    extra: JSON.stringify(extra),
-    next_extra: state._tag === "Writing" ? JSON.stringify(nextExtra) : null,
   })}`;
   if (resetBackup)
     yield* sql`DELETE FROM author_backup_checkpoints WHERE workspace_id=${key.workspaceId} AND locator=${key.locator}`;
@@ -235,9 +190,9 @@ export const readAuthorInventory = (home: string, workspace: WorkspaceId) =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       const row = (yield* Schema.decodeUnknownEffect(
-        Schema.Array(Schema.Struct({ extra: Schema.String, inventory_extra: Schema.String })),
+        Schema.Array(Schema.Struct({ workspace_id: Schema.String })),
       )(
-        yield* sql`SELECT extra,inventory_extra FROM author_inventories WHERE workspace_id=${workspace}`,
+        yield* sql`SELECT workspace_id FROM author_inventories WHERE workspace_id=${workspace}`,
       ).pipe(Effect.mapError((error) => invalid(libraryDatabasePath(home), error))))[0];
       if (!row) return undefined;
       const paths = yield* Schema.decodeUnknownEffect(
@@ -252,10 +207,8 @@ export const readAuthorInventory = (home: string, workspace: WorkspaceId) =>
       ).pipe(Effect.mapError((error) => invalid(libraryDatabasePath(home), error)));
       const items = (category: string) =>
         paths.filter((item) => item.category === category).map((item) => item.path);
-      return yield* Schema.decodeUnknownEffect(Schema.declare(Schema.is(AuthorRemovalState)))({
-        ...(yield* json(libraryDatabasePath(home), row.extra)),
+      return yield* Schema.decodeUnknownEffect(AuthorRemovalState, { onExcessProperty: "error" })({
         inventory: {
-          ...(yield* json(libraryDatabasePath(home), row.inventory_extra)),
           files: items("files"),
           members: items("members"),
         },
@@ -272,25 +225,12 @@ export const saveAuthorInventory = Effect.fn("AuthorState.saveInventory")(functi
   state: AuthorRemovalState,
 ) {
   const sql = yield* SqlClient.SqlClient;
-  const raw = yield* Schema.decodeUnknownEffect(JsonObject)(state).pipe(
+  yield* Schema.decodeUnknownEffect(AuthorRemovalState, { onExcessProperty: "error" })(state).pipe(
     Effect.mapError((error) => invalid(libraryDatabasePath(home), error)),
   );
-  const prior = (yield* Schema.decodeUnknownEffect(
-    Schema.Array(Schema.Struct({ extra: Schema.String, inventory_extra: Schema.String })),
-  )(
-    yield* sql`SELECT extra,inventory_extra FROM author_inventories WHERE workspace_id=${workspace}`,
-  ).pipe(Effect.mapError((error) => invalid(libraryDatabasePath(home), error))))[0];
-  const extra = {
-    ...(prior ? yield* json(libraryDatabasePath(home), prior.extra) : {}),
-    ...Struct.omit(raw, ["inventory", "removedFiles", "removedMembers"]),
-  };
-  const inventoryExtra = {
-    ...(prior ? yield* json(libraryDatabasePath(home), prior.inventory_extra) : {}),
-    ...Struct.omit(objectAt(raw, "inventory") ?? {}, ["files", "members"]),
-  };
   yield* sql`UPDATE author_state_fields SET inventories_present=1 WHERE id=1`;
   yield* sql`INSERT INTO author_workspace_state (workspace_id,sync_present,backup_present) VALUES (${workspace},0,0) ON CONFLICT(workspace_id) DO NOTHING`;
-  yield* sql`INSERT INTO author_inventories (workspace_id,extra,inventory_extra) VALUES (${workspace},${JSON.stringify(extra)},${JSON.stringify(inventoryExtra)}) ON CONFLICT(workspace_id) DO UPDATE SET extra=excluded.extra,inventory_extra=excluded.inventory_extra`;
+  yield* sql`INSERT INTO author_inventories (workspace_id) VALUES (${workspace}) ON CONFLICT(workspace_id) DO NOTHING`;
   yield* sql`DELETE FROM author_inventory_paths WHERE workspace_id=${workspace}`;
   const rows = ["files", "members", "removedFiles", "removedMembers"].flatMap((category) => {
     const paths =
@@ -384,12 +324,9 @@ export const prepareAuthorState = Effect.fn("AuthorState.prepare")(function* (
           const document =
             text === undefined
               ? empty()
-              : yield* Schema.decodeEffect(
-                  Schema.fromJsonString(Schema.declare(Schema.is(LegacyState))),
-                )(text).pipe(Effect.mapError((error) => invalid(source, error)));
-          const raw = yield* Schema.decodeUnknownEffect(JsonObject)(document).pipe(
-            Effect.mapError((error) => invalid(source, error)),
-          );
+              : yield* Schema.decodeEffect(Schema.fromJsonString(LegacyState), {
+                  onExcessProperty: "error",
+                })(text).pipe(Effect.mapError((error) => invalid(source, error)));
           const backup = text === undefined ? null : `${source}.backup-database`;
           if (backup && text !== undefined) {
             const prior = yield* fs
@@ -401,7 +338,7 @@ export const prepareAuthorState = Effect.fn("AuthorState.prepare")(function* (
             } else yield* writeRawAtomic(backup, text, true);
             yield* syncPaths([backup, home]);
           }
-          yield* sql`INSERT INTO author_state_fields (id,inventories_present,backups_present,extra) VALUES (1,${Number(document.inventories !== undefined)},${Number(document.backups !== undefined)},${JSON.stringify(Struct.omit(raw, ["schema", "workspaces", "inventories", "backups"]))})`;
+          yield* sql`INSERT INTO author_state_fields (id,inventories_present,backups_present) VALUES (1,${Number(document.inventories !== undefined)},${Number(document.backups !== undefined)})`;
           for (const [id, states] of Object.entries(document.workspaces)) {
             const workspace = WorkspaceId.make(id);
             yield* sql`INSERT INTO author_workspace_state (workspace_id,sync_present,backup_present) VALUES (${workspace},1,0) ON CONFLICT(workspace_id) DO UPDATE SET sync_present=1`;

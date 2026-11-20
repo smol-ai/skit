@@ -60,7 +60,7 @@ it.effect("operation row and before/after codecs preserve Installed Skill extens
 );
 
 it.effect(
-  "updating an installed version preserves extension data through the durable Apply program",
+  "installed extensions are refused atomically and a declared version update still completes Apply",
   () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -97,10 +97,21 @@ it.effect(
         if (before._tag !== "Present" || !before.state.installed_skills.length)
           return yield* Effect.die("Missing installed copies");
         const extension = { original: [null, "old bytes"], future: { untouched: true } };
-        yield* saveLibrary(home, {
-          ...before.state,
-          installed_skills: before.state.installed_skills.map((row) => ({ ...row, extension })),
-        });
+        const originalBytes = yield* fs.readFileString(
+          join(before.state.installed_skills[0]!.path, "SKILL.md"),
+        );
+        const refused = yield* Effect.result(
+          saveLibrary(home, {
+            ...before.state,
+            installed_skills: before.state.installed_skills.map((row) => ({ ...row, extension })),
+          }),
+        );
+        assert.strictEqual(refused._tag, "Failure");
+        assert.deepStrictEqual(yield* library.read, before);
+        assert.strictEqual(
+          yield* fs.readFileString(join(before.state.installed_skills[0]!.path, "SKILL.md")),
+          originalBytes,
+        );
         yield* fs.writeFileString(join(source, "SKILL.md"), text("Updated"));
         const update = yield* localImportRequest(source, "2026-11-17T00:00:00Z");
         if (Option.isNone(update)) return yield* Effect.die("Missing updated source");
@@ -114,7 +125,7 @@ it.effect(
         if (after._tag !== "Present") return yield* Effect.die("Missing Library");
         for (const row of after.state.installed_skills) {
           const value = yield* Schema.decodeUnknownEffect(JsonObject)(row);
-          assert.deepStrictEqual(value.extension, extension);
+          assert.isFalse(Object.hasOwn(value, "extension"));
           assert.strictEqual(row.status, "installed");
           assert.isFalse(
             before.state.installed_skills.some(

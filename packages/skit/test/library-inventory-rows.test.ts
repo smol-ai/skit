@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { SqlClient } from "effect/sql";
 import { join } from "node:path";
-import { fixture } from "./helpers/library-values.js";
+import { declaredFixture as fixture } from "./helpers/library-values.js";
 import { writeInventoryV4 } from "./helpers/inventory-v4.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { LibraryWriter, loadLibrary, writeLibrary } from "../src/library/store/library-store.js";
@@ -29,7 +29,6 @@ const prepared = Effect.gen(function* () {
         harness: "codex",
         path: "/without-aliases",
         currentHash: first.currentHash,
-        extension: { empty: [], absent: null },
       },
     ],
     ownershipIssues: [
@@ -37,14 +36,13 @@ const prepared = Effect.gen(function* () {
         ...issue,
         harnesses: ["codex", "codex"],
         matchesExpectedHash: false,
-        extension: { kept: null },
       },
       {
         ...issue,
         code: "INVALID_OWNERSHIP_MARKER",
         harnesses: [],
         matchesExpectedHash: true,
-        markerReason: { _tag: "NotObject", future: { original: true } },
+        markerReason: { _tag: "NotObject" },
       },
     ],
     scanIssues: [
@@ -53,14 +51,12 @@ const prepared = Effect.gen(function* () {
         code: "MISSING_ROOT",
         harness: "codex",
         path: "/missing",
-        target: { unknownForThisVariant: true },
       },
       {
         code: "DANGLING_SYMLINK",
         harness: "codex",
         path: "/link",
         target: "/target",
-        extension: [2, 1],
       },
     ],
   });
@@ -70,7 +66,7 @@ const prepared = Effect.gen(function* () {
 });
 
 it.effect(
-  "inventory migration preserves duplicate observations, child order, absence, diagnostics and unknown fields",
+  "inventory migration preserves duplicate observations, child order, absence and declared diagnostics",
   () =>
     Effect.gen(function* () {
       const { home, state, path } = yield* prepared;
@@ -303,7 +299,6 @@ it.effect(
             "artifact_hash",
             "validation_identity_hash",
             "skill_format",
-            "extra",
           ])
             yield* sql`ALTER TABLE library_skill_versions DROP COLUMN ${sql(column)}`;
           yield* sql`DROP TABLE library_assessment_acceptances`;

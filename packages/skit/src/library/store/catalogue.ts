@@ -30,13 +30,15 @@ import type { HistoryAction } from "./history-action.js";
 const fields = ["collections", "skills", "collection_versions", "imports"] as const;
 const CatalogueFields = Schema.Struct(Struct.pick(LibraryStateFields, fields));
 export type Catalogue = typeof CatalogueFields.Type;
-const Catalogue = Schema.declare(Schema.is(CatalogueFields));
+const Catalogue = CatalogueFields;
 
 /** Validate the catalogue's own relationships without constructing device or operation state. */
 export const decodeCatalogue = Effect.fn("Library.decodeCatalogue")(
   function* (path: string, input: unknown) {
     const document = yield* Schema.decodeUnknownEffect(JsonObject)(input);
-    const catalogue = yield* Schema.decodeUnknownEffect(Catalogue)(Struct.pick(document, fields));
+    const catalogue = yield* Schema.decodeUnknownEffect(Catalogue, { onExcessProperty: "error" })(
+      Struct.pick(document, fields),
+    );
     yield* Schema.decodeUnknownEffect(LibraryManifest)({
       schema: CURRENT_PORTABLE_LIBRARY_SCHEMA,
       ...Struct.pick(catalogue, fields),

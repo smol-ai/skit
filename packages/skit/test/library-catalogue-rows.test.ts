@@ -6,7 +6,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option, Struct, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { join } from "node:path";
-import { fixture } from "./helpers/library-values.js";
+import { declaredFixture as fixture } from "./helpers/library-values.js";
 import { skitLayer } from "../src/platform/layer.js";
 import {
   LibraryWriter,
@@ -92,8 +92,13 @@ it.effect("catalogue reads and writes need no installed, scan or security tables
           key: string;
         }>`SELECT key FROM library_sync_base WHERE entity='collections'`;
         assert.deepStrictEqual(
-          rows.map((row) => row.key),
-          originalBase.filter((row) => row.entity === "collections").map((row) => row.key),
+          rows.map((row) => row.key).sort(),
+          [
+            ...new Set([
+              ...originalBase.filter((row) => row.entity === "collections").map((row) => row.key),
+              stored.value.collections[0]!.collection_id,
+            ]),
+          ].sort(),
         );
       }),
       true,
@@ -112,7 +117,6 @@ it.effect(
         ...stored.value.imports[0]!,
         import_id: makeImportId(),
         imported_at: "2026-11-17T00:00:00Z",
-        extension: { source: "new", absent: null },
       };
       const next = {
         collections: stored.value.collections
@@ -349,7 +353,9 @@ it.effect("malformed catalogue JSON is refused as a typed Library error without 
       path,
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
-        yield* sql`UPDATE library_collections SET extra='{broken' WHERE collection_id=${stored.value.collections[0]!.collection_id}`;
+        yield* sql`PRAGMA ignore_check_constraints=ON`;
+        yield* sql`UPDATE library_collections SET upstream='{broken' WHERE collection_id=${stored.value.collections[0]!.collection_id}`;
+        yield* sql`PRAGMA ignore_check_constraints=OFF`;
       }),
     );
     const failure = yield* Effect.flip(readCatalogue(home));
@@ -374,9 +380,9 @@ it.effect("malformed catalogue JSON is refused as a typed Library error without 
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
         const [row] = yield* sql<{
-          extra: string;
-        }>`SELECT extra FROM library_collections WHERE collection_id=${stored.value.collections[0]!.collection_id}`;
-        assert.strictEqual(row?.extra, "{broken");
+          upstream: string;
+        }>`SELECT upstream FROM library_collections WHERE collection_id=${stored.value.collections[0]!.collection_id}`;
+        assert.strictEqual(row?.upstream, "{broken");
       }),
       true,
     );

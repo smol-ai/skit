@@ -28,7 +28,7 @@ const fields = [
 ] as const;
 const EnabledFields = Schema.Struct(Struct.pick(LibraryStateFields, fields));
 export type EnabledState = typeof EnabledFields.Type;
-export const EnabledState = Schema.declare(Schema.is(EnabledFields)).check(
+export const EnabledState = EnabledFields.check(
   Schema.makeFilter((state) => {
     const scopes = [
       state,
@@ -131,7 +131,9 @@ export const saveEnabled = Effect.fn("Library.saveEnabled")(function* (
         Schema.Tuple([EnabledState, EnabledState]),
       )([selected(nextInput), selected(baseInput)]);
       const current = yield* loadEnabledRows();
-      const stored = yield* Schema.decodeUnknownEffect(EnabledState)(selected(current));
+      const stored = yield* Schema.decodeUnknownEffect(EnabledState, { onExcessProperty: "error" })(
+        selected(current),
+      );
       if (canonicalJson(ordered(stored)) !== canonicalJson(ordered(base)))
         return yield* new LibraryChanged({ path });
       if (canonicalJson(ordered(stored)) === canonicalJson(ordered(next))) return revision;

@@ -35,8 +35,6 @@ it.effect(
       const idle = yield* Schema.decodeUnknownEffect(Schema.declare(Schema.is(Sync.Idle)))({
         _tag: "Idle",
         base: null,
-        revision: { unread: true },
-        extension: [1, "kept"],
       });
       const writing = yield* Schema.decodeUnknownEffect(Schema.declare(Schema.is(Sync.Writing)))({
         _tag: "Writing",
@@ -44,21 +42,18 @@ it.effect(
         from: hash,
         to: hash,
         merged: false,
-        next: { _tag: "Sending", base: null, revision: hash, future: "next" },
-        future: "writing",
+        next: { _tag: "Sending", base: null, revision: hash },
       });
       const inventory = {
-        inventory: { files: ["b", "a", "a"], members: ["m2", "m1"], future: "inventory" },
+        inventory: { files: ["b", "a", "a"], members: ["m2", "m1"] },
         removedFiles: ["removed"],
         removedMembers: [],
-        future: "removals",
       };
       const document = {
         schema: "skit.author-sync.v1",
         workspaces: { [a]: { one: idle }, [b]: {}, [c]: { writing } },
         inventories: { [a]: inventory },
         backups: { [a]: { one: hash }, [b]: {} },
-        future: { retained: true },
       };
       const text = `${JSON.stringify(document, null, 2)}\n`;
       const source = join(home, "author-sync.json");
@@ -86,12 +81,11 @@ it.effect(
             { document: text },
           ]);
           assert.deepStrictEqual(
-            yield* sql`SELECT inventories_present,backups_present,extra FROM author_state_fields`,
+            yield* sql`SELECT inventories_present,backups_present FROM author_state_fields`,
             [
               {
                 inventories_present: 1,
                 backups_present: 1,
-                extra: JSON.stringify({ future: { retained: true } }),
               },
             ],
           );
@@ -121,8 +115,7 @@ it.effect(
       );
       assert.deepStrictEqual(yield* readAuthorInventory(home, a), inventory);
       const nativeRevision = yield* History.RevisionId.makeEffect(hash);
-      // Unknown legacy fields remain evidence across native transitions. Current known fields
-      // take precedence while active, without deleting an earlier unread extension.
+      // Declared checkpoint fields round-trip across native transitions; source evidence remains exact.
       yield* withAuthorStateTransaction(
         home,
         saveAuthorSyncState(
@@ -313,7 +306,7 @@ it.effect(
         Effect.gen(function* () {
           const sql = yield* SqlClient.SqlClient;
           yield* sql`INSERT INTO author_workspace_state VALUES(${workspace},0,0)`;
-          yield* sql`INSERT INTO author_inventories VALUES(${workspace},'{}','{}')`;
+          yield* sql`INSERT INTO author_inventories(workspace_id) VALUES(${workspace})`;
           yield* sql`PRAGMA ignore_check_constraints=ON`;
           yield* sql`INSERT INTO author_inventory_paths VALUES(${workspace},'future-category',0,'unread-data')`;
           yield* sql`PRAGMA ignore_check_constraints=OFF`;
@@ -331,5 +324,38 @@ it.effect(
         }),
         true,
       );
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect(
+  "unknown Author source and checkpoint fields are refused without losing original data",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-author-excess-" });
+      const source = join(home, "author-sync.json");
+      const text =
+        ' {"schema":"skit.author-sync.v1","workspaces":{},"future":{"kept":[null,false]}} \n';
+      yield* fs.writeFileString(source, text);
+      const refused = yield* Effect.result(prepareAuthorState(home));
+      assert.strictEqual(refused._tag, "Failure");
+      assert.strictEqual(yield* fs.readFileString(source), text);
+      yield* withLibraryDatabase(
+        libraryDatabasePath(home),
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          assert.deepStrictEqual(yield* sql`SELECT * FROM author_state_import`, []);
+          assert.deepStrictEqual(yield* sql`SELECT * FROM author_sync_checkpoints`, []);
+        }),
+        true,
+      );
+      yield* fs.remove(source);
+      const key = { workspaceId: WorkspaceId.make("workspace_" + "a".repeat(32)), locator: "one" };
+      const unknown = { ...Sync.Idle.make({ base: null }), future: { kept: [null, false] } };
+      const written = yield* Effect.result(
+        withAuthorStateTransaction(home, saveAuthorSyncState(home, key, unknown)),
+      );
+      assert.strictEqual(written._tag, "Failure");
+      assert.deepStrictEqual(yield* readAuthorSyncState(home, key), Sync.Idle.make({ base: null }));
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

@@ -3,7 +3,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { join } from "node:path";
-import { fixture } from "./helpers/library-values.js";
+import { declaredFixture as fixture } from "./helpers/library-values.js";
 import { skitLayer } from "../src/platform/layer.js";
 import {
   LibraryWriter,
@@ -52,12 +52,12 @@ it.effect(
       const { home, state, first } = yield* prepared();
       const next = yield* decodeLibraryState({
         ...state,
-        enabled: [{ collection: first.collection_id, extension: { kept: [null, true] } }],
+        enabled: [{ collection: first.collection_id }],
         repositories: state.repositories.map((row) => ({ ...row, enabled: [] })),
         device_skill_selection: {
           ...state.device_skill_selection,
           mode: "choose",
-          enabled: [{ skill: first.skill_id, extension: { kept: null } }],
+          enabled: [{ skill: first.skill_id }],
         },
       });
       yield* writeLibrary(
@@ -245,7 +245,7 @@ it.effect(
     Effect.gen(function* () {
       const { home, state, first, path } = yield* prepared();
       if (!state.sync_ancestry) return yield* Effect.die("Missing agreed base");
-      const agreed = [{ skill: first.skill_id, extension: { receipt: [null, "remote"] } }];
+      const agreed = [{ skill: first.skill_id }];
       const before = {
         ...state,
         sync_ancestry: {

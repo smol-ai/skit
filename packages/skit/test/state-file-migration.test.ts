@@ -632,54 +632,54 @@ it.effect("relabels v7 state as v8 without inventing sync ancestry", () =>
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("state load and publication retain nested extensions without skipping validation", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-state-extensions-" });
-    const path = join(home, "state.json");
-    yield* fs.writeFileString(
-      path,
-      yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
-    );
-    const fixtureHome = yield* fs.makeTempDirectoryScoped({ prefix: "skit-legacy-fixture-" });
-    yield* fs.copyFile(
-      join(fixtures, "v4-well-known-subset.json"),
-      join(fixtureHome, "state.json"),
-    );
-    const current = yield* openedState(fixtureHome);
-    assert.strictEqual(current.present, true);
-    if (!current.present) return;
-    const value = {
-      ...current.state,
-      extension: { retained: true },
-      collections: current.state.collections.map((collection) => ({
-        ...collection,
-        extension: { retained: "collection" },
-      })),
-    };
-    const original = JSON.stringify(value);
-    yield* fs.writeFileString(path, original);
-    const reopened = yield* openedState(home);
-    assert.strictEqual(reopened.present, true);
-    if (reopened.present) assert.deepStrictEqual(reopened.state, JSON.parse(original));
-    assert.deepStrictEqual(
-      JSON.parse(yield* fs.readFileString(join(home, "state.json.v12.backup-database"))),
-      JSON.parse(original),
-    );
-
-    yield* fs.writeFileString(
-      path,
-      JSON.stringify({
-        ...value,
-        collections: value.collections.map((collection) => ({
+it.effect(
+  "state loading refuses unknown fields without changing source data and still validates declared fields",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-state-extensions-" });
+      const path = join(home, "state.json");
+      yield* fs.writeFileString(
+        path,
+        yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
+      );
+      const fixtureHome = yield* fs.makeTempDirectoryScoped({ prefix: "skit-legacy-fixture-" });
+      yield* fs.copyFile(
+        join(fixtures, "v4-well-known-subset.json"),
+        join(fixtureHome, "state.json"),
+      );
+      const current = yield* openedState(fixtureHome);
+      assert.strictEqual(current.present, true);
+      if (!current.present) return;
+      const value = {
+        ...current.state,
+        extension: { retained: true },
+        collections: current.state.collections.map((collection) => ({
           ...collection,
-          collection_id: "bad-id",
+          extension: { retained: "collection" },
         })),
-      }),
-    );
-    const failure = yield* Effect.flip(openedState(home));
-    assert.strictEqual(failure._tag, "InvalidLibraryState");
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      };
+      const original = JSON.stringify(value);
+      yield* fs.writeFileString(path, original);
+      const refused = yield* Effect.result(openedState(home));
+      assert.strictEqual(refused._tag, "Failure");
+      if (refused._tag === "Failure")
+        assert.strictEqual(refused.failure._tag, "InvalidLibraryState");
+      assert.strictEqual(yield* fs.readFileString(path), original);
+
+      yield* fs.writeFileString(
+        path,
+        JSON.stringify({
+          ...current.state,
+          collections: current.state.collections.map((collection) => ({
+            ...collection,
+            collection_id: "bad-id",
+          })),
+        }),
+      );
+      const failure = yield* Effect.flip(openedState(home));
+      assert.strictEqual(failure._tag, "InvalidLibraryState");
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("migrates v9 Bindings to enabled lists and renames stored records", () =>

@@ -64,7 +64,7 @@ it.effect(
         yield* fs.readFileString(join(home, "machine.json.backup-database")),
         bytes,
       );
-      const state = { ...emptyLibraryState(), extension: { keep: [null, {}, []] } };
+      const state = { ...emptyLibraryState() };
       yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(state));
       yield* migrateLocalLibraryState(home);
       const loaded = yield* inspectLocalLibraryState(home);
@@ -98,7 +98,7 @@ it.effect(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-independent-library-" });
-      const state = { ...emptyLibraryState(), extension: { keep: [false, null] } };
+      const state = { ...emptyLibraryState() };
       yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(state));
       yield* fs.writeFileString(join(home, "machine.json"), "invalid machine\n");
       yield* migrateLocalLibraryState(home);
@@ -134,7 +134,9 @@ it.effect("invalid Library rows leave machine settings readable", () =>
       home,
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
-        yield* sql`UPDATE library_device SET extra=json_set(COALESCE(extra,'{}'),'$.schemaVersion','corrupt') WHERE id=1`;
+        yield* sql`PRAGMA ignore_check_constraints=ON`;
+        yield* sql`UPDATE library_device SET schema_version=99 WHERE id=1`;
+        yield* sql`PRAGMA ignore_check_constraints=OFF`;
       }),
     );
     assert.strictEqual(
@@ -146,7 +148,7 @@ it.effect("invalid Library rows leave machine settings readable", () =>
 );
 
 it.effect(
-  "v5 imports preserve duplicates, order, unknown fields and key presence exactly, and import only once",
+  "v5 imports preserve duplicates, order, declared JSON and key presence exactly, and import only once",
   () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -157,13 +159,11 @@ it.effect(
         displayName: "Lossless",
         discoveryRoots: ["/second", "/first", "/second"],
         repositories: [
-          { path: "/same", status: "watched", extension: { one: [null, {}] } },
-          { path: "/same", status: "ignored", extension: { two: [] } },
+          { path: "/same", status: "watched" },
+          { path: "/same", status: "ignored" },
         ],
         repositoryDecisionsInitialized: true,
         legacyMachineId: { future: true },
-        path: { future: "data" },
-        extension: { ["__proto__"]: { keep: true }, missing: null, empty: [] },
       };
       const text = JSON.stringify(machine);
       yield* fs.writeFileString(join(home, "machine.json"), text);
@@ -177,12 +177,11 @@ it.effect(
           assert.strictEqual(canonicalJson(loaded), canonicalJson(machine));
           const sql = yield* SqlClient.SqlClient;
           assert.deepStrictEqual(
-            yield* sql`SELECT position,path,status,extra FROM machine_repositories ORDER BY position`,
-            machine.repositories.map(({ path, status, ...extra }, position) => ({
+            yield* sql`SELECT position,path,status FROM machine_repositories ORDER BY position`,
+            machine.repositories.map(({ path, status }, position) => ({
               position,
               path,
               status,
-              extra: JSON.stringify(extra),
             })),
           );
 
@@ -199,8 +198,6 @@ it.effect(
           const loaded = yield* loadMachineRows(path);
           assert.ok(loaded);
           const raw = JSON.parse(JSON.stringify(loaded));
-          assert.deepStrictEqual(raw.extension, machine.extension);
-          assert.deepStrictEqual(raw.path, machine.path);
           assert.deepStrictEqual(raw.legacyMachineId, machine.legacyMachineId);
         }),
         true,
@@ -274,3 +271,41 @@ it.effect("retries from the durable backup if the refusal file precedes the SQLi
     assert.deepStrictEqual((yield* MachineSettings.read(home)).discoveryRoots, ["/preserved"]);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+for (const nested of [false, true])
+  it.effect(
+    `unknown Machine fields refuse import without changing source evidence (nested=${nested})`,
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-machine-excess-" });
+        const document = {
+          schemaVersion: 5,
+          discoveryRoots: [],
+          repositoryDecisionsInitialized: true,
+          repositories: nested
+            ? [{ path: "/same", status: "watched", future: { kept: [null, false] } }]
+            : [],
+          ...(nested ? {} : { future: { kept: [null, false] } }),
+        };
+        const text = JSON.stringify(document, null, 2) + "\n";
+        const source = join(home, "machine.json");
+        yield* fs.writeFileString(source, text);
+        const result = yield* Effect.result(MachineSettings.read(home));
+        assert.strictEqual(result._tag, "Failure");
+        assert.strictEqual(yield* fs.readFileString(source), text);
+        yield* withLibraryDatabase(
+          libraryDatabasePath(home),
+          Effect.gen(function* () {
+            const sql = yield* SqlClient.SqlClient;
+            assert.deepStrictEqual(yield* sql`SELECT * FROM machine`, []);
+            assert.deepStrictEqual(yield* sql`SELECT * FROM machine_repositories`, []);
+            assert.deepStrictEqual(
+              yield* sql`SELECT * FROM library_import WHERE source='machine.json'`,
+              [],
+            );
+          }),
+          true,
+        );
+      }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  );

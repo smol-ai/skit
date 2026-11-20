@@ -1,3 +1,4 @@
+import * as Status from "../src/library/installed-skill-status.js";
 import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
 import { prepareSetupChanges } from "../src/library/store/setup-intent.js";
 import { prepareLibraryDifference, prepareLibrarySide } from "../src/library/store/difference.js";
@@ -27,7 +28,7 @@ import { runUndo } from "../src/library/internal/setup/undo-execution.js";
 import { Digest } from "effect/crypto";
 import { canonicalJson } from "../src/shared/json.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { fixture } from "./helpers/library-values.js";
+import { declaredFixture as fixture } from "./helpers/library-values.js";
 import { saveLibrary, testRoots } from "./helpers/library-store.js";
 import { SqlClient } from "effect/sql";
 import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
@@ -98,7 +99,6 @@ it.effect(
         installed_skills: [],
         repositories: [],
         enabled: [{ skill: skill.skill_id }],
-        extension: { absent: null, nested: ["keep", {}] },
       });
       const reversed = reverseSetupIntent(
         before,
@@ -185,7 +185,7 @@ it.effect(
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("Sync saves its recorded extensions exactly and resumes after publication", () =>
+it.effect("Sync saves its declared target exactly and resumes after publication", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.realPath(
@@ -277,20 +277,11 @@ it.effect("Sync saves its recorded extensions exactly and resumes after publicat
     const state = yield* loadLibrary(home);
     const before = yield* decodeLibraryState({
       ...state,
-      extension: { nested: [null, "keep"] },
-      skills: state.skills.map((skill) => ({
-        ...skill,
-        extension: "skill",
-        versions: skill.versions.map((version) => ({
-          ...version,
-          extension: { nested: ["version"] },
-        })),
-      })),
-      installed_skills: state.installed_skills.map((copy) => ({ ...copy, extension: "installed" })),
+      installed_skills: state.installed_skills.map(Status.pending),
     });
     yield* saveLibrary(home, before);
-    // A native deletion requires work. The preview also removes the installed-row extension,
-    // making the publication necessary even though the clean Library body stays unchanged.
+    // A pending installed copy is a declared live delta; publication must finish before restart.
+    const installedBytes = yield* fs.readFileString(join(installed, "SKILL.md"));
     yield* fs.remove(installed, { recursive: true });
     const digest = yield* Digest.Digest;
     let recorded: { operationId: OperationId; after: LibraryState } | undefined;
@@ -358,7 +349,7 @@ it.effect("Sync saves its recorded extensions exactly and resumes after publicat
         { ...before, installed_skills: [] },
       );
     }).pipe(Effect.provide(layer));
-    assert.isFalse(yield* fs.exists(installed));
+    assert.strictEqual(yield* fs.readFileString(join(installed, "SKILL.md")), installedBytes);
     assert.strictEqual(yield* fs.readFileString(join(source, "SKILL.md")), bytes);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

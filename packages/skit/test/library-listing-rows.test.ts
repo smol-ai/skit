@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { SqlClient } from "effect/sql";
 import { join } from "node:path";
-import { fixture } from "./helpers/library-values.js";
+import { declaredFixture as fixture } from "./helpers/library-values.js";
 import { openLibrary } from "./helpers/library-store.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { snapshotOf } from "../src/library/snapshot.js";
@@ -54,7 +54,7 @@ it.effect(
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
-it.effect("a listing decodes damaged row extras as a typed failure", () =>
+it.effect("a listing refuses invalid declared row fields as a typed failure", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-listing-invalid-" });
@@ -66,7 +66,7 @@ it.effect("a listing decodes damaged row extras as a typed failure", () =>
         const sql = yield* SqlClient.SqlClient;
         yield* migrateLibraryDatabase(path);
         yield* sql.withTransaction(saveDatabaseState(path, state, null));
-        yield* sql`UPDATE library_collections SET extra='[]'`;
+        yield* sql`UPDATE library_collections SET label=''`;
       }),
     );
     const library = yield* openLibrary(home);

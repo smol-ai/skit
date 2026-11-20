@@ -12,7 +12,7 @@ import { SetupIntent, setupIntent } from "../src/library/store/intent.js";
 import { prepareSetupChanges } from "../src/library/store/setup-intent.js";
 import { reverseSetupIntent } from "../src/library/internal/setup/undo-intent.js";
 import { inverseSetResult, reverseFullSetupIntent } from "./helpers/setup-intent-reference.js";
-import { fixture } from "./helpers/library-values.js";
+import { declaredFixture as fixture } from "./helpers/library-values.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 it.effect("the 44-case First 1 matrix matches the full-intent inverse as sets", () =>
