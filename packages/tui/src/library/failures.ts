@@ -83,11 +83,11 @@ const readFailure = Match.type<typeof LibraryReadFailure.Type>().pipe(
     InvalidLibraryState: ({ path, reason }) =>
       `Invalid Library state at ${path}: ${InvalidLibraryStateReason.match(reason, {
         LegacySourceChanged: ({ sourcePath, backupPath, databasePath }) =>
-          `legacy file ${sourcePath} changed after import into ${databasePath}; original backup: ${backupPath ?? "source was absent"}`,
+          `legacy source ${sourcePath} changed after import into ${databasePath} began. ${backupPath === null ? "The source was absent when import began." : `Original backup is at ${backupPath}.`} Keep all existing copies of the source, backup, and database`,
         LegacyStateBesideDatabase: ({ statePath, databasePath }) =>
           `database ${databasePath} is authoritative. Move ${statePath} aside before retrying`,
         ImportBackupChanged: ({ sourcePath, backupPath, databasePath }) =>
-          `backup ${backupPath} differs from source ${sourcePath} while preparing ${databasePath}`,
+          `import into ${databasePath} stopped because backup ${backupPath} differs from source ${sourcePath}. Keep all existing copies of the source, backup, and database`,
         NewerDatabaseMigration: ({ databasePath, migration, supported }) =>
           `database ${databasePath} has migration ${migration}; this build supports through ${supported}. Use a build that supports this migration; keep the database intact`,
         OperationStateMissing: ({ databasePath }) =>

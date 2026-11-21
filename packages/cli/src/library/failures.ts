@@ -126,11 +126,11 @@ const libraryFailureMessage = Match.type<typeof LibraryDataFailure.Type>().pipe(
     InvalidLibraryState: ({ path, reason }) =>
       `Invalid Library state at ${path}: ${InvalidLibraryStateReason.match(reason, {
         LegacySourceChanged: ({ sourcePath, backupPath, databasePath }) =>
-          `legacy file ${sourcePath} changed after import into ${databasePath}; original backup: ${backupPath ?? "source was absent"}`,
+          `legacy source ${sourcePath} changed after import into ${databasePath} began. ${backupPath === null ? "The source was absent when import began" : `Original backup is at ${backupPath}`}`,
         LegacyStateBesideDatabase: ({ statePath, databasePath }) =>
           `database ${databasePath} is authoritative. Move ${statePath} aside before retrying`,
         ImportBackupChanged: ({ sourcePath, backupPath, databasePath }) =>
-          `backup ${backupPath} differs from source ${sourcePath} while preparing ${databasePath}`,
+          `import into ${databasePath} stopped because backup ${backupPath} differs from source ${sourcePath}`,
         NewerDatabaseMigration: ({ databasePath, migration, supported }) =>
           `database ${databasePath} has migration ${migration}; this build supports through ${supported}`,
         OperationStateMissing: ({ databasePath }) =>
@@ -223,6 +223,8 @@ const libraryFailureNext = Match.type<typeof LibraryDataFailure.Type>().pipe(
     UnknownInstalledSkill: () => ["Run ", { code: "skit list" }, " to find an installed Skill."],
     LibrarySqlError: () => ["Check the reported database failure and retry."],
     InvalidLibraryState: ({ path, reason }) => {
+      if (reason._tag === "LegacySourceChanged" || reason._tag === "ImportBackupChanged")
+        return ["Keep all existing copies of the source, backup, and database."];
       if (reason._tag === "NewerDatabaseMigration")
         return ["Use a build that supports this database migration. Keep the database intact."];
       if (reason._tag === "LegacyStateBesideDatabase")
