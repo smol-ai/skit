@@ -100,9 +100,9 @@ for (const race of ["new-parent", "new-child", "new-target"] as const)
       let inserted = false;
       const raced: FileSystem.FileSystem = {
         ...fs,
-        remove: (target, options) =>
+        rename: (target, destination) =>
           Effect.gen(function* () {
-            yield* fs.remove(target, options);
+            yield* fs.rename(target, destination);
             if (inserted || target !== join(root, race === "new-parent" ? "notes" : "notes/a.txt"))
               return;
             if (race === "new-target") return;
@@ -131,6 +131,37 @@ for (const race of ["new-parent", "new-child", "new-target"] as const)
       expect(
         yield* fs.readFileString(join(root, race === "new-child" ? "notes/private.txt" : "notes")),
       ).toBe("editor");
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  );
+
+for (const change of ["deletion", "file-to-directory replacement"] as const)
+  it.effect(`preserves an atomic editor save immediately before ${change}`, () =>
+    Effect.gen(function* () {
+      const { fs, root, put } = yield* fixture;
+      const from = files({ notes: "base" });
+      const to = change === "deletion" ? [] : files({ "notes/child.txt": "incoming" });
+      yield* put(from);
+      const target = join(root, "notes");
+      const editor = join(root, ".skit", "editor-save");
+      yield* fs.writeFileString(editor, "editor");
+      const save = fs.rename(editor, target);
+      const raced: FileSystem.FileSystem = {
+        ...fs,
+        rename: (source, destination) =>
+          source === target
+            ? save.pipe(Effect.andThen(fs.rename(source, destination)))
+            : fs.rename(source, destination),
+        remove: (source, options) =>
+          source === target
+            ? save.pipe(Effect.andThen(fs.remove(source, options)))
+            : fs.remove(source, options),
+      };
+      const failure = yield* Effect.flip(
+        writeWorkspaceTree(root, from, to).pipe(Effect.provideService(FileSystem.FileSystem, raced)),
+      );
+      expect(failure).toMatchObject({ _tag: "LocalFilesChangedDuringSync" });
+      expect(yield* fs.readFileString(target)).toBe("editor");
+      expect(yield* fs.readDirectory(join(root, ".skit"))).toEqual([]);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 

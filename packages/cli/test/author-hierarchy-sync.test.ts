@@ -217,14 +217,20 @@ describe("skit author sync", () => {
               expect((yield* world.b.sync()).status).toBe("waiting_for_removal");
               expect((yield* world.b.sync(false, true)).status).toBe("pushed");
               let stopped = false;
+              let displaced: string | undefined;
               const result = yield* Effect.exit(
                 world.a.sync().pipe(
                   Effect.provideService(FileSystem.FileSystem, {
                     ...fs,
+                    rename: (from, to) =>
+                      Effect.gen(function* () {
+                        yield* fs.rename(from, to);
+                        if (from === join(world.a.workspace, initial)) displaced = to;
+                      }),
                     remove: (path, options) =>
                       Effect.gen(function* () {
                         yield* fs.remove(path, options);
-                        if (!stopped && path === join(world.a.workspace, initial)) {
+                        if (!stopped && path === displaced) {
                           stopped = true;
                           return yield* Effect.die(
                             "process stopped after removing the predecessor",

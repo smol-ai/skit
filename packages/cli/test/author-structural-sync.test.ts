@@ -64,11 +64,11 @@ describe("skit author sync", () => {
                 world.a.sync().pipe(
                   Effect.provideService(FileSystem.FileSystem, {
                     ...fs,
-                    remove: (path, options) =>
+                    rename: (from, to) =>
                       Effect.gen(function* () {
-                        if (inWorkspace(path)) yield* stop("staged");
-                        yield* fs.remove(path, options);
-                        if (inWorkspace(path)) yield* stop("removed");
+                        if (inWorkspace(from)) yield* stop("staged");
+                        yield* fs.rename(from, to);
+                        if (inWorkspace(from)) yield* stop("removed");
                       }),
                     link: (from, to) =>
                       Effect.gen(function* () {

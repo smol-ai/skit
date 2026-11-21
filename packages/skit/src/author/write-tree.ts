@@ -7,7 +7,7 @@ import { TreeEntry } from "../artifact/tree-entry.js";
 import { syncPaths } from "../platform/atomic-write.js";
 import { AuthorLocalPathUnchecked, LocalFilesChangedDuringSync } from "./failures.js";
 import { scanWorkspaceWrite } from "./local-tree.js";
-import { replaceFile } from "./file-replacement.js";
+import { changeFile } from "./file-replacement.js";
 
 /**
  * The file half of WorkspaceLease.writeTree, after the lease has checked its private checkpoint: make
@@ -123,7 +123,7 @@ export const writeWorkspaceTree = Effect.fn("AuthorWorkspace.writeTree")(functio
         const target = yield* local.checkTarget(entry.path);
         const staged = path.join(staging, ...entry.path.split("/"));
         const previous = before.get(entry.path);
-        if (previous !== undefined) yield* replaceFile(root, target, staged, previous);
+        if (previous !== undefined) yield* changeFile(root, target, previous, staged);
         else {
           // Exclusive publication refuses an editor's new file at a target this write vacated.
           yield* fs.link(staged, target);

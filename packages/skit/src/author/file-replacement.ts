@@ -102,16 +102,16 @@ export const recoverFileReplacement = Effect.fn("AuthorWorkspace.recoverFileRepl
 /**
  * Move first so the inode checked here is the one actually displaced by the write.
  *
- * Saves that reach the target path are kept: one that lands before the check fails the
- * hash, and one that creates a new file at the path makes publication fail. A write
+ * Saves that reach the target path are kept: a changed file displaced by the move fails
+ * the hash, and a save after the move stays at the target. A write
  * through a descriptor still open on the displaced inode after the check is not kept,
  * as with any replacement by name. No retention period could close that window.
  */
-export const replaceFile = Effect.fn("AuthorWorkspace.replaceFile")(function* (
+export const changeFile = Effect.fn("AuthorWorkspace.changeFile")(function* (
   root: string,
   target: string,
-  staged: string,
   before: TreeFile,
+  staged?: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -142,14 +142,14 @@ export const replaceFile = Effect.fn("AuthorWorkspace.replaceFile")(function* (
     yield* syncPaths([directory, path.dirname(target)]);
     if ((yield* savedHash(saved, relative, info)) !== hash)
       return yield* new LocalFilesChangedDuringSync();
-    yield* fs
-      .link(staged, target)
-      .pipe(
+    if (staged !== undefined) {
+      yield* fs.link(staged, target).pipe(
         Effect.catchReason("PlatformError", "AlreadyExists", () =>
           Effect.fail(new LocalFilesChangedDuringSync()),
         ),
       );
-    yield* syncPaths([path.dirname(target)]);
+      yield* syncPaths([path.dirname(target)]);
+    }
     yield* fs.remove(saved);
     yield* syncPaths([directory]);
     yield* fs.remove(directory, { recursive: true });
