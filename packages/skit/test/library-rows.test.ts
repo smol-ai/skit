@@ -3,7 +3,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { SqlClient } from "effect/sql";
 import { join } from "node:path";
-import { declaredFixture as fixture } from "./helpers/library-values.js";
+import { declaredFixture as fixture, makeDeclaredFixture } from "./helpers/library-values.js";
 import { skitLayer } from "../src/platform/layer.js";
 import {
   canonicalJson,
@@ -13,7 +13,6 @@ import {
 } from "../src/shared/json.js";
 import {
   decodeCurrentState,
-  migrateLocalLibraryState,
   readDatabaseState,
   saveDatabaseState,
   saveLibraryHistory,
@@ -21,7 +20,7 @@ import {
 import { loadLibrary, loadOperations } from "../src/library/store/library-store.js";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { enabledAt } from "../src/library/enabled.js";
-import { openLibrary } from "./helpers/library-store.js";
+import { openLibrary, saveLibrary } from "./helpers/library-store.js";
 import { loadLibraryRows } from "../src/library/store/rows.js";
 import { withLibraryDatabase } from "../src/library/store/database.js";
 import {
@@ -40,7 +39,9 @@ it.effect(
       const fs = yield* FileSystem.FileSystem;
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-rows-" });
       const path = join(home, "library.sqlite");
-      const { state } = yield* fixture;
+      // Keep multiple collections and installed skills without repeating the size fixture
+      // for every optional-field round trip.
+      const { state } = yield* makeDeclaredFixture(2, 8);
       const skill = state.skills[0]!;
       const source = state.imports[0]!;
       const extension = { absent: null, empty: [], nested: { ["__proto__"]: [true, false] } };
@@ -339,18 +340,14 @@ it.effect("a load refuses malformed rows without changing operation data", () =>
 );
 
 it.effect(
-  "changes only the installed row and revision, then completes an enable on the imported fixture",
+  "changes only the installed row and revision, then completes an enable on the saved fixture",
   () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-row-measure-" });
       const path = join(home, "library.sqlite");
       const { state } = yield* fixture;
-      yield* fs.writeFileString(
-        join(home, "state.json"),
-        JSON.stringify({ ...state, operations: [] }),
-      );
-      yield* migrateLocalLibraryState(home);
+      yield* saveLibrary(home, state);
       assert.strictEqual(canonicalJson(yield* loadLibrary(home)), canonicalJson(state));
       const sizes = Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;

@@ -17,13 +17,16 @@ import {
   libraryManifestFromLocalState,
 } from "../../src/library/library-state.js";
 
-export const fixture = Effect.gen(function* () {
-  const collections = Array.from({ length: 32 }, (_, index) => ({
+const libraryFixture = Effect.fn("Test.libraryFixture")(function* (
+  collectionCount: number,
+  skillCount: number,
+) {
+  const collections = Array.from({ length: collectionCount }, (_, index) => ({
     collection_id: makeCollectionId(),
     label: "collection-" + index,
     extension: { ordered: [3, 2, 1], absent: null },
   }));
-  const skills = Array.from({ length: 298 }, (_, index) => ({
+  const skills = Array.from({ length: skillCount }, (_, index) => ({
     skill_id: makeSkillId(),
     collection_id: collections[index % collections.length]?.collection_id,
     path: "skill-" + index,
@@ -192,10 +195,15 @@ export const fixture = Effect.gen(function* () {
   return { state: full, future: futureVersions[0] };
 });
 
+export const fixture = libraryFixture(32, 298);
+
 /** A separate fixture for the closed store contract. Pure domain/record codecs still use
  * fixture above to prove their existing extension behavior; only declared fields go live. */
-export const declaredFixture = Effect.gen(function* () {
-  const value = yield* fixture;
+export const makeDeclaredFixture = Effect.fn("Test.declaredLibraryFixture")(function* (
+  collectionCount: number,
+  skillCount: number,
+) {
+  const value = yield* libraryFixture(collectionCount, skillCount);
   const declared = yield* Schema.decodeUnknownEffect(Schema.Struct(LibraryStateFields))(
     value.state,
   );
@@ -207,3 +215,5 @@ export const declaredFixture = Effect.gen(function* () {
         : yield* Schema.decodeUnknownEffect(SkillVersion)(value.future),
   };
 });
+
+export const declaredFixture = makeDeclaredFixture(32, 298);
