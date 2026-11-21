@@ -21,6 +21,18 @@ import { canonicalJson } from "../src/shared/json.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { testRoots } from "./helpers/library-store.js";
 
+const emptyV9 = {
+  schemaVersion: 9,
+  unmanaged: [],
+  collections: [],
+  skills: [],
+  retained_copies: [],
+  acquisitions: [],
+  global_bindings: [],
+  local_bindings: [],
+  projections: [],
+};
+
 it.effect(
   "machine imports independently of a corrupt legacy Library; repairing it imports into the same database",
   () =>
@@ -65,7 +77,7 @@ it.effect(
         bytes,
       );
       const state = { ...emptyLibraryState() };
-      yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(state));
+      yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(emptyV9));
       yield* migrateLocalLibraryState(home);
       const loaded = yield* inspectLocalLibraryState(home);
       assert.isTrue(loaded.present);
@@ -99,7 +111,7 @@ it.effect(
       const fs = yield* FileSystem.FileSystem;
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-independent-library-" });
       const state = { ...emptyLibraryState() };
-      yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(state));
+      yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(emptyV9));
       yield* fs.writeFileString(join(home, "machine.json"), "invalid machine\n");
       yield* migrateLocalLibraryState(home);
       const loaded = yield* inspectLocalLibraryState(home);
@@ -127,7 +139,7 @@ it.effect("invalid Library rows leave machine settings readable", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-independent-rows-" });
-    yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(emptyLibraryState()));
+    yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(emptyV9));
     yield* migrateLocalLibraryState(home);
     const before = yield* MachineSettings.updateDiscovery(home, { discoveryRoots: ["/saved"] });
     yield* withDatabaseTransaction(

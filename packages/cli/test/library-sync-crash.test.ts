@@ -1,3 +1,4 @@
+import { asV9 } from "./helpers/released-library.js";
 import { describe } from "@effect/vitest";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
@@ -411,13 +412,19 @@ describe("skit sync", () => {
           // Seed pre-database documents so each device imports them on its first sync.
           yield* fs.makeDirectory(c.home, { recursive: true });
           yield* fs.copy(join(a.home, "originals"), join(c.home, "originals"));
-          yield* fs.writeFileString(join(c.home, "state.json"), JSON.stringify(yield* a.state));
+          yield* fs.writeFileString(
+            join(c.home, "state.json"),
+            JSON.stringify(asV9(yield* a.state)),
+          );
           assert.strictEqual((yield* c.sync({ apply: false })).status, "push_ready");
           assert.strictEqual((yield* c.sync()).status, "pushed");
 
           yield* fs.makeDirectory(b.home, { recursive: true });
           yield* fs.copy(join(c.home, "originals"), join(b.home, "originals"));
-          yield* fs.writeFileString(join(b.home, "state.json"), JSON.stringify(yield* c.state));
+          yield* fs.writeFileString(
+            join(b.home, "state.json"),
+            JSON.stringify(asV9(yield* c.state)),
+          );
           assert.strictEqual((yield* b.sync()).status, "clean");
           yield* a.importSource("second");
           yield* a.sync();

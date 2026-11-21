@@ -1,8 +1,8 @@
+import { saveLibrary } from "./helpers/library-store.js";
 import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
-import { join } from "node:path";
 import { declaredFixture as fixture } from "./helpers/library-values.js";
 import { skitLayer } from "../src/platform/layer.js";
 import {
@@ -26,7 +26,7 @@ const prepared = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-remove-rows-" });
   const { state } = yield* fixture;
-  yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(state));
+  yield* saveLibrary(home, state);
   yield* migrateLocalLibraryState(home);
   const collection = state.collections[0]!;
   const remainingImports = state.imports.filter(
@@ -89,6 +89,7 @@ it.effect(
     Effect.gen(function* () {
       const { home, state, expected, operation, progress, publication, path } = yield* prepared;
       const beforeHistory = yield* readLibraryAudit(home);
+      const previousEventIds = new Set(beforeHistory.map((event) => event.eventId));
       yield* writeLibrary(
         home,
         Effect.gen(function* () {
@@ -114,6 +115,7 @@ it.effect(
                 Schema.decodeEffect(Schema.fromJsonString(LibraryAuditEvent))(row.document),
               );
               return events
+                .filter((event) => !previousEventIds.has(event.eventId))
                 .flatMap((event) => event.changes)
                 .filter((change) => !change.action.startsWith("operation-"));
             }),

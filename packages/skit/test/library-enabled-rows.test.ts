@@ -1,8 +1,8 @@
+import { saveLibrary } from "./helpers/library-store.js";
 import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
 import { SqlClient } from "effect/sql";
-import { join } from "node:path";
 import { declaredFixture as fixture } from "./helpers/library-values.js";
 import { skitLayer } from "../src/platform/layer.js";
 import {
@@ -31,7 +31,7 @@ const prepared = (ancestry = true) =>
     const { state: full } = yield* fixture;
     const { sync_ancestry: _ancestry, ...withoutAncestry } = full;
     const state: LibraryState = ancestry ? full : withoutAncestry;
-    yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(state));
+    yield* saveLibrary(home, state);
     yield* migrateLocalLibraryState(home);
     const first = state.skills[0];
     if (!first) return yield* Effect.die("Missing Skill");
@@ -50,6 +50,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { home, state, first } = yield* prepared();
+      const beforeAudit = yield* readLibraryAudit(home);
       const next = yield* decodeLibraryState({
         ...state,
         enabled: [{ collection: first.collection_id }],
@@ -70,8 +71,9 @@ it.effect(
       );
       assert.strictEqual(canonicalJson(yield* loadLibrary(home)), canonicalJson(next));
       const audit = yield* readLibraryAudit(home);
+      assert.deepStrictEqual(audit.slice(0, beforeAudit.length), beforeAudit);
       assert.deepStrictEqual(
-        audit.flatMap((event) => event.changes),
+        audit.slice(beforeAudit.length).flatMap((event) => event.changes),
         diffLibraryState(state, next),
       );
     }).pipe(Effect.provide(skitLayer), Effect.scoped),

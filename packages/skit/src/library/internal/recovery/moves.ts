@@ -40,7 +40,7 @@ const recordSchemas = <Number extends Schema.Codec<bigint, unknown>>(number: Num
   });
   return { EntryFields, Entry };
 };
-// v3 saves device and inode numbers as text so they stay exact; v1 and v2 saved JSON numbers.
+// v3 saves device and inode numbers as text so they stay exact; v1 saved JSON numbers.
 const current = recordSchemas(FileIdentityNumber);
 const numeric = recordSchemas(LegacyFileIdentityNumber);
 const decoded = recordSchemas(Schema.BigInt);
@@ -67,7 +67,6 @@ const CurrentMoveRecord = Schema.Struct({
 });
 const MoveRecord = Schema.Union([
   Schema.Struct({ schemaVersion: Schema.Literal(1), entries: Schema.Array(LegacyEntry) }),
-  Schema.Struct({ schemaVersion: Schema.Literal(2), entries: Schema.Array(numeric.Entry) }),
   CurrentMoveRecord,
 ]);
 

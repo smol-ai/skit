@@ -1,7 +1,7 @@
+import { saveLibrary } from "./helpers/library-store.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { SqlClient } from "effect/sql";
-import { join } from "node:path";
 import { declaredFixture as fixture } from "./helpers/library-values.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { LibraryWriter, loadLibrary, writeLibrary } from "../src/library/store/library-store.js";
@@ -16,7 +16,7 @@ const prepared = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-acceptance-rows-" });
   const { state } = yield* fixture;
-  yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(state));
+  yield* saveLibrary(home, state);
   yield* migrateLocalLibraryState(home);
   const prior = state.assessmentAcceptances?.[0];
   if (!prior) return yield* Effect.die("Missing acceptance");

@@ -1,7 +1,7 @@
+import { saveLibrary } from "./helpers/library-store.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { SqlClient } from "effect/sql";
-import { join } from "node:path";
 import { declaredFixture as fixture } from "./helpers/library-values.js";
 import { writeInventoryV4 } from "./helpers/inventory-v4.js";
 import { skitLayer } from "../src/platform/layer.js";
@@ -60,7 +60,7 @@ const prepared = Effect.gen(function* () {
       },
     ],
   });
-  yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(state));
+  yield* saveLibrary(home, state);
   yield* migrateLocalLibraryState(home);
   return { home, state, path: libraryDatabasePath(home) };
 });
@@ -188,6 +188,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { home, state } = yield* prepared;
+      const beforeAudit = yield* readLibraryAudit(home);
       const { scanIssues: _resolved, ...rest } = state;
       const next = {
         ...rest,
@@ -233,8 +234,10 @@ it.effect(
         libraryStateRevision(yield* loadLibrary(home)),
         libraryStateRevision(next),
       );
+      const audit = yield* readLibraryAudit(home);
+      assert.deepStrictEqual(audit.slice(0, beforeAudit.length), beforeAudit);
       assert.deepStrictEqual(
-        (yield* readLibraryAudit(home)).flatMap((event) => event.changes),
+        audit.slice(beforeAudit.length).flatMap((event) => event.changes),
         diffInstalledSkills(state.installed_skills, next.installed_skills),
       );
     }).pipe(Effect.provide(skitLayer), Effect.scoped),

@@ -383,65 +383,6 @@ for (const kind of ["apply", "sync"] as const)
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 
-it.effect("released setup imports keep their executable Pending steps and compact intent", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const { state, pending } = yield* fixture();
-    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-dev-operation-" });
-    const completed = {
-      _tag: "Done",
-      operationId: makeOperationId(),
-      steps: [{ step: { _tag: "Apply", obsolete: true } }],
-    };
-    yield* fs.writeFileString(
-      join(home, "state.json"),
-      JSON.stringify({
-        ...state,
-        operations: [
-          completed,
-          {
-            operationId: pending.operationId,
-            _tag: "Pending",
-            steps: pending.steps,
-            before: recordedLibrary(state),
-          },
-        ],
-      }),
-    );
-    yield* migrateLocalLibraryState(home);
-    yield* withLibraryDatabase(
-      libraryDatabasePath(home),
-      Effect.gen(function* () {
-        const sql = yield* SqlClient.SqlClient;
-        const rows =
-          yield* sql`SELECT summary FROM library_legacy_operations WHERE operation_id=${completed.operationId}`;
-        assert.deepStrictEqual(rows, [{ summary: null }]);
-      }),
-      true,
-    );
-    const accepted = (yield* loadOperations(home))[0];
-    assert.ok(accepted);
-    if (accepted._tag !== "Pending") return assert.fail("Expected imported Pending setup");
-    assert.deepStrictEqual(accepted.steps, pending.steps);
-    assert.isFalse(Object.hasOwn(accepted.before, "intent"));
-    yield* writeLibrary(
-      home,
-      Effect.gen(function* () {
-        yield* (yield* LibraryWriter).settleOperation(accepted);
-      }),
-    );
-    assert.deepStrictEqual((yield* loadOperations(home))[0], {
-      _tag: "Done",
-      operationId: pending.operationId,
-      kind: "setup",
-      setup: pending.setup,
-      steps: [{ step: { _tag: "Remove" }, before: [], after: [], status: "Pending" }],
-      before: pending.before,
-      after: pending.before,
-    });
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
 it.effect("new setup keeps a previously Stopped setup Undone and removes its finished Undo", () =>
   Effect.gen(function* () {
     const { home, state, pending } = yield* fixture();

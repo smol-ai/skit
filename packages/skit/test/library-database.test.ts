@@ -8,10 +8,9 @@ import {
 import { prepareLibraryDifference } from "../src/library/store/difference.js";
 import { canonicalJson } from "../src/shared/json.js";
 import { declaredFixture as valuesFixture } from "./helpers/library-values.js";
-import { snapshotOf, Revision } from "../src/library/snapshot.js";
+import { snapshotOf } from "../src/library/snapshot.js";
 import {
   loadOperations,
-  loadOperationHistory,
   loadLibrary,
   LibraryWriter,
   writeLibrary,
@@ -369,120 +368,6 @@ it.effect(
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect(
-  "keeps completed source history separate from live recovery evidence, drafts and current fields",
-  () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const home = yield* fs.makeTempDirectoryScoped({
-        prefix: "skit-database-development-import-",
-      });
-      const current = emptyLibraryState();
-      const before = recordedLibrary(current);
-      const operations = yield* Schema.encodeEffect(Schema.Array(OperationStatus))([
-        OperationStatus.cases.Done.make({
-          operationId: makeOperationId(),
-          steps: [],
-          before,
-          after: before,
-        }),
-        OperationStatus.cases.Pending.make({ operationId: makeOperationId(), steps: [], before }),
-        OperationStatus.cases.Stopped.make({
-          operationId: makeOperationId(),
-          steps: [],
-          before,
-          after: before,
-          reason: { _tag: "LibraryChanged", step: 0, revision: Revision.make("changed") },
-        }),
-      ]);
-      const event = yield* LibraryAuditEvent.makeEffect({
-        schemaVersion: 1,
-        eventId: makeOperationId(),
-        occurredAt: "2026-11-05T00:00:00.000Z",
-        type: "library.imported",
-        workflow: "test",
-        changes: [{ entity: "library", id: "imported-recovery", action: "operation-Pending" }],
-      });
-      const historyDelivery = {
-        schemaVersion: 1,
-        pending: [{ event, operationIds: [operations[1]!.operationId] }],
-      };
-      const original = JSON.stringify({
-        ...current,
-        operations,
-        historyDelivery,
-      });
-      yield* fs.writeFileString(join(home, "state.json"), original);
-      yield* migrateLocalLibraryState(home);
-      const expected = current;
-      assert.deepStrictEqual(yield* loadLibrary(home), expected);
-      const imported = yield* loadOperations(home);
-      assert.deepStrictEqual(
-        (yield* loadOperationHistory(home)).map((row) => row.operationId),
-        operations.map((row) => row.operationId),
-      );
-      assert.deepStrictEqual(
-        imported.map((row) => row.operationId),
-        operations.slice(1).map((row) => row.operationId),
-      );
-      assert.deepStrictEqual(
-        imported.map((row) => row._tag),
-        ["Pending", "Stopped"],
-      );
-      for (const row of imported) {
-        assert.deepStrictEqual(row.before, { installedSkills: [] });
-        assert.deepStrictEqual(
-          row.setup?.changes,
-          yield* prepareSetupChanges(setupIntent(current), setupIntent(current), home),
-        );
-        assert.deepStrictEqual(row.steps, []);
-      }
-      yield* withLibraryDatabase(
-        libraryDatabasePath(home),
-        Effect.gen(function* () {
-          const sql = yield* SqlClient.SqlClient;
-          const drafts = yield* sql<{
-            document: string;
-            operation_ids: string;
-          }>`SELECT document, operation_ids FROM library_audit_events`;
-          assert.deepStrictEqual(
-            drafts.map((row) => ({
-              event: JSON.parse(row.document),
-              operationIds: JSON.parse(row.operation_ids),
-            })),
-            historyDelivery.pending,
-          );
-        }),
-        true,
-      );
-      assert.deepStrictEqual(yield* readLibraryAudit(home), []);
-      const pending = (yield* loadOperations(home)).find((record) => record._tag === "Pending");
-      if (pending?._tag !== "Pending") return assert.fail("Missing imported operation");
-      yield* writeLibrary(
-        home,
-        Effect.gen(function* () {
-          yield* (yield* LibraryWriter).settleOperation(pending);
-        }),
-        { resume: pending.operationId },
-      );
-      const delivered = (yield* readLibraryAudit(home)).filter(
-        (record) => record.eventId === event.eventId,
-      );
-      assert.strictEqual(delivered.length, 1);
-      assert.strictEqual(delivered[0]?.workflow, event.workflow);
-      assert.deepStrictEqual(delivered[0]?.changes, [
-        ...event.changes,
-        { entity: "library", id: pending.operationId, action: "operation-Done" },
-      ]);
-      assert.strictEqual(
-        yield* fs.readFileString(
-          join(home, `state.json.v${current.schemaVersion}.backup-database`),
-        ),
-        original,
-      );
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
 it.effect("a completed database remains authoritative when only its old-CLI stub is missing", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -830,59 +715,6 @@ it.effect("reports orphaned operation rows without a current state document", ()
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-for (const changed of [false, true])
-  it.effect(
-    `imports a legacy draft beside an audit identity: ${changed ? "refuses changed content" : "keeps one event"}`,
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-legacy-audit-identity-" });
-        const event = yield* LibraryAuditEvent.makeEffect({
-          schemaVersion: 1,
-          eventId: makeOperationId(),
-          occurredAt: "2026-11-05T00:00:00.000Z",
-          type: "library.imported",
-          workflow: "legacy-import",
-          changes: [{ entity: "library", id: "legacy", action: "operation-Done" }],
-        });
-        const original = JSON.stringify({
-          ...emptyLibraryState(),
-          historyDelivery: {
-            schemaVersion: 1,
-            pending: [
-              {
-                event: { ...event, workflow: changed ? "changed-content" : event.workflow },
-                operationIds: [],
-              },
-            ],
-          },
-        });
-        const audit = JSON.stringify(event) + "\n";
-        yield* fs.writeFileString(join(home, "state.json"), original);
-        yield* fs.writeFileString(join(home, "audit.jsonl"), audit);
-        if (changed) {
-          const failed = yield* migrateLocalLibraryState(home).pipe(Effect.flip);
-          assert.strictEqual(failed._tag, "LibraryAuditInvalid");
-          if (failed._tag === "LibraryAuditInvalid")
-            assert.strictEqual(failed.reason._tag, "EventIdentityChanged");
-          assert.deepStrictEqual(
-            yield* withLibraryDatabase(
-              libraryDatabasePath(home),
-              readDatabaseState(libraryDatabasePath(home)),
-              true,
-            ),
-            { state: undefined, revision: null },
-          );
-          assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), original);
-        } else {
-          yield* migrateLocalLibraryState(home);
-          assert.deepStrictEqual(yield* readLibraryAudit(home), [event]);
-        }
-        assert.strictEqual(yield* fs.readFileString(join(home, "audit.jsonl")), audit);
-      }).pipe(Effect.provide(skitLayer), Effect.scoped),
-  );
-
-/** The exact document-backed schema from migration 001, before revision activation. */
 const documentDatabase = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-document-conversion-" });

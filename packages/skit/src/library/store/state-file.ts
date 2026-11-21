@@ -1,5 +1,5 @@
 import { LibraryStateFields } from "./state-fields.js";
-import { canonicalJson, isJsonObject, arrayAt, objectAt, stringAt } from "../../shared/json.js";
+import { canonicalJson, isJsonObject } from "../../shared/json.js";
 import type { HistoryAction } from "./history-action.js";
 import { classifyLibraryAuditEvent, diffLibraryState } from "../audit/state-diff.js";
 import { makeOperationId, OperationId } from "../entity-ids.js";
@@ -38,19 +38,10 @@ import { LibraryStateFromV6 } from "./state-schema-v6.js";
 import { LibraryStateFromV7 } from "./state-schema-v7.js";
 import { LibraryStateFromV8 } from "./state-schema-v8.js";
 import { LibraryStateFromV9 } from "./state-schema-v9.js";
-import { LibraryStateFromV10 } from "./state-schema-v10.js";
-import { LibraryStateFromV11 } from "./state-schema-v11.js";
-import { OperationStatus, RecordedSetupStep, RecordedLibrary } from "./state-schema.js";
-import { importLegacyHistory, saveLegacyHistory } from "./legacy-history.js";
+import { OperationStatus } from "./state-schema.js";
 import { withLibraryStateReplacement } from "./writer-lock.js";
 
-import {
-  CurrentSetupOperation,
-  prepareSetupChanges,
-  prepareSetupProgress,
-  SetupIntent,
-} from "./setup-intent.js";
-import { prepareLibraryDifference } from "./difference.js";
+import { CurrentSetupOperation, prepareSetupProgress, SetupIntent } from "./setup-intent.js";
 import { setupIntent } from "./intent.js";
 
 import { loadLibraryRows, saveLibraryRows } from "./rows.js";
@@ -66,20 +57,6 @@ const StoredAuditEvent = Schema.declare(
     Schema.is(JsonObject)(value) && Schema.is(LibraryAuditEvent)(value),
 );
 
-/** Only legacy import recognizes the old outbox envelope. */
-const LegacyHistoryDelivery = Schema.Struct({
-  schemaVersion: Schema.Literal(1),
-  pending: Schema.Array(
-    Schema.Struct({
-      event: StoredAuditEvent,
-      operationIds: Schema.Array(OperationId),
-    }),
-  ),
-});
-const LegacyStateEnvelope = Schema.StructWithRest(
-  Schema.Struct({ historyDelivery: Schema.optionalKey(LegacyHistoryDelivery) }),
-  [JsonObject],
-);
 // oxlint-disable-next-line effecttsgo/schema-number -- Preserve numeric future-version diagnostics, including overflow.
 const StateVersion = Schema.Struct({ schemaVersion: Schema.Number });
 
@@ -113,12 +90,11 @@ export const decodeCurrentState = Effect.fn("Library.decodeCurrentState")(functi
 
 /**
  * v4 is what the first public SKIT wrote. Each legacy version steps through the linear
- * v4–v11 follow their historical chain directly into the current state.
+ * v4–v9 are the released source formats.
  */
 const OLDEST_LIBRARY_STATE_VERSION = 4;
+const NEWEST_LIBRARY_STATE_FILE_VERSION = 9;
 const LegacyLibraryState = Schema.Union([
-  LibraryStateFromV11,
-  LibraryStateFromV10,
   LibraryStateFromV9,
   LibraryStateFromV8,
   LibraryStateFromV7,
@@ -144,7 +120,9 @@ const readStateVersion = (path: string, value: unknown) =>
   );
 
 const isLegacyVersion = (version: number) =>
-  version >= OLDEST_LIBRARY_STATE_VERSION && version < CURRENT_LIBRARY_STATE_VERSION;
+  Number.isInteger(version) &&
+  version >= OLDEST_LIBRARY_STATE_VERSION &&
+  version <= NEWEST_LIBRARY_STATE_FILE_VERSION;
 
 /** Decode a stored state of the current version. Any other version is refused, never migrated. */
 const decodeStoredState = Effect.fn("Library.decodeStoredState")(function* (
@@ -481,10 +459,8 @@ export const migrateLocalLibraryState = Effect.fn("Library.migrateState")(functi
     audit === undefined &&
     (auditText !== undefined || stateText !== undefined || prior !== undefined || create);
   const lockPath = join(root, ".lock");
-  if (!needsState && !needsAudit && (yield* readLegacyText(lockPath)) !== databaseImportOwner) {
-    yield* importLegacyHistory(root);
+  if (!needsState && !needsAudit && (yield* readLegacyText(lockPath)) !== databaseImportOwner)
     return;
-  }
   if (yield* currentLibraryTransaction(root))
     return yield* new InvalidLibraryState({
       path,
@@ -626,13 +602,7 @@ export const migrateLocalLibraryState = Effect.fn("Library.migrateState")(functi
                 if (needsState && !registered) {
                   const stateText = yield* readLegacyText(statePath);
                   let state: LibraryState | undefined;
-                  let importedOperations: readonly JsonObject[] = [];
-                  let legacyOperations: readonly JsonObject[] = [];
                   let stateVersion: number | undefined;
-                  let delivery: typeof LegacyHistoryDelivery.Type = {
-                    schemaVersion: 1,
-                    pending: [],
-                  };
                   if (stateText !== undefined) {
                     const value = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(
                       stateText,
@@ -647,24 +617,19 @@ export const migrateLocalLibraryState = Effect.fn("Library.migrateState")(functi
                     );
                     const version = yield* readStateVersion(statePath, value);
                     stateVersion = version;
-                    if (version === CURRENT_LIBRARY_STATE_VERSION) {
-                      const { operations, historyDelivery, ...document } =
-                        yield* Schema.decodeUnknownEffect(LegacyStateEnvelope)(value).pipe(
-                          Effect.mapError(
-                            (failure) =>
-                              new InvalidLibraryState({
-                                path: statePath,
-                                reason: { _tag: "SchemaInvalid", failure },
-                              }),
-                          ),
-                        );
-                      const decodedLive = yield* Schema.decodeUnknownEffect(
-                        Schema.Array(
-                          Schema.StructWithRest(Schema.Struct({ _tag: Schema.String }), [
-                            JsonObject,
-                          ]),
-                        ),
-                      )(operations ?? []).pipe(
+                    if (!isLegacyVersion(version))
+                      return yield* new InvalidLibraryState({
+                        path: statePath,
+                        reason: {
+                          _tag: "UnsupportedVersion",
+                          version: Math.max(-Number.MAX_VALUE, Math.min(version, Number.MAX_VALUE)),
+                          oldest: OLDEST_LIBRARY_STATE_VERSION,
+                          current: NEWEST_LIBRARY_STATE_FILE_VERSION,
+                        },
+                      });
+                    state = yield* decodeCurrentState(
+                      statePath,
+                      yield* Schema.decodeEffect(LegacyLibraryState)(value).pipe(
                         Effect.mapError(
                           (failure) =>
                             new InvalidLibraryState({
@@ -672,177 +637,8 @@ export const migrateLocalLibraryState = Effect.fn("Library.migrateState")(functi
                               reason: { _tag: "SchemaInvalid", failure },
                             }),
                         ),
-                      );
-                      const live = structuredClone(decodedLive);
-                      legacyOperations = live;
-                      state = yield* decodeCurrentState(statePath, document);
-                      const completed = new Map<string, JsonObject>();
-                      for (const entry of live) {
-                        if (entry._tag !== "Done") continue;
-                        for (const row of arrayAt(entry, "steps")) {
-                          if (!isJsonObject(row)) continue;
-                          const step = objectAt(row, "step"),
-                            program = step && objectAt(step, "program"),
-                            target = program && stringAt(program, "operationId");
-                          if (step?._tag === "Undo" && target && !completed.has(target))
-                            completed.set(target, entry);
-                        }
-                      }
-                      const compact: JsonObject[] = [];
-                      for (const raw of live) {
-                        if (raw._tag === "Done") continue;
-                        if (raw.setup !== undefined || raw.kind !== undefined)
-                          return yield* new InvalidLibraryState({
-                            path: statePath,
-                            reason: {
-                              _tag: "InvalidData",
-                              issue: "Unsupported unreleased setup record",
-                            },
-                          });
-                        const undo = arrayAt(raw, "steps").some(
-                          (row) => isJsonObject(row) && objectAt(row, "step")?._tag === "Undo",
-                        );
-                        const steps = yield* Effect.forEach(arrayAt(raw, "steps"), (row) =>
-                          Effect.gen(function* () {
-                            if (!isJsonObject(row)) return row;
-                            const step = objectAt(row, "step");
-                            if (step?._tag !== "Undo") return row;
-                            const program = objectAt(step, "program");
-                            if (!program) return row; // The normal step decoder reports malformed evidence.
-                            const before = yield* decodeCurrentState(statePath, program.before);
-                            const after = yield* decodeCurrentState(statePath, program.after);
-                            const { before: _before, after: _after, ...fields } = program;
-                            return {
-                              ...row,
-                              step: {
-                                ...step,
-                                program: {
-                                  ...fields,
-                                  difference: yield* prepareLibraryDifference(
-                                    before,
-                                    after,
-                                    statePath,
-                                  ),
-                                },
-                              },
-                            };
-                          }),
-                        );
-                        const candidate = { ...raw, steps };
-                        const operation = yield* Effect.gen(function* () {
-                          yield* Schema.decodeUnknownEffect(
-                            Schema.Struct({ steps: Schema.Array(RecordedSetupStep) }),
-                          )(candidate);
-                          return yield* Schema.decodeUnknownEffect(OperationStatus)(candidate);
-                        }).pipe(
-                          Effect.mapError(
-                            (failure) =>
-                              new InvalidLibraryState({
-                                path: statePath,
-                                reason: { _tag: "SchemaInvalid", failure },
-                              }),
-                          ),
-                        );
-                        const prior = yield* Schema.decodeUnknownEffect(SetupIntent)(
-                          operation.before.intent,
-                        ).pipe(
-                          Effect.mapError(
-                            (failure) =>
-                              new InvalidLibraryState({
-                                path: statePath,
-                                reason: { _tag: "SchemaInvalid", failure },
-                              }),
-                          ),
-                        );
-                        // A finished inverse also records the exact Library it began with.
-                        const finished = completed.get(operation.operationId);
-                        const last =
-                          operation._tag === "Pending" && finished
-                            ? yield* Schema.decodeUnknownEffect(RecordedLibrary)(
-                                finished.before,
-                              ).pipe(
-                                Effect.mapError(
-                                  (failure) =>
-                                    new InvalidLibraryState({
-                                      path: statePath,
-                                      reason: { _tag: "SchemaInvalid", failure },
-                                    }),
-                                ),
-                              )
-                            : operation._tag === "Pending"
-                              ? {
-                                  intent: setupIntent(state),
-                                  installedSkills: state.installed_skills,
-                                }
-                              : operation.after;
-                        const expected = yield* Schema.decodeUnknownEffect(SetupIntent)(
-                          last.intent,
-                        ).pipe(
-                          Effect.mapError(
-                            (failure) =>
-                              new InvalidLibraryState({
-                                path: statePath,
-                                reason: { _tag: "SchemaInvalid", failure },
-                              }),
-                          ),
-                        );
-                        const changes = yield* prepareSetupChanges(prior, expected, statePath);
-                        const next = {
-                          ...operation,
-                          ...(operation._tag === "Pending"
-                            ? {}
-                            : { kind: undo ? "undo" : "setup" }),
-                          before: { installedSkills: operation.before.installedSkills },
-                          setup: { changes },
-                          ...(operation._tag === "Pending" && !finished
-                            ? {}
-                            : { after: { installedSkills: last.installedSkills } }),
-                          ...(finished ? { _tag: "Undone", kind: "setup" } : {}),
-                        };
-                        const encoded = yield* Schema.encodeUnknownEffect(
-                          Schema.fromJsonString(OperationStatus),
-                        )(next).pipe(
-                          Effect.mapError(
-                            (failure) =>
-                              new InvalidLibraryState({
-                                path: statePath,
-                                reason: { _tag: "SchemaInvalid", failure },
-                              }),
-                          ),
-                        );
-                        compact.push(
-                          yield* Schema.decodeEffect(Schema.fromJsonString(JsonObject))(
-                            encoded,
-                          ).pipe(
-                            Effect.mapError(
-                              (failure) =>
-                                new InvalidLibraryState({
-                                  path: statePath,
-                                  reason: { _tag: "SchemaInvalid", failure },
-                                }),
-                            ),
-                          ),
-                        );
-                      }
-                      importedOperations = compact;
-                      delivery = historyDelivery ?? { schemaVersion: 1, pending: [] };
-                    } else if (isLegacyVersion(version)) {
-                      state = yield* decodeCurrentState(
-                        statePath,
-                        yield* Schema.decodeEffect(LegacyLibraryState)(value).pipe(
-                          Effect.mapError(
-                            (failure) =>
-                              new InvalidLibraryState({
-                                path: statePath,
-                                reason: { _tag: "SchemaInvalid", failure },
-                              }),
-                          ),
-                        ),
-                      );
-                    } else {
-                      yield* decodeStoredState(statePath, value);
-                      return;
-                    }
+                      ),
+                    );
                   }
 
                   const hash =
@@ -894,78 +690,6 @@ export const migrateLocalLibraryState = Effect.fn("Library.migrateState")(functi
                             ),
                           ),
                         );
-                      for (const [position, operation] of importedOperations.entries()) {
-                        const id = yield* Schema.decodeUnknownEffect(
-                          Schema.Struct({ operationId: OperationId }),
-                        )(operation).pipe(
-                          Effect.mapError(
-                            (failure) =>
-                              new InvalidLibraryState({
-                                path: statePath,
-                                reason: { _tag: "SchemaInvalid", failure },
-                              }),
-                          ),
-                        );
-                        const kind = arrayAt(operation, "steps").some(
-                          (row) => isJsonObject(row) && objectAt(row, "step")?._tag === "Undo",
-                        )
-                          ? "undo"
-                          : "setup";
-                        yield* sql`INSERT INTO library_operations (position,operation_id,kind,document) VALUES (${position},${id.operationId},${kind},${JSON.stringify(operation)})`;
-                      }
-                      for (const draft of delivery.pending) {
-                        const existing = (yield* sql<{
-                          document: string;
-                          operation_ids: string;
-                        }>`SELECT document,operation_ids FROM library_audit_events WHERE event_id=${draft.event.eventId}`)[0];
-                        if (existing) {
-                          const expected = yield* Schema.decodeEffect(
-                            Schema.fromJsonString(StoredAuditEvent),
-                          )(existing.document).pipe(
-                            Effect.mapError(
-                              (failure) =>
-                                new LibraryAuditInvalid({
-                                  path: auditPath,
-                                  reason: { _tag: "SchemaInvalid", failure },
-                                }),
-                            ),
-                          );
-                          if (canonicalJson(expected) !== canonicalJson(draft.event))
-                            return yield* new LibraryAuditInvalid({
-                              path: auditPath,
-                              reason: {
-                                _tag: "EventIdentityChanged",
-                                eventId: draft.event.eventId,
-                                expected,
-                                actual: draft.event,
-                              },
-                            });
-                          const ids = yield* Schema.decodeEffect(
-                            Schema.fromJsonString(Schema.Array(OperationId)),
-                          )(existing.operation_ids).pipe(
-                            Effect.mapError(
-                              (failure) =>
-                                new LibraryAuditInvalid({
-                                  path: auditPath,
-                                  reason: { _tag: "SchemaInvalid", failure },
-                                }),
-                            ),
-                          );
-                          yield* sql`UPDATE library_audit_events SET operation_ids=${JSON.stringify([...new Set([...ids, ...draft.operationIds])])} WHERE event_id=${draft.event.eventId}`;
-                        } else {
-                          yield* sql`INSERT INTO library_audit_events (event_id,document,operation_ids) VALUES (${draft.event.eventId},${canonicalJson(draft.event)},${JSON.stringify(draft.operationIds)})`;
-                        }
-                      }
-                      yield* saveLegacyHistory(legacyOperations, hash).pipe(
-                        Effect.catchTag("SchemaError", (failure) =>
-                          Effect.fail(
-                            new InvalidLibraryState({
-                              path: statePath,
-                              reason: { _tag: "SchemaInvalid", failure },
-                            }),
-                          ),
-                        ),
-                      );
                       yield* sql`INSERT INTO library_import (source,backup,hash,fenced) VALUES ('state.json',${backup},${hash},0)`;
                     }),
                   );
@@ -997,7 +721,6 @@ export const migrateLocalLibraryState = Effect.fn("Library.migrateState")(functi
       );
     }),
   );
-  yield* importLegacyHistory(root);
 });
 
 /** Read one database snapshot without importing or checking machine settings. */

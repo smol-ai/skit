@@ -1,8 +1,8 @@
+import { saveLibrary } from "./helpers/library-store.js";
 import { writeInventoryV4 } from "./helpers/inventory-v4.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { SqlClient } from "effect/sql";
-import { join } from "node:path";
 import { declaredFixture as fixture } from "./helpers/library-values.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { LibraryWriter, loadLibrary, writeLibrary } from "../src/library/store/library-store.js";
@@ -25,7 +25,7 @@ const prepared = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-installed-rows-" });
   const { state } = yield* fixture;
-  yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(state));
+  yield* saveLibrary(home, state);
   yield* migrateLocalLibraryState(home);
   const first = state.installed_skills[0];
   if (!first) return yield* Effect.die("Missing Installed Skill");
@@ -37,6 +37,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { home, state, first, path } = yield* prepared;
+      const beforeAudit = yield* readLibraryAudit(home);
       yield* withLibraryDatabase(
         path,
         Effect.gen(function* () {
@@ -86,13 +87,15 @@ it.effect(
         }),
       );
       const history = yield* readLibraryAudit(home);
-      const changes = history.flatMap((event) => event.changes);
+      assert.deepStrictEqual(history.slice(0, beforeAudit.length), beforeAudit);
+      const newEvents = history.slice(beforeAudit.length);
+      const changes = newEvents.flatMap((event) => event.changes);
       assert.isTrue(
         changes.some(
           (change) => change.id === first.installed_skill_id && change.action === "pending",
         ),
       );
-      assert.strictEqual(history.length, 1);
+      assert.strictEqual(newEvents.length, 1);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 

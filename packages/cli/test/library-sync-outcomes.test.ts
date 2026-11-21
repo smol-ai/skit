@@ -1,3 +1,4 @@
+import { asV9 } from "./helpers/released-library.js";
 import { describe } from "@effect/vitest";
 import { emptyLibraryFixture } from "./helpers/library-home.js";
 import { readLibraryManifest } from "./helpers/library-manifest.js";
@@ -118,79 +119,6 @@ const onlyOrphanOriginals = Effect.fn("Test.onlyOrphanOriginals")(function* (dev
 });
 
 /** A current state with nothing installed, written as the v7 document an older SKIT left. */
-const asV7 = ({
-  schemaVersion: _schemaVersion,
-  collection_versions,
-  imports,
-  enabled,
-  invocation_policies,
-  repositories,
-  installed_skills,
-  skills,
-  ...fields
-}: LibraryState) => {
-  assert.deepStrictEqual([repositories, installed_skills], [[], []]);
-  return {
-    ...fields,
-    schemaVersion: 7,
-    skills: skills.map(({ versions, ...skill }) => ({
-      ...skill,
-      versions: versions.map(
-        ({ source_hash, artifact_hash, validation_identity_hash, ...version }) => ({
-          ...version,
-          source_digest: source_hash,
-          artifact_digest: artifact_hash,
-          validation_identity_digest: validation_identity_hash,
-        }),
-      ),
-    })),
-    retained_copies: collection_versions.map(
-      ({ collection_version_id, hash, members, ...copy }) => ({
-        ...copy,
-        retained_copy_id: collection_version_id,
-        digest: hash,
-        members: members.map(({ source_hash, artifact_hash, ...member }) => ({
-          ...member,
-          source_digest: source_hash,
-          artifact_digest: artifact_hash,
-        })),
-      }),
-    ),
-    acquisitions: imports.map(
-      ({ import_id, kind, collection_version_id, imported_at, lock_file_entries, ...item }) => ({
-        ...item,
-        acquisition_id: import_id,
-        kind: kind === "edit" ? "retained-edit" : kind,
-        retained_copy_id: collection_version_id,
-        acquired_at: imported_at,
-        observations: lock_file_entries.map(
-          ({ read_at, original_entry_hash, well_known_hash, ...entry }) => ({
-            ...entry,
-            observed_at: read_at,
-            original_entry_digest: original_entry_hash,
-            ...(well_known_hash === undefined ? {} : { well_known_digest: well_known_hash }),
-          }),
-        ),
-      }),
-    ),
-    global_bindings: enabled.length
-      ? [
-          {
-            scope: { kind: "global" },
-            entries: enabled.map((item) =>
-              "skill" in item
-                ? { kind: "skill", skill_id: item.skill }
-                : { kind: "collection", collection_id: item.collection },
-            ),
-            ...(invocation_policies === undefined ? {} : { invocation_policies }),
-          },
-        ]
-      : [],
-    local_bindings: [],
-    projections: [],
-  };
-};
-
 const seed = Effect.fn("Test.seedSyncHomes")(function* ({ a, b }: Homes) {
   yield* a.importSource("first");
   yield* a.edit((state) => ({
@@ -1090,7 +1018,7 @@ describe("skit sync", () => {
                     yield* fs.copy(join(source.home, "originals"), join(a.home, "originals"));
                     yield* fs.writeFileString(
                       join(a.home, "state.json"),
-                      JSON.stringify(asV7(yield* source.state)),
+                      JSON.stringify({ ...asV9(yield* source.state), schemaVersion: 7 }),
                     );
                   }
                 }

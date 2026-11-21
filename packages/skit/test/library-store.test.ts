@@ -1,8 +1,8 @@
+import { SqlClient } from "effect/sql";
 import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
 import { prepareSetupChanges } from "../src/library/store/setup-intent.js";
 import { snapshotOf, Revision } from "../src/library/snapshot.js";
 import {
-  migrateLocalLibraryState,
   loadOperations,
   libraryOriginalsPath,
   LibraryWriter,
@@ -11,7 +11,7 @@ import {
   type LibraryStateWriteError,
 } from "../src/library/store/library-store.js";
 
-import { libraryDatabasePath } from "../src/library/store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
 import { PnpmSkillManaged } from "../src/installed-skills/pnpm-failures.js";
 import { PluginManifestInvalid } from "../src/sources/plugin-failures.js";
 import { DedicatedInstallerRequired } from "../src/sources/installer-guidance.js";
@@ -38,7 +38,7 @@ import {
   CollectionRemovalMissing,
   SkillRemovalRequiresCollection,
 } from "../src/library/installation/remove.js";
-import { openLibrary } from "./helpers/library-store.js";
+import { openLibrary, saveLibrary } from "./helpers/library-store.js";
 import { assert, it } from "@effect/vitest";
 import {
   Context,
@@ -60,7 +60,7 @@ import {
   libraryManifestFromLocalState,
   type LibraryState,
 } from "../src/library/library-state.js";
-import { setupIntent, recordedLibrary } from "../src/library/store/intent.js";
+import { setupIntent } from "../src/library/store/intent.js";
 import { readSnapshotArchive } from "../src/library/snapshot-archive.js";
 import { OperationStatus, StepError } from "../src/library/store/state-schema.js";
 import {
@@ -731,27 +731,36 @@ it.effect("reads a recorded LibraryBusy failure without rewriting it, and encode
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-old-home-busy-" });
     const state = emptyLibraryState();
-    const bytes = JSON.stringify({
-      ...state,
-      operations: [
-        {
-          _tag: "Stopped",
-          operationId: makeOperationId(),
-          steps: [],
-          before: recordedLibrary(state),
-          after: recordedLibrary(state),
-          reason: {
-            _tag: "StepFailed",
-            step: 0,
-            error: { _tag: "LibraryBusy", path: "/home/lock.sqlite" },
-          },
-        },
-      ],
+    const record = {
+      _tag: "Stopped",
+      kind: "apply",
+      operationId: makeOperationId(),
+      steps: [],
+      before: { installedSkills: [] },
+      after: { installedSkills: [] },
+      reason: {
+        _tag: "StepFailed",
+        step: 0,
+        error: { _tag: "LibraryBusy", path: "/home/lock.sqlite" },
+      },
+    };
+    const bytes = JSON.stringify(record);
+    yield* saveLibrary(home, state);
+    const path = libraryDatabasePath(home);
+    const readStored = Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return (yield* sql<{ document: string }>`SELECT document FROM library_operations`)[0]
+        ?.document;
     });
-    yield* fs.writeFileString(join(home, "state.json"), bytes);
-    yield* migrateLocalLibraryState(home);
-    const owner = yield* openLibrary(home);
-    const snapshot = yield* owner.read;
+    yield* withLibraryDatabase(
+      path,
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`INSERT INTO library_operations (position, operation_id, kind, document)
+          VALUES (0, ${record.operationId}, 'apply', ${bytes})`;
+      }),
+    );
+    const snapshot = yield* (yield* openLibrary(home)).read;
     assert.strictEqual(snapshot._tag, "Present");
     if (snapshot._tag !== "Present") return;
     const operations = yield* loadOperations(home);
@@ -764,10 +773,7 @@ it.effect("reads a recorded LibraryBusy failure without rewriting it, and encode
       _tag: "HomeBusy",
       path: "/home/lock.sqlite",
     });
-    assert.strictEqual(
-      yield* fs.readFileString(join(home, "state.json.v12.backup-database")),
-      bytes,
-    );
+    assert.strictEqual(yield* withLibraryDatabase(path, readStored, true), bytes);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -776,30 +782,40 @@ it.effect("reads historical stored prose without rewriting bytes or inventing fa
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-old-step-text-" });
     const state = emptyLibraryState();
-    const bytes = JSON.stringify({
-      ...state,
-      operations: [
-        {
-          _tag: "Stopped",
-          operationId: makeOperationId(),
-          steps: [],
-          before: recordedLibrary(state),
-          after: recordedLibrary(state),
-          reason: {
-            _tag: "StepFailed",
-            step: 0,
-            error: {
-              _tag: "HistoricalFailure",
-              code: "CONFLICT",
-              message: "historical diagnostic",
-              remediation: "historical guidance",
-            },
-          },
+    const record = {
+      _tag: "Stopped",
+      kind: "apply",
+      operationId: makeOperationId(),
+      steps: [],
+      before: { installedSkills: [] },
+      after: { installedSkills: [] },
+      reason: {
+        _tag: "StepFailed",
+        step: 0,
+        error: {
+          _tag: "HistoricalFailure",
+          code: "CONFLICT",
+          message: "historical diagnostic",
+          remediation: "historical guidance",
         },
-      ],
+      },
+    };
+    const bytes = JSON.stringify(record);
+    yield* saveLibrary(home, state);
+    const path = libraryDatabasePath(home);
+    const readStored = Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return (yield* sql<{ document: string }>`SELECT document FROM library_operations`)[0]
+        ?.document;
     });
-    yield* fs.writeFileString(join(home, "state.json"), bytes);
-    yield* migrateLocalLibraryState(home);
+    yield* withLibraryDatabase(
+      path,
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`INSERT INTO library_operations (position, operation_id, kind, document)
+          VALUES (0, ${record.operationId}, 'apply', ${bytes})`;
+      }),
+    );
     const snapshot = yield* (yield* openLibrary(home)).read;
     assert.strictEqual(snapshot._tag, "Present");
     if (snapshot._tag !== "Present") return;
@@ -814,10 +830,7 @@ it.effect("reads historical stored prose without rewriting bytes or inventing fa
       diagnostic: "historical diagnostic",
       originalRemediation: "historical guidance",
     });
-    assert.strictEqual(
-      yield* fs.readFileString(join(home, "state.json.v12.backup-database")),
-      bytes,
-    );
+    assert.strictEqual(yield* withLibraryDatabase(path, readStored, true), bytes);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 

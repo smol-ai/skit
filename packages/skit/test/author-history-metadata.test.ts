@@ -1,3 +1,4 @@
+import { saveLibrary } from "./helpers/library-store.js";
 import { database012 } from "./helpers/library-database-012.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Schema, Layer } from "effect";
@@ -349,7 +350,7 @@ it.effect("a quiescent home copy restores Library rows and native Author revisio
   Effect.gen(function* () {
     const f = yield* prepared;
     const state = emptyLibraryState();
-    yield* f.fs.writeFileString(join(f.home, "state.json"), JSON.stringify(state));
+    yield* saveLibrary(f.home, state);
     yield* migrateLocalLibraryState(f.home);
     yield* MachineSettings.updateDiscovery(f.home, { discoveryRoots: ["/keep"] });
 

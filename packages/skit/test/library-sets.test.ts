@@ -1,3 +1,4 @@
+import { asV9 } from "./helpers/released-library.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -133,13 +134,22 @@ it.effect("duplicate enabled keys refuse a released source without dropping rows
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-duplicate-enabled-" });
-    const { state } = yield* fixture;
+    const { state } = yield* declaredFixture;
+    const {
+      sync_ancestry: _ancestry,
+      device_skill_selection: _selection,
+      ownershipIssues: _issues,
+      assessmentAcceptances: _acceptances,
+      ...released
+    } = state;
     const item = { skill: state.skills[0]!.skill_id };
-    const raw = JSON.stringify({ ...state, enabled: [item, item] });
+    const raw = JSON.stringify(asV9({ ...released, enabled: [item, item] }));
     const path = join(home, "state.json");
     yield* fs.writeFileString(path, raw);
     const failed = yield* Effect.flip(migrateLocalLibraryState(home));
     assert.strictEqual(failed._tag, "InvalidLibraryState");
+    if (failed._tag === "InvalidLibraryState")
+      assert.strictEqual(failed.reason._tag, "SchemaInvalid");
     assert.strictEqual(yield* fs.readFileString(path), raw);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

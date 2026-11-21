@@ -1,8 +1,8 @@
+import { saveLibrary } from "./helpers/library-store.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
 import { declaredFixture as fixture } from "./helpers/library-values.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { decodeLibraryState } from "../src/library/library-state.js";
@@ -24,7 +24,7 @@ const prepared = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-native-undo-" });
   const { state } = yield* fixture;
-  yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(state));
+  yield* saveLibrary(home, state);
   yield* migrateLocalLibraryState(home);
   const pending = OperationStatus.cases.Pending.make({
     operationId: makeOperationId(),

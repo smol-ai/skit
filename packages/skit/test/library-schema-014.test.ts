@@ -10,7 +10,7 @@ import {
   prepareLibraryDatabase,
   withLibraryDatabase,
 } from "../src/library/store/database.js";
-import { migrateLocalLibraryState } from "../src/library/store/state-file.js";
+import { saveLibrary } from "./helpers/library-store.js";
 import { loadLibrary, writeLibrary, LibraryWriter } from "../src/library/store/library-store.js";
 import { readCatalogue } from "../src/library/store/catalogue.js";
 import { readLibraryAudit } from "../src/library/audit/audit-log.js";
@@ -27,19 +27,16 @@ const prepared = Effect.gen(function* () {
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-schema-014-" });
   const { state } = yield* fixture;
   const ancestry = state.sync_ancestry!;
-  yield* fs.writeFileString(
-    join(home, "state.json"),
-    JSON.stringify({
-      ...state,
-      sync_ancestry: {
-        ...ancestry,
-        base_manifest: {
-          ...ancestry.base_manifest,
-          snapshot_digests: [...ancestry.base_manifest.snapshot_digests].reverse(),
-        },
+  yield* saveLibrary(home, {
+    ...state,
+    sync_ancestry: {
+      ...ancestry,
+      base_manifest: {
+        ...ancestry.base_manifest,
+        snapshot_digests: [...ancestry.base_manifest.snapshot_digests].reverse(),
       },
-    }),
-  );
+    },
+  });
   yield* fs.writeFileString(
     join(home, "machine.json"),
     JSON.stringify({
@@ -55,7 +52,6 @@ const prepared = Effect.gen(function* () {
       repositoryDecisionsInitialized: true,
     }),
   );
-  yield* migrateLocalLibraryState(home);
   const machine = yield* MachineSettings.read(home);
   const rootPath = join(home, "workspace");
   yield* fs.makeDirectory(rootPath);

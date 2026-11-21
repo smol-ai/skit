@@ -1,3 +1,4 @@
+import { asV9 } from "./helpers/released-library.js";
 import { assert, it } from "@effect/vitest";
 import { Context, Effect, FileSystem, Layer } from "effect";
 import { systemError } from "effect/PlatformError";
@@ -13,12 +14,8 @@ import {
   makeSkillId,
   makeSkillVersionId,
 } from "../src/library/entity-ids.js";
-import { currentSkillVersion, type Enabled } from "../src/library/library-contracts.js";
-import {
-  CURRENT_LIBRARY_STATE_VERSION,
-  emptyLibraryState,
-  type LibraryState,
-} from "../src/library/library-state.js";
+import { currentSkillVersion } from "../src/library/library-contracts.js";
+import { CURRENT_LIBRARY_STATE_VERSION, emptyLibraryState } from "../src/library/library-state.js";
 import { globalEnabled } from "../src/library/enabled.js";
 import { inspectLibrary, libraryLayer, saveLibrary } from "./helpers/library-store.js";
 import { migrateLocalLibraryState } from "../src/library/store/library-store.js";
@@ -46,106 +43,11 @@ it.effect(
         assert.deepInclude(failure.reason, {
           _tag: "UnsupportedVersion",
           version: CURRENT_LIBRARY_STATE_VERSION + 0.5,
-          current: CURRENT_LIBRARY_STATE_VERSION,
+          current: 9,
         });
       assert.strictEqual(yield* fs.readFileString(path), bytes);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
-
-const bindingEntries = (enabled: readonly Enabled[]) =>
-  enabled.map((item) =>
-    "skill" in item
-      ? { kind: "skill", skill_id: item.skill }
-      : { kind: "collection", collection_id: item.collection },
-  );
-
-/** A current state written as the v9 document it migrates from, so tests can build older states. */
-const asV9 = ({
-  schemaVersion: _schemaVersion,
-  collection_versions,
-  imports,
-  enabled,
-  invocation_policies,
-  repositories,
-  installed_skills,
-  skills,
-  ...fields
-}: LibraryState) => {
-  assert.isUndefined(fields.sync_ancestry);
-  assert.isUndefined(fields.device_skill_selection);
-  assert.isUndefined(fields.ownershipIssues);
-  return {
-    ...fields,
-    schemaVersion: 9,
-    skills: skills.map(({ versions, ...skill }) => ({
-      ...skill,
-      versions: versions.map(
-        ({ source_hash, artifact_hash, validation_identity_hash, ...version }) => ({
-          ...version,
-          source_digest: source_hash,
-          artifact_digest: artifact_hash,
-          validation_identity_digest: validation_identity_hash,
-        }),
-      ),
-    })),
-    retained_copies: collection_versions.map(
-      ({ collection_version_id, hash, members, ...copy }) => ({
-        ...copy,
-        retained_copy_id: collection_version_id,
-        digest: hash,
-        members: members.map(({ source_hash, artifact_hash, ...member }) => ({
-          ...member,
-          source_digest: source_hash,
-          artifact_digest: artifact_hash,
-        })),
-      }),
-    ),
-    acquisitions: imports.map(
-      ({ import_id, kind, collection_version_id, imported_at, lock_file_entries, ...item }) => ({
-        ...item,
-        acquisition_id: import_id,
-        kind: kind === "edit" ? "retained-edit" : kind,
-        retained_copy_id: collection_version_id,
-        acquired_at: imported_at,
-        observations: lock_file_entries.map(
-          ({ read_at, original_entry_hash, well_known_hash, ...entry }) => ({
-            ...entry,
-            observed_at: read_at,
-            original_entry_digest: original_entry_hash,
-            ...(well_known_hash === undefined ? {} : { well_known_digest: well_known_hash }),
-          }),
-        ),
-      }),
-    ),
-    global_bindings:
-      enabled.length > 0 || invocation_policies !== undefined
-        ? [
-            {
-              scope: { kind: "global" },
-              entries: bindingEntries(enabled),
-              ...(invocation_policies === undefined ? {} : { invocation_policies }),
-            },
-          ]
-        : [],
-    local_bindings: repositories.map((repository) => ({
-      scope: { kind: "repository", root: repository.root },
-      entries: bindingEntries(repository.enabled),
-      ...(repository.invocation_policies === undefined
-        ? {}
-        : { invocation_policies: repository.invocation_policies }),
-    })),
-    projections: installed_skills.map(
-      ({ installed_skill_id, destination, installed_at, expected_hash, ...copy }) => ({
-        ...copy,
-        projection_id: installed_skill_id,
-        target: destination,
-        projected_at: installed_at,
-        expected_digest: expected_hash,
-        ...(copy.status === "conflicted" ? { observed_digest: copy.current_hash } : {}),
-      }),
-    ),
-  };
-};
 
 interface LegacySkillVersionFixture {
   readonly [field: string]: unknown;
@@ -804,165 +706,23 @@ it.effect("migrates v9 Bindings to enabled lists and renames stored records", ()
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-/** The status fields a v10 installed copy stored, written as raw JSON. */
-interface StoredStatusFields {
-  readonly status: string;
-  readonly current_hash?: string;
-  readonly suppression_reason?: string;
-  readonly suppressed_at?: string;
-  readonly destination?: string;
-}
-
-it.effect(
-  "migrates v10 installed copies to the fields their status uses, dropping former folders",
-  () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-v10-migration-" });
-      const historical = JSON.parse(
-        yield* fs.readFileString(join(fixtures, "v11-well-known-subset.json")),
-      );
-      const {
-        installed_skill_id: _id,
-        path,
-        status: _status,
-        ...copy
-      } = historical.installed_skills[0]!;
-      const hash = copy.expected_hash;
-      const row = (name: string, fields: StoredStatusFields) => ({
-        ...copy,
-        installed_skill_id: makeInstalledSkillId(),
-        path: `${path}-${name}`,
-        ...fields,
+it.effect.each([10, 11, 12])("refuses standalone v%s JSON without rewriting it", (version) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-unreleased-state-" });
+    const path = join(home, "state.json");
+    const original = JSON.stringify({ schemaVersion: version });
+    yield* fs.writeFileString(path, original);
+    const failure = yield* Effect.flip(openedState(home));
+    assert.strictEqual(failure._tag, "InvalidLibraryState");
+    if (failure._tag === "InvalidLibraryState")
+      assert.deepStrictEqual(failure.reason, {
+        _tag: "UnsupportedVersion",
+        version,
+        oldest: 4,
+        current: 9,
       });
-      const rows = [
-        row("installed", {
-          status: "installed",
-          current_hash: hash,
-          suppression_reason: "native_delete",
-        }),
-        row("drifted", { status: "drifted", current_hash: hash }),
-        row("unsupported", { status: "unsupported" }),
-        row("conflicted-unknown", { status: "conflicted" }),
-        row("conflicted", { status: "conflicted", current_hash: hash }),
-        row("suppressed", { status: "suppressed", suppressed_at: "2026-10-01T00:00:00.000Z" }),
-        // A copy in a former per-Harness folder is no longer recorded.
-        row("legacy", { status: "installed", destination: "legacy" }),
-      ];
-      yield* fs.writeFileString(
-        join(home, "state.json"),
-        JSON.stringify({
-          ...historical,
-          schemaVersion: 10,
-          installed_skills: rows,
-        }),
-      );
-
-      const migrated = yield* openedState(home);
-      assert.strictEqual(migrated.present, true);
-      if (!migrated.present) return;
-      assert.strictEqual(migrated.state.schemaVersion, 12);
-      assert.deepStrictEqual(migrated.state.installed_skills, [
-        {
-          ...copy,
-          installed_skill_id: rows[0]!.installed_skill_id,
-          path: rows[0]!.path,
-          status: "installed",
-        },
-        {
-          ...copy,
-          installed_skill_id: rows[1]!.installed_skill_id,
-          path: rows[1]!.path,
-          status: "pending",
-        },
-        {
-          ...copy,
-          installed_skill_id: rows[2]!.installed_skill_id,
-          path: rows[2]!.path,
-          status: "pending",
-        },
-        {
-          ...copy,
-          installed_skill_id: rows[3]!.installed_skill_id,
-          path: rows[3]!.path,
-          status: "pending",
-        },
-        {
-          ...copy,
-          installed_skill_id: rows[4]!.installed_skill_id,
-          path: rows[4]!.path,
-          status: "conflicted",
-          current_hash: hash,
-          conflicts: [],
-        },
-        {
-          ...copy,
-          installed_skill_id: rows[5]!.installed_skill_id,
-          path: rows[5]!.path,
-          status: "suppressed",
-          suppression_reason: "native_delete",
-          suppressed_at: "2026-10-01T00:00:00.000Z",
-        },
-      ]);
-      assert.isTrue(
-        (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v10.backup-")),
-      );
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("migrates v11 state to v12 with no operation records", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-v11-migration-" });
-    const historical = yield* fs.readFileString(join(fixtures, "v11-well-known-subset.json"));
-    yield* fs.writeFileString(join(home, "state.json"), historical);
-
-    const migrated = yield* openedState(home);
-    assert.strictEqual(migrated.present, true);
-    if (!migrated.present) return;
-    assert.deepStrictEqual(migrated.state, {
-      ...JSON.parse(historical),
-      schemaVersion: 12,
-    });
-    assert.isTrue(
-      (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v11.backup-")),
-    );
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("v11 ownership issue prose does not become a fabricated marker diagnosis", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-v11-marker-issue-" });
-    const historical = JSON.stringify({
-      ...JSON.parse(yield* fs.readFileString(join(fixtures, "v11-well-known-subset.json"))),
-      ownershipIssues: [
-        {
-          code: "INVALID_OWNERSHIP_MARKER",
-          path: "/skills/review",
-          canonicalPath: "/skills/review",
-          harnesses: ["codex"],
-          currentHash: `sha256:${"a".repeat(64)}`,
-          detail: "legacy diagnostic",
-        },
-      ],
-    });
-    yield* fs.writeFileString(join(home, "state.json"), historical);
-    const loaded = yield* openedState(home);
-    assert.isTrue(loaded.present);
-    if (!loaded.present) return;
-    const issue = loaded.state.ownershipIssues?.[0];
-    assert.strictEqual(issue?.code, "INVALID_OWNERSHIP_MARKER");
-    assert.notProperty(issue, "detail");
-    assert.notProperty(issue, "markerReason");
-    const backup = (yield* fs.readDirectory(home)).find((name) =>
-      name.startsWith("state.json.v11.backup-"),
-    );
-    assert.isDefined(backup);
-    assert.deepStrictEqual(
-      JSON.parse(yield* fs.readFileString(join(home, backup!))),
-      JSON.parse(historical),
-    );
+    assert.strictEqual(yield* fs.readFileString(path), original);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -1071,12 +831,12 @@ it.effect("a failed backup flush preserves the historical state and can retry mi
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-migration-flush-" });
     const path = join(home, "state.json");
-    const historical = yield* fs.readFileString(join(fixtures, "v11-well-known-subset.json"));
+    const historical = JSON.stringify(asV9(emptyLibraryState()));
     yield* fs.writeFileString(path, historical);
     const faulting = FileSystem.FileSystem.of({
       ...fs,
       open: (file, options) =>
-        file.includes(".v11.backup-")
+        file.includes(".v9.backup-")
           ? Effect.fail(
               systemError({ _tag: "PermissionDenied", module: "FileSystem", method: "open" }),
             )

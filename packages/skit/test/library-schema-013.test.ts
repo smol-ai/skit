@@ -1,3 +1,4 @@
+import { saveLibrary } from "./helpers/library-store.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
@@ -26,7 +27,6 @@ const prepared = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-schema-013-" });
   const { state } = yield* fixture;
-  yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(state));
   const events = yield* Effect.forEach([1, 0], (day) =>
     LibraryAuditEvent.makeEffect({
       schemaVersion: 1,
@@ -42,6 +42,7 @@ const prepared = Effect.gen(function* () {
     events.map((event) => JSON.stringify(event)).join("\n") + "\n",
   );
   yield* migrateLocalLibraryState(home);
+  yield* saveLibrary(home, state);
   return { fs, home, state, path: libraryDatabasePath(home) };
 });
 const unchangedRows = (path: string) =>

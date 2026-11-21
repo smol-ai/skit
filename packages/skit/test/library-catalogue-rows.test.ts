@@ -1,3 +1,4 @@
+import { saveLibrary } from "./helpers/library-store.js";
 import { database012 } from "./helpers/library-database-012.js";
 import { normalizeCatalogue } from "../src/library/manifest.js";
 import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
@@ -34,7 +35,7 @@ const prepared = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-catalogue-rows-" });
   const { state, future } = yield* fixture;
-  yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(state));
+  yield* saveLibrary(home, state);
   yield* migrateLocalLibraryState(home);
   const stored = yield* readCatalogue(home);
   return { home, state, future, stored, path: libraryDatabasePath(home) };
@@ -430,7 +431,7 @@ for (const rollback of [false, true])
             ),
           })),
         });
-        yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(seed));
+        yield* saveLibrary(home, seed);
         yield* migrateLocalLibraryState(home);
         const path = libraryDatabasePath(home);
         const before = yield* readCatalogue(home);

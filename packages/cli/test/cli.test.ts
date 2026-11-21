@@ -228,7 +228,7 @@ test.each(["list", "check", "setup"])(
           error: {
             _tag: "InvalidLibraryState",
             path,
-            reason: { _tag: "UnsupportedVersion", version: 2, oldest: 4, current: 12 },
+            reason: { _tag: "UnsupportedVersion", version: 2, oldest: 4, current: 9 },
           },
         },
       ]);

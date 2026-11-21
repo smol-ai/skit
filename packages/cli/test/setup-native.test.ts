@@ -1,3 +1,4 @@
+import { asV9 } from "./helpers/released-library.js";
 import { describe } from "@effect/vitest";
 import { TreeError } from "@smolai/skit-core/shared";
 import * as Library from "@smolai/skit-core/library";
@@ -479,7 +480,7 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
       adoption_receipts: [],
     }).pipe(Effect.orDie);
     yield* f.fs.makeDirectory(f.libraryHome, { recursive: true });
-    yield* f.fs.writeFileString(join(f.libraryHome, "state.json"), JSON.stringify(state));
+    yield* f.fs.writeFileString(join(f.libraryHome, "state.json"), JSON.stringify(asV9(state)));
     const scan = yield* scanForSetup(f.options);
     const authoredSkillRealPath = yield* f.fs.realPath(authoredSkill);
 
@@ -708,7 +709,7 @@ it.effect(
         adoption_receipts: [],
       }).pipe(Effect.orDie);
       yield* f.fs.makeDirectory(f.libraryHome, { recursive: true });
-      yield* f.fs.writeFileString(join(f.libraryHome, "state.json"), JSON.stringify(state));
+      yield* f.fs.writeFileString(join(f.libraryHome, "state.json"), JSON.stringify(asV9(state)));
       const scan = yield* scanForSetup(f.options);
 
       expect(scan.installedSkills).toEqual(
