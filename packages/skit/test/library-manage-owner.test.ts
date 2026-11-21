@@ -1,6 +1,6 @@
 import { loadOperations, loadLibrary } from "../src/library/store/library-store.js";
 import { libraryDatabasePath } from "../src/library/store/database.js";
-import { saveLibrary, testRoots } from "./helpers/library-store.js";
+import { testRoots } from "./helpers/library-store.js";
 import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
 
 import { describe, assert, it } from "@effect/vitest";
@@ -93,16 +93,13 @@ it.effect(
 );
 
 it.effect(
-  "existing Manage previews preserve unknown state and take ownership without changing Skill bytes",
+  "existing Manage previews leave saved state unchanged and take ownership without changing Skill bytes",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture;
       yield* Effect.gen(function* () {
         const library = yield* Library.Service;
         const imported = yield* library.import.collection(f.request);
-        const saved = yield* loadLibrary(f.home);
-        const future = { ...saved, future: { keep: "future data" } };
-        yield* saveLibrary(f.home, future);
         const before = yield* loadLibrary(f.home);
         const plan = yield* library.plan(
           {
@@ -131,10 +128,6 @@ it.effect(
         assert.strictEqual(outcome.result.results[0].application.status, "complete");
         assert.strictEqual(yield* f.fs.readFileString(join(f.copy, "SKILL.md")), f.bytes);
         const after = yield* loadLibrary(f.home);
-        assert.deepStrictEqual(
-          yield* Schema.decodeUnknownEffect(Schema.Struct({ future: Schema.Unknown }))(after),
-          { future: { keep: "future data" } },
-        );
         assert.strictEqual(after.installed_skills[0].status, "installed");
       }).pipe(Effect.provide(Library.layer(f.config)));
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),

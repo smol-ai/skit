@@ -88,7 +88,6 @@ const worldLabels = {
   removedPath: "Path removed during the scenario",
   noteCount: "Reference notes before removal",
   removeCount: "Reference notes removed",
-  checkpoint: "Checkpoint bytes supplied by the fixture",
 };
 
 // This owner binds declared inputs to the real fixture, the production layers and the
@@ -674,14 +673,15 @@ const scenarios = [
   scenario({
     name: "invalid-checkpoint",
     description:
-      "Refuse an unreadable sync checkpoint without changing files or remote history, then resume after its original bytes are restored.",
-    world: { connection: "connected", checkpoint: "{unfinished" },
-    run: (world, typed, { checkpoint: invalid }) =>
+      "Refuse an unreadable sync checkpoint without changing files or remote history, then resume after its original status is restored.",
+    world: { connection: "connected" },
+    run: (world, typed) =>
       Effect.gen(function* () {
         const saved = yield* world.a.readCheckpoint();
         const before = yield* world.a.files();
         const remote = yield* world.server.revisions();
-        yield* world.a.writeCheckpoint(invalid);
+        yield* world.a.corruptCheckpoint();
+        const invalid = yield* world.a.readCheckpoint();
         yield* typed("skit author sync --apply");
         yield* failed(world.a.sync(), "AuthorSyncStateInvalid");
         const checkpointAfter = yield* world.a.readCheckpoint();

@@ -2,14 +2,9 @@ import { NodeRuntime } from "@effect/platform-node";
 // Process protocol only; every operation comes from the compiled core.
 import { Effect, FileSystem, Option } from "effect";
 import { join } from "node:path";
-import { decodeLibraryState } from "../../dist/library/library-state.js";
 import * as Library from "../../dist/library/library.js";
 import * as MachineSettings from "../../dist/library/machine-settings.js";
-import {
-  LibraryWriter,
-  writeLibrary,
-  loadLibrary,
-} from "../../dist/library/store/library-store.js";
+import { LibraryWriter, writeLibrary } from "../../dist/library/store/library-store.js";
 import { localImportRequest } from "../../dist/library/setup/local-import.js";
 import { deterministicTreeHash } from "../../dist/artifact/skit.js";
 import { readPathEvidence } from "../../dist/library/folder-evidence.js";
@@ -38,17 +33,6 @@ const program = Effect.gen(function* () {
       const library = yield* Library.Service;
       yield* library.import.collection(request.value);
     }).pipe(Effect.provide(Library.layer({ home, roots })));
-    yield* writeLibrary(
-      home,
-      Effect.gen(function* () {
-        const writer = yield* LibraryWriter;
-        const state = yield* loadLibrary(home);
-        yield* writer.save(
-          yield* decodeLibraryState({ ...state, extension: { keep: [null, {}, []] } }),
-          state,
-        );
-      }),
-    );
     return;
   }
   const setup = Effect.gen(function* () {

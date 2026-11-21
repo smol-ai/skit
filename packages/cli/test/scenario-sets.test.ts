@@ -13,9 +13,13 @@ const register = (scenario: (typeof scenarioSets)[number]["scenarios"][number]) 
     () =>
       Effect.gen(function* () {
         const interaction = yield* makeScriptedInteraction(scenario.answers);
-        yield* scenario
-          .run(yield* makeJourneyHome, interaction.typed)
-          .pipe(Effect.provide(interaction.layer));
+        const home = yield* makeJourneyHome;
+        const run: Effect.Effect<
+          void,
+          unknown,
+          Effect.Services<ReturnType<typeof scenario.run>>
+        > = scenario.run(home, interaction.typed);
+        yield* run.pipe(Effect.provide(interaction.layer));
         expect(yield* interaction.remaining, scenario.name).toBe(0);
         const events = yield* interaction.events;
         expect(events[0]?._tag, scenario.name).toBe("Command");

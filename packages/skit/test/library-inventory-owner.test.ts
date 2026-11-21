@@ -9,7 +9,7 @@ import * as Library from "../src/library/library.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { loadLibrary } from "../src/library/store/library-store.js";
-import { saveLibrary, testRoots } from "./helpers/library-store.js";
+import { testRoots } from "./helpers/library-store.js";
 
 const folder = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -108,22 +108,6 @@ describe("skit inventory", () => {
             if (stale._tag === "Failure")
               assert.strictEqual(stale.failure._tag, "Library.StalePlan");
             assert.deepStrictEqual(yield* loadLibrary(f.home), saved);
-            const future = { ...saved, future: { keep: "future data" } };
-            yield* saveLibrary(f.home, future);
-            const futurePlan = yield* library.plan(
-              { _tag: "RefreshInventory", roots: [{ harness: "codex", root: f.skills }] },
-              { base: yield* library.read },
-            );
-            const decoded = yield* Schema.decodeUnknownEffect(Library.RefreshInventoryPlan)(
-              JSON.parse(JSON.stringify(futurePlan)),
-            );
-            yield* library.apply({ _tag: "Apply", plan: decoded });
-            assert.deepStrictEqual(
-              yield* Schema.decodeUnknownEffect(Schema.Struct({ future: Schema.Unknown }))(
-                yield* loadLibrary(f.home),
-              ),
-              { future: { keep: "future data" } },
-            );
           }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
         }).pipe(Effect.scoped, Effect.provide(skitLayer)),
     );

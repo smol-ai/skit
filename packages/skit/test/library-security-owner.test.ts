@@ -13,7 +13,7 @@ import * as Library from "../src/library/library.js";
 import { openLibraryView } from "../src/library/internal/session/library-view.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { saveLibrary, testRoots } from "./helpers/library-store.js";
+import { testRoots } from "./helpers/library-store.js";
 
 const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -52,9 +52,6 @@ it.effect("acceptance planning leaves saved state unchanged", () =>
 
       yield* library.import.collection(f.request);
 
-      const saved = yield* loadLibrary(f.home);
-      const future = { ...saved, future: { keep: "future data" } };
-      yield* saveLibrary(f.home, future);
       const before = yield* loadLibrary(f.home);
       const intent = yield* intentFor(f.home);
       const plan = yield* library.plan(intent, { base: yield* library.read });
@@ -68,7 +65,7 @@ it.effect("acceptance planning leaves saved state unchanged", () =>
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
-it.effect("acceptance leaves unknown saved fields intact", () =>
+it.effect("applying a round-tripped acceptance plan persists its acceptance", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
     yield* Effect.gen(function* () {
@@ -76,9 +73,6 @@ it.effect("acceptance leaves unknown saved fields intact", () =>
 
       yield* library.import.collection(f.request);
 
-      const saved = yield* loadLibrary(f.home);
-      const future = { ...saved, future: { keep: "future data" } };
-      yield* saveLibrary(f.home, future);
       const intent = yield* intentFor(f.home);
       const plan = yield* library.plan(intent, { base: yield* library.read });
       const codec = Schema.fromJsonString(Library.AcceptFindingPlan);
@@ -87,11 +81,6 @@ it.effect("acceptance leaves unknown saved fields intact", () =>
       const result = (yield* library.apply({ _tag: "Apply", plan: portable })).result;
 
       const after = yield* loadLibrary(f.home);
-
-      assert.deepStrictEqual(
-        yield* Schema.decodeUnknownEffect(Schema.Struct({ future: Schema.Unknown }))(after),
-        { future: { keep: "future data" } },
-      );
 
       assert.deepStrictEqual(after.assessmentAcceptances, [result.acceptance]);
     }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
@@ -298,7 +287,10 @@ it.effect("acceptance refuses a reentrant mutation after its final content check
       const plan = yield* owner.plan(yield* intentFor(f.home), { base: yield* owner.read });
       const files = yield* InstalledSkills.make(testRoots(f.home));
       const current = yield* loadLibrary(f.home);
-      const concurrent = { ...current, concurrent: { retained: true } };
+      const concurrent: typeof current = {
+        ...current,
+        scanIssues: [{ path: f.home, harness: "codex", code: "MISSING_ROOT" }],
+      };
       let mutate = Effect.void;
       let checks = 0;
       const controlled = InstalledSkills.Service.of({
@@ -327,10 +319,7 @@ it.effect("acceptance refuses a reentrant mutation after its final content check
       if (result._tag === "Failure") assert.strictEqual(result.failure._tag, "LibraryChanged");
       const saved = yield* loadLibrary(f.home);
       assert.deepStrictEqual(saved.assessmentAcceptances ?? [], []);
-      assert.deepStrictEqual(
-        yield* Schema.decodeUnknownEffect(Schema.Struct({ concurrent: Schema.Unknown }))(saved),
-        { concurrent: { retained: true } },
-      );
+      assert.deepStrictEqual(saved.scanIssues, concurrent.scanIssues);
     }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

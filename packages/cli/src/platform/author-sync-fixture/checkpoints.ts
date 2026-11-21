@@ -27,10 +27,6 @@ export const checkpointStore = (home: string) => {
         const sql = yield* SqlClient.SqlClient;
         return yield* sql.withTransaction(
           Effect.gen(function* () {
-            const corrupt = yield* sql<{
-              extra: string;
-            }>`SELECT extra FROM author_sync_checkpoints WHERE status='Unknown' LIMIT 1`;
-            if (corrupt[0]) return corrupt[0].extra;
             const entries = yield* Effect.forEach(tables, (table) =>
               Effect.gen(function* () {
                 const rows = yield* sql.unsafe(`SELECT * FROM ${table} ORDER BY rowid`);
@@ -47,22 +43,28 @@ export const checkpointStore = (home: string) => {
         );
       }).pipe(Effect.provide(sqliteLayer({ filename, readonly: true })), Effect.orDie),
     ),
+    corrupt: Effect.scoped(
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql.withTransaction(
+          Effect.gen(function* () {
+            // Deliberately damage the declared status column to exercise the owner's decoder.
+            yield* sql`PRAGMA ignore_check_constraints=ON`;
+            yield* sql`UPDATE author_sync_checkpoints SET status='Unknown'`;
+          }),
+        );
+      }).pipe(Effect.provide(sqliteLayer({ filename }))),
+    ),
     write: (text: string) =>
       Effect.scoped(
         Effect.gen(function* () {
           const sql = yield* SqlClient.SqlClient;
-          const decoded = yield* Effect.result(Schema.decodeEffect(Document)(text));
-          if (decoded._tag === "Failure") {
-            // Deliberately corrupt a real stored checkpoint; the owner must refuse it on its next read.
-            yield* sql`PRAGMA ignore_check_constraints=ON`;
-            yield* sql`UPDATE author_sync_checkpoints SET status='Unknown',extra=${text}`;
-            return;
-          }
+          const snapshot = yield* Schema.decodeEffect(Document)(text);
           yield* sql.withTransaction(
             Effect.gen(function* () {
               for (const table of [...tables].reverse()) yield* sql.unsafe(`DELETE FROM ${table}`);
               for (const table of tables) {
-                const [first, ...rest] = decoded.success.tables[table];
+                const [first, ...rest] = snapshot.tables[table];
                 if (first) yield* sql`INSERT INTO ${sql(table)} ${sql.insert([first, ...rest])}`;
               }
             }),

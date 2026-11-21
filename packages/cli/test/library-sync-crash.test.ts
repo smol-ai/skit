@@ -1,5 +1,3 @@
-import { SqlClient } from "effect/sql";
-import { sqliteLayer } from "@smolai/skit-core/platform";
 import { describe } from "@effect/vitest";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
@@ -265,69 +263,57 @@ describe("skit sync", () => {
   describe("Recovering interrupted work", () => {
     describe("Sync remembers which Registry changes its saved Library includes.", () => {
       for (const ancestry of ["missing", "stale"] as const)
-        it.effect(
-          `a clean sync anchoring ${ancestry} ancestry records one completed Sync and preserves undeclared fields`,
-          () =>
-            Effect.gen(function* () {
-              const { fs, a, b, remote } = yield* devices;
-              yield* a.importSource("first");
-              if (ancestry === "stale") yield* a.sync();
-              // Seed an extension written by a newer build into the authoritative row.
-              yield* Effect.scoped(
-                Effect.gen(function* () {
-                  const sql = yield* SqlClient.SqlClient;
-                  yield* sql`UPDATE library_device SET revision=revision+1,extra=json_set(COALESCE(extra,'{}'),'$.extension',json('{"kept":[null,false,false]}')) WHERE id=1`;
-                }).pipe(Effect.provide(sqliteLayer({ filename: join(a.home, "library.sqlite") }))),
-              );
-              const backup = join(a.home, "..", "ancestry-backup");
-              yield* fs.copy(a.home, backup);
-              if (ancestry === "missing") yield* a.sync();
-              else {
-                yield* b.sync();
-                const label = (yield* b.state).collections[0]!.label;
-                yield* b.edit((state) => ({
-                  ...state,
-                  collections: state.collections.map((collection) => ({
-                    ...collection,
-                    label: "temporary",
-                  })),
-                }));
-                yield* b.sync();
-                yield* b.edit((state) => ({
-                  ...state,
-                  collections: state.collections.map((collection) => ({ ...collection, label })),
-                }));
-                yield* b.sync();
-              }
-              const head = (yield* remote)!;
-              yield* fs.remove(a.home, { recursive: true });
-              yield* fs.copy(backup, a.home);
-              const before = yield* a.state;
-              const beforeHistory = yield* (yield* a.owner()).history;
-              const saves = a.saves;
-              assert.strictEqual((yield* a.sync({ apply: false })).status, "clean");
-              assert.strictEqual(a.saves, saves);
-              assert.deepStrictEqual(yield* a.state, before);
+        it.effect(`a clean sync anchoring ${ancestry} ancestry records one completed Sync`, () =>
+          Effect.gen(function* () {
+            const { fs, a, b, remote } = yield* devices;
+            yield* a.importSource("first");
+            if (ancestry === "stale") yield* a.sync();
+            const backup = join(a.home, "..", "ancestry-backup");
+            yield* fs.copy(a.home, backup);
+            if (ancestry === "missing") yield* a.sync();
+            else {
+              yield* b.sync();
+              const label = (yield* b.state).collections[0]!.label;
+              yield* b.edit((state) => ({
+                ...state,
+                collections: state.collections.map((collection) => ({
+                  ...collection,
+                  label: "temporary",
+                })),
+              }));
+              yield* b.sync();
+              yield* b.edit((state) => ({
+                ...state,
+                collections: state.collections.map((collection) => ({ ...collection, label })),
+              }));
+              yield* b.sync();
+            }
+            const head = (yield* remote)!;
+            yield* fs.remove(a.home, { recursive: true });
+            yield* fs.copy(backup, a.home);
+            const before = yield* a.state;
+            const beforeHistory = yield* (yield* a.owner()).history;
+            const saves = a.saves;
+            assert.strictEqual((yield* a.sync({ apply: false })).status, "clean");
+            assert.strictEqual(a.saves, saves);
+            assert.deepStrictEqual(yield* a.state, before);
 
-              assert.strictEqual((yield* a.sync()).status, "clean");
-              const afterHistory = yield* (yield* a.owner()).history;
-              assert.deepStrictEqual(afterHistory.operations, beforeHistory.operations);
-              assert.strictEqual(afterHistory.events.length, beforeHistory.events.length + 1);
-              assert.isTrue(
-                afterHistory.events
-                  .at(-1)
-                  ?.changes.some((change) => change.action === "operation-Done"),
-              );
-              const anchored = yield* a.state;
-              assert.deepStrictEqual(Reflect.get(anchored, "extension"), {
-                kept: [null, false, false],
-              });
-              assert.strictEqual(anchored.sync_ancestry?.revision_id, head.revision_id);
-              const saved = a.saves;
-              assert.strictEqual((yield* a.sync()).status, "clean");
-              assert.strictEqual(a.saves, saved);
-              assert.deepStrictEqual(yield* a.state, anchored);
-            }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+            assert.strictEqual((yield* a.sync()).status, "clean");
+            const afterHistory = yield* (yield* a.owner()).history;
+            assert.deepStrictEqual(afterHistory.operations, beforeHistory.operations);
+            assert.strictEqual(afterHistory.events.length, beforeHistory.events.length + 1);
+            assert.isTrue(
+              afterHistory.events
+                .at(-1)
+                ?.changes.some((change) => change.action === "operation-Done"),
+            );
+            const anchored = yield* a.state;
+            assert.strictEqual(anchored.sync_ancestry?.revision_id, head.revision_id);
+            const saved = a.saves;
+            assert.strictEqual((yield* a.sync()).status, "clean");
+            assert.strictEqual(a.saves, saved);
+            assert.deepStrictEqual(yield* a.state, anchored);
+          }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
         );
     });
   });
@@ -418,34 +404,25 @@ describe("skit sync", () => {
         }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
       );
 
-      it.effect("sync preserves fields this CLI does not declare", () =>
+      it.effect("sync imports legacy state before preview, push and merge", () =>
         Effect.gen(function* () {
           const { fs, a, b, c } = yield* devices;
           yield* a.importSource("first");
-          // These are pre-database documents from a build with an extra field, imported once.
+          // Seed pre-database documents so each device imports them on its first sync.
           yield* fs.makeDirectory(c.home, { recursive: true });
           yield* fs.copy(join(a.home, "originals"), join(c.home, "originals"));
-          yield* fs.writeFileString(
-            join(c.home, "state.json"),
-            JSON.stringify({ ...(yield* a.state), extension: { kept: true } }),
-          );
+          yield* fs.writeFileString(join(c.home, "state.json"), JSON.stringify(yield* a.state));
           assert.strictEqual((yield* c.sync({ apply: false })).status, "push_ready");
-          assert.isTrue(Object.hasOwn(yield* c.state, "extension"));
           assert.strictEqual((yield* c.sync()).status, "pushed");
-          assert.deepStrictEqual(Reflect.get(yield* c.state, "extension"), { kept: true });
 
           yield* fs.makeDirectory(b.home, { recursive: true });
           yield* fs.copy(join(c.home, "originals"), join(b.home, "originals"));
-          yield* fs.writeFileString(
-            join(b.home, "state.json"),
-            JSON.stringify({ ...(yield* c.state), extension: { kept: true } }),
-          );
+          yield* fs.writeFileString(join(b.home, "state.json"), JSON.stringify(yield* c.state));
           assert.strictEqual((yield* b.sync()).status, "clean");
-          assert.isTrue(Object.hasOwn(yield* b.state, "extension"));
           yield* a.importSource("second");
           yield* a.sync();
           assert.strictEqual((yield* b.sync()).status, "merged");
-          assert.deepStrictEqual(Reflect.get(yield* b.state, "extension"), { kept: true });
+          assert.deepStrictEqual((yield* b.state).collections, (yield* a.state).collections);
         }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
       );
     });

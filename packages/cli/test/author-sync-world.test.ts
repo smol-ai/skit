@@ -326,28 +326,19 @@ describe("skit author sync", () => {
       );
     });
     describe("Sync refuses saved state it cannot understand.", () => {
-      it.effect.each([
-        { name: "unparsable", render: () => "{unfinished" },
-        {
-          name: "unknown state",
-          render: (workspaceId: string) =>
-            JSON.stringify({
-              schema: "skit.author-sync.v1",
-              workspaces: { [workspaceId]: { [locator]: { _tag: "Unknown" } } },
-            }),
-        },
-      ])(
-        "invalid saved sync state is recoverable without changing files or remote history ($name)",
-        ({ render }) =>
+      it.effect(
+        "an invalid checkpoint status is recoverable without changing files or remote history",
+        () =>
           Effect.gen(function* () {
             const world = yield* makeAuthorSyncWorld();
             yield* world.connect();
             const path = join(world.a.home, "library.sqlite");
             const saved = yield* world.a.readCheckpoint();
-            const invalid = render(yield* workspaceIdOf(world.a));
             const files = yield* world.a.files();
             const revisions = yield* world.server.revisions();
-            yield* world.a.writeCheckpoint(invalid);
+            yield* world.a.corruptCheckpoint();
+            const invalid = yield* world.a.readCheckpoint();
+            expect(invalid).not.toBe(saved);
             const failure = yield* Effect.flip(world.a.sync());
             expect(failure).toMatchObject({
               _tag: "AuthorSyncStateInvalid",

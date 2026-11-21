@@ -206,6 +206,7 @@ export const makeAuthorSyncWorld = Effect.fn("Fixture.makeAuthorSyncWorld")(func
       }),
       remove: (path: string) => fs.remove(join(workspace, path), { recursive: true }),
       exists: (path: string) => fs.exists(join(workspace, path)),
+      corruptCheckpoint: () => checkpointStore(home).corrupt,
       readCheckpoint: () => checkpointStore(home).read,
       writeCheckpoint: (content: string) => checkpointStore(home).write(content),
       saveAtomically: Effect.fn("Fixture.saveAtomically")(function* (
