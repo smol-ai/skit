@@ -264,6 +264,23 @@ const libraryFailureNext = Match.type<typeof LibraryDataFailure.Type>().pipe(
           " aside as a separate backup, then retry.",
         ];
       if (
+        reason._tag === "DatabaseWriteInsideRead" ||
+        reason._tag === "DatabaseWriterLockMissing" ||
+        reason._tag === "ImportInsideTransaction" ||
+        reason._tag === "DocumentEncodingFailed"
+      )
+        return [
+          "Retry the operation. If it fails again, report the failure to SKIT’s maintainers.",
+        ];
+      if (
+        reason._tag === "CatalogueRowChanged" ||
+        reason._tag === "EnabledSubjectMissing" ||
+        reason._tag === "InventoryInstalledIdentityChanged" ||
+        reason._tag === "CollectionStillInstalled" ||
+        reason._tag === "UndoFieldChanged"
+      )
+        return ["Review the operation against the current Library, then retry."];
+      if (
         path.endsWith("library.sqlite") ||
         reason._tag === "DatabaseIntegrityInvalid" ||
         reason._tag === "OperationStateMissing"

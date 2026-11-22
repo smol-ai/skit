@@ -95,3 +95,17 @@ test("SQLite schema failures use the same recovery action as an empty database",
   const empty = new InvalidLibraryState({ path, reason: { _tag: "DatabaseEmpty" } });
   expect(libraryFailure(failure).next).toEqual(libraryFailure(empty).next);
 });
+
+test("database damage, refused edits and transaction mistakes have distinct actions", () => {
+  const path = "/library/library.sqlite";
+  const action = (reason: InvalidLibraryState["reason"]) => {
+    const error = new InvalidLibraryState({ path, reason });
+    return libraryFailure(error).next;
+  };
+  const backup = action({ _tag: "DatabaseEmpty" });
+  const report = action({ _tag: "DatabaseWriteInsideRead" });
+  const review = action({ _tag: "UndoFieldChanged", field: "unmanaged" });
+  expect(action({ _tag: "DatabaseWriterLockMissing" })).toEqual(report);
+  expect(action({ _tag: "EnabledSubjectMissing", subject: "skill", id: "skill" })).toEqual(review);
+  expect(new Set([backup, report, review].map((value) => JSON.stringify(value))).size).toBe(3);
+});

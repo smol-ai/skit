@@ -1,4 +1,4 @@
-import { InvalidLibraryState } from "@smolai/skit-core/library";
+import { InvalidLibraryState, LibraryChanged } from "@smolai/skit-core/library";
 import {
   AuthorWorkspaceInvariantFailed,
   WorkspaceRoot,
@@ -15,7 +15,7 @@ import { DedicatedInstallerRequired } from "@smolai/skit-core/library/source/ins
 import { PnpmSkillManaged } from "@smolai/skit-core/installed-skills/pnpm-failures";
 import { ImportRequestInvalid } from "@smolai/skit-core/library/import/failures";
 import { CollectionNotUpdatable } from "@smolai/skit-core/library/update/failures";
-import { libraryFailure } from "../src/library/failures";
+import { libraryFailure, libraryReadFailure } from "../src/library/failures";
 import { SkitValidationFailed } from "@smolai/skit-core/author";
 import { Schema } from "effect";
 
@@ -147,4 +147,19 @@ test("retains typed inventory row evidence across the TUI failure codec", () => 
   expect(Schema.decodeUnknownSync(codec)(JSON.parse(JSON.stringify(data))).reason).toEqual(
     failure.reason,
   );
+});
+
+test("database damage, refused edits and transaction mistakes have distinct actions", () => {
+  const path = "/library/library.sqlite";
+  const action = (reason: InvalidLibraryState["reason"]) => {
+    const error = new InvalidLibraryState({ path, reason });
+    return libraryReadFailure(error)?.remediation;
+  };
+  const backup = action({ _tag: "DatabaseEmpty" });
+  const report = action({ _tag: "DatabaseWriteInsideRead" });
+  const review = action({ _tag: "UndoFieldChanged", field: "unmanaged" });
+  expect(action({ _tag: "DatabaseWriterLockMissing" })).toEqual(report);
+  expect(action({ _tag: "EnabledSubjectMissing", subject: "skill", id: "skill" })).toEqual(review);
+  expect(new Set([backup, report, review].map((value) => JSON.stringify(value))).size).toBe(3);
+  expect(libraryReadFailure(new LibraryChanged({ path }))?.remediation).toBeDefined();
 });
