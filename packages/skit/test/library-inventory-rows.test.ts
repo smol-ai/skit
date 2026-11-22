@@ -246,7 +246,13 @@ it.effect("an unset issue-presence flag cannot hide existing observation rows", 
         yield* sql`UPDATE library_inventory SET scan_issues_present=0`;
       }),
     );
-    assert.strictEqual((yield* Effect.flip(readInventoryState(home)))._tag, "InvalidLibraryState");
+    const failure = yield* Effect.flip(readInventoryState(home));
+    assert.strictEqual(failure._tag, "InvalidLibraryState");
+    if (failure._tag === "InvalidLibraryState")
+      assert.deepStrictEqual(failure.reason, {
+        _tag: "InventoryRowsInvalid",
+        table: "library_scan_issues",
+      });
     yield* writeLibrary(
       home,
       Effect.gen(function* () {

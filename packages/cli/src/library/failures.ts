@@ -133,6 +133,34 @@ const libraryFailureMessage = Match.type<typeof LibraryDataFailure.Type>().pipe(
           `import into ${databasePath} stopped because backup ${backupPath} differs from source ${sourcePath}`,
         NewerDatabaseMigration: ({ databasePath, migration, supported }) =>
           `database ${databasePath} has migration ${migration}; this build supports through ${supported}`,
+        DatabaseMigrationIncomplete: () => "database migration did not finish",
+        DatabaseMigrationsMismatch: ({ expected, actual }) =>
+          `unsupported database migrations (${actual.join(", ") || "none"}). This build expects ${expected.join(", ")}`,
+        DatabaseWriterLockMissing: () => "database write transaction has no Library writer lock",
+        ImportInsideTransaction: () =>
+          "Library import must finish before a database transaction starts",
+        ImportRecordMissing: ({ sourcePath }) =>
+          `database already has Library data without an import record for ${sourcePath}`,
+        DocumentEncodingFailed: ({ document }) => `cannot encode the ${document} document as JSON`,
+        RowIdentityMismatch: ({ field, expected, actual }) =>
+          `accepted catalogue row has ${field} ${actual ?? "(missing)"}; expected ${expected}`,
+        CatalogueRowChanged: ({ field, id }) =>
+          `a catalogue operation would remove or rewrite ${field} row ${id ?? "(missing identity)"}`,
+        DifferenceFieldUnknown: ({ field }) =>
+          `unknown field in a recorded Library change: ${field}`,
+        EnabledSubjectMissing: ({ subject, id }) =>
+          `enabled ${subject} ${id} is missing from the Library`,
+        InstalledVersionOwnerMismatch: ({ installedId, version, expectedSkill, actualSkill }) =>
+          `installed copy ${installedId} expects version ${version} of Skill ${expectedSkill}; the version ${actualSkill === null ? "is missing" : `belongs to ${actualSkill}`}`,
+        InventoryRowsInvalid: ({ table, position }) =>
+          `inventory rows in ${table} have inconsistent positions or presence${position === undefined ? "" : ` at position ${position}`}`,
+        InventoryInstalledIdentityChanged: ({ installedId, expectedCount, actualCount }) =>
+          expectedCount !== actualCount
+            ? `the scan would change the number of installed copies from ${expectedCount} to ${actualCount}`
+            : `the scan would change the identity of installed copy ${installedId ?? "(unknown)"}`,
+        CollectionStillInstalled: ({ collectionId, installedId }) =>
+          `Collection ${collectionId} still has installed copy ${installedId}`,
+        UndoFieldChanged: ({ field }) => `Undo would change unrelated Library field ${field}`,
         OperationStateMissing: ({ databasePath }) =>
           `operation records in ${databasePath} have no current Library state`,
         DatabaseIntegrityInvalid: ({ databasePath, result }) =>

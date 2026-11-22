@@ -175,7 +175,7 @@ export const LibraryDifference = Schema.Struct({
     (difference) =>
       difference.sameAncestry !== true ||
       (difference.beforeAncestry !== undefined && difference.afterAncestry === undefined),
-    { message: "Shared ancestry requires one before value and no after value" },
+    { representation: { id: "skit/schema/shared-library-ancestry", payload: null } },
   ),
 );
 export type LibraryDifference = typeof LibraryDifference.Type;
@@ -282,7 +282,7 @@ export const prepareLibrarySide = Effect.fn("Library.prepareSide")(function* (
       if (entity === undefined)
         return yield* new InvalidLibraryState({
           path,
-          reason: { _tag: "InvalidData", issue: "Unknown Library difference field" },
+          reason: { _tag: "DifferenceFieldUnknown", field: list.field },
         });
       const rows = new Map(
         arrayAt(document, list.field)

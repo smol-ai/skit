@@ -222,7 +222,7 @@ export const saveDatabaseState = Effect.fn("Library.saveDatabaseState")(function
     catch: () =>
       new InvalidLibraryState({
         path,
-        reason: { _tag: "InvalidData", issue: "Library is not JSON" },
+        reason: { _tag: "DocumentEncodingFailed", document: "library" },
       }),
   });
   const document = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(JsonObject))(value).pipe(
@@ -465,8 +465,7 @@ export const migrateLocalLibraryState = Effect.fn("Library.migrateState")(functi
     return yield* new InvalidLibraryState({
       path,
       reason: {
-        _tag: "InvalidData",
-        issue: "Library import must finish before a transaction starts",
+        _tag: "ImportInsideTransaction",
       },
     });
   yield* withLibraryStateReplacement(
@@ -683,8 +682,8 @@ export const migrateLocalLibraryState = Effect.fn("Library.migrateState")(functi
                               new InvalidLibraryState({
                                 path,
                                 reason: {
-                                  _tag: "InvalidData",
-                                  issue: "Library data exists without a state-file import record",
+                                  _tag: "ImportRecordMissing",
+                                  sourcePath: statePath,
                                 },
                               }),
                             ),

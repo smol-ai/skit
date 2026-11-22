@@ -157,7 +157,9 @@ for (const change of ["deletion", "file-to-directory replacement"] as const)
             : fs.remove(source, options),
       };
       const failure = yield* Effect.flip(
-        writeWorkspaceTree(root, from, to).pipe(Effect.provideService(FileSystem.FileSystem, raced)),
+        writeWorkspaceTree(root, from, to).pipe(
+          Effect.provideService(FileSystem.FileSystem, raced),
+        ),
       );
       expect(failure).toMatchObject({ _tag: "LocalFilesChangedDuringSync" });
       expect(yield* fs.readFileString(target)).toBe("editor");

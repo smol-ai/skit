@@ -143,11 +143,13 @@ export const changeFile = Effect.fn("AuthorWorkspace.changeFile")(function* (
     if ((yield* savedHash(saved, relative, info)) !== hash)
       return yield* new LocalFilesChangedDuringSync();
     if (staged !== undefined) {
-      yield* fs.link(staged, target).pipe(
-        Effect.catchReason("PlatformError", "AlreadyExists", () =>
-          Effect.fail(new LocalFilesChangedDuringSync()),
-        ),
-      );
+      yield* fs
+        .link(staged, target)
+        .pipe(
+          Effect.catchReason("PlatformError", "AlreadyExists", () =>
+            Effect.fail(new LocalFilesChangedDuringSync()),
+          ),
+        );
       yield* syncPaths([path.dirname(target)]);
     }
     yield* fs.remove(saved);

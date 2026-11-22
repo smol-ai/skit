@@ -5,7 +5,7 @@ import { LibraryState } from "../library-state.js";
 import { InstalledSkill } from "../device-state.js";
 import { checkCatalogueChange, decodeCatalogue } from "./catalogue.js";
 import { saveCatalogueBase } from "./catalogue-base.js";
-import { EnabledState } from "./enabled.js";
+import { EnabledState, missingEnabledSubject } from "./enabled.js";
 import {
   loadCatalogueRows,
   loadEnabledRows,
@@ -48,7 +48,7 @@ export const saveSetupUndoState = Effect.fn("Library.saveSetupUndoState")(
       )
         return yield* new InvalidLibraryState({
           path,
-          reason: { _tag: "InvalidData", issue: "Undo cannot change unrelated Library facts" },
+          reason: { _tag: "UndoFieldChanged", field: key },
         });
     }
     const beforeCatalogue = yield* decodeCatalogue(path, beforeDocument);
@@ -64,17 +64,8 @@ export const saveSetupUndoState = Effect.fn("Library.saveSetupUndoState")(
     const collections = new Set(
       nextCatalogue.collections.map((collection) => collection.collection_id),
     );
-    if (
-      [nextEnabled, ...nextEnabled.repositories].some((scope) =>
-        scope.enabled.some((item) =>
-          "skill" in item ? !skills.has(item.skill) : !collections.has(item.collection),
-        ),
-      )
-    )
-      return yield* new InvalidLibraryState({
-        path,
-        reason: { _tag: "InvalidData", issue: "Enabled subject is absent" },
-      });
+    const missing = missingEnabledSubject(nextEnabled, skills, collections);
+    if (missing) return yield* new InvalidLibraryState({ path, reason: missing });
     const currentEnabled = yield* loadEnabledRows();
     const currentSelections = yield* Schema.decodeUnknownEffect(EnabledState)(
       Struct.pick(currentEnabled, enabledFields),

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { skitLayer } from "../src/platform/layer.js";
 import { lockFile } from "../src/platform/file-lock.js";
 import { systemError } from "effect/PlatformError";
+import { isSkitFailure } from "../src/shared/failure.js";
 import { makeFileBytes, fileBytesPath } from "../src/artifact/file-bytes.js";
 import {
   prepareLibraryDatabase,
@@ -128,8 +129,11 @@ for (const damage of ["missing", "changed"] as const)
       ]) {
         const error = yield* Effect.flip(operation);
         assert.strictEqual(error._tag, "FileBytesInvalid");
-        if (error._tag === "FileBytesInvalid")
+        if (error._tag === "FileBytesInvalid") {
+          assert.isTrue(isSkitFailure(error));
+          assert.strictEqual(error.code, "VALIDATION_FAILED");
           assert.strictEqual(error.reason._tag, damage === "missing" ? "Missing" : "HashMismatch");
+        }
       }
       if (damage === "missing") assert.isFalse(yield* f.fs.exists(path));
       else assert.strictEqual(yield* f.fs.readFileString(path), "changed");
@@ -269,13 +273,17 @@ it.effect(
       const batch = yield* Effect.scoped(
         Effect.gen(function* () {
           yield* lockFile(join(f.home, "lock.sqlite"));
-          return yield* controlled.keepMany(contents);
+          return yield* controlled.keepMany(contents, (content) => content);
         }),
       );
       assert.strictEqual(parentFlushes.get(join(f.home, "file-bytes")), 1);
       assert.strictEqual(parentFlushes.get(f.home), 1);
-      for (const [index, hash] of batch.hashes.entries())
-        assert.deepStrictEqual(yield* f.fs.readFile(fileBytesPath(f.home, hash)), contents[index]);
+      assert.deepStrictEqual(
+        batch.files.map(({ entry }) => entry),
+        contents,
+      );
+      for (const { entry, hash } of batch.files)
+        assert.deepStrictEqual(yield* f.fs.readFile(fileBytesPath(f.home, hash)), entry);
       const refused = yield* Effect.flip(
         withDatabaseTransaction(
           f.home,
@@ -295,7 +303,11 @@ it.effect(
         true,
       );
       yield* withDatabaseTransaction(f.home, batch.register);
-      for (const [index, hash] of batch.hashes.entries())
-        assert.deepStrictEqual(yield* f.owner.read(hash), contents[index]);
+      assert.deepStrictEqual(
+        batch.files.map(({ entry }) => entry),
+        contents,
+      );
+      for (const { entry, hash } of batch.files)
+        assert.deepStrictEqual(yield* f.owner.read(hash), entry);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

@@ -58,6 +58,8 @@ const checkFailure = (check: { readonly id: string; readonly payload: unknown })
       return "Path must be absolute";
     case "skit/schema/typeid":
       return `Expected a canonical ${value("prefix")} TypeID`;
+    case "skit/schema/shared-library-ancestry":
+      return "Shared ancestry requires a before value and no after value";
     case "skit/schema/installed-change-status":
       return "Recorded result and installed row status must agree";
     case "skit/schema/url":

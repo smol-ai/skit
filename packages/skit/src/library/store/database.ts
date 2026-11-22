@@ -92,7 +92,7 @@ export const migrateLibraryDatabase = Effect.fn("Library.migrateDatabase")(funct
   if (!(yield* databaseIsCurrent(path)))
     return yield* new InvalidLibraryState({
       path,
-      reason: { _tag: "InvalidData", issue: "Database migration did not finish" },
+      reason: { _tag: "DatabaseMigrationIncomplete" },
     });
 });
 
@@ -134,8 +134,9 @@ const databaseIsCurrent = Effect.fn("Library.databaseIsCurrent")(function* (path
     return yield* new InvalidLibraryState({
       path,
       reason: {
-        _tag: "InvalidData",
-        issue: "Unsupported unreleased Library database format",
+        _tag: "DatabaseMigrationsMismatch",
+        expected: migrations.map(({ id, name }) => `${id}_${name}`),
+        actual: rows.map(({ migration_id, name }) => `${migration_id}_${name}`),
       },
     });
   return rows.length === migrations.length;
@@ -215,8 +216,7 @@ export const withDatabaseTransaction = <A, E, R>(
       return yield* new InvalidLibraryState({
         path,
         reason: {
-          _tag: "InvalidData",
-          issue: "Existing write transaction does not hold the home writer lock",
+          _tag: "DatabaseWriterLockMissing",
         },
       });
     yield* prepareLibraryDatabase(home, true);

@@ -3,6 +3,7 @@ import { Effect, FileSystem, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import { SqlClient } from "effect/sql";
 import { dirname, join, resolve } from "node:path";
+import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 import { Hash, hashHex, sha256Hash } from "../shared/hash.js";
 import { syncPaths } from "../platform/atomic-write.js";
 import {
@@ -11,16 +12,25 @@ import {
   withLibraryDatabase,
 } from "../library/store/database.js";
 
-export class FileBytesInvalid extends Schema.TaggedError<FileBytesInvalid>()("FileBytesInvalid", {
-  path: Schema.String,
-  hash: Hash,
-  reason: Schema.TaggedUnion({
-    Missing: {},
-    HashMismatch: { actual: Hash },
-    NotFile: {},
-    SizeMismatch: { expected: Schema.Int, actual: Schema.Int },
-  }),
-}) {}
+export class FileBytesInvalid
+  extends Schema.TaggedError<FileBytesInvalid, { readonly brand: unique symbol }>()(
+    "FileBytesInvalid",
+    {
+      path: Schema.String,
+      hash: Hash,
+      reason: Schema.TaggedUnion({
+        Missing: {},
+        HashMismatch: { actual: Hash },
+        NotFile: {},
+        SizeMismatch: { expected: Schema.Int, actual: Schema.Int },
+      }),
+    },
+  )
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "VALIDATION_FAILED" as const;
+}
 
 export const fileBytesPath = (home: string, hash: Hash) =>
   join(resolve(home), "file-bytes", hashHex(hash));
@@ -129,16 +139,13 @@ export const makeFileBytes = Effect.fn("FileBytes.make")(function* (home: string
   });
   // A batch owns its verified immutable facts. Only its registration Effect may publish them.
   // All filesystem work finishes before the caller opens the metadata transaction.
-  const keepMany = Effect.fn("FileBytes.keepMany")(function* (contents: readonly Uint8Array[]) {
-    const copies = contents.map((content) => Uint8Array.from(content));
-    const hashes = yield* Effect.forEach(copies, hashBytes);
-    const known = yield* knownMany(hashes);
+  const stage = Effect.fn("FileBytes.stage")(function* (
+    files: readonly { readonly hash: Hash; readonly content: Uint8Array }[],
+  ) {
+    const known = yield* knownMany(files.map(({ hash }) => hash));
     const facts = new Map<Hash, number>();
-    for (const [index, hash] of hashes.entries()) {
-      const content = copies[index];
-      if (content === undefined) return yield* Effect.die("FileBytes batch lengths differ");
+    for (const { hash, content } of files)
       if (!(yield* keep(hash, content, known.get(hash)))) facts.set(hash, content.byteLength);
-    }
     if (facts.size > 0)
       yield* syncPaths([
         ...Array.from(facts.keys(), (hash) => fileBytesPath(root, hash)),
@@ -168,37 +175,33 @@ export const makeFileBytes = Effect.fn("FileBytes.make")(function* (home: string
         }
       }
     });
-    return { hashes, register };
-  });
-  const loadLegacyMany = Effect.fn("FileBytes.loadLegacyMany")(function* (
-    sources: readonly { readonly path: string; readonly hash: Hash }[],
-  ) {
-    const known = yield* knownMany(sources.map((source) => source.hash));
-    return yield* Effect.forEach(sources, ({ path, hash }) =>
-      Effect.gen(function* () {
-        const size = known.get(hash);
-        if (size !== undefined) return yield* readFile(fileBytesPath(root, hash), hash, size);
-        const staged = yield* Effect.result(readFile(fileBytesPath(root, hash), hash));
-        if (staged._tag === "Success") return staged.success;
-        if (staged.failure._tag !== "FileBytesInvalid" || staged.failure.reason._tag !== "Missing")
-          return yield* staged.failure;
-        return yield* readFile(path, hash);
-      }),
-    );
+    return register;
   });
   return {
-    keepMany,
-    readMany: Effect.fn("FileBytes.readMany")(function* (
-      hashes: readonly Hash[],
+    keepMany: Effect.fn("FileBytes.keepMany")(function* <A>(
+      entries: readonly A[],
+      bytesOf: (entry: A) => Uint8Array,
+    ) {
+      const copies = entries.map((entry) => ({ entry, content: Uint8Array.from(bytesOf(entry)) }));
+      const files = yield* Effect.forEach(copies, ({ entry, content }) =>
+        Effect.map(hashBytes(content), (hash) => ({ entry, hash, content })),
+      );
+      const register = yield* stage(files);
+      return { files: files.map(({ entry, hash }) => ({ entry, hash })), register };
+    }),
+    readMany: Effect.fn("FileBytes.readMany")(function* <A>(
+      entries: readonly A[],
+      hashOf: (entry: A) => Hash,
       allowStaged = false,
     ) {
-      const known = yield* knownMany(hashes);
-      return yield* Effect.forEach(hashes, (hash) => {
+      const files = entries.map((entry) => ({ entry, hash: hashOf(entry) }));
+      const known = yield* knownMany(files.map(({ hash }) => hash));
+      return yield* Effect.forEach(files, ({ entry, hash }) => {
         const path = fileBytesPath(root, hash);
         const size = known.get(hash);
         return size === undefined && !allowStaged
           ? Effect.fail(invalid(path, hash, { _tag: "Missing" }))
-          : readFile(path, hash, size);
+          : Effect.map(readFile(path, hash, size), (bytes) => ({ entry, bytes }));
       });
     }),
     read: (hash: Hash) =>
@@ -210,27 +213,31 @@ export const makeFileBytes = Effect.fn("FileBytes.make")(function* (home: string
       }),
     save: (content: Uint8Array) =>
       Effect.gen(function* () {
-        const batch = yield* keepMany([content]);
-        yield* provide(withDatabaseTransaction(root, batch.register));
-        const hash = batch.hashes[0];
-        if (hash === undefined) return yield* Effect.die("FileBytes batch is empty");
+        const copy = Uint8Array.from(content);
+        const hash = yield* hashBytes(copy);
+        const register = yield* stage([{ hash, content: copy }]);
+        yield* provide(withDatabaseTransaction(root, register));
         return hash;
       }),
     // Recovery stages complete bytes without needing the shared writer. No metadata is acknowledged.
     keep: (content: Uint8Array) =>
       Effect.gen(function* () {
-        const batch = yield* keepMany([content]);
-        const hash = batch.hashes[0];
-        if (hash === undefined) return yield* Effect.die("FileBytes batch is empty");
+        const copy = Uint8Array.from(content);
+        const hash = yield* hashBytes(copy);
+        yield* stage([{ hash, content: copy }]);
         return hash;
       }),
     // Compatibility reads never change legacy or recovery evidence.
     loadLegacy: (path: string, hash: Hash) =>
       Effect.gen(function* () {
-        const loaded = yield* loadLegacyMany([{ path, hash }]);
-        const content = loaded[0];
-        if (content === undefined) return yield* Effect.die("FileBytes batch is empty");
-        return content;
+        const canonical = fileBytesPath(root, hash);
+        const size = (yield* knownMany([hash])).get(hash);
+        if (size !== undefined) return yield* readFile(canonical, hash, size);
+        return yield* readFile(canonical, hash).pipe(
+          Effect.catchTag("FileBytesInvalid", (error) =>
+            error.reason._tag === "Missing" ? readFile(path, hash) : Effect.fail(error),
+          ),
+        );
       }),
   };
 });

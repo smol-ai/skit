@@ -109,8 +109,9 @@ export const checkCatalogueChange = Effect.fn("Library.checkCatalogueChange")(fu
         return yield* new InvalidLibraryState({
           path,
           reason: {
-            _tag: "InvalidData",
-            issue: "A catalogue change cannot discard or rewrite immutable Library facts",
+            _tag: "CatalogueRowChanged",
+            field: entity.field,
+            id: stringAt(row, entity.id),
           },
         });
       if (entity.field === "skills") {
@@ -127,8 +128,9 @@ export const checkCatalogueChange = Effect.fn("Library.checkCatalogueChange")(fu
             return yield* new InvalidLibraryState({
               path,
               reason: {
-                _tag: "InvalidData",
-                issue: "A catalogue change cannot rewrite an existing Skill Version",
+                _tag: "CatalogueRowChanged",
+                field: "skill_versions",
+                id: stringAt(version, "skill_version_id"),
               },
             });
       }

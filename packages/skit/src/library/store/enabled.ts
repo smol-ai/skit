@@ -75,6 +75,30 @@ const setupEnabledIntent = (state: EnabledState): SetupIntent => ({
 });
 
 /** Audit needs identities and current Collection membership, never Skill documents or file trees. */
+/** The first missing subject in device and repository bindings. */
+export const missingEnabledSubject = (
+  state: Pick<EnabledState, "enabled" | "repositories">,
+  skills: ReadonlySet<SkillId>,
+  collections: ReadonlySet<CollectionId>,
+) => {
+  for (const scope of [state, ...state.repositories]) {
+    const item = scope.enabled.find((item) =>
+      "skill" in item ? !skills.has(item.skill) : !collections.has(item.collection),
+    );
+    if (item)
+      return "skill" in item
+        ? InvalidLibraryState.fields.reason.cases.EnabledSubjectMissing.make({
+            subject: "skill",
+            id: item.skill,
+          })
+        : InvalidLibraryState.fields.reason.cases.EnabledSubjectMissing.make({
+            subject: "collection",
+            id: item.collection,
+          });
+  }
+  return undefined;
+};
+
 const loadEnabledSkillIds = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const rows = yield* sql`SELECT s.skill_id,s.collection_id,
@@ -138,19 +162,8 @@ export const saveEnabled = Effect.fn("Library.saveEnabled")(function* (
         return yield* new LibraryChanged({ path });
       if (canonicalJson(ordered(stored)) === canonicalJson(ordered(next))) return revision;
       const catalogue = yield* loadEnabledSkillIds;
-      if (
-        [next, ...next.repositories].some((scope) =>
-          scope.enabled.some((item) =>
-            "skill" in item
-              ? !catalogue.skills.has(item.skill)
-              : !catalogue.collections.has(item.collection),
-          ),
-        )
-      )
-        return yield* new InvalidLibraryState({
-          path,
-          reason: { _tag: "InvalidData", issue: "Enabled subject is missing from the Library" },
-        });
+      const missing = missingEnabledSubject(next, catalogue.skills, catalogue.collections);
+      if (missing) return yield* new InvalidLibraryState({ path, reason: missing });
       const document = yield* Schema.decodeUnknownEffect(JsonObject)(selected(next));
       yield* saveEnabledRows(current, document);
       yield* saveSetupIntentProgress(path, setupEnabledIntent(stored), setupEnabledIntent(next));

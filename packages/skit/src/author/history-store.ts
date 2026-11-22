@@ -88,16 +88,20 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
       }),
     );
   });
-  const byteFailure = (tree: Hash, error: FileBytesInvalid) =>
-    error.reason._tag === "Missing"
-      ? corrupt(tree, { _tag: "BlobMissing", blob: error.hash })
-      : error.reason._tag === "HashMismatch"
-        ? corrupt(tree, { _tag: "BlobHashMismatch", blob: error.hash, actual: error.reason.actual })
-        : failed(error);
-  const readBlobs = (tree: Hash, blobs: readonly Hash[]) =>
-    bytes
-      .readMany(blobs)
-      .pipe(Effect.catchTag("FileBytesInvalid", (error) => Effect.fail(byteFailure(tree, error))));
+  const byteFailure = (tree: Hash, error: FileBytesInvalid) => {
+    const blob = error.hash;
+    const reasons = History.StoreCorruptReason.cases;
+    return corrupt(
+      tree,
+      FileBytesInvalid.fields.reason.match(error.reason, {
+        Missing: () => reasons.BlobMissing.make({ blob }),
+        HashMismatch: ({ actual }) => reasons.BlobHashMismatch.make({ blob, actual }),
+        NotFile: () => reasons.BlobNotFile.make({ blob }),
+        SizeMismatch: ({ expected, actual }) =>
+          reasons.BlobSizeMismatch.make({ blob, expected, actual }),
+      }),
+    );
+  };
   const provideStorage = <A, E>(
     effect: Effect.Effect<A, E, FileSystem.FileSystem | Digest.Digest>,
   ) =>
@@ -121,24 +125,28 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
     hash: Hash,
     tree: History.Tree,
   ) {
-    const files = tree.filter((entry) => entry.kind === "file");
+    const files = tree.flatMap((entry, position) =>
+      entry.kind === "file" ? [{ entry, position }] : [],
+    );
     const batch = yield* bytes
-      .keepMany(files.map((entry) => entry.bytes))
+      .keepMany(files, ({ entry }) => entry.bytes)
       .pipe(Effect.catchTag("FileBytesInvalid", (error) => Effect.fail(byteFailure(hash, error))));
-    const blobs = new Map<Uint8Array, Hash>();
-    for (const [index, file] of files.entries()) {
-      const blob = batch.hashes[index];
-      if (blob === undefined) return yield* Effect.die("Author file batch lengths differ");
-      blobs.set(file.bytes, blob);
-    }
+    const entries: { position: number; entry: StoredEntry }[] = tree.flatMap((entry, position) =>
+      entry.kind === "file" ? [] : [{ entry, position }],
+    );
+    for (const {
+      entry: { entry, position },
+      hash: blob,
+    } of batch.files)
+      entries.push({ position, entry: { kind: "file", path: entry.path, mode: entry.mode, blob } });
+    entries.sort((left, right) => left.position - right.position);
     return {
-      register: batch.register,
-      blob: (content: Uint8Array) =>
-        Effect.gen(function* () {
-          const blob = blobs.get(content);
-          if (blob === undefined) return yield* Effect.die("Author file missing from batch");
-          return blob;
-        }),
+      entries: entries.map(({ entry }) => entry),
+      register: batch.register.pipe(
+        Effect.mapError((error) =>
+          error._tag === "FileBytesInvalid" ? byteFailure(hash, error) : error,
+        ),
+      ),
     };
   });
   const prepareRevision = Effect.fn("AuthorHistory.prepareRevisionRows")(function* (text: string) {
@@ -177,20 +185,22 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
               onExcessProperty: "error",
             })(text);
             const files = entries.filter((entry) => entry.kind === "file");
-            const batch = yield* bytes.keepMany(
-              yield* bytes.readMany(
-                files.map((entry) => entry.blob),
-                true,
-              ),
-            );
+            const staged = yield* bytes.readMany(files, (entry) => entry.blob, true);
+            const batch = yield* bytes.keepMany(staged, ({ bytes }) => bytes);
             return { hash, entries, register: batch.register };
-          }),
+          }).pipe(
+            Effect.catchTag("FileBytesInvalid", (error) => Effect.fail(byteFailure(hash, error))),
+          ),
       );
       if (trees.length > 0)
         yield* writeRows(
           Effect.gen(function* () {
             for (const tree of trees) {
-              yield* tree.register;
+              yield* tree.register.pipe(
+                Effect.catchTag("FileBytesInvalid", (error) =>
+                  Effect.fail(byteFailure(tree.hash, error)),
+                ),
+              );
               yield* saveTreeRows(tree.hash, { entries: tree.entries });
             }
           }),
@@ -201,19 +211,7 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
   });
   const keepTree = Effect.fn("AuthorHistory.keepTree")(function* (tree: History.Tree) {
     const hash = yield* History.treeHash(tree).pipe(Effect.provideService(Digest.Digest, digests));
-    const batch = yield* keepFiles(hash, tree);
-    const entries = yield* Effect.forEach(History.sortTree(tree), (entry) =>
-      Effect.gen(function* () {
-        if (entry.kind !== "file") return entry;
-        return {
-          path: entry.path,
-          kind: entry.kind,
-          mode: entry.mode,
-          blob: yield* batch.blob(entry.bytes),
-        };
-      }),
-    );
-
+    const { entries } = yield* keepFiles(hash, History.sortTree(tree));
     const text = yield* Schema.encodeEffect(ManifestDocument)({
       schema: "skit.author-tree.v1",
       entries,
@@ -241,35 +239,29 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
         }
         const value = yield* readRows(loadTreeRows(hash));
         if (!value) return Option.none<string>();
-        const files = value.entries.filter((entry) => entry.kind === "file");
-        const contents = yield* readBlobs(
-          hash,
-          files.map((entry) => entry.blob),
+        const files = value.entries.flatMap((entry, position) =>
+          entry.kind === "file" ? [{ entry, position }] : [],
         );
-        const loaded = new Map<Hash, Uint8Array>();
-        for (const [index, entry] of files.entries()) {
-          const content = contents[index];
-          if (content === undefined) return yield* Effect.die("Author file batch lengths differ");
-          loaded.set(entry.blob, content);
-        }
-        const tree = yield* Effect.forEach(value.entries, (entry) =>
-          Effect.gen(function* () {
-            if (entry.kind === "file") {
-              const content = loaded.get(entry.blob);
-              if (content === undefined) return yield* Effect.die("Author file missing from batch");
-              return {
-                path: entry.path,
-                kind: entry.kind,
-                mode: entry.mode,
-                bytes: content,
-              };
-            }
-            return entry.kind === "directory"
-              ? { path: entry.path, kind: entry.kind }
-              : { path: entry.path, kind: entry.kind, target: entry.target };
-          }),
+        const loaded = yield* bytes
+          .readMany(files, ({ entry }) => entry.blob)
+          .pipe(
+            Effect.catchTag("FileBytesInvalid", (error) => Effect.fail(byteFailure(hash, error))),
+          );
+        const tree: { position: number; entry: History.Tree[number] }[] = value.entries.flatMap(
+          (entry, position) => (entry.kind === "file" ? [] : [{ entry, position }]),
         );
-        return Option.some(yield* Schema.encodeEffect(TreeDocument)(tree));
+        for (const {
+          entry: { entry, position },
+          bytes,
+        } of loaded)
+          tree.push({
+            position,
+            entry: { kind: "file", path: entry.path, mode: entry.mode, bytes },
+          });
+        tree.sort((left, right) => left.position - right.position);
+        return Option.some(
+          yield* Schema.encodeEffect(TreeDocument)(tree.map(({ entry }) => entry)),
+        );
       }).pipe(
         Effect.catchTag("SchemaError", (error) =>
           Effect.fail(
@@ -291,26 +283,11 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
             onExcessProperty: "error",
           })(text);
           const batch = yield* keepFiles(hash, tree);
-          const entries: StoredEntry[] = yield* Effect.forEach(tree, (entry) =>
-            Effect.gen(function* () {
-              if (entry.kind === "file")
-                return {
-                  kind: entry.kind,
-                  path: entry.path,
-                  mode: entry.mode,
-                  blob: yield* batch.blob(entry.bytes),
-                };
-              return entry.kind === "directory"
-                ? { kind: entry.kind, path: entry.path }
-                : { kind: entry.kind, path: entry.path, target: entry.target };
-            }),
-          );
-
           yield* ensureMetadata(true);
           yield* writeRows(
             Effect.gen(function* () {
               yield* batch.register;
-              yield* saveTreeRows(hash, { entries });
+              yield* saveTreeRows(hash, { entries: batch.entries });
             }),
           );
         } else {

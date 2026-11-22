@@ -136,3 +136,15 @@ test("database failures explain recovery without resetting only the legacy state
     ),
   ).toContain("build that supports this migration");
 });
+
+test("retains typed inventory row evidence across the TUI failure codec", () => {
+  const failure = new InvalidLibraryState({
+    path: "/state/library.sqlite",
+    reason: { _tag: "InventoryRowsInvalid", table: "library_unmanaged_paths", position: 2 },
+  });
+  const codec = Schema.toCodecJson(InvalidLibraryState);
+  const data = Schema.encodeSync(codec)(failure);
+  expect(Schema.decodeUnknownSync(codec)(JSON.parse(JSON.stringify(data))).reason).toEqual(
+    failure.reason,
+  );
+});

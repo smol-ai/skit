@@ -145,19 +145,20 @@ export const loadInventoryRows = Effect.fn("Inventory.loadRows")(function* (path
     yield* sql<Row>`SELECT * FROM library_ownership_issue_harnesses ORDER BY issue_position,position`;
   const issues = yield* sql<Row>`SELECT * FROM library_scan_issues ORDER BY position`;
   const header = headers[0];
-  const invalid = () =>
+  const invalid = (table: string, position?: Row[string]) =>
     new InvalidLibraryState({
       path,
       reason: {
-        _tag: "InvalidData",
-        issue: "Inventory scan positions or presence do not match their child rows",
+        _tag: "InventoryRowsInvalid",
+        table,
+        ...(typeof position === "number" ? { position } : {}),
       },
     });
   if (!header) {
     if (
       [unmanaged, paths, harnesses, ownership, issueHarnesses, issues].some((rows) => rows.length)
     )
-      return yield* invalid();
+      return yield* invalid("library_inventory");
     return undefined;
   }
   yield* Schema.decodeUnknownEffect(
@@ -169,28 +170,40 @@ export const loadInventoryRows = Effect.fn("Inventory.loadRows")(function* (path
   yield* Schema.decodeUnknownEffect(Schema.Array(Schema.Struct({ position: Position })))(issues);
   const unmanagedPositions = new Set(unmanaged.map((row) => row.position));
   const ownershipPositions = new Set(ownership.map((row) => row.position));
-  if (
-    [unmanaged, ownership, issues].some((rows) =>
-      rows.some((row, index) => row.position !== index),
-    ) ||
-    paths.some((row) => !unmanagedPositions.has(row.unmanaged_position)) ||
-    harnesses.some((row) => !unmanagedPositions.has(row.unmanaged_position)) ||
-    issueHarnesses.some((row) => !ownershipPositions.has(row.issue_position)) ||
-    (!header.ownership_issues_present && ownership.length) ||
-    (!header.scan_issues_present && issues.length)
-  )
-    return yield* invalid();
+  for (const { table, rows } of [
+    { table: "library_unmanaged_skills", rows: unmanaged },
+    { table: "library_ownership_issues", rows: ownership },
+    { table: "library_scan_issues", rows: issues },
+  ]) {
+    const position = rows.findIndex((row, index) => row.position !== index);
+    if (position >= 0) return yield* invalid(table, position);
+  }
+  for (const row of paths)
+    if (!unmanagedPositions.has(row.unmanaged_position))
+      return yield* invalid("library_unmanaged_paths", row.unmanaged_position);
+  for (const row of harnesses)
+    if (!unmanagedPositions.has(row.unmanaged_position))
+      return yield* invalid("library_unmanaged_harnesses", row.unmanaged_position);
+  for (const row of issueHarnesses)
+    if (!ownershipPositions.has(row.issue_position))
+      return yield* invalid("library_ownership_issue_harnesses", row.issue_position);
+  if (!header.ownership_issues_present && ownership.length)
+    return yield* invalid("library_ownership_issues");
+  if (!header.scan_issues_present && issues.length) return yield* invalid("library_scan_issues");
   const value: JsonObject = { unmanaged: [] };
   for (const row of unmanaged) {
     const aliases = paths.filter((child) => child.unmanaged_position === row.position);
     const names = harnesses.filter((child) => child.unmanaged_position === row.position);
     if (
       (!row.paths_present && aliases.length) ||
+      aliases.some((child, index) => child.position !== index)
+    )
+      return yield* invalid("library_unmanaged_paths", row.position);
+    if (
       (!row.harnesses_present && names.length) ||
-      aliases.some((child, index) => child.position !== index) ||
       names.some((child, index) => child.position !== index)
     )
-      return yield* invalid();
+      return yield* invalid("library_unmanaged_harnesses", row.position);
     const item: JsonObject = {
       harness: row.harness,
       path: row.path,
@@ -205,7 +218,8 @@ export const loadInventoryRows = Effect.fn("Inventory.loadRows")(function* (path
     value.ownershipIssues = [];
     for (const row of ownership) {
       const names = issueHarnesses.filter((child) => child.issue_position === row.position);
-      if (names.some((child, index) => child.position !== index)) return yield* invalid();
+      if (names.some((child, index) => child.position !== index))
+        return yield* invalid("library_ownership_issue_harnesses", row.position);
       const item: JsonObject = {
         code: row.code,
         path: row.path,

@@ -37,12 +37,16 @@ const checkInstalledSkills = Effect.fn("Library.checkInstalledSkills")(function*
   for (let start = 0; start < ids.length; start += 500)
     for (const row of yield* findVersions(ids.slice(start, start + 500)))
       owners.set(row.skill_version_id, row.skill_id);
-  if (rows.some((row) => owners.get(row.skill_version_id) !== row.skill_id))
+  const mismatched = rows.find((row) => owners.get(row.skill_version_id) !== row.skill_id);
+  if (mismatched)
     return yield* new InvalidLibraryState({
       path,
       reason: {
-        _tag: "InvalidData",
-        issue: "Installed Skill Version does not belong to its Skill",
+        _tag: "InstalledVersionOwnerMismatch",
+        installedId: mismatched.installed_skill_id,
+        version: mismatched.skill_version_id,
+        expectedSkill: mismatched.skill_id,
+        actualSkill: owners.get(mismatched.skill_version_id) ?? null,
       },
     });
 });

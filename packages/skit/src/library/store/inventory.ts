@@ -31,7 +31,7 @@ const decodeInventoryState = Effect.fn("Inventory.decodeState")(function* (
     catch: () =>
       new InvalidLibraryState({
         path,
-        reason: { _tag: "InvalidData", issue: "Inventory scan is not JSON" },
+        reason: { _tag: "DocumentEncodingFailed", document: "inventory" },
       }),
   });
   const value = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(JsonObject))(text);
@@ -110,18 +110,20 @@ export const saveInventory = Effect.fn("Inventory.save")(function* (
               ].includes(field),
           ),
         );
-      if (
-        next.installed_skills.length !== installed.length ||
-        next.installed_skills.some(
-          (row, index) =>
-            canonicalJson(identity(row)) !== canonicalJson(identity(installed[index]!)),
-        )
-      )
+      const changedRow = next.installed_skills.find((row, index) => {
+        const prior = installed[index];
+        return (
+          prior === undefined || canonicalJson(identity(row)) !== canonicalJson(identity(prior))
+        );
+      });
+      if (next.installed_skills.length !== installed.length || changedRow !== undefined)
         return yield* new InvalidLibraryState({
           path,
           reason: {
-            _tag: "InvalidData",
-            issue: "Inventory cannot change an installed copy's identity",
+            _tag: "InventoryInstalledIdentityChanged",
+            expectedCount: installed.length,
+            actualCount: next.installed_skills.length,
+            ...(changedRow === undefined ? {} : { installedId: changedRow.installed_skill_id }),
           },
         });
       if (revision === null) yield* saveDatabaseState(path, emptyLibraryState(), null);

@@ -49,7 +49,12 @@ export const saveCatalogueBase = Effect.fn("Library.saveCatalogueBase")(function
       if (agreed !== undefined && agreed[entity.id] !== change.key)
         return yield* new InvalidLibraryState({
           path,
-          reason: { _tag: "InvalidData", issue: "Accepted catalogue row has another identity" },
+          reason: {
+            _tag: "RowIdentityMismatch",
+            field: entity.id,
+            expected: change.key,
+            actual: stringAt(agreed, entity.id),
+          },
         });
       if (canonicalJson(change.after) === canonicalJson(agreed)) {
         if (previous)

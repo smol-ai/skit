@@ -122,6 +122,8 @@ export const StoreCorruptReason = Schema.TaggedUnion({
   ContentHashMismatch: { actual: Hash },
   BlobMissing: { blob: Hash },
   BlobHashMismatch: { blob: Hash, actual: Hash },
+  BlobNotFile: { blob: Hash },
+  BlobSizeMismatch: { blob: Hash, expected: Schema.Int, actual: Schema.Int },
   EditTimesMismatch: { paths: Schema.Array(Schema.String) },
 });
 export type StoreCorruptReason = typeof StoreCorruptReason.Type;

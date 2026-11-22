@@ -8,7 +8,7 @@ import { enabledSkillIds } from "../library-contracts.js";
 import { canonicalJson, JsonObject } from "../../shared/json.js";
 import { diffCatalogue, diffEnabled, diffInstalledSkills } from "../audit/state-diff.js";
 import { decodeCatalogue } from "./catalogue.js";
-import { EnabledState } from "./enabled.js";
+import { EnabledState, missingEnabledSubject } from "./enabled.js";
 import { libraryDatabasePath } from "./database.js";
 import {
   loadCatalogueRows,
@@ -71,33 +71,24 @@ export const saveCollectionRemoval = Effect.fn("Library.saveCollectionRemoval")(
       const next = prepareCollectionRemoval(before, change.removeCollection);
       const desired = yield* decodeCatalogue(path, next);
       const skills = new Map(desired.skills.map((row) => [row.skill_id, row]));
-      if (
-        final.some(
-          (row) =>
-            !skills
-              .get(row.skill_id)
-              ?.versions.some((version) => version.skill_version_id === row.skill_version_id),
-        )
-      )
-        return yield* new InvalidLibraryState({
-          path,
-          reason: { _tag: "InvalidData", issue: "Collection removal still has installed copies" },
-        });
-      const collections = new Set(desired.collections.map((row) => row.collection_id));
-      if (
-        [next, ...next.repositories].some((scope) =>
-          scope.enabled.some((item) =>
-            "skill" in item ? !skills.has(item.skill) : !collections.has(item.collection),
-          ),
-        )
-      )
+      const stillInstalled = final.find(
+        (row) =>
+          !skills
+            .get(row.skill_id)
+            ?.versions.some((version) => version.skill_version_id === row.skill_version_id),
+      );
+      if (stillInstalled)
         return yield* new InvalidLibraryState({
           path,
           reason: {
-            _tag: "InvalidData",
-            issue: "Collection removal has a missing enabled subject",
+            _tag: "CollectionStillInstalled",
+            collectionId: change.removeCollection,
+            installedId: stillInstalled.installed_skill_id,
           },
         });
+      const collections = new Set(desired.collections.map((row) => row.collection_id));
+      const missing = missingEnabledSubject(next, new Set(skills.keys()), collections);
+      if (missing) return yield* new InvalidLibraryState({ path, reason: missing });
       const baseDocument = yield* Schema.decodeUnknownEffect(JsonObject)(catalogue);
       const nextDocument = yield* Schema.decodeUnknownEffect(JsonObject)(desired);
       const enabledDocument = yield* Schema.decodeUnknownEffect(JsonObject)(next);

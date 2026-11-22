@@ -236,11 +236,9 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
   )(yield* Effect.context<Requires>());
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const links = yield* LinkStat;
   const workspaces = yield* AuthorWorkspace;
   const home = path.resolve(config.home);
   const directory = path.join(home, "history");
-  const journalPath = path.join(directory, "journal.sqlite");
   const syncStatePath = libraryDatabasePath(home);
   const { store: engineStore, keepTree } = yield* makeHistoryStore(directory);
   // Scans serialize across processes without holding the shared database writer through file work.
@@ -256,8 +254,7 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
     if (error._tag === "History.StoreFailed" && Schema.is(HomeBusy)(error.cause))
       return Effect.fail(error.cause);
     const blob =
-      error._tag === "History.StoreCorrupt" &&
-      (error.reason._tag === "BlobMissing" || error.reason._tag === "BlobHashMismatch")
+      error._tag === "History.StoreCorrupt" && "blob" in error.reason
         ? error.reason.blob
         : undefined;
     return Effect.fail(
@@ -293,22 +290,6 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
           reason: { _tag: "HistoryInsideWorkspace", workspace: root, resolved: true },
         });
     }
-    // Legacy metadata is read only when it exists; native captures never create these folders.
-    for (const folder of [path.join(directory, "trees"), path.join(directory, "revisions")]) {
-      if ((yield* fs.exists(folder)) && insideRoot(yield* fs.realPath(folder)))
-        return yield* new AuthorHistoryInvalid({
-          path: directory,
-          reason: { _tag: "HistoryInsideWorkspace", workspace: root, resolved: true },
-        });
-    }
-    const journalFile = yield* links
-      .lstat(journalPath)
-      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
-    if (journalFile?.type === "SymbolicLink")
-      return yield* new AuthorHistoryInvalid({
-        path: journalPath,
-        reason: { _tag: "JournalRedirected" },
-      });
     // Broken device-local metadata must not prevent backing up the authored files. This is
     // path-provenance fallback only; it neither creates nor repairs a workspace identity.
     const workspaceId = yield* workspaces.readIdentity(root).pipe(

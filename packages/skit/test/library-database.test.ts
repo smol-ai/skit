@@ -655,7 +655,12 @@ it.effect("revalidates a database that appeared after the initial probe", () =>
       Effect.flip,
     );
     assert.strictEqual(error._tag, "InvalidLibraryState");
-    if (error._tag === "InvalidLibraryState") assert.strictEqual(error.reason._tag, "InvalidData");
+    if (error._tag === "InvalidLibraryState")
+      assert.deepStrictEqual(error.reason, {
+        _tag: "DatabaseMigrationsMismatch",
+        expected: ["1_library"],
+        actual: ["1_unexpected"],
+      });
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -821,6 +826,12 @@ for (const bad of ["document", "migration"])
       );
       const failed = yield* Effect.flip(migrateLocalLibraryState(f.home));
       assert.strictEqual(failed._tag, "InvalidLibraryState");
+      if (failed._tag === "InvalidLibraryState")
+        assert.deepStrictEqual(failed.reason, {
+          _tag: "DatabaseMigrationsMismatch",
+          expected: ["1_library"],
+          actual: [bad === "document" ? "1_document_library" : "1_unknown"],
+        });
       const after = yield* withLibraryDatabase(
         f.path,
         Effect.gen(function* () {
