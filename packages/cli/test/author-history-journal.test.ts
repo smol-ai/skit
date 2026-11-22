@@ -344,39 +344,6 @@ it.effect("copied live workspace identity cannot merge two folders' histories", 
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("existing stored trees stay available without inventing a pre-journal timeline", () =>
-  Effect.gen(function* () {
-    const { a } = yield* makeAuthorSyncWorld();
-    const fs = yield* FileSystem.FileSystem;
-    yield* a.edit("notes/a.txt", "existing tree");
-    const saved = yield* capture(a.workspace, a.home);
-    // A home with immutable history files but no journal has no earlier timeline to infer.
-    const preJournalHome = join(a.home, "pre-journal");
-    yield* fs.makeDirectory(preJournalHome);
-    yield* fs.copy(join(a.home, "history"), join(preJournalHome, "history"));
-    yield* fs.makeDirectory(join(preJournalHome, "history", "trees"), { recursive: true });
-    yield* fs.writeFileString(
-      join(preJournalHome, "history", "trees", `${saved.treeHash.slice(7)}.json`),
-      yield* Schema.encodeEffect(Schema.fromJsonString(Schema.toCodecJson(History.Tree)))(
-        yield* readAuthorTree(saved, a.home),
-      ),
-    );
-    yield* fs.remove(join(preJournalHome, "history", "journal.sqlite"));
-    yield* fs.remove(join(preJournalHome, "history", "lock.sqlite"));
-    yield* Effect.gen(function* () {
-      expect(fileText(yield* readAuthorTree(saved, preJournalHome), "notes/a.txt")).toBe(
-        "existing tree",
-      );
-      yield* TestClock.setTime(1000);
-      const recorded = yield* refreshWorkspace(a.workspace);
-      expect(recorded.treeHash).toBe(saved.treeHash);
-      expect(recorded.revision.parents).toEqual([]);
-      expect(recorded.revision.author.at).toBe(1000);
-      expect(yield* storedTreesAt(preJournalHome)).toHaveLength(1);
-    }).pipe(Effect.provide(authorLayer(preJournalHome)));
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
-
 describe("skit author sync", () => {
   describe("Keeping saved work", () => {
     describe("Versions recorded by SKIT remain recoverable after sync.", () => {

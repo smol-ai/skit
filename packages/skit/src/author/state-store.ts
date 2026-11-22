@@ -1,14 +1,9 @@
 import { Effect, FileSystem, Schema } from "effect";
 import { SqlClient } from "effect/sql";
-import { join } from "node:path";
 import * as History from "../history/history.js";
 import * as Sync from "../sync/sync.js";
-import { sha256Hash } from "../shared/hash.js";
-import { withLock } from "../platform/home-lock.js";
-import { syncPaths, writeRawAtomic } from "../platform/atomic-write.js";
 import {
   libraryDatabasePath,
-  prepareLibraryDatabase,
   withDatabaseTransaction,
   withLibraryDatabase,
 } from "../library/store/database.js";
@@ -17,16 +12,6 @@ import { AuthorSyncStateInvalid, WorkspaceId, type SyncKey } from "./workspace-c
 import { AuthorRemovalState } from "./inventory.js";
 import { LibrarySqlError, InvalidLibraryState } from "../library/failures.js";
 
-const LegacyState = Schema.Struct({
-  schema: Schema.Literal("skit.author-sync.v1"),
-  workspaces: Schema.Record(WorkspaceId, Schema.Record(Schema.String, Sync.SyncState)),
-  inventories: Schema.optionalKey(Schema.Record(WorkspaceId, AuthorRemovalState)),
-  backups: Schema.optionalKey(
-    Schema.Record(WorkspaceId, Schema.Record(Schema.String, History.RevisionId)),
-  ),
-});
-type AuthorState = typeof LegacyState.Type;
-const empty = (): AuthorState => ({ schema: "skit.author-sync.v1", workspaces: {} });
 const invalid = (path: string, failure: Schema.SchemaError) =>
   new AuthorSyncStateInvalid({ path, reason: { _tag: "InvalidData", failure } });
 const decodeState = (path: string, value: unknown) =>
@@ -51,11 +36,7 @@ const storage = <A, E, R>(
 export const withAuthorStateTransaction = <A, E, R>(
   home: string,
   effect: Effect.Effect<A, E, R | SqlClient.SqlClient>,
-) =>
-  Effect.gen(function* () {
-    yield* prepareAuthorState(home, { create: true });
-    return yield* storage(home, withDatabaseTransaction(home, effect));
-  });
+) => storage(home, withDatabaseTransaction(home, effect));
 
 const read = <A, E, R>(
   home: string,
@@ -245,118 +226,4 @@ export const saveAuthorInventory = Effect.fn("AuthorState.saveInventory")(functi
   });
   const [first, ...rest] = rows;
   if (first) yield* sql`INSERT INTO author_inventory_paths ${sql.insert([first, ...rest])}`;
-});
-
-const checkLegacyState = Effect.fn("AuthorState.checkLegacy")(function* (
-  home: string,
-  expected: string | null,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const source = join(home, "author-sync.json");
-  const text = yield* fs
-    .readFileString(source)
-    .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
-  if (text === undefined) return;
-  yield* Schema.decodeEffect(Schema.fromJsonString(Schema.declare(Schema.is(LegacyState))))(
-    text,
-  ).pipe(Effect.mapError((error) => invalid(source, error)));
-  const actual = yield* sha256Hash(new TextEncoder().encode(text));
-  if (actual !== expected)
-    return yield* failed(source, { _tag: "LegacyAuthorStateChanged", expected, actual });
-});
-
-/** Released JSON is imported once. Layer loading also checks for an older writer's changed file. */
-export const prepareAuthorState = Effect.fn("AuthorState.prepare")(function* (
-  home: string,
-  options: { readonly create?: boolean; readonly checkLegacy?: boolean } = {},
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const source = join(home, "author-sync.json");
-  const path = libraryDatabasePath(home);
-  const present = yield* fs.exists(source);
-  if (!options.create && !present && !(yield* fs.exists(path))) return false;
-  yield* prepareLibraryDatabase(home, true).pipe(
-    Effect.catchTags({
-      LibrarySqlError: (cause) => Effect.fail(failed(path, cause)),
-      InvalidLibraryState: (cause) => Effect.fail(failed(path, cause)),
-    }),
-  );
-  const imported = yield* read(
-    home,
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return (yield* Schema.decodeUnknownEffect(
-        Schema.Array(Schema.Struct({ hash: Schema.NullOr(Schema.String) })),
-      )(yield* sql`SELECT hash FROM author_state_import WHERE id=1`).pipe(
-        Effect.mapError((error) => invalid(libraryDatabasePath(home), error)),
-      ))[0];
-    }),
-    undefined,
-  );
-  if (imported) {
-    if (options.checkLegacy) yield* checkLegacyState(home, imported.hash);
-    return true;
-  }
-  if (!present && !options.create) return false;
-  return yield* withLock(
-    home,
-    storage(
-      home,
-      withDatabaseTransaction(
-        home,
-        Effect.gen(function* () {
-          const sql = yield* SqlClient.SqlClient;
-          const existing = (yield* Schema.decodeUnknownEffect(
-            Schema.Array(Schema.Struct({ hash: Schema.NullOr(Schema.String) })),
-          )(yield* sql`SELECT hash FROM author_state_import WHERE id=1`).pipe(
-            Effect.mapError((error) => invalid(libraryDatabasePath(home), error)),
-          ))[0];
-          if (existing) {
-            if (options.checkLegacy) yield* checkLegacyState(home, existing.hash);
-            return true;
-          }
-          const text = yield* fs
-            .readFileString(source)
-            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
-          const hash =
-            text === undefined ? null : yield* sha256Hash(new TextEncoder().encode(text));
-          if (text === undefined && !options.create) return false;
-          const document =
-            text === undefined
-              ? empty()
-              : yield* Schema.decodeEffect(Schema.fromJsonString(LegacyState), {
-                  onExcessProperty: "error",
-                })(text).pipe(Effect.mapError((error) => invalid(source, error)));
-          const backup = text === undefined ? null : `${source}.backup-database`;
-          if (backup && text !== undefined) {
-            const prior = yield* fs
-              .readFileString(backup)
-              .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
-            if (prior !== undefined) {
-              if ((yield* sha256Hash(new TextEncoder().encode(prior))) !== hash)
-                return yield* failed(backup, { _tag: "AuthorStateBackupChanged" });
-            } else yield* writeRawAtomic(backup, text, true);
-            yield* syncPaths([backup, home]);
-          }
-          yield* sql`INSERT INTO author_state_fields (id,inventories_present,backups_present) VALUES (1,${Number(document.inventories !== undefined)},${Number(document.backups !== undefined)})`;
-          for (const [id, states] of Object.entries(document.workspaces)) {
-            const workspace = WorkspaceId.make(id);
-            yield* sql`INSERT INTO author_workspace_state (workspace_id,sync_present,backup_present) VALUES (${workspace},1,0) ON CONFLICT(workspace_id) DO UPDATE SET sync_present=1`;
-            for (const [locator, state] of Object.entries(states))
-              yield* saveAuthorSyncState(home, { workspaceId: workspace, locator }, state);
-          }
-          for (const [id, state] of Object.entries(document.inventories ?? {}))
-            yield* saveAuthorInventory(home, WorkspaceId.make(id), state);
-          for (const [id, backups] of Object.entries(document.backups ?? {})) {
-            const workspace = WorkspaceId.make(id);
-            yield* sql`INSERT INTO author_workspace_state (workspace_id,sync_present,backup_present) VALUES (${workspace},0,1) ON CONFLICT(workspace_id) DO UPDATE SET backup_present=1`;
-            for (const [locator, revision] of Object.entries(backups))
-              yield* saveAuthorBackup({ workspaceId: workspace, locator }, revision);
-          }
-          yield* sql`INSERT INTO author_state_import (id,document,hash,backup) VALUES (1,${text ?? null},${hash},${backup})`;
-          return true;
-        }),
-      ),
-    ),
-  );
 });

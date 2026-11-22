@@ -204,15 +204,15 @@ it.effect("rejects a history directory symlink into its workspace", () =>
 );
 
 it.effect(
-  "rejects a dangling journal symlink before SQLite can create a database in the source",
+  "rejects a dangling history lock symlink before SQLite can create a database in the source",
   () =>
     Effect.gen(function* () {
       const { a } = yield* makeAuthorSyncWorld();
       const fs = yield* FileSystem.FileSystem;
       const directory = join(a.home, "history");
-      const target = join(a.workspace, "journal.sqlite");
+      const target = join(a.workspace, "lock.sqlite");
       yield* fs.makeDirectory(directory);
-      yield* fs.symlink(target, join(directory, "journal.sqlite"));
+      yield* fs.symlink(target, join(directory, "lock.sqlite"));
       expect(
         yield* Effect.flip(refreshWorkspace(a.workspace)).pipe(Effect.provide(authorLayer(a.home))),
       ).toMatchObject({ _tag: "AuthorHistoryInvalid", reason: { _tag: "JournalRedirected" } });

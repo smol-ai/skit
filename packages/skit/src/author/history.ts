@@ -8,7 +8,7 @@ export { AuthorHistoryInvalid } from "./history-failures.js";
 /**
  * AuthorHistory: the owner of this device's author history (ADR-0027).
  *
- * It owns <home>/history/{trees,revisions}/** and Author timeline, workspace and
+ * It owns immutable history and the Author timeline, workspace and
  * checkpoint/inventory rows in <home>/library.sqlite. Callers save workspace files with `refresh`
  * and `saveTree`, run sync against `engineStore`, and step checkpoints through `syncState`.
  */
@@ -242,7 +242,6 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
   const directory = path.join(home, "history");
   const journalPath = path.join(directory, "journal.sqlite");
   const syncStatePath = libraryDatabasePath(home);
-  yield* AuthorState.prepareAuthorState(home, { checkLegacy: true });
   const { store: engineStore, keepTree } = yield* makeHistoryStore(directory);
   // Scans serialize across processes without holding the shared database writer through file work.
   const writers = yield* Semaphore.make(1);
@@ -659,7 +658,6 @@ export const checkAuthorRemovals = Effect.fn("Author.checkRemovals")(function* (
   workspaceId: string,
   tree: History.Tree,
 ) {
-  yield* AuthorState.prepareAuthorState(home);
   const previous = yield* AuthorState.readAuthorInventory(home, WorkspaceId.make(workspaceId));
   return (yield* makeRemovalCheck().check(
     workspaceId,

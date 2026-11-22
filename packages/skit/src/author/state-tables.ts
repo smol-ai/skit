@@ -4,8 +4,8 @@ import { SqlClient } from "effect/sql";
 /** Author owns its checkpoints and inventories; Library's schema runner coordinates creation. */
 export const createAuthorStateTables = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-  yield* sql`CREATE TABLE author_state_import (id INTEGER PRIMARY KEY CHECK(id=1), document TEXT, hash TEXT, backup TEXT) STRICT`;
   yield* sql`CREATE TABLE author_state_fields (id INTEGER PRIMARY KEY CHECK(id=1), inventories_present INTEGER NOT NULL CHECK(inventories_present IN (0,1)), backups_present INTEGER NOT NULL CHECK(backups_present IN (0,1))) STRICT`;
+  yield* sql`INSERT INTO author_state_fields VALUES (1,0,0)`;
   yield* sql`CREATE TABLE author_workspace_state (workspace_id TEXT PRIMARY KEY, sync_present INTEGER NOT NULL CHECK(sync_present IN (0,1)), backup_present INTEGER NOT NULL CHECK(backup_present IN (0,1))) STRICT`;
   yield* sql`CREATE TABLE "author_sync_checkpoints" (
     workspace_id TEXT NOT NULL REFERENCES author_workspace_state(workspace_id),locator TEXT NOT NULL,

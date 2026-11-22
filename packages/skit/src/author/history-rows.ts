@@ -57,13 +57,11 @@ export const hasHistoryRows = Effect.fn("AuthorHistory.hasRows")(function* (
 ) {
   const sql = yield* SqlClient.SqlClient;
   return kind === "tree"
-    ? (yield* sql`SELECT hash FROM author_trees WHERE hash=${hash} UNION ALL SELECT hash FROM author_history_legacy_documents WHERE kind='tree' AND hash=${hash} LIMIT 1`)
-        .length > 0
-    : (yield* sql`SELECT hash FROM author_revisions WHERE hash=${hash} UNION ALL SELECT hash FROM author_history_legacy_documents WHERE kind='revision' AND hash=${hash} LIMIT 1`)
-        .length > 0;
+    ? (yield* sql`SELECT hash FROM author_trees WHERE hash=${hash} LIMIT 1`).length > 0
+    : (yield* sql`SELECT hash FROM author_revisions WHERE hash=${hash} LIMIT 1`).length > 0;
 });
 
-/** Query only the source identities being imported, including unreadable legacy evidence. */
+/** Find stored identities for a batch of hashes. */
 export const knownHistoryRows = Effect.fn("AuthorHistory.knownRows")(function* (
   kind: History.Kind,
   hashes: readonly Hash[],
@@ -74,8 +72,8 @@ export const knownHistoryRows = Effect.fn("AuthorHistory.knownRows")(function* (
     Result: Schema.Struct({ hash: Hash }),
     execute: (ids) =>
       kind === "tree"
-        ? sql`SELECT hash FROM author_trees WHERE hash IN ${sql.in(ids)} UNION SELECT hash FROM author_history_legacy_documents WHERE kind='tree' AND hash IN ${sql.in(ids)}`
-        : sql`SELECT hash FROM author_revisions WHERE hash IN ${sql.in(ids)} UNION SELECT hash FROM author_history_legacy_documents WHERE kind='revision' AND hash IN ${sql.in(ids)}`,
+        ? sql`SELECT hash FROM author_trees WHERE hash IN ${sql.in(ids)}`
+        : sql`SELECT hash FROM author_revisions WHERE hash IN ${sql.in(ids)}`,
   });
   const known = new Set<Hash>();
   const unique = [...new Set(hashes)];
@@ -88,36 +86,12 @@ export const listHistoryRows = Effect.fn("AuthorHistory.listRows")(function* (ki
   const sql = yield* SqlClient.SqlClient;
   const rows = yield* Schema.decodeUnknownEffect(Schema.Array(Schema.Struct({ hash: Hash })))(
     kind === "tree"
-      ? yield* sql`SELECT hash FROM author_trees UNION SELECT hash FROM author_history_legacy_documents WHERE kind='tree' ORDER BY hash`
-      : yield* sql`SELECT hash FROM author_revisions UNION SELECT hash FROM author_history_legacy_documents WHERE kind='revision' ORDER BY hash`,
+      ? yield* sql`SELECT hash FROM author_trees ORDER BY hash`
+      : yield* sql`SELECT hash FROM author_revisions ORDER BY hash`,
   );
   return rows.map((row) => row.hash);
 });
 
-export const loadLegacyHistoryDocument = Effect.fn("AuthorHistory.loadUnreadable")(function* (
-  kind: History.Kind,
-  hash: Hash,
-) {
-  const sql = yield* SqlClient.SqlClient;
-  const rows = yield* Schema.decodeUnknownEffect(
-    Schema.Array(Schema.Struct({ document: Schema.String })),
-  )(
-    yield* sql`SELECT document FROM author_history_legacy_documents WHERE kind=${kind} AND hash=${hash}`,
-  );
-  return rows[0]?.document;
-});
-
-export const saveLegacyHistoryDocument = Effect.fn("AuthorHistory.saveUnreadable")(function* (
-  kind: History.Kind,
-  hash: Hash,
-  text: string,
-) {
-  const sql = yield* SqlClient.SqlClient;
-  if (yield* hasHistoryRows(kind, hash)) return;
-  yield* sql`INSERT INTO author_history_legacy_documents(kind,hash,document) VALUES(${kind},${hash},${text})`;
-});
-
-/** Header and children are read in the caller's snapshot and decoded before any file access. */
 export const loadTreeRows = Effect.fn("AuthorHistory.loadTreeRows")(function* (hash: Hash) {
   const sql = yield* SqlClient.SqlClient;
   if ((yield* sql`SELECT hash FROM author_trees WHERE hash=${hash}`).length === 0) return undefined;
@@ -195,24 +169,10 @@ export const loadRevisionRows = Effect.fn("AuthorHistory.loadRevisionRows")(func
 export const saveRevisionRows = Effect.fn("AuthorHistory.saveRevisionRows")(function* (
   hash: Hash,
   stored: StoredRevision,
-  source?: string,
 ) {
   const sql = yield* SqlClient.SqlClient;
   if (yield* hasHistoryRows("revision", hash)) return;
   const revision = stored.revision;
-  // Revision-only imports remain readable evidence. No tree identity is inferred or invented.
-  if ((yield* sql`SELECT hash FROM author_trees WHERE hash=${revision.tree}`).length === 0) {
-    yield* saveLegacyHistoryDocument(
-      "revision",
-      hash,
-      source ??
-        JSON.stringify({
-          ...revision,
-          author: revision.author,
-        }),
-    );
-    return;
-  }
   yield* sql`INSERT INTO author_revisions(hash,tree_hash,author_device,author_at,edits_json)
     VALUES(${hash},${revision.tree},${revision.author.device},${revision.author.at},${JSON.stringify(revision.edits)})`;
   for (const [position, parent] of revision.parents.entries())

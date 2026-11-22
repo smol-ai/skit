@@ -1,16 +1,13 @@
-/** AuthorHistory owns relational metadata, immutable file bytes and native recovery evidence.
- * Only its loader reads earlier loose tree/revision documents. */
+/** AuthorHistory owns relational metadata, immutable file bytes and recovery evidence. */
 import { Effect, FileSystem, Option, Path, Schema } from "effect";
 import { SqlClient } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
-import { JsonObject, canonicalJson } from "../shared/json.js";
+import { JsonObject } from "../shared/json.js";
 import {
   libraryDatabasePath,
   prepareLibraryDatabase,
   withLibraryDatabase,
   withDatabaseTransaction,
 } from "../library/store/database.js";
-import { prepareHistoryJournal } from "./history-journal.js";
 import {
   hasHistoryRows,
   knownHistoryRows,
@@ -19,14 +16,11 @@ import {
   loadRevisionRows,
   saveTreeRows,
   saveRevisionRows,
-  loadLegacyHistoryDocument,
-  saveLegacyHistoryDocument,
-  type StoredTree,
   type StoredEntry,
   type StoredRevision,
 } from "./history-rows.js";
 import { Digest } from "effect/crypto";
-import { Hash, hashHex, sha256Hash } from "../shared/hash.js";
+import { Hash, hashHex } from "../shared/hash.js";
 import * as History from "../history/history.js";
 import { TreeDirectory, TreeFile, TreeSymlink } from "../artifact/tree-entry.js";
 import { syncPaths } from "../platform/atomic-write.js";
@@ -45,23 +39,15 @@ const TreeManifest = Schema.Struct({
 const ManifestDocument = Schema.fromJsonString(TreeManifest);
 const TreeDocument = Schema.fromJsonString(Schema.toCodecJson(History.Tree));
 
-const storedFolder = (path: Path.Path, directory: string, kind: History.Kind) =>
-  path.join(directory, kind === "tree" ? "trees" : "revisions");
-
-/** Flush bytes before their metadata transaction; History.Store verifies canonical identities. */
 export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (directory: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const digests = yield* Digest.Digest;
   const home = path.dirname(directory);
   const database = libraryDatabasePath(home);
-  const legacyBlobDirectory = path.join(directory, "blobs");
   const bytes = yield* makeFileBytes(home);
   const recoveryDirectory = path.join(directory, "recovery", "trees");
   let prepared = false;
-  const legacyBlobPath = (hash: Hash) => path.join(legacyBlobDirectory, hashHex(hash));
-  const hashBytes = (bytes: Uint8Array) =>
-    sha256Hash(bytes).pipe(Effect.provideService(Digest.Digest, digests));
   const failed = (cause: unknown) => new History.StoreFailed({ cause });
   const isCorrupt = Schema.is(History.StoreCorrupt);
   const storageError = (cause: unknown) => (isCorrupt(cause) ? cause : failed(cause));
@@ -110,7 +96,7 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
         : failed(error);
   const readBlobs = (tree: Hash, blobs: readonly Hash[]) =>
     bytes
-      .loadLegacyMany(blobs.map((hash) => ({ path: legacyBlobPath(hash), hash })))
+      .readMany(blobs)
       .pipe(Effect.catchTag("FileBytesInvalid", (error) => Effect.fail(byteFailure(tree, error))));
   const provideStorage = <A, E>(
     effect: Effect.Effect<A, E, FileSystem.FileSystem | Digest.Digest>,
@@ -155,84 +141,6 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
         }),
     };
   });
-  const prepareTree = Effect.fn("AuthorHistory.prepareTreeRows")(function* (
-    hash: Hash,
-    text: string,
-  ) {
-    const value = yield* Schema.decodeUnknownEffect(
-      Schema.fromJsonString(Schema.Union([Schema.Array(JsonObject), JsonObject])),
-    )(text);
-    let entries: readonly StoredEntry[];
-    let register: Effect.Effect<
-      void,
-      FileBytesInvalid | SqlError | Schema.SchemaError,
-      SqlClient.SqlClient
-    > = Effect.void;
-    if (Array.isArray(value)) {
-      const tree = yield* Schema.decodeUnknownEffect(TreeDocument, { onExcessProperty: "error" })(
-        text,
-      );
-      const batch = yield* keepFiles(hash, tree);
-      register = batch.register;
-      entries = yield* Effect.forEach(tree, (entry, index) =>
-        Effect.gen(function* () {
-          const raw = value[index];
-          if (raw === undefined) return yield* Effect.die("Author tree lengths differ");
-          if (entry.kind === "file")
-            return {
-              kind: entry.kind,
-              path: entry.path,
-              mode: entry.mode,
-              blob: yield* batch.blob(entry.bytes),
-            };
-          return entry.kind === "directory"
-            ? { kind: entry.kind, path: entry.path }
-            : {
-                kind: entry.kind,
-                path: entry.path,
-                target: entry.target,
-              };
-        }),
-      );
-    } else {
-      const manifest = yield* Schema.decodeUnknownEffect(JsonObject)(value);
-      yield* Schema.decodeUnknownEffect(TreeManifest, { onExcessProperty: "error" })(manifest);
-      const rawEntries = yield* Schema.decodeUnknownEffect(Schema.Array(JsonObject))(
-        manifest.entries,
-      );
-      entries = yield* Effect.forEach(rawEntries, (raw) =>
-        Effect.gen(function* () {
-          const entry = yield* Schema.decodeUnknownEffect(
-            Schema.Union([TreeDirectory, StoredFile, TreeSymlink]),
-            { onExcessProperty: "error" },
-          )(raw);
-          if (entry.kind === "file")
-            return {
-              kind: entry.kind,
-              path: entry.path,
-              mode: entry.mode,
-              blob: entry.blob,
-            };
-          return entry.kind === "directory"
-            ? { kind: entry.kind, path: entry.path }
-            : {
-                kind: entry.kind,
-                path: entry.path,
-                target: entry.target,
-              };
-        }),
-      );
-      const files = entries.filter((entry) => entry.kind === "file");
-      const batch = yield* bytes.keepMany(
-        yield* readBlobs(
-          hash,
-          files.map((entry) => entry.blob),
-        ),
-      );
-      register = batch.register;
-    }
-    return { tree: { entries } satisfies StoredTree, register };
-  });
   const prepareRevision = Effect.fn("AuthorHistory.prepareRevisionRows")(function* (text: string) {
     const value = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(JsonObject))(text);
     const revision = yield* Schema.decodeUnknownEffect(History.Revision, {
@@ -240,114 +148,54 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
     })(value);
     return { revision } satisfies StoredRevision;
   });
-  const sourceFiles = Effect.fn("AuthorHistory.sourceFiles")(function* (
-    folder: string,
-    kind: History.Kind,
-  ) {
-    const names = yield* fs
-      .readDirectory(folder)
-      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed([])));
-    return names
-      .filter((name) => /^[a-f0-9]{64}\.json$/u.test(name))
-      .sort()
-      .map((name) => ({
-        kind,
-        hash: Hash.make(`sha256:${name.slice(0, 64)}`),
-        file: path.join(folder, name),
-      }));
-  });
   const ensureMetadata = Effect.fn("AuthorHistory.prepareMetadata")(function* (create = false) {
     if (prepared) return true;
-    const recoveries = yield* sourceFiles(recoveryDirectory, "tree");
-    const exists = yield* provideStorage(prepareLibraryDatabase(home));
-    const imported = exists
-      ? yield* readRows(
-          Effect.gen(function* () {
-            const sql = yield* SqlClient.SqlClient;
-            return (yield* sql`SELECT id FROM author_metadata_import WHERE id=1`).length > 0;
-          }),
-        )
-      : false;
-    if (imported && recoveries.length === 0) {
-      prepared = true;
-      return true;
-    }
-    const files = imported
-      ? []
-      : [
-          ...(yield* sourceFiles(storedFolder(path, directory, "tree"), "tree")),
-          ...(yield* sourceFiles(storedFolder(path, directory, "revision"), "revision")),
-        ];
-    if (!create && !imported && files.length === 0 && recoveries.length === 0) return false;
-    if (!exists) yield* provideStorage(prepareLibraryDatabase(home, true));
-    const sources = imported ? recoveries : [...files, ...recoveries];
-    const known = yield* readRows(
-      Effect.gen(function* () {
-        return {
-          tree: yield* knownHistoryRows(
-            "tree",
-            sources.filter((source) => source.kind === "tree").map((source) => source.hash),
-          ),
-          revision: yield* knownHistoryRows(
-            "revision",
-            sources.filter((source) => source.kind === "revision").map((source) => source.hash),
-          ),
-        };
-      }),
+    const names = yield* fs
+      .readDirectory(recoveryDirectory)
+      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed([])));
+    const recoveries = names
+      .filter((name) => /^[a-f0-9]{64}\.json$/u.test(name))
+      .sort()
+      .map((name) => ({ name, hash: Hash.make(`sha256:${name.slice(0, 64)}`) }));
+    const exists = yield* provideStorage(
+      prepareLibraryDatabase(home, create || recoveries.length > 0),
     );
-    const documents = yield* Effect.forEach(sources, (source) =>
-      Effect.gen(function* () {
-        if (known[source.kind].has(source.hash)) return undefined;
-        const text = yield* fs.readFileString(source.file);
-        // Invalid legacy metadata remains exact, readable evidence. It is validated on access.
-        if (source.kind === "tree") {
-          const tree = yield* Effect.result(prepareTree(source.hash, text));
-          return { ...source, text, ...(tree._tag === "Success" ? { tree: tree.success } : {}) };
-        }
-        const revision = yield* Effect.result(prepareRevision(text));
-        return {
-          ...source,
-          text,
-          ...(revision._tag === "Success" ? { revision: revision.success } : {}),
-        };
-      }),
-    );
-    if (imported && documents.every((document) => document === undefined)) {
-      prepared = true;
-      return true;
-    }
-    yield* fs.makeDirectory(directory, { recursive: true, mode: 0o700 });
-    yield* provideStorage(prepareHistoryJournal(home));
-    const sourceHash = yield* hashBytes(
-      new TextEncoder().encode(
-        canonicalJson(
-          documents
-            .filter((value) => value !== undefined)
-            .map((value) => ({ kind: value.kind, hash: value.hash, text: value.text })),
+    if (!exists) return false;
+    if (recoveries.length > 0) {
+      const known = yield* readRows(
+        knownHistoryRows(
+          "tree",
+          recoveries.map(({ hash }) => hash),
         ),
-      ),
-    );
-    yield* writeRows(
-      Effect.gen(function* () {
-        const sql = yield* SqlClient.SqlClient;
-        // Another owner may have completed the import while this one decoded immutable sources.
-        const exists = (yield* sql`SELECT id FROM author_metadata_import WHERE id=1`).length > 0;
-        for (const document of documents.toSorted(
-          (left, right) => (left?.kind === "tree" ? 0 : 1) - (right?.kind === "tree" ? 0 : 1),
-        )) {
-          if (!document) continue;
-          if (exists && !recoveries.some((source) => source.file === document.file)) continue;
-          if ("tree" in document && document.tree) {
-            yield* document.tree.register;
-            yield* saveTreeRows(document.hash, document.tree.tree);
-          } else if ("revision" in document && document.revision)
-            yield* saveRevisionRows(document.hash, document.revision, document.text);
-          else yield* saveLegacyHistoryDocument(document.kind, document.hash, document.text);
-        }
-        if (!exists)
-          yield* sql`INSERT INTO author_metadata_import(id,source_hash) VALUES(1,${sourceHash})`;
-      }),
-    );
+      );
+      const trees = yield* Effect.forEach(
+        recoveries.filter(({ hash }) => !known.has(hash)),
+        ({ name, hash }) =>
+          Effect.gen(function* () {
+            const text = yield* fs.readFileString(path.join(recoveryDirectory, name));
+            const { entries } = yield* Schema.decodeUnknownEffect(ManifestDocument, {
+              onExcessProperty: "error",
+            })(text);
+            const files = entries.filter((entry) => entry.kind === "file");
+            const batch = yield* bytes.keepMany(
+              yield* bytes.readMany(
+                files.map((entry) => entry.blob),
+                true,
+              ),
+            );
+            return { hash, entries, register: batch.register };
+          }),
+      );
+      if (trees.length > 0)
+        yield* writeRows(
+          Effect.gen(function* () {
+            for (const tree of trees) {
+              yield* tree.register;
+              yield* saveTreeRows(tree.hash, { entries: tree.entries });
+            }
+          }),
+        );
+    }
     prepared = true;
     return true;
   });
@@ -377,24 +225,13 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
     yield* flush(recoveryDirectory);
     prepared = false;
   });
-  const readLegacy = (kind: History.Kind, hash: Hash) =>
-    Effect.gen(function* () {
-      const text = yield* readRows(loadLegacyHistoryDocument(kind, hash));
-      if (text === undefined) return Option.none<string>();
-      if (kind === "revision")
-        yield* Schema.decodeEffect(Schema.fromJsonString(History.Revision), {
-          onExcessProperty: "error",
-        })(text);
-      else yield* Schema.decodeEffect(TreeDocument, { onExcessProperty: "error" })(text);
-      return Option.some(text);
-    });
   const store = yield* History.makeStore({
     read: (kind, hash) =>
       Effect.gen(function* () {
         if (!(yield* ensureMetadata())) return Option.none<string>();
         if (kind === "revision") {
           const value = yield* readRows(loadRevisionRows(hash));
-          if (!value) return yield* readLegacy(kind, hash);
+          if (!value) return Option.none<string>();
           return Option.some(
             JSON.stringify({
               ...value.revision,
@@ -403,7 +240,7 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
           );
         }
         const value = yield* readRows(loadTreeRows(hash));
-        if (!value) return yield* readLegacy(kind, hash);
+        if (!value) return Option.none<string>();
         const files = value.entries.filter((entry) => entry.kind === "file");
         const contents = yield* readBlobs(
           hash,

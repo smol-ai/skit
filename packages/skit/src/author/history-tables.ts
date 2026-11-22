@@ -11,9 +11,6 @@ export const createAuthorHistoryTables = Effect.gen(function* () {
     sequence INTEGER NOT NULL CHECK(sequence>=1 AND sequence<=9007199254740991),
     revision TEXT NOT NULL,root TEXT NOT NULL,workspace_id TEXT,PRIMARY KEY(workspace_key,sequence)
   ) STRICT`;
-  yield* sql`CREATE TABLE author_history_import (
-    id INTEGER PRIMARY KEY CHECK(id=1),source_hash TEXT
-  ) STRICT`;
   yield* sql`CREATE INDEX author_history_workspace_roots ON author_history_workspaces(root)`;
 });
 
@@ -41,9 +38,4 @@ export const createAuthorMetadataTables = Effect.gen(function* () {
     position INTEGER NOT NULL CHECK(position>=0),parent_hash TEXT NOT NULL,
     PRIMARY KEY(revision_hash,position)
   ) STRICT`;
-  yield* sql`CREATE TABLE author_history_legacy_documents(
-    kind TEXT NOT NULL CHECK(kind IN ('tree','revision')),hash TEXT NOT NULL,document TEXT NOT NULL, source_rows TEXT CHECK(source_rows IS NULL OR json_valid(source_rows)),
-    PRIMARY KEY(kind,hash)
-  ) STRICT`;
-  yield* sql`CREATE TABLE author_metadata_import(id INTEGER PRIMARY KEY CHECK(id=1),source_hash TEXT NOT NULL) STRICT`;
 });

@@ -10,7 +10,7 @@ import * as History from "../src/history/history.js";
 import * as Sync from "../src/sync/sync.js";
 import { SqlClient } from "effect/sql";
 import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
-import { prepareAuthorState } from "../src/author/state-store.js";
+import { prepareLibraryDatabase } from "../src/library/store/database.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const ownerLayer = (home: string) =>
@@ -173,7 +173,7 @@ for (const boundary of ["before-commit", "after-commit"] as const)
         const observation = yield* (yield* AuthorHistory).refresh(root);
         return { key: { workspaceId, locator }, id: observation.id };
       }).pipe(Effect.provide(ownerLayer(f.home)), Effect.scoped);
-      yield* prepareAuthorState(f.home, { create: true });
+      yield* prepareLibraryDatabase(f.home, true);
       if (boundary === "before-commit")
         yield* withLibraryDatabase(
           libraryDatabasePath(f.home),

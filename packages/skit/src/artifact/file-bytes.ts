@@ -188,7 +188,19 @@ export const makeFileBytes = Effect.fn("FileBytes.make")(function* (home: string
   });
   return {
     keepMany,
-    loadLegacyMany,
+    readMany: Effect.fn("FileBytes.readMany")(function* (
+      hashes: readonly Hash[],
+      allowStaged = false,
+    ) {
+      const known = yield* knownMany(hashes);
+      return yield* Effect.forEach(hashes, (hash) => {
+        const path = fileBytesPath(root, hash);
+        const size = known.get(hash);
+        return size === undefined && !allowStaged
+          ? Effect.fail(invalid(path, hash, { _tag: "Missing" }))
+          : readFile(path, hash, size);
+      });
+    }),
     read: (hash: Hash) =>
       Effect.gen(function* () {
         const size = (yield* knownMany([hash])).get(hash);
