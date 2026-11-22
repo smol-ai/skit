@@ -137,6 +137,7 @@ const libraryFailureMessage = Match.type<typeof LibraryDataFailure.Type>().pipe(
         DatabaseMigrationIncomplete: () => "database migration did not finish",
         DatabaseMigrationsMismatch: ({ expected, actual }) =>
           `unsupported database migrations (${actual.join(", ") || "none"}). This build expects ${expected.join(", ")}`,
+        DatabaseWriteInsideRead: () => "cannot start a database write inside a read transaction",
         DatabaseWriterLockMissing: () => "database write transaction has no Library writer lock",
         ImportInsideTransaction: () =>
           "Library import must finish before a database transaction starts",

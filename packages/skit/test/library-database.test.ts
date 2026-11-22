@@ -1021,7 +1021,7 @@ it.effect("shared writes refuse a pre-existing transaction without home writer a
 );
 
 it.effect(
-  "writes nested in a read snapshot use a separate writer and leave the snapshot stable",
+  "writes nested in a read snapshot fail without committing through a second connection",
   () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -1042,20 +1042,22 @@ it.effect(
           yield* reader.withTransaction(
             Effect.gen(function* () {
               assert.deepStrictEqual(yield* reader`SELECT value FROM nested_write`, []);
-              yield* withDatabaseTransaction(
-                home,
-                Effect.gen(function* () {
-                  const writer = yield* SqlClient.SqlClient;
-                  assert.notStrictEqual(writer, reader);
-                  yield* writer`INSERT INTO nested_write(value) VALUES('committed')`;
-                }),
+              const failure = yield* Effect.flip(
+                withDatabaseTransaction(
+                  home,
+                  Effect.gen(function* () {
+                    const writer = yield* SqlClient.SqlClient;
+                    yield* writer`INSERT INTO nested_write(value) VALUES('unwanted')`;
+                  }),
+                ),
               );
+              assert.strictEqual(failure._tag, "InvalidLibraryState");
+              if (failure._tag === "InvalidLibraryState")
+                assert.deepStrictEqual(failure.reason, { _tag: "DatabaseWriteInsideRead" });
               assert.deepStrictEqual(yield* reader`SELECT value FROM nested_write`, []);
             }),
           );
-          assert.deepStrictEqual(yield* reader`SELECT value FROM nested_write`, [
-            { value: "committed" },
-          ]);
+          assert.deepStrictEqual(yield* reader`SELECT value FROM nested_write`, []);
         }),
         true,
       );

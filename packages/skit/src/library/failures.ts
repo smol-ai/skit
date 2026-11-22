@@ -140,6 +140,7 @@ export const InvalidLibraryStateReason = Schema.TaggedUnion({
     expected: Schema.Array(Schema.String),
     actual: Schema.Array(Schema.String),
   },
+  DatabaseWriteInsideRead: {},
   DatabaseWriterLockMissing: {},
   ImportInsideTransaction: {},
   ImportRecordMissing: { sourcePath: Schema.String },

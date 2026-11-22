@@ -227,6 +227,11 @@ export const withDatabaseTransaction = <A, E, R>(
       return yield* current.sql.withTransaction(
         program.pipe(Effect.provideService(SqlClient.SqlClient, current.sql)),
       );
+    if (current?.mode === "read")
+      return yield* new InvalidLibraryState({
+        path,
+        reason: { _tag: "DatabaseWriteInsideRead" },
+      });
     if (current?.mode === "write")
       return yield* new InvalidLibraryState({
         path,
