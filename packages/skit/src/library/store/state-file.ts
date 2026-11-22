@@ -419,48 +419,58 @@ export const migrateLocalLibraryState = Effect.fn("Library.migrateState")(functi
     ))
   )
     return;
-  const records = yield* withLibraryDatabase(
-    path,
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql<{
-        source: string;
-        hash: string | null;
-        backup: string | null;
-        fenced: number;
-      }>`SELECT source,hash,backup,fenced FROM library_import WHERE source IN ('state.json','audit.jsonl')`;
-    }),
-    true,
-  );
-  const prior = records.find((row) => row.source === "state.json"),
-    audit = records.find((row) => row.source === "audit.jsonl");
-  const auditHash =
-    auditText === undefined ? null : yield* sha256Hash(new TextEncoder().encode(auditText));
-  if (audit && auditText !== undefined && audit.hash !== auditHash)
-    return yield* new InvalidLibraryState({
-      path: auditPath,
-      reason: {
-        _tag: "LegacySourceChanged",
-        sourcePath: auditPath,
-        backupPath: audit.backup,
-        databasePath: path,
-      },
-    });
-  if (prior?.fenced === 1 && stateText !== undefined && stateText !== databaseStub)
-    return yield* new InvalidLibraryState({
-      path: statePath,
-      reason: { _tag: "LegacyStateBesideDatabase", statePath, databasePath: path },
-    });
-  const needsState =
-    prior === undefined
-      ? stateText !== undefined || create
-      : prior.fenced === 0 || stateText !== databaseStub;
-  const needsAudit =
-    audit === undefined &&
-    (auditText !== undefined || stateText !== undefined || prior !== undefined || create);
   const lockPath = join(root, ".lock");
-  if (!needsState && !needsAudit && (yield* readLegacyText(lockPath)) !== databaseImportOwner)
-    return;
+  const pendingImport = (stateText: string | undefined, auditText: string | undefined) =>
+    Effect.gen(function* () {
+      const records = yield* withLibraryDatabase(
+        path,
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          return yield* sql<{
+            source: string;
+            hash: string | null;
+            backup: string | null;
+            fenced: number;
+          }>`SELECT source,hash,backup,fenced FROM library_import WHERE source IN ('state.json','audit.jsonl')`;
+        }),
+        true,
+      );
+      const prior = records.find((row) => row.source === "state.json"),
+        audit = records.find((row) => row.source === "audit.jsonl");
+      const auditHash =
+        auditText === undefined ? null : yield* sha256Hash(new TextEncoder().encode(auditText));
+      if (audit && auditText !== undefined && audit.hash !== auditHash)
+        return yield* new InvalidLibraryState({
+          path: auditPath,
+          reason: {
+            _tag: "LegacySourceChanged",
+            sourcePath: auditPath,
+            backupPath: audit.backup,
+            databasePath: path,
+          },
+        });
+      if (prior?.fenced === 1 && stateText !== undefined && stateText !== databaseStub)
+        return yield* new InvalidLibraryState({
+          path: statePath,
+          reason: { _tag: "LegacyStateBesideDatabase", statePath, databasePath: path },
+        });
+      const needsState =
+        prior === undefined
+          ? stateText !== undefined || create
+          : prior.fenced === 0 || stateText !== databaseStub;
+      const needsAudit =
+        audit === undefined &&
+        (auditText !== undefined || stateText !== undefined || prior !== undefined || create);
+      if (!needsState && !needsAudit && (yield* readLegacyText(lockPath)) !== databaseImportOwner)
+        return undefined;
+      return { prior, needsState };
+    });
+  // The unlocked probe can skip a completed import. Only the locked read may reject it.
+  const ready = yield* pendingImport(stateText, auditText).pipe(
+    Effect.map((pending) => pending === undefined),
+    Effect.catchTag("InvalidLibraryState", () => Effect.succeed(false)),
+  );
+  if (ready) return;
   if (yield* currentLibraryTransaction(root))
     return yield* new InvalidLibraryState({
       path,
@@ -471,28 +481,28 @@ export const migrateLocalLibraryState = Effect.fn("Library.migrateState")(functi
   yield* withLibraryStateReplacement(
     root,
     Effect.gen(function* () {
+      const pending = yield* pendingImport(
+        yield* readLegacyText(statePath),
+        yield* readLegacyText(auditPath),
+      );
+      if (!pending) return;
+      const { prior, needsState } = pending;
       let locked = false;
       yield* Effect.acquireUseRelease(
         Effect.void,
         () =>
           Effect.gen(function* () {
-            if (
-              needsState ||
-              needsAudit ||
-              (yield* readLegacyText(lockPath)) === databaseImportOwner
-            ) {
-              yield* writeRawAtomic(lockPath, databaseImportOwner, true).pipe(
-                Effect.catchReason("PlatformError", "AlreadyExists", () =>
-                  Effect.gen(function* () {
-                    const owner = yield* readLegacyText(lockPath);
-                    if (owner !== databaseImportOwner)
-                      return yield* new HomeBusy({ path: lockPath, owner: owner ?? "unknown" });
-                  }),
-                ),
-              );
-              locked = true;
-              yield* syncPaths([lockPath, root]);
-            }
+            yield* writeRawAtomic(lockPath, databaseImportOwner, true).pipe(
+              Effect.catchReason("PlatformError", "AlreadyExists", () =>
+                Effect.gen(function* () {
+                  const owner = yield* readLegacyText(lockPath);
+                  if (owner !== databaseImportOwner)
+                    return yield* new HomeBusy({ path: lockPath, owner: owner ?? "unknown" });
+                }),
+              ),
+            );
+            locked = true;
+            yield* syncPaths([lockPath, root]);
             yield* withLibraryDatabase(
               path,
               Effect.gen(function* () {

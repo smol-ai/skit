@@ -368,6 +368,38 @@ it.effect(
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
+it.effect("rechecks the legacy source after another startup finishes importing it", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-import-race-" });
+    const path = libraryDatabasePath(home);
+    const statePath = join(home, "state.json");
+    yield* fs.writeFileString(statePath, JSON.stringify(legacy));
+    let winnerFinished = false;
+    yield* migrateLocalLibraryState(home).pipe(
+      Effect.provideService(FileSystem.FileSystem, {
+        ...fs,
+        exists: (candidate) =>
+          Effect.gen(function* () {
+            if (candidate === path && !winnerFinished) {
+              // The losing startup has read the original file. Finish the winning migration.
+              yield* migrateLocalLibraryState(home).pipe(
+                Effect.provideService(FileSystem.FileSystem, fs),
+              );
+              winnerFinished = true;
+            }
+            return yield* fs.exists(candidate);
+          }),
+      }),
+    );
+    assert.isTrue(winnerFinished);
+    assert.strictEqual(
+      (yield* loadLibrary(home)).unmanaged[0]?.currentHash,
+      legacy.unmanaged[0]?.observedHash,
+    );
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
 it.effect("a completed database remains authoritative when only its old-CLI stub is missing", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
