@@ -146,8 +146,12 @@ export const makeFileBytes = Effect.fn("FileBytes.make")(function* (home: string
     // Staging can create the home before its database exists. Only a new home adds an entry to its parent.
     const newHome = files.length > 0 && !(yield* fs.exists(root));
     const facts = new Map<Hash, number>();
-    for (const { hash, content } of files)
+    const verified = new Set<Hash>();
+    for (const { hash, content } of files) {
+      if (verified.has(hash)) continue;
       if (!(yield* keep(hash, content, known.get(hash)))) facts.set(hash, content.byteLength);
+      verified.add(hash);
+    }
     if (facts.size > 0)
       yield* syncPaths([
         ...Array.from(facts.keys(), (hash) => fileBytesPath(root, hash)),

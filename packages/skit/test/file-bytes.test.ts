@@ -334,3 +334,33 @@ it.effect("staging bytes for a new home also flushes the home’s parent", () =>
     assert.isTrue(yield* fs.exists(home));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+it.effect("a batch verifies one canonical blob for distinct entries with the same bytes", () =>
+  Effect.gen(function* () {
+    const { fs, home, hash } = yield* fixture;
+    const canonical = fileBytesPath(home, hash);
+    let reads = 0;
+    const owner = yield* makeFileBytes(home).pipe(
+      Effect.provideService(FileSystem.FileSystem, {
+        ...fs,
+        readFile: (path) =>
+          Effect.gen(function* () {
+            if (path === canonical) reads++;
+            return yield* fs.readFile(path);
+          }),
+      }),
+    );
+    const entries = [
+      { path: "one", bytes: Uint8Array.from(content) },
+      { path: "two", bytes: Uint8Array.from(content) },
+    ];
+    const batch = yield* owner.keepMany(entries, ({ bytes }) => bytes);
+    assert.deepStrictEqual(
+      batch.files,
+      entries.map((entry) => ({ entry, hash })),
+    );
+    assert.strictEqual(reads, 1);
+    yield* withDatabaseTransaction(home, batch.register);
+    assert.deepStrictEqual(yield* owner.read(hash), content);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
