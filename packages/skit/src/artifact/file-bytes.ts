@@ -159,7 +159,10 @@ export const makeFileBytes = Effect.fn("FileBytes.make")(function* (home: string
         root,
         ...(newHome ? [dirname(root)] : []),
       ]).pipe(Effect.provideService(FileSystem.FileSystem, fs));
-    const register = Effect.gen(function* () {
+    return facts;
+  });
+  const register = (facts: ReadonlyMap<Hash, number>) =>
+    Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       const entries = [...facts].map(([hash, size]) => ({ hash, size }));
       for (let start = 0; start < entries.length; start += 500) {
@@ -181,8 +184,6 @@ export const makeFileBytes = Effect.fn("FileBytes.make")(function* (home: string
         }
       }
     });
-    return register;
-  });
   return {
     keepMany: Effect.fn("FileBytes.keepMany")(function* <A>(
       entries: readonly A[],
@@ -192,8 +193,11 @@ export const makeFileBytes = Effect.fn("FileBytes.make")(function* (home: string
       const files = yield* Effect.forEach(copies, ({ entry, content }) =>
         Effect.map(hashBytes(content), (hash) => ({ entry, hash, content })),
       );
-      const register = yield* stage(files);
-      return { files: files.map(({ entry, hash }) => ({ entry, hash })), register };
+      const facts = yield* stage(files);
+      return {
+        files: files.map(({ entry, hash }) => ({ entry, hash })),
+        register: register(facts),
+      };
     }),
     readMany: Effect.fn("FileBytes.readMany")(function* <A>(
       entries: readonly A[],
@@ -221,8 +225,8 @@ export const makeFileBytes = Effect.fn("FileBytes.make")(function* (home: string
       Effect.gen(function* () {
         const copy = Uint8Array.from(content);
         const hash = yield* hashBytes(copy);
-        const register = yield* stage([{ hash, content: copy }]);
-        yield* provide(withDatabaseTransaction(root, register));
+        const facts = yield* stage([{ hash, content: copy }]);
+        yield* provide(withDatabaseTransaction(root, register(facts)));
         return hash;
       }),
     // Recovery stages complete bytes without needing the shared writer. No metadata is acknowledged.
