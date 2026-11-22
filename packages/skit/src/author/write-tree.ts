@@ -126,7 +126,13 @@ export const writeWorkspaceTree = Effect.fn("AuthorWorkspace.writeTree")(functio
         if (previous !== undefined) yield* changeFile(root, target, previous, staged);
         else {
           // Exclusive publication refuses an editor's new file at a target this write vacated.
-          yield* fs.link(staged, target);
+          yield* fs
+            .link(staged, target)
+            .pipe(
+              Effect.catchReason("PlatformError", "AlreadyExists", () =>
+                Effect.fail(new LocalFilesChangedDuringSync()),
+              ),
+            );
           yield* fs.remove(staged);
         }
         // The write changed its folder, and any folder it created changed its parent.

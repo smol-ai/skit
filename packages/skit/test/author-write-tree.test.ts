@@ -126,6 +126,10 @@ for (const race of ["new-parent", "new-child", "new-target"] as const)
           Effect.provideService(FileSystem.FileSystem, raced),
         ),
       );
+      if (race === "new-target") {
+        const failure = yield* Effect.flip(exit);
+        expect(failure._tag).toBe("LocalFilesChangedDuringSync");
+      }
       expect(exit._tag).toBe("Failure");
       expect(inserted).toBe(true);
       expect(
