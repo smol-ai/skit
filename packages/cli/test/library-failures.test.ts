@@ -1,8 +1,9 @@
 import { failureExitCode } from "../src/commands/exit-code.js";
 import { test, expect } from "vitest";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import {
   AddNoSkills,
+  InvalidLibraryState,
   SetupImportInvalid,
   LibrarySubjectNotFound,
   LibrarySubjectAmbiguous,
@@ -10,7 +11,7 @@ import {
   CollectionRemovalMissing,
   SkillRemovalRequiresCollection,
 } from "@smolai/skit-core/library";
-import { LibraryDataFailure } from "../src/library/failures.js";
+import { LibraryDataFailure, libraryFailure } from "../src/library/failures.js";
 import { classifyFailure } from "../src/commands/failure-classification.js";
 
 test("source and removal failures retain facts and codes after decoding, with words supplied by the CLI", () => {
@@ -82,4 +83,15 @@ test.each([
   expect(shown.message).toContain(words);
   expect(shown.message).not.toContain(reason);
   expect(shown.remediation).toContain("skit setup");
+});
+
+test("SQLite schema failures use the same recovery action as an empty database", () => {
+  const path = "/library/library.sqlite";
+  const reason = Effect.runSync(Effect.flip(Schema.decodeUnknownEffect(Schema.String)(42)));
+  const failure = new InvalidLibraryState({
+    path,
+    reason: { _tag: "SchemaInvalid", failure: reason },
+  });
+  const empty = new InvalidLibraryState({ path, reason: { _tag: "DatabaseEmpty" } });
+  expect(libraryFailure(failure).next).toEqual(libraryFailure(empty).next);
 });

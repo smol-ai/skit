@@ -302,11 +302,7 @@ export const libraryFailure = (error: typeof LibraryDataFailure.Type) =>
             })),
           }),
         ],
-        next: [
-          "Back up the state file before recovery. To reset an alpha Library, move it aside and run ",
-          { code: "skit setup" },
-          "; keep installed Skill files.",
-        ],
+        next: libraryFailureNext(error),
       })
     : error._tag === "Library.SyncConflicted"
       ? describeFailure({
