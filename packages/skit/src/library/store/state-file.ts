@@ -1,5 +1,5 @@
 import { LibraryStateFields } from "./state-fields.js";
-import { canonicalJson, isJsonObject } from "../../shared/json.js";
+import { canonicalJson } from "../../shared/json.js";
 import type { HistoryAction } from "./history-action.js";
 import { classifyLibraryAuditEvent, diffLibraryState } from "../audit/state-diff.js";
 import { makeOperationId, OperationId } from "../entity-ids.js";
@@ -194,6 +194,22 @@ export const advanceLibraryRevision = Effect.fn("Library.advanceRevision")(funct
   return rows[0].revision;
 });
 
+const libraryJson = Effect.fn("Library.stateJson")(function* (path: string, state: LibraryState) {
+  const value = yield* Effect.try({
+    try: () => JSON.stringify(state),
+    catch: () =>
+      new InvalidLibraryState({
+        path,
+        reason: { _tag: "DocumentEncodingFailed", document: "library" },
+      }),
+  });
+  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(JsonObject))(value).pipe(
+    Effect.mapError(
+      (failure) => new InvalidLibraryState({ path, reason: { _tag: "SchemaInvalid", failure } }),
+    ),
+  );
+});
+
 /** Validate the JSON to be saved once, then write changed rows in the caller's transaction. */
 export const saveDatabaseState = Effect.fn("Library.saveDatabaseState")(function* (
   path: string,
@@ -210,41 +226,27 @@ export const saveDatabaseState = Effect.fn("Library.saveDatabaseState")(function
     if (saved.revision !== revision || base === null) return yield* new LibraryChanged({ path });
     current = { state: base, revision: saved.revision };
   }
+  const before = base === null ? undefined : yield* libraryJson(path, base);
+  const baseState = before === undefined ? undefined : yield* decodeCurrentState(path, before);
   if (
     revision === undefined &&
-    (base === null
+    (baseState === undefined
       ? current.state !== undefined
-      : libraryStateRevision(current.state ?? emptyLibraryState()) !== libraryStateRevision(base))
+      : libraryStateRevision(current.state ?? emptyLibraryState()) !==
+        libraryStateRevision(baseState))
   )
     return yield* new LibraryChanged({ path });
-  const value = yield* Effect.try({
-    try: () => JSON.stringify(next),
-    catch: () =>
-      new InvalidLibraryState({
-        path,
-        reason: { _tag: "DocumentEncodingFailed", document: "library" },
-      }),
-  });
-  const document = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(JsonObject))(value).pipe(
-    Effect.mapError(
-      (failure) => new InvalidLibraryState({ path, reason: { _tag: "SchemaInvalid", failure } }),
-    ),
-  );
+  const document = yield* libraryJson(path, next);
   const state = yield* decodeCurrentState(path, document);
-  if (
-    current.state !== undefined &&
-    libraryStateRevision(state) === libraryStateRevision(current.state)
-  )
+  const savedState = revision === undefined ? current.state : baseState;
+  if (savedState !== undefined && libraryStateRevision(state) === libraryStateRevision(savedState))
     return state;
   const normalized = yield* Schema.decodeUnknownEffect(JsonObject)(state).pipe(
     Effect.mapError(
       (failure) => new InvalidLibraryState({ path, reason: { _tag: "SchemaInvalid", failure } }),
     ),
   );
-  yield* saveLibraryRows(
-    normalized,
-    current.revision !== null && isJsonObject(base) ? base : undefined,
-  ).pipe(
+  yield* saveLibraryRows(normalized, current.revision === null ? undefined : before).pipe(
     Effect.catchTag("SchemaError", (failure) =>
       Effect.fail(new InvalidLibraryState({ path, reason: { _tag: "SchemaInvalid", failure } })),
     ),

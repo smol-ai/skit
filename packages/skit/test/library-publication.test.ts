@@ -33,6 +33,44 @@ import { saveLibrary, testRoots } from "./helpers/library-store.js";
 import { SqlClient } from "effect/sql";
 import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
 
+it.effect("normalizes an explicit undefined field in the Library save base", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-library-save-base-" });
+    const { state: fixtureState } = yield* fixture;
+    const { assessmentAcceptances: _absent, ...state } = fixtureState;
+    yield* saveLibrary(home, state);
+    const snapshot = yield* inspectLocalLibraryState(home);
+    if (!snapshot.present) return yield* Effect.die("Missing prepared Library");
+    const base = { ...snapshot.state, assessmentAcceptances: undefined };
+    const next = {
+      ...snapshot.state,
+      collections: snapshot.state.collections.map((row) => ({ ...row, label: "Changed label" })),
+    };
+    yield* writeLibrary(
+      home,
+      Effect.gen(function* () {
+        const writer = yield* LibraryWriter;
+        yield* writer.save(next, base, snapshot.revision);
+      }),
+    );
+    const saved = yield* loadLibrary(home);
+    assert.strictEqual(saved.collections[0]?.label, "Changed label");
+    assert.isFalse(Object.hasOwn(saved, "assessmentAcceptances"));
+    yield* withLibraryDatabase(
+      libraryDatabasePath(home),
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        assert.deepStrictEqual(
+          yield* sql`SELECT assessment_acceptances_present FROM library_device`,
+          [{ assessment_acceptances_present: 0 }],
+        );
+      }),
+      true,
+    );
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
 it.effect(
   "a prepared Sync boundary saves by its captured revision without reloading unrelated rows",
   () =>
