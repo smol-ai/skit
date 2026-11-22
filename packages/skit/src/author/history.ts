@@ -27,6 +27,8 @@ import {
 } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 
+import { normalizeAuthorTreeEntries } from "../artifact/tree.js";
+import { parentDirectories } from "../shared/relative-path.js";
 import { AuthorIgnoreRepository } from "../artifact/plain-author-ignore.js";
 import * as History from "../history/history.js";
 import { HomeBusy } from "../platform/lock-failures.js";
@@ -265,6 +267,23 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
     );
   };
 
+  const matchesReceivedTree = Effect.fn("AuthorHistory.matchesReceivedTree")(
+    function* (actual: History.Tree, received: History.Tree) {
+      const same = Schema.toEquivalence(History.Tree);
+      if (same(History.sortTree(actual), History.sortTree(received))) return true;
+      if (received.some((entry) => entry.kind !== "file")) return false;
+      // Verbatim directories carry only a path. A file already implies its parent directories.
+      const parents = new Set(
+        actual.flatMap((entry) => (entry.kind === "file" ? parentDirectories(entry.path) : [])),
+      );
+      if (actual.some((entry) => entry.kind === "directory" && !parents.has(entry.path)))
+        return false;
+      const normalized = yield* normalizeAuthorTreeEntries(actual);
+      return same(History.sortTree(normalized), History.sortTree(received));
+    },
+    Effect.catchTag("TreeError", () => Effect.succeed(false)),
+  );
+
   /**
    * Save a stable, unvalidated tree before sync can change it. Originals, executable modes,
    * directories and symlinks use the verbatim tree format. Root Git/control exclusions and
@@ -314,15 +333,24 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
           latest === undefined
             ? undefined
             : { id: latest, revision: yield* engineStore.revision(latest) };
-        const unchanged = previous?.revision.tree === treeHash;
-        if (unchanged || Result.isFailure(identity)) {
+        const sameHash = previous?.revision.tree === treeHash;
+        let recordedTree: History.Tree = tree;
+        if (previous && !sameHash) {
+          const head = yield* engineStore.tree(previous.revision.tree);
+          if (yield* matchesReceivedTree(tree, head)) {
+            if (source === undefined) return { ...previous, treeHash };
+            // A different source can still update edit-time provenance for equivalent files.
+            recordedTree = head;
+          }
+        }
+        if (sameHash || Result.isFailure(identity)) {
           // Verify the stored tree, and keep the bytes even when there is no device to record as.
           yield* engineStore.putTree(tree);
-          if (previous && unchanged && source === undefined) return { ...previous, treeHash };
+          if (previous && sameHash && source === undefined) return { ...previous, treeHash };
         }
         const recorded = yield* History.record(
           engineStore,
-          tree,
+          recordedTree,
           previous ? [previous.id] : [],
           {
             device: yield* Effect.fromResult(identity),
@@ -369,9 +397,7 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
       Effect.gen(function* () {
         const actual = yield* scanAuthorWorkspace(lease.root);
         return (
-          (yield* lease.revision) === revision &&
-          actual.treeHash === received.tree &&
-          Schema.toEquivalence(History.Tree)(History.sortTree(actual.tree), History.sortTree(tree))
+          (yield* lease.revision) === revision && (yield* matchesReceivedTree(actual.tree, tree))
         );
       }).pipe(Effect.catchTag("LocalFilesChangedDuringSync", () => Effect.succeed(false))),
       lease.revision.pipe(Effect.map((current) => current === revision)),
