@@ -149,10 +149,12 @@ export class StoreFailed extends Schema.TaggedError<
   cause: Schema.Defect(),
 }) {}
 
-export class RecordInvalid extends Schema.TaggedError<
-  RecordInvalid,
-  { readonly brand: unique symbol }
->()("History.RecordInvalid", { paths: Schema.Array(Schema.String) }) {}
+class RecordInvalid extends Schema.TaggedError<RecordInvalid, { readonly brand: unique symbol }>()(
+  "History.RecordInvalid",
+  { paths: Schema.Array(Schema.String) },
+) {}
+
+export type { RecordInvalid };
 
 export const StoreError = Schema.Union([StoreMissing, StoreCorrupt, StoreFailed, RecordInvalid]);
 export type StoreError = typeof StoreError.Type;
