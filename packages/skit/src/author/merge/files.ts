@@ -197,57 +197,57 @@ const subtree: Merge.Merger<ReadonlyArray<TreeFile>> = (versions, at, choose) =>
   return { ...result, value: Option.map(result.value, (groups) => Object.values(groups).flat()) };
 };
 
-const mergeTree = (alignSkillMoves: boolean): Merge.Merger<History.Tree> =>
-  Merge.via<History.Tree, ReadonlyArray<TreeFile>>(
-    {
-      decode: (tree) =>
-        Option.map(
-          Option.all(
-            tree.map((entry) => (entry.kind === "file" ? Option.some(entry) : Option.none())),
-          ),
-          (files) => files.sort((left, right) => left.path.localeCompare(right.path)),
-        ),
-      encode: (files) => files,
-    },
-    (versions, at, choose) => {
-      if (!alignSkillMoves)
-        return subtree(
-          {
-            base: Option.some(Option.getOrElse(versions.base, () => [])),
-            ours: Option.some(Option.getOrElse(versions.ours, () => [])),
-            theirs: Option.some(Option.getOrElse(versions.theirs, () => [])),
-          },
-          at,
-          choose,
-        );
-      const index = (files: Option.Option<ReadonlyArray<TreeFile>>) =>
-        Record.fromEntries(Option.getOrElse(files, () => []).map((file) => [file.path, file]));
-      const trees = {
-        base: index(versions.base),
-        ours: index(versions.ours),
-        theirs: index(versions.theirs),
-      };
-      const aligned = followSkillMoves(trees);
-      const files = (side: Readonly<Record<string, TreeFile>>) =>
-        Object.values(side).sort((left, right) => left.path.localeCompare(right.path));
-      return subtree(
-        {
-          base: Option.some(files(aligned.base)),
-          ours: Option.some(files(aligned.ours)),
-          theirs: Option.some(files(aligned.theirs)),
-        },
-        at,
-        choose,
-      );
-    },
-    Merge.whole(Schema.toEquivalence(History.Tree)),
-  );
-
-/** Align Skill moves first, then merge the hierarchy. Non-file trees keep whole-tree policy. */
-export const mergeAuthorTree = mergeTree(true);
+const fileTreeCodec = {
+  decode: (tree: History.Tree) =>
+    Option.map(
+      Option.all(tree.map((entry) => (entry.kind === "file" ? Option.some(entry) : Option.none()))),
+      (files) => files.sort((left, right) => left.path.localeCompare(right.path)),
+    ),
+  encode: (files: ReadonlyArray<TreeFile>) => files,
+};
+const wholeTree = Merge.whole(Schema.toEquivalence(History.Tree));
 
 /** Merge paths already aligned with their edit times. */
-export const mergeAlignedAuthorTree = mergeTree(false);
+export const mergeAlignedAuthorTree = Merge.via<History.Tree, ReadonlyArray<TreeFile>>(
+  fileTreeCodec,
+  (versions, at, choose) =>
+    subtree(
+      {
+        base: Option.some(Option.getOrElse(versions.base, () => [])),
+        ours: Option.some(Option.getOrElse(versions.ours, () => [])),
+        theirs: Option.some(Option.getOrElse(versions.theirs, () => [])),
+      },
+      at,
+      choose,
+    ),
+  wholeTree,
+);
+
+/** Align Skill moves first, then merge the hierarchy. Non-file trees keep whole-tree policy. */
+export const mergeAuthorTree = Merge.via<History.Tree, ReadonlyArray<TreeFile>>(
+  fileTreeCodec,
+  (versions, at, choose) => {
+    const index = (files: Option.Option<ReadonlyArray<TreeFile>>) =>
+      Record.fromEntries(Option.getOrElse(files, () => []).map((file) => [file.path, file]));
+    const aligned = followSkillMoves({
+      base: index(versions.base),
+      ours: index(versions.ours),
+      theirs: index(versions.theirs),
+    });
+    const files = (side: Readonly<Record<string, TreeFile>>) =>
+      Object.values(side).sort((left, right) => left.path.localeCompare(right.path));
+    return subtree(
+      {
+        base: Option.some(files(aligned.base)),
+        ours: Option.some(files(aligned.ours)),
+        theirs: Option.some(files(aligned.theirs)),
+      },
+      at,
+      choose,
+    );
+  },
+  wholeTree,
+);
 
 /** What kind of conflict a file tree merge met, for people and the Registry. */
 export const conflictKind = (found: Merge.Conflict): SyncConflict["kind"] => {
