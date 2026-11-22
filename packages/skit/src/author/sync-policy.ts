@@ -76,10 +76,13 @@ export const mergeAuthorRevisions = (
       const tree: History.Tree = Option.getOrElse(side, () => []);
       const files = tree.filter((entry): entry is TreeFile => entry.kind === "file");
       return Object.fromEntries(
-        files.map((entry) => [
-          entry.path,
-          { ...entry, editedAt: Object.hasOwn(times, entry.path) ? times[entry.path] : undefined },
-        ]),
+        files.map((entry) => {
+          const path = History.editTimePath(entry.path);
+          return [
+            entry.path,
+            { ...entry, editedAt: Object.hasOwn(times, path) ? times[path] : undefined },
+          ];
+        }),
       );
     };
     const moved = followSkillMoves({
@@ -97,7 +100,7 @@ export const mergeAuthorRevisions = (
     const times = (side: typeof moved.ours) =>
       Object.fromEntries(
         Object.values(side).flatMap((entry) =>
-          entry.editedAt === undefined ? [] : [[entry.path, entry.editedAt]],
+          entry.editedAt === undefined ? [] : [[History.editTimePath(entry.path), entry.editedAt]],
         ),
       );
     versions = {

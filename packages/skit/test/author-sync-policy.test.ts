@@ -103,6 +103,20 @@ describe("skit author sync", () => {
         );
         expect(result.edits).toEqual({ "changelog/SKILL.md": 2 });
       });
+      test("a decomposed filename keeps its canonical edit time during merge", () => {
+        const native = "cafe\u0301.bin";
+        const canonical = native.normalize("NFC");
+        const base = [{ ...entry(native, "base"), bytes: Uint8Array.of(0, 1) }];
+        const ours = [{ ...entry(native, "ours"), bytes: Uint8Array.of(0, 2) }];
+        const theirs = [{ ...entry(native, "theirs"), bytes: Uint8Array.of(0, 3) }];
+        const result = mergeAuthorRevisions(
+          { base: Option.some(base), ours: Option.some(ours), theirs: Option.some(theirs) },
+          { ours: { [canonical]: 10 }, theirs: { [canonical]: 20 } },
+        );
+        expect(result.value).toEqual(Option.some(theirs));
+        expect(result.edits).toEqual({ [canonical]: 20 });
+      });
+
       test("each conflicting path uses its own time", () => {
         const result = Merge.runDecided(
           authorTree({ excluded: new Set(), previouslyExcluded: new Set() }),

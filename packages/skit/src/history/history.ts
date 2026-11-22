@@ -66,9 +66,12 @@ export type Author = typeof Author.Type;
 export const EditTimes = Schema.Record(Schema.String, Schema.Int);
 export type EditTimes = typeof EditTimes.Type;
 
+/** Edit-time keys use the same NFC spelling for native and transported trees. */
+export const editTimePath = (path: string) => path.normalize("NFC");
+
 /** Missing or unrelated clock keys cannot participate in a path-based decision. */
 export const editTimePaths = (tree: Tree, edits: EditTimes): ReadonlyArray<string> => {
-  const paths = new Set(tree.map((entry) => entry.path.normalize("NFC")));
+  const paths = new Set(tree.map((entry) => editTimePath(entry.path)));
   return [
     ...new Set([
       ...[...paths].filter((path) => !Object.hasOwn(edits, path)),
@@ -268,14 +271,14 @@ export const editTimes = (
 ): EditTimes => {
   const same = Schema.toEquivalence(TreeEntry);
   const find = (tree: Tree, path: string) =>
-    tree.find((entry) => entry.path.normalize("NFC") === path);
+    tree.find((entry) => editTimePath(entry.path) === path);
   const matches = (entry: TreeEntry, tree: Tree) => {
-    const found = find(tree, entry.path.normalize("NFC"));
+    const found = find(tree, editTimePath(entry.path));
     return found !== undefined && same({ ...entry, path: found.path }, found);
   };
   const timesByPath = new Map<string, number>();
   for (const entry of tree) {
-    const path = entry.path.normalize("NFC");
+    const path = editTimePath(entry.path);
     const unchanged = previous.filter((parent) => matches(entry, parent.tree));
     const times = unchanged.flatMap((parent) =>
       Object.hasOwn(parent.edits, path) ? [parent.edits[path]!] : [],
@@ -325,8 +328,8 @@ export const record = Effect.fn("History.record")(function* (
   if (copied !== undefined) {
     const same = Schema.toEquivalence(TreeEntry);
     for (const entry of tree) {
-      const path = entry.path.normalize("NFC");
-      const original = copied.tree.find((file) => file.path.normalize("NFC") === path);
+      const path = editTimePath(entry.path);
+      const original = copied.tree.find((file) => editTimePath(file.path) === path);
       if (original !== undefined && same({ ...entry, path: original.path }, original))
         edits[path] = copied.revision.edits[path]!;
     }
@@ -349,8 +352,9 @@ export const record = Effect.fn("History.record")(function* (
 
 /** A structural overlap uses the latest edit within the whole conflicting subtree. */
 export const editTime = (edits: EditTimes, path: string): number | undefined => {
+  const key = editTimePath(path);
   const times = Object.entries(edits)
-    .filter(([candidate]) => path === "" || candidate === path || candidate.startsWith(`${path}/`))
+    .filter(([candidate]) => key === "" || candidate === key || candidate.startsWith(`${key}/`))
     .map(([, time]) => time);
   return times.length === 0 ? undefined : Math.max(...times);
 };
