@@ -14,7 +14,7 @@ import {
   saveOperation,
   settleOperation,
   type PendingOperation,
-  type OperationPublication,
+  type LibraryStateChange,
 } from "./operations.js";
 import type { OperationKind, SetupStopReason } from "./state-schema.js";
 import type { Snapshot } from "../snapshot.js";
@@ -125,7 +125,7 @@ export class LibraryWriter extends Context.Service<
     readonly saveOperation: (
       next: PendingOperation,
       base: PendingOperation,
-      state?: OperationPublication,
+      change?: LibraryStateChange,
     ) => Effect.Effect<void, LibraryStateWriteError>;
     readonly settleOperation: (
       base: PendingOperation,
@@ -221,8 +221,8 @@ export const writeLibrary = <A, E, R>(
             write((action) => saveLibraryState(root, next, base, action, revision)),
           recordOperation: (operation, base, kind, replaceDone = false) =>
             write((action) => recordOperation(root, operation, base, kind, action, replaceDone)),
-          saveOperation: (next, base, state) =>
-            write((action) => saveOperation(root, next, base, action, state)),
+          saveOperation: (next, base, change) =>
+            write((action) => saveOperation(root, next, base, action, change)),
           settleOperation: (base, reason) =>
             write((action) => settleOperation(root, base, action, reason)),
         });

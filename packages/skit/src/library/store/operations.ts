@@ -34,7 +34,7 @@ import { decodeCatalogue } from "./catalogue.js";
 import { EnabledState } from "./enabled.js";
 import { loadCatalogueRows, loadEnabledRows, loadInstalledSkillRows } from "./rows.js";
 
-export type OperationPublication =
+export type LibraryStateChange =
   | { readonly next: LibraryState; readonly base: LibraryState }
   | InstalledSkillsChange
   | CollectionRemoval;
@@ -268,7 +268,7 @@ export const saveOperation = Effect.fn("Library.saveOperation")(function* (
   next: PendingOperation,
   base: PendingOperation,
   action: HistoryAction,
-  publication?: OperationPublication,
+  change?: LibraryStateChange,
 ) {
   const path = libraryDatabasePath(home);
   yield* withLibraryTransaction(
@@ -286,15 +286,15 @@ export const saveOperation = Effect.fn("Library.saveOperation")(function* (
       )
         return yield* new LibraryChanged({ path });
       let changes: ReturnType<typeof diffLibraryState> = [];
-      if (publication && "removeCollection" in publication)
-        yield* saveCollectionRemoval(home, publication, action);
-      else if (publication && "installedSkills" in publication)
-        yield* saveInstalledSkills(home, publication, action);
-      else if (publication) {
-        const saved = yield* saveDatabaseState(path, publication.next, publication.base);
-        changes = diffLibraryState(publication.base, saved);
+      if (change && "removeCollection" in change)
+        yield* saveCollectionRemoval(home, change, action);
+      else if (change && "installedSkills" in change)
+        yield* saveInstalledSkills(home, change, action);
+      else if (change) {
+        const saved = yield* saveDatabaseState(path, change.next, change.base);
+        changes = diffLibraryState(change.base, saved);
       }
-      // The publication can advance setup Undo progress in this same transaction. Carry that
+      // The change can advance setup Undo progress in this same transaction. Carry that
       // owner-written progress forward; callers may update step evidence, not setup intent.
       const active = yield* CurrentSetupOperation;
       const updated = active === base.operationId ? yield* readOperation(path, active) : undefined;
