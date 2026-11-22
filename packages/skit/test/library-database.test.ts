@@ -16,7 +16,7 @@ import {
   writeLibrary,
 } from "../src/library/store/library-store.js";
 import { SqlError, classifySqliteError } from "effect/sql/SqlError";
-import { assert, it } from "@effect/vitest";
+import { assert, expect, it } from "@effect/vitest";
 import { Effect, FileSystem, Schema } from "effect";
 import { systemError } from "effect/PlatformError";
 import { Migrator, SqlClient } from "effect/sql";
@@ -999,19 +999,34 @@ it.effect("shared writes refuse a pre-existing transaction without home writer a
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-unlocked-transaction-" });
     yield* prepareLibraryDatabase(home, true);
+    const path = libraryDatabasePath(home);
     yield* withLibraryDatabase(
-      libraryDatabasePath(home),
+      path,
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
         yield* sql.withTransaction(
           Effect.gen(function* () {
-            const failure = yield* Effect.flip(
+            const exit = yield* Effect.exit(
               withDatabaseTransaction(
                 home,
                 sql`INSERT INTO library_collections(collection_id,label) VALUES('unlocked','unlocked')`,
               ),
             );
-            assert.strictEqual(failure._tag, "InvalidLibraryState");
+            expect(exit).toMatchObject({
+              _tag: "Failure",
+              cause: {
+                reasons: [
+                  {
+                    _tag: "Die",
+                    defect: {
+                      _tag: "LibraryInvariantFailed",
+                      path,
+                      reason: { _tag: "DatabaseWriterLockMissing" },
+                    },
+                  },
+                ],
+              },
+            });
             assert.deepStrictEqual(yield* sql`SELECT collection_id FROM library_collections`, []);
           }),
         );
@@ -1042,7 +1057,7 @@ it.effect(
           yield* reader.withTransaction(
             Effect.gen(function* () {
               assert.deepStrictEqual(yield* reader`SELECT value FROM nested_write`, []);
-              const failure = yield* Effect.flip(
+              const exit = yield* Effect.exit(
                 withDatabaseTransaction(
                   home,
                   Effect.gen(function* () {
@@ -1051,9 +1066,21 @@ it.effect(
                   }),
                 ),
               );
-              assert.strictEqual(failure._tag, "InvalidLibraryState");
-              if (failure._tag === "InvalidLibraryState")
-                assert.deepStrictEqual(failure.reason, { _tag: "DatabaseWriteInsideRead" });
+              expect(exit).toMatchObject({
+                _tag: "Failure",
+                cause: {
+                  reasons: [
+                    {
+                      _tag: "Die",
+                      defect: {
+                        _tag: "LibraryInvariantFailed",
+                        path,
+                        reason: { _tag: "DatabaseWriteInsideRead" },
+                      },
+                    },
+                  ],
+                },
+              });
               assert.deepStrictEqual(yield* reader`SELECT value FROM nested_write`, []);
             }),
           );

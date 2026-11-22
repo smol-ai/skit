@@ -97,10 +97,6 @@ const readFailureMessage = Match.type<typeof LibraryReadFailure.Type>().pipe(
         DatabaseMigrationIncomplete: () => "database migration did not finish",
         DatabaseMigrationsMismatch: ({ expected, actual }) =>
           `unsupported database migrations (${actual.join(", ") || "none"}). This build expects ${expected.join(", ")}`,
-        DatabaseWriteInsideRead: () => "cannot start a database write inside a read transaction",
-        DatabaseWriterLockMissing: () => "database write transaction has no Library writer lock",
-        ImportInsideTransaction: () =>
-          "Library import must finish before a database transaction starts",
         ImportRecordMissing: ({ sourcePath }) =>
           `database already has Library data without an import record for ${sourcePath}`,
         DocumentEncodingFailed: ({ document }) => `cannot encode the ${document} document as JSON`,
@@ -158,12 +154,7 @@ const readFailureNext = Match.type<typeof LibraryReadFailure.Type>().pipe(
         return "Use a build that supports this migration. Keep the database intact.";
       if (reason._tag === "LegacyStateBesideDatabase")
         return `Keep the authoritative database. Move ${reason.statePath} aside as a separate backup, then retry.`;
-      if (
-        reason._tag === "DatabaseWriteInsideRead" ||
-        reason._tag === "DatabaseWriterLockMissing" ||
-        reason._tag === "ImportInsideTransaction" ||
-        reason._tag === "DocumentEncodingFailed"
-      )
+      if (reason._tag === "DocumentEncodingFailed")
         return "Retry the operation. If it fails again, report the failure to SKIT’s maintainers.";
       if (
         reason._tag === "CatalogueRowChanged" ||

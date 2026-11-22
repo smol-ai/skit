@@ -4506,51 +4506,6 @@
                     "_tag": {
                       "type": "string",
                       "enum": [
-                        "DatabaseWriteInsideRead"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "_tag"
-                  ],
-                  "additionalProperties": true
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "_tag": {
-                      "type": "string",
-                      "enum": [
-                        "DatabaseWriterLockMissing"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "_tag"
-                  ],
-                  "additionalProperties": true
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "_tag": {
-                      "type": "string",
-                      "enum": [
-                        "ImportInsideTransaction"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "_tag"
-                  ],
-                  "additionalProperties": true
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "_tag": {
-                      "type": "string",
-                      "enum": [
                         "ImportRecordMissing"
                       ]
                     },
@@ -15221,51 +15176,6 @@
                                     "_tag": {
                                       "type": "string",
                                       "enum": [
-                                        "DatabaseWriteInsideRead"
-                                      ]
-                                    }
-                                  },
-                                  "required": [
-                                    "_tag"
-                                  ],
-                                  "additionalProperties": true
-                                },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "_tag": {
-                                      "type": "string",
-                                      "enum": [
-                                        "DatabaseWriterLockMissing"
-                                      ]
-                                    }
-                                  },
-                                  "required": [
-                                    "_tag"
-                                  ],
-                                  "additionalProperties": true
-                                },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "_tag": {
-                                      "type": "string",
-                                      "enum": [
-                                        "ImportInsideTransaction"
-                                      ]
-                                    }
-                                  },
-                                  "required": [
-                                    "_tag"
-                                  ],
-                                  "additionalProperties": true
-                                },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "_tag": {
-                                      "type": "string",
-                                      "enum": [
                                         "ImportRecordMissing"
                                       ]
                                     },
@@ -22376,51 +22286,6 @@
                     "_tag": {
                       "type": "string",
                       "enum": [
-                        "DatabaseWriteInsideRead"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "_tag"
-                  ],
-                  "additionalProperties": true
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "_tag": {
-                      "type": "string",
-                      "enum": [
-                        "DatabaseWriterLockMissing"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "_tag"
-                  ],
-                  "additionalProperties": true
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "_tag": {
-                      "type": "string",
-                      "enum": [
-                        "ImportInsideTransaction"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "_tag"
-                  ],
-                  "additionalProperties": true
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "_tag": {
-                      "type": "string",
-                      "enum": [
                         "ImportRecordMissing"
                       ]
                     },
@@ -23698,6 +23563,75 @@
                   "required": [
                     "_tag",
                     "path"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "LibraryInvariantFailed"
+                      ]
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": [
+                                "DatabaseWriteInsideRead"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag"
+                          ],
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": [
+                                "DatabaseWriterLockMissing"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag"
+                          ],
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": [
+                                "ImportInsideTransaction"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag"
+                          ],
+                          "additionalProperties": true
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "path",
+                    "reason"
                   ],
                   "additionalProperties": true
                 },
@@ -27431,6 +27365,75 @@
                   "required": [
                     "_tag",
                     "path"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "LibraryInvariantFailed"
+                      ]
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": [
+                                "DatabaseWriteInsideRead"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag"
+                          ],
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": [
+                                "DatabaseWriterLockMissing"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag"
+                          ],
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": [
+                                "ImportInsideTransaction"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag"
+                          ],
+                          "additionalProperties": true
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "path",
+                    "reason"
                   ],
                   "additionalProperties": true
                 },
@@ -36312,51 +36315,6 @@
                                     "_tag": {
                                       "type": "string",
                                       "enum": [
-                                        "DatabaseWriteInsideRead"
-                                      ]
-                                    }
-                                  },
-                                  "required": [
-                                    "_tag"
-                                  ],
-                                  "additionalProperties": true
-                                },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "_tag": {
-                                      "type": "string",
-                                      "enum": [
-                                        "DatabaseWriterLockMissing"
-                                      ]
-                                    }
-                                  },
-                                  "required": [
-                                    "_tag"
-                                  ],
-                                  "additionalProperties": true
-                                },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "_tag": {
-                                      "type": "string",
-                                      "enum": [
-                                        "ImportInsideTransaction"
-                                      ]
-                                    }
-                                  },
-                                  "required": [
-                                    "_tag"
-                                  ],
-                                  "additionalProperties": true
-                                },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "_tag": {
-                                      "type": "string",
-                                      "enum": [
                                         "ImportRecordMissing"
                                       ]
                                     },
@@ -43471,51 +43429,6 @@
                     "_tag": {
                       "type": "string",
                       "enum": [
-                        "DatabaseWriteInsideRead"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "_tag"
-                  ],
-                  "additionalProperties": true
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "_tag": {
-                      "type": "string",
-                      "enum": [
-                        "DatabaseWriterLockMissing"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "_tag"
-                  ],
-                  "additionalProperties": true
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "_tag": {
-                      "type": "string",
-                      "enum": [
-                        "ImportInsideTransaction"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "_tag"
-                  ],
-                  "additionalProperties": true
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "_tag": {
-                      "type": "string",
-                      "enum": [
                         "ImportRecordMissing"
                       ]
                     },
@@ -44702,6 +44615,75 @@
           "required": [
             "_tag",
             "root",
+            "reason"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "LibraryInvariantFailed"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "DatabaseWriteInsideRead"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "_tag"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "DatabaseWriterLockMissing"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "_tag"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "ImportInsideTransaction"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "_tag"
+                  ],
+                  "additionalProperties": true
+                }
+              ]
+            }
+          },
+          "required": [
+            "_tag",
+            "path",
             "reason"
           ],
           "additionalProperties": true

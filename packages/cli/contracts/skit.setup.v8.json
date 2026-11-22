@@ -12492,51 +12492,6 @@
                 "_tag": {
                   "type": "string",
                   "enum": [
-                    "DatabaseWriteInsideRead"
-                  ]
-                }
-              },
-              "required": [
-                "_tag"
-              ],
-              "additionalProperties": true
-            },
-            {
-              "type": "object",
-              "properties": {
-                "_tag": {
-                  "type": "string",
-                  "enum": [
-                    "DatabaseWriterLockMissing"
-                  ]
-                }
-              },
-              "required": [
-                "_tag"
-              ],
-              "additionalProperties": true
-            },
-            {
-              "type": "object",
-              "properties": {
-                "_tag": {
-                  "type": "string",
-                  "enum": [
-                    "ImportInsideTransaction"
-                  ]
-                }
-              },
-              "required": [
-                "_tag"
-              ],
-              "additionalProperties": true
-            },
-            {
-              "type": "object",
-              "properties": {
-                "_tag": {
-                  "type": "string",
-                  "enum": [
                     "ImportRecordMissing"
                   ]
                 },
@@ -21053,6 +21008,75 @@
       ],
       "additionalProperties": true
     },
+    "LibraryInvariantFailedEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "LibraryInvariantFailed"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "DatabaseWriteInsideRead"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "DatabaseWriterLockMissing"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ImportInsideTransaction"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "path",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
     "Library.StepDefectEncoded": {
       "type": "object",
       "properties": {
@@ -21069,6 +21093,9 @@
             },
             {
               "$ref": "#/definitions/ArchiveStreamInvalidEncoded"
+            },
+            {
+              "$ref": "#/definitions/LibraryInvariantFailedEncoded"
             },
             {}
           ]

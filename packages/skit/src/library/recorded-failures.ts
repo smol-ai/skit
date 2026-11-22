@@ -1,3 +1,4 @@
+import { LibraryInvariantFailed } from "./failures.js";
 import { AuthorWorkspaceInvariantFailed } from "../author/workspace-contracts.js";
 import { ArchiveStreamInvalid } from "../artifact/archive-failure.js";
 import { SchemaFailure } from "../shared/schema-issue.js";
@@ -9,7 +10,12 @@ export class StepDefect
   extends Schema.TaggedError<StepDefect, { readonly brand: unique symbol }>()(
     "Library.StepDefect",
     {
-      defect: Schema.Union([AuthorWorkspaceInvariantFailed, ArchiveStreamInvalid, Schema.Defect()]),
+      defect: Schema.Union([
+        AuthorWorkspaceInvariantFailed,
+        ArchiveStreamInvalid,
+        LibraryInvariantFailed,
+        Schema.Defect(),
+      ]),
     },
   )
   implements SkitFailure

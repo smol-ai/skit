@@ -1,5 +1,5 @@
 import { Context, Effect, FileSystem, Option, Schema } from "effect";
-import { InvalidLibraryState, LibrarySqlError } from "../failures.js";
+import { InvalidLibraryState, LibraryInvariantFailed, LibrarySqlError } from "../failures.js";
 import { Migrator, SqlClient } from "effect/sql";
 import { join, resolve } from "node:path";
 
@@ -228,17 +228,13 @@ export const withDatabaseTransaction = <A, E, R>(
         program.pipe(Effect.provideService(SqlClient.SqlClient, current.sql)),
       );
     if (current?.mode === "read")
-      return yield* new InvalidLibraryState({
-        path,
-        reason: { _tag: "DatabaseWriteInsideRead" },
-      });
+      return yield* Effect.die(
+        new LibraryInvariantFailed({ path, reason: { _tag: "DatabaseWriteInsideRead" } }),
+      );
     if (current?.mode === "write")
-      return yield* new InvalidLibraryState({
-        path,
-        reason: {
-          _tag: "DatabaseWriterLockMissing",
-        },
-      });
+      return yield* Effect.die(
+        new LibraryInvariantFailed({ path, reason: { _tag: "DatabaseWriterLockMissing" } }),
+      );
     yield* prepareLibraryDatabase(home, true);
     return yield* withLibraryStateReplacement(
       home,

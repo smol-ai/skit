@@ -1,4 +1,8 @@
-import { InvalidLibraryState, LibraryChanged } from "@smolai/skit-core/library";
+import {
+  InvalidLibraryState,
+  LibraryChanged,
+  LibraryInvariantFailed,
+} from "@smolai/skit-core/library";
 import {
   AuthorWorkspaceInvariantFailed,
   WorkspaceRoot,
@@ -18,6 +22,7 @@ import { CollectionNotUpdatable } from "@smolai/skit-core/library/update/failure
 import { libraryFailure, libraryReadFailure } from "../src/library/failures";
 import { SkitValidationFailed } from "@smolai/skit-core/author";
 import { Schema } from "effect";
+import { invariantFailure } from "../src/library/invariant-failures";
 
 test("the TUI explains structured archive diagnostics after JSON storage", () => {
   const original = new SkitValidationFailed({
@@ -149,17 +154,28 @@ test("retains typed inventory row evidence across the TUI failure codec", () => 
   );
 });
 
-test("database damage, refused edits and transaction mistakes have distinct actions", () => {
+test("database damage, refused edits and encoding failures have distinct actions", () => {
   const path = "/library/library.sqlite";
   const action = (reason: InvalidLibraryState["reason"]) => {
     const error = new InvalidLibraryState({ path, reason });
     return libraryReadFailure(error)?.remediation;
   };
   const backup = action({ _tag: "DatabaseEmpty" });
-  const report = action({ _tag: "DatabaseWriteInsideRead" });
+  const report = action({ _tag: "DocumentEncodingFailed", document: "library" });
   const review = action({ _tag: "UndoFieldChanged", field: "unmanaged" });
-  expect(action({ _tag: "DatabaseWriterLockMissing" })).toEqual(report);
+  expect(action({ _tag: "DocumentEncodingFailed", document: "inventory" })).toEqual(report);
   expect(action({ _tag: "EnabledSubjectMissing", subject: "skill", id: "skill" })).toEqual(review);
   expect(new Set([backup, report, review].map((value) => JSON.stringify(value))).size).toBe(3);
   expect(libraryReadFailure(new LibraryChanged({ path }))?.remediation).toBeDefined();
+});
+
+test("the TUI delegates Library invariants to the defect presenter", () => {
+  const failure = new LibraryInvariantFailed({
+    path: "/library/library.sqlite",
+    reason: { _tag: "ImportInsideTransaction" },
+  });
+  const presented = invariantFailure(failure);
+  expect(presented).toBeDefined();
+  expect(libraryFailure(failure).split("\n")[0]).toBe(presented);
+  expect(libraryReadFailure(failure)).toBeUndefined();
 });

@@ -1,3 +1,4 @@
+import { LibraryInvariantFailed, LibraryInvariantReason } from "@smolai/skit-core/library";
 import {
   AuthorWorkspaceInvariantFailed,
   AuthorWorkspaceInvariantReason,
@@ -31,6 +32,18 @@ export const invariantFailure = (error: unknown) => {
         }),
       ],
       details: [Block.Fields({ rows: [{ label: "Workspace", value: [{ path: error.root }] }] })],
+      next,
+    });
+  if (Schema.is(LibraryInvariantFailed)(error))
+    return describeFailure({
+      summary: [
+        LibraryInvariantReason.match(error.reason, {
+          DatabaseWriteInsideRead: () => "A Library write started inside a read transaction",
+          DatabaseWriterLockMissing: () => "A Library write started without the writer lock",
+          ImportInsideTransaction: () => "A Library import started inside a database transaction",
+        }),
+      ],
+      details: [Block.Fields({ rows: [{ label: "Database", value: [{ path: error.path }] }] })],
       next,
     });
   if (Schema.is(ArchiveStreamInvalid)(error)) return archiveInvariantFailure(error);

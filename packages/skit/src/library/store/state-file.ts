@@ -21,7 +21,12 @@ import { LibraryAuditInvalid } from "../audit/failures.js";
 
 import type { PlatformError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
-import { InvalidLibraryState, LibraryChanged, LibrarySqlError } from "../failures.js";
+import {
+  InvalidLibraryState,
+  LibraryInvariantFailed,
+  LibraryChanged,
+  LibrarySqlError,
+} from "../failures.js";
 import { HomeBusy } from "../../platform/lock-failures.js";
 import { writeRawAtomic, syncPaths } from "../../platform/atomic-write.js";
 import {
@@ -474,12 +479,9 @@ export const migrateLocalLibraryState = Effect.fn("Library.migrateState")(functi
   );
   if (ready) return;
   if (yield* currentLibraryTransaction(root))
-    return yield* new InvalidLibraryState({
-      path,
-      reason: {
-        _tag: "ImportInsideTransaction",
-      },
-    });
+    return yield* Effect.die(
+      new LibraryInvariantFailed({ path, reason: { _tag: "ImportInsideTransaction" } }),
+    );
   yield* withLibraryStateReplacement(
     root,
     Effect.gen(function* () {

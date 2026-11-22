@@ -116,6 +116,22 @@ export class ImportContentInvalid
   readonly code = "VALIDATION_FAILED" as const;
 }
 
+export const LibraryInvariantReason = Schema.TaggedUnion({
+  DatabaseWriteInsideRead: {},
+  DatabaseWriterLockMissing: {},
+  ImportInsideTransaction: {},
+});
+export class LibraryInvariantFailed
+  extends Schema.TaggedError<LibraryInvariantFailed, { readonly brand: unique symbol }>()(
+    "LibraryInvariantFailed",
+    { path: Schema.String, reason: LibraryInvariantReason },
+  )
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+}
+
 /** Why something the Library stores cannot be used. Front ends write the words. */
 export const InvalidLibraryStateReason = Schema.TaggedUnion({
   LegacySourceChanged: {
@@ -140,9 +156,6 @@ export const InvalidLibraryStateReason = Schema.TaggedUnion({
     expected: Schema.Array(Schema.String),
     actual: Schema.Array(Schema.String),
   },
-  DatabaseWriteInsideRead: {},
-  DatabaseWriterLockMissing: {},
-  ImportInsideTransaction: {},
   ImportRecordMissing: { sourcePath: Schema.String },
   DocumentEncodingFailed: { document: Schema.Literals(["library", "inventory"]) },
   RowIdentityMismatch: {

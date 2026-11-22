@@ -2539,51 +2539,6 @@
                 "_tag": {
                   "type": "string",
                   "enum": [
-                    "DatabaseWriteInsideRead"
-                  ]
-                }
-              },
-              "required": [
-                "_tag"
-              ],
-              "additionalProperties": true
-            },
-            {
-              "type": "object",
-              "properties": {
-                "_tag": {
-                  "type": "string",
-                  "enum": [
-                    "DatabaseWriterLockMissing"
-                  ]
-                }
-              },
-              "required": [
-                "_tag"
-              ],
-              "additionalProperties": true
-            },
-            {
-              "type": "object",
-              "properties": {
-                "_tag": {
-                  "type": "string",
-                  "enum": [
-                    "ImportInsideTransaction"
-                  ]
-                }
-              },
-              "required": [
-                "_tag"
-              ],
-              "additionalProperties": true
-            },
-            {
-              "type": "object",
-              "properties": {
-                "_tag": {
-                  "type": "string",
-                  "enum": [
                     "ImportRecordMissing"
                   ]
                 },
