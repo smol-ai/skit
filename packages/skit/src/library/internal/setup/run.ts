@@ -565,16 +565,17 @@ export const setupOperation = Effect.fn("Library.setupOperation")(function* (
     });
   const state = inspected.present ? inspected.state : emptyLibraryState();
   const operationId = options.operationId;
+  const kind = options.kind ?? "setup";
   const preparation = yield* recordPreparation(steps);
   const pending = yield* OperationStatus.cases.Pending.makeEffect({
     operationId,
     ...(preparation === undefined ? {} : { preparation }),
     steps: yield* Effect.forEach(steps, recordedStep),
     before:
-      (options.kind ?? "setup") === "setup"
+      kind === "setup"
         ? { installedSkills: structuredClone(state.installed_skills) }
         : recordedLibrary(state),
-    ...((options.kind ?? "setup") === "setup"
+    ...(kind === "setup"
       ? {
           setup: {
             changes: yield* prepareSetupChanges(
@@ -598,7 +599,7 @@ export const setupOperation = Effect.fn("Library.setupOperation")(function* (
     ),
   );
   yield* writer
-    .recordOperation(pending, options.base, options.kind ?? "setup", options.replaceDone ?? false)
+    .recordOperation(pending, options.base, kind, options.replaceDone ?? false)
     .pipe(
       Effect.catchTag("LibraryChanged", () =>
         Effect.fail(
@@ -606,9 +607,10 @@ export const setupOperation = Effect.fn("Library.setupOperation")(function* (
         ),
       ),
     );
-  return yield* runOperation(operationId).pipe(
-    Effect.provideService(CurrentSetupOperation, operationId),
-  );
+  const run = runOperation(operationId);
+  return yield* kind === "setup"
+    ? run.pipe(Effect.provideService(CurrentSetupOperation, operationId))
+    : run;
 });
 
 /** Public setup allocates its operation; standalone plans allocate one before their preview. */
@@ -716,11 +718,12 @@ export const recover = Effect.fn("Library.recover")(function* (home: string) {
       const stopped: StoppedOperation[] = [];
       for (const operation of yield* operations) {
         if (operation._tag !== "Pending") continue;
+        const run = runOperation(operation.operationId);
         const result = yield* writeLibrary(
           home,
-          runOperation(operation.operationId).pipe(
-            Effect.provideService(CurrentSetupOperation, operation.operationId),
-          ),
+          operation.setup === undefined
+            ? run
+            : run.pipe(Effect.provideService(CurrentSetupOperation, operation.operationId)),
           {
             resume: operation.operationId,
           },

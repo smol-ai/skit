@@ -16,7 +16,7 @@ import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 import { InstalledApply, OperationStatus } from "../src/library/store/state-schema.js";
-import { SqlClient } from "effect/sql";
+import { SqlClient, Statement } from "effect/sql";
 import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
 import { saveLibrary, testRoots } from "./helpers/library-store.js";
 
@@ -353,9 +353,32 @@ it.effect("apply returns the final journal revision and rebuilds the next state 
     const f = yield* fixture("enable");
     // The plan's derived rows are display data, never authority to publish arbitrary state.
     f.plan.next.repositories.push({ root: join(f.root, "unreviewed"), enabled: [] });
+    const operationReads = new Map<string, number>();
     yield* Effect.gen(function* () {
       const library = yield* Library.Service;
-      const outcome = yield* library.apply({ _tag: "Apply", plan: f.plan });
+      const outcome = yield* library.apply({ _tag: "Apply", plan: f.plan }).pipe(
+        Effect.provideService(Statement.CurrentTransformer, (statement, _sql, _fiber, span) =>
+          Effect.sync(() => {
+            if (
+              statement
+                .compile()[0]
+                .startsWith("SELECT document FROM library_operations WHERE operation_id")
+            ) {
+              let parent = Option.getOrUndefined(span.parent);
+              while (parent?._tag === "Span") {
+                if (parent.name === "Library.saveOperation") {
+                  operationReads.set(parent.spanId, (operationReads.get(parent.spanId) ?? 0) + 1);
+                  break;
+                }
+                parent = Option.getOrUndefined(parent.parent);
+              }
+            }
+            return statement;
+          }),
+        ),
+      );
+      assert.isAbove(operationReads.size, 0);
+      assert.isTrue([...operationReads.values()].every((reads) => reads === 1));
       assert.strictEqual(outcome.result._tag, "Applied");
       const snapshot = yield* library.read;
       if (snapshot._tag !== "Present") return yield* Effect.die("Missing Library");
