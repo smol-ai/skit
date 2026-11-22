@@ -39,14 +39,21 @@ const openLibraryDatabase = <A, E, R>(
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      if (mode !== "read") {
-        const fs = yield* FileSystem.FileSystem;
-        yield* fs.chmod(path, 0o600);
-        yield* sql`PRAGMA synchronous = FULL`;
-      }
-      return yield* program.pipe(Effect.provideService(LibraryDatabase, { path, sql, mode }));
-    }).pipe(Effect.provide(sqliteLayer({ filename: path, readonly: mode === "read" }))),
+      const fs = yield* FileSystem.FileSystem;
+      const info = yield* fs
+        .stat(path)
+        .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
+      if (info?.type === "File" && info.size === 0n)
+        return yield* new InvalidLibraryState({ path, reason: { _tag: "DatabaseEmpty" } });
+      return yield* Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        if (mode !== "read") {
+          yield* fs.chmod(path, 0o600);
+          yield* sql`PRAGMA synchronous = FULL`;
+        }
+        return yield* program.pipe(Effect.provideService(LibraryDatabase, { path, sql, mode }));
+      }).pipe(Effect.provide(sqliteLayer({ filename: path, readonly: mode === "read" })));
+    }),
   );
 
 /** Nested reads can see the current writer's uncommitted rows. */

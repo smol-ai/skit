@@ -134,6 +134,7 @@ export const InvalidLibraryStateReason = Schema.TaggedUnion({
     migration: Schema.Int,
     supported: Schema.Int,
   },
+  DatabaseEmpty: {},
   DatabaseMigrationIncomplete: {},
   DatabaseMigrationsMismatch: {
     expected: Schema.Array(Schema.String),

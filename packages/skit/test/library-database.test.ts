@@ -696,6 +696,25 @@ it.effect("revalidates a database that appeared after the initial probe", () =>
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
+it.effect("refuses a zero-byte Library database without replacing it", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-empty-database-" });
+    const path = libraryDatabasePath(home);
+    yield* fs.writeFile(path, new Uint8Array());
+    for (const effect of [
+      prepareLibraryDatabase(home, true).pipe(Effect.asVoid),
+      inspectLocalLibraryState(home).pipe(Effect.asVoid),
+    ]) {
+      const failure = yield* Effect.flip(effect);
+      assert.strictEqual(failure._tag, "InvalidLibraryState");
+      if (failure._tag === "InvalidLibraryState")
+        assert.deepStrictEqual(failure.reason, { _tag: "DatabaseEmpty" });
+      assert.strictEqual((yield* fs.readFile(path)).byteLength, 0);
+    }
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
 it.effect("keeps native SQL and migration causes in a database failure", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;

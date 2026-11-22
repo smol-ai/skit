@@ -133,6 +133,7 @@ const libraryFailureMessage = Match.type<typeof LibraryDataFailure.Type>().pipe(
           `import into ${databasePath} stopped because backup ${backupPath} differs from source ${sourcePath}`,
         NewerDatabaseMigration: ({ databasePath, migration, supported }) =>
           `database ${databasePath} has migration ${migration}; this build supports through ${supported}`,
+        DatabaseEmpty: () => "database file is empty",
         DatabaseMigrationIncomplete: () => "database migration did not finish",
         DatabaseMigrationsMismatch: ({ expected, actual }) =>
           `unsupported database migrations (${actual.join(", ") || "none"}). This build expects ${expected.join(", ")}`,

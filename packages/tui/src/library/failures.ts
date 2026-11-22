@@ -90,6 +90,7 @@ const readFailure = Match.type<typeof LibraryReadFailure.Type>().pipe(
           `import into ${databasePath} stopped because backup ${backupPath} differs from source ${sourcePath}. Keep all existing copies of the source, backup, and database`,
         NewerDatabaseMigration: ({ databasePath, migration, supported }) =>
           `database ${databasePath} has migration ${migration}; this build supports through ${supported}. Use a build that supports this migration; keep the database intact`,
+        DatabaseEmpty: () => "database file is empty",
         DatabaseMigrationIncomplete: () => "database migration did not finish",
         DatabaseMigrationsMismatch: ({ expected, actual }) =>
           `unsupported database migrations (${actual.join(", ") || "none"}). This build expects ${expected.join(", ")}`,
