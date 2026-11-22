@@ -310,6 +310,12 @@ const loadCurrentInput = Effect.fn("Sync.loadCurrentInput")(function* <E>({
           Effect.catchTag("History.StoreMissing", () =>
             Effect.gen(function* () {
               const fetched = yield* remote.revision(currentId);
+              const paths = History.editTimePaths(fetched.tree, fetched.revision.edits);
+              if (paths.length > 0)
+                return yield* new RemoteInvalid({
+                  id: currentId,
+                  reason: { _tag: "EditTimesMismatch", paths },
+                });
               const actualTree = yield* store.putTree(fetched.tree);
               if (actualTree !== fetched.revision.tree)
                 return yield* new RemoteInvalid({

@@ -389,6 +389,36 @@ const text = (tree: History.Tree) =>
     ]),
   );
 
+it.effect("refuses mismatched remote edit times before storing the tree or revision", () =>
+  Effect.gen(function* () {
+    const { registry, remote } = makeRegistry();
+    const store = yield* memoryStore;
+    const tree = [file("skills/review/SKILL.md", "remote")];
+    const revision: History.Revision = {
+      tree: yield* History.treeHash(tree),
+      parents: [],
+      author: { device: makeMachineId(), at: 1 },
+      edits: {},
+    };
+    const id = yield* History.revisionId(revision);
+    registry.current = id;
+    registry.revisions.set(id, { revision, tree });
+    const failure = yield* Sync.loadPlanInput({
+      store,
+      remote,
+      state: Sync.Idle.make({ base: null }),
+      local: { hash: yield* History.treeHash([]), tree: [] },
+    }).pipe(Effect.flip);
+    expect(failure).toMatchObject({
+      _tag: "Sync.RemoteInvalid",
+      id,
+      reason: { _tag: "EditTimesMismatch", paths: ["skills/review/SKILL.md"] },
+    });
+    expect(yield* store.trees).toEqual([]);
+    expect(yield* Effect.flip(store.revision(id))).toMatchObject({ _tag: "History.StoreMissing" });
+  }).pipe(Effect.provide(NodeCrypto.layerDigest)),
+);
+
 describe("run", () => {
   it.effect("a first push records the device's tree and points current at it", () =>
     Effect.gen(function* () {

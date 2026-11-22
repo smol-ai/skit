@@ -34,6 +34,26 @@ describe("identity", () => {
     }).pipe(Effect.provide(NodeCrypto.layerDigest)),
   );
 
+  it.effect("refuses incomplete caller edit times before storing a new revision", () =>
+    Effect.gen(function* () {
+      const store = yield* memoryStore;
+      const tree = [file("x", "original")];
+      const author = { device, at: 1 };
+      const hash = yield* History.treeHash(tree);
+      const id = yield* History.revisionId({ tree: hash, parents: [], author, edits: {} });
+      expect(
+        yield* Effect.flip(History.record(store, tree, [], author, { edits: {} })),
+      ).toMatchObject({
+        _tag: "History.RecordInvalid",
+        paths: ["x"],
+      });
+      expect(yield* store.trees).toEqual([]);
+      expect(yield* Effect.flip(store.revision(id))).toMatchObject({
+        _tag: "History.StoreMissing",
+      });
+    }).pipe(Effect.provide(NodeCrypto.layerDigest)),
+  );
+
   it.effect("unrelated observations keep each path's original edit time", () =>
     Effect.gen(function* () {
       const store = yield* memoryStore;

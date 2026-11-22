@@ -8,7 +8,16 @@ export const syncFailure = Match.type<SyncFailure>().pipe(
     "Sync.RemoteInvalid": ({ id, reason }) =>
       describeFailure({
         summary: [
-          `The Registry sent revision ${id} in a form that does not match it: ${reason._tag === "TreeMismatch" ? `its tree has hash ${reason.actual}, expected ${reason.expected}` : `its revision identity is ${reason.actual}`}`,
+          `The Registry sent revision ${id} in a form that does not match it: ${Match.valueTags(
+            reason,
+            {
+              TreeMismatch: ({ actual, expected }) =>
+                `its tree has hash ${actual}, expected ${expected}`,
+              RevisionMismatch: ({ actual }) => `its revision identity is ${actual}`,
+              EditTimesMismatch: ({ paths }) =>
+                `edit times do not match tree paths: ${paths.join(", ")}`,
+            },
+          )}`,
         ],
         next: [
           "Run ",

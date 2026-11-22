@@ -146,7 +146,12 @@ export class StoreFailed extends Schema.TaggedError<
   cause: Schema.Defect(),
 }) {}
 
-export const StoreError = Schema.Union([StoreMissing, StoreCorrupt, StoreFailed]);
+export class RecordInvalid extends Schema.TaggedError<
+  RecordInvalid,
+  { readonly brand: unique symbol }
+>()("History.RecordInvalid", { paths: Schema.Array(Schema.String) }) {}
+
+export const StoreError = Schema.Union([StoreMissing, StoreCorrupt, StoreFailed, RecordInvalid]);
 export type StoreError = typeof StoreError.Type;
 
 /**
@@ -294,7 +299,6 @@ export const record = Effect.fn("History.record")(function* (
   author: Author,
   options: { readonly source?: RevisionId; readonly edits?: EditTimes } = {},
 ) {
-  const hash = yield* store.putTree(tree);
   const load = (id: RevisionId) =>
     Effect.gen(function* () {
       const revision = yield* store.revision(id);
@@ -327,6 +331,9 @@ export const record = Effect.fn("History.record")(function* (
         edits[path] = copied.revision.edits[path]!;
     }
   }
+  const paths = editTimePaths(tree, edits);
+  if (paths.length > 0) return yield* new RecordInvalid({ paths });
+  const hash = yield* store.putTree(tree);
   // A post-sync scan can already have been saved by the background observer. Correct
   // copied-path provenance when needed, but do not add another identical observation.
   if (

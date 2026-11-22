@@ -35,6 +35,13 @@ export const historyStoreFailure = Match.type<History.StoreError>().pipe(
         ],
         next: ["Keep the history files and restore the invalid content before syncing again."],
       }),
+    "History.RecordInvalid": ({ paths }) =>
+      describeFailure({
+        summary: [
+          `Cannot record revision: edit times do not match tree paths: ${paths.join(", ")}`,
+        ],
+        next: ["Keep the local files and report this history failure."],
+      }),
     "History.StoreFailed": ({ cause }) =>
       describeFailure({
         summary: [`History storage failed: ${errorMessage(cause)}`],
