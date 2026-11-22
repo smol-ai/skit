@@ -584,73 +584,17 @@ test("separate author processes back up offline history and converge through rea
         .toBe("watcher bytes retained across ambiguous POST");
       await expect.poll(() => settled([wa, wb]), { timeout: 25_000 }).toBe(true);
       expect(await storedCount(saved)).toBe(1);
-      // Take IDs and the count in one snapshot so every extra revision can be explained.
-      const beforeWindow = (
-        await env.DB.prepare(
-          "SELECT revision_id,tree_hash,author_device,author_at,created_at FROM revisions ORDER BY created_at,revision_id",
-        ).all<{
-          revision_id: string;
-          tree_hash: string;
-          author_device: string;
-          author_at: number;
-          created_at: string;
-        }>()
-      ).results;
-      const quiet = beforeWindow.length;
-      const windowStartedAt = Date.now();
+      const revisionIds = async () =>
+        (
+          await env.DB.prepare("SELECT revision_id FROM revisions ORDER BY revision_id").all<{
+            revision_id: string;
+          }>()
+        ).results.map((row) => row.revision_id);
+      const beforeWindow = await revisionIds();
       const headBeforeWindow = await current();
       await new Promise((resolveWait) => setTimeout(resolveWait, 7_000));
-      const afterWindow = (
-        await env.DB.prepare(
-          "SELECT revision_id,tree_hash,author_device,author_at,created_at FROM revisions ORDER BY created_at,revision_id",
-        ).all<{
-          revision_id: string;
-          tree_hash: string;
-          author_device: string;
-          author_at: number;
-          created_at: string;
-        }>()
-      ).results;
-      const beforeIds = new Set(beforeWindow.map((row) => row.revision_id));
-      const additions = [];
-      for (const row of afterWindow.filter((row) => !beforeIds.has(row.revision_id))) {
-        const stored = await revision(row.revision_id);
-        const parentRevisions = await Promise.all(
-          stored.revision.parents.map((id) => revision(id)),
-        );
-        additions.push({
-          ...row,
-          parents: stored.revision.parents,
-          edits: stored.revision.edits,
-          parentsKnownBeforeWindow: stored.revision.parents.map((id) => beforeIds.has(id)),
-          parentTrees: parentRevisions.map((parent) => parent.revision.tree),
-          parentAuthors: parentRevisions.map((parent) => parent.revision.author),
-          parentEdits: parentRevisions.map((parent) => parent.revision.edits),
-          treeEqualsAnyParent: parentRevisions.some(
-            (parent) => parent.revision.tree === stored.revision.tree,
-          ),
-          treeKnownBeforeWindow: beforeWindow.some(
-            (previous) => previous.tree_hash === stored.revision.tree,
-          ),
-        });
-      }
-      console.info(
-        JSON.stringify({
-          proof: "watcher-quiet-window",
-          windowStartedAt,
-          windowEndedAt: Date.now(),
-          headBeforeWindow,
-          headAfterWindow: await current(),
-          heldId: saved,
-          beforeCount: quiet,
-          afterCount: afterWindow.length,
-          additions,
-          syncReceipts: [wa, wb].map((watch) =>
-            watch.events.filter((event) => event.event === "sync").map((event) => event.result),
-          ),
-        }),
-      );
-      expect(await revisionCount()).toBe(quiet);
+      expect(await revisionIds()).toEqual(beforeWindow);
+      expect(await current()).toEqual(headBeforeWindow);
     } finally {
       for (const child of watchers) {
         if (child.exitCode === null && child.signalCode === null) {
