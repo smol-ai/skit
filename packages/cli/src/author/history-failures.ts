@@ -3,7 +3,8 @@ import {
   AuthorHistoryFailure,
   AuthorHistoryInvalidReason,
 } from "@smolai/skit-core/author/history-failures";
-import { Match } from "effect";
+import { Match, Schema } from "effect";
+import { LibraryDataFailure, libraryFailure } from "../library/failures.js";
 import { errorMessage } from "@smolai/skit-core/shared";
 import { schemaFailure } from "../platform/schema-failure.js";
 import { historyStoreFailure, treePathIssue } from "../platform/history-failures.js";
@@ -14,7 +15,8 @@ export const authorHistoryReason = (reason: AuthorHistoryInvalidReason): string 
     JournalVersionInvalid: ({ failure }) => `unsupported journal schema: ${schemaFailure(failure)}`,
     JournalWorkspaceMismatch: ({ expected, actual }) =>
       `journal workspace ${actual} does not match ${expected}`,
-    JournalFailure: ({ cause }) => errorMessage(cause),
+    JournalFailure: ({ cause }) =>
+      Schema.is(LibraryDataFailure)(cause) ? libraryFailure(cause).message : errorMessage(cause),
     JournalSchemaInvalid: ({ failure }) => schemaFailure(failure),
     StoreFailure: ({ failure }) => historyStoreFailure(failure).message,
     HistoryInsideWorkspace: ({ workspace, resolved }) =>
@@ -32,11 +34,18 @@ export const authorHistoryReason = (reason: AuthorHistoryInvalidReason): string 
 
 export const authorHistoryFailure = Match.type<AuthorHistoryFailure>().pipe(
   Match.tagsExhaustive({
-    AuthorHistoryInvalid: ({ path, reason }) =>
-      describeFailure({
-        summary: [
-          `${path === "history" ? "Author history" : `Author history at ${path}`} is unusable: ${authorHistoryReason(reason)}`,
-        ],
+    AuthorHistoryInvalid: ({ path, reason }) => {
+      const summary = `${path === "history" ? "Author history" : `Author history at ${path}`} is unusable`;
+      if (reason._tag === "JournalFailure" && Schema.is(LibraryDataFailure)(reason.cause)) {
+        const nested = libraryFailure(reason.cause);
+        return describeFailure({
+          summary: [summary],
+          details: nested.explanation,
+          next: nested.next,
+        });
+      }
+      return describeFailure({
+        summary: [`${summary}: ${authorHistoryReason(reason)}`],
         next:
           reason._tag === "HistoryInsideWorkspace"
             ? [
@@ -45,7 +54,8 @@ export const authorHistoryFailure = Match.type<AuthorHistoryFailure>().pipe(
             : reason._tag === "BackupDisconnected"
               ? ["Connect this Author Workspace before backing it up."]
               : ["Keep the history files and resolve the storage problem before syncing again."],
-      }),
+      });
+    },
     AuthorHistoryBusy: ({ path }) =>
       describeFailure({
         summary: [`Author history at ${path} is busy with another recording`],

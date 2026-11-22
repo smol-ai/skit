@@ -269,7 +269,7 @@ export const libraryFailure = (error: unknown): string => {
     return `${formatted.message}\n${formatted.remediation}`;
   }
   if (Schema.is(AuthorHistoryFailure)(error)) {
-    const formatted = authorHistoryFailure(error);
+    const formatted = authorHistoryFailure(error, libraryReadFailure);
     return `${formatted.message}\n${formatted.remediation}`;
   }
   if (Schema.is(StoreError)(error)) {

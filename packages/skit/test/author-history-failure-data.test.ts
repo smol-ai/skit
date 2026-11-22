@@ -5,6 +5,7 @@ import { AuthorHistoryInvalid, AuthorHistoryFailure } from "../src/author/histor
 import { StoreCorrupt, StoreError } from "../src/history/history.js";
 import { SkitContractError } from "../src/api/contracts.js";
 import { StepError } from "../src/library/store/state-schema.js";
+import { InvalidLibraryState } from "../src/library/failures.js";
 import { Hash } from "../src/shared/hash.js";
 
 it.effect("retains native and schema errors until the stored-step JSON boundary", () =>
@@ -64,6 +65,33 @@ it.effect("stores exact content mismatch facts rather than a formatted error sen
       kind: "tree",
       hash: expected,
       reason: { _tag: "ContentHashMismatch", actual },
+    });
+  }),
+);
+
+it.effect("keeps Library import conflict facts inside a stored history journal failure", () =>
+  Effect.gen(function* () {
+    const path = "/state/library.sqlite";
+    const conflict = new InvalidLibraryState({
+      path,
+      reason: {
+        _tag: "ImportBackupChanged",
+        sourcePath: "/state/machine.json",
+        backupPath: "/state/machine.json.backup-database",
+        databasePath: path,
+      },
+    });
+    const history = new AuthorHistoryInvalid({
+      path,
+      reason: { _tag: "JournalFailure", cause: conflict },
+    });
+    const codec = Schema.toCodecJson(AuthorHistoryInvalid);
+    const saved = yield* Schema.decodeUnknownEffect(codec)(
+      JSON.parse(JSON.stringify(yield* Schema.encodeEffect(codec)(history))),
+    );
+    expect(saved.reason).toMatchObject({
+      _tag: "JournalFailure",
+      cause: { _tag: "InvalidLibraryState", path, reason: conflict.reason },
     });
   }),
 );

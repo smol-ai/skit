@@ -29,17 +29,28 @@ const authorHistoryReason = (reason: AuthorHistoryInvalidReason): string =>
     BackupDisconnected: () => "backup requires a connected workspace",
   });
 
-export const authorHistoryFailure = Match.type<AuthorHistoryFailure>().pipe(
-  Match.tagsExhaustive({
-    AuthorHistoryInvalid: ({ path, reason }) => ({
-      message: `${path === "history" ? "Author history" : `Author history at ${path}`} is unusable: ${authorHistoryReason(reason)}`,
-      remediation:
-        reason._tag === "HistoryInsideWorkspace"
-          ? "Choose a SKIT state directory outside the Author Workspace with --home, then retry."
-          : reason._tag === "BackupDisconnected"
-            ? "Connect this Author Workspace before backing it up."
-            : "Keep the history files and resolve the storage problem before syncing again.",
-    }),
+export const authorHistoryFailure = (
+  error: AuthorHistoryFailure,
+  libraryReadFailure: (
+    error: unknown,
+  ) => { message: string; remediation: string | undefined } | undefined,
+) =>
+  Match.valueTags(error, {
+    AuthorHistoryInvalid: ({ path, reason }) => {
+      const summary = `${path === "history" ? "Author history" : `Author history at ${path}`} is unusable`;
+      const nested =
+        reason._tag === "JournalFailure" ? libraryReadFailure(reason.cause) : undefined;
+      return {
+        message: `${summary}: ${nested?.message ?? authorHistoryReason(reason)}`,
+        remediation:
+          nested?.remediation ??
+          (reason._tag === "HistoryInsideWorkspace"
+            ? "Choose a SKIT state directory outside the Author Workspace with --home, then retry."
+            : reason._tag === "BackupDisconnected"
+              ? "Connect this Author Workspace before backing it up."
+              : "Keep the history files and resolve the storage problem before syncing again."),
+      };
+    },
     AuthorHistoryBusy: ({ path }) => ({
       message: `Author history at ${path} is busy with another recording`,
       remediation: "Retry after the other recording completes.",
@@ -52,5 +63,4 @@ export const authorHistoryFailure = Match.type<AuthorHistoryFailure>().pipe(
       message: `The backup checkpoint for ${key.locator} changed while this backup was running`,
       remediation: "Sync again; it resumes from the acknowledged revision.",
     }),
-  }),
-);
+  });
