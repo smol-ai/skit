@@ -255,7 +255,7 @@ export const loadMachineSettings = Effect.fn("MachineSettings.load")(function* (
             yield* fs.remove(lock);
             yield* syncPaths([root]);
           }
-        }).pipe(Effect.orDie),
+        }),
     ),
   );
 });

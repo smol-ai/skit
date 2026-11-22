@@ -321,3 +321,78 @@ for (const nested of [false, true])
         );
       }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
+
+for (const rollback of ["transaction", "savepoint"]) {
+  it.effect(`machine import recovers from its durable backup when its ${rollback} rolls back`, () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-machine-rollback-" });
+      const source = join(home, "machine.json");
+      const lock = join(home, ".lock");
+      const path = libraryDatabasePath(home);
+      const original = JSON.stringify({
+        schemaVersion: 5,
+        machineId: makeMachineId(),
+        displayName: "Before rollback",
+        discoveryRoots: ["/original"],
+        repositories: [],
+        repositoryDecisionsInitialized: false,
+      });
+      yield* fs.writeFileString(source, original);
+      const updateAndFail = Effect.gen(function* () {
+        yield* MachineSettings.updateDiscovery(home, { discoveryRoots: ["/uncommitted"] });
+        assert.strictEqual(yield* fs.readFileString(source), '{"schemaVersion":6}\n');
+        assert.isFalse(yield* fs.exists(lock));
+        return yield* Effect.fail("roll back machine import");
+      });
+      if (rollback === "transaction") {
+        assert.strictEqual(
+          yield* Effect.flip(withDatabaseTransaction(home, updateAndFail)),
+          "roll back machine import",
+        );
+      } else {
+        yield* withDatabaseTransaction(
+          home,
+          Effect.gen(function* () {
+            assert.strictEqual(
+              yield* Effect.flip(withDatabaseTransaction(home, updateAndFail)),
+              "roll back machine import",
+            );
+            assert.isFalse(yield* fs.exists(lock));
+          }),
+        );
+      }
+
+      assert.strictEqual(yield* fs.readFileString(source), '{"schemaVersion":6}\n');
+      assert.isFalse(yield* fs.exists(lock));
+      assert.strictEqual(yield* fs.readFileString(`${source}.backup-database`), original);
+      yield* withLibraryDatabase(
+        path,
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          assert.deepStrictEqual(yield* sql`SELECT id FROM machine`, []);
+          assert.deepStrictEqual(
+            yield* sql`SELECT source FROM library_import WHERE source='machine.json'`,
+            [],
+          );
+        }),
+        true,
+      );
+      assert.deepStrictEqual((yield* MachineSettings.read(home)).discoveryRoots, ["/original"]);
+      yield* withLibraryDatabase(
+        path,
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          assert.deepStrictEqual(yield* loadMachineRows(path), JSON.parse(original));
+          assert.deepStrictEqual(
+            yield* sql`SELECT source,fenced FROM library_import WHERE source='machine.json'`,
+            [{ source: "machine.json", fenced: 1 }],
+          );
+        }),
+        true,
+      );
+      assert.strictEqual(yield* fs.readFileString(source), '{"schemaVersion":6}\n');
+      assert.isFalse(yield* fs.exists(lock));
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  );
+}
