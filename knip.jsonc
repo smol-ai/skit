@@ -46,7 +46,7 @@
         "scripts/**/*.mjs",
         "scripts/check-frozen-migrations.ts",
       ],
-      "project": ["src/**/*.ts", "web/src/**/*.{ts,css}", "test/**/*.ts", "scripts/**/*.mjs"],
+      "project": ["src/**/*.ts", "web/src/**/*.{ts,css}", "test/**/*.ts", "scripts/**/*.{mjs,ts}"],
     },
   },
 }
