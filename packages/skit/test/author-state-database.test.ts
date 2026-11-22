@@ -8,6 +8,7 @@ import {
   readAuthorInventory,
   withAuthorStateTransaction,
   saveAuthorSyncState,
+  saveAuthorInventory,
 } from "../src/author/state-store.js";
 import {
   libraryDatabasePath,
@@ -119,5 +120,23 @@ it.effect("unknown Author checkpoint fields are refused", () =>
     );
     assert.strictEqual(written._tag, "Failure");
     assert.deepStrictEqual(yield* readAuthorSyncState(home, key), Sync.Idle.make({ base: null }));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("round-trips an Author inventory beyond SQLite’s bind-variable limit", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-author-inventory-batch-" });
+    const workspace = WorkspaceId.make(`workspace_${"a".repeat(32)}`);
+    const state = {
+      inventory: {
+        files: Array.from({ length: 8_200 }, (_, index) => `assets/file-${index}.txt`),
+        members: ["reference"],
+      },
+      removedFiles: ["old.md"],
+      removedMembers: ["old"],
+    };
+    yield* withAuthorStateTransaction(home, saveAuthorInventory(home, workspace, state));
+    assert.deepStrictEqual(yield* readAuthorInventory(home, workspace), state);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

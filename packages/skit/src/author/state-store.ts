@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Schema } from "effect";
+import { Array as EffectArray, Effect, FileSystem, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import * as History from "../history/history.js";
 import * as Sync from "../sync/sync.js";
@@ -224,6 +224,6 @@ export const saveAuthorInventory = Effect.fn("AuthorState.saveInventory")(functi
             : state.removedMembers;
     return paths.map((path, position) => ({ workspace_id: workspace, category, position, path }));
   });
-  const [first, ...rest] = rows;
-  if (first) yield* sql`INSERT INTO author_inventory_paths ${sql.insert([first, ...rest])}`;
+  for (const batch of EffectArray.chunksOf(rows, 500))
+    yield* sql`INSERT INTO author_inventory_paths ${sql.insert(batch)}`;
 });
