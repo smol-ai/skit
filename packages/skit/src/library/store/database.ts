@@ -172,10 +172,12 @@ export const prepareLibraryDatabase = Effect.fn("Library.prepareDatabase")(funct
             prefix: "library-create-",
           });
           const temporary = join(directory, "library.sqlite");
-          yield* withLibraryDatabase(
-            temporary,
+          // Build in memory so the Bun driver's cached statements never hold the published inode.
+          // SQLite closes the VACUUM output before returning, then the home lock serializes publication.
+          yield* Effect.scoped(
             Effect.gen(function* () {
               const sql = yield* SqlClient.SqlClient;
+              yield* sql`PRAGMA synchronous = FULL`;
               yield* migrateLibraryDatabase(temporary);
               const checked = yield* sql<{ integrity_check: string }>`PRAGMA integrity_check`;
               if (checked.length !== 1 || checked[0]?.integrity_check !== "ok")
@@ -187,9 +189,15 @@ export const prepareLibraryDatabase = Effect.fn("Library.prepareDatabase")(funct
                     result: checked.map((row) => row.integrity_check),
                   },
                 });
-              yield* sql`PRAGMA wal_checkpoint(TRUNCATE)`;
-            }),
+              yield* sql`VACUUM INTO ${temporary}`;
+            }).pipe(
+              Effect.provide(sqliteLayer({ filename: ":memory:", disableWAL: true })),
+              Effect.catchTag("SqlError", (cause) =>
+                Effect.fail(new LibrarySqlError({ path: temporary, cause })),
+              ),
+            ),
           );
+          yield* fs.chmod(temporary, 0o600);
           yield* syncPaths([temporary, directory]);
           yield* fs.link(temporary, path);
           yield* syncPaths([path, root]);
