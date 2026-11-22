@@ -1,5 +1,6 @@
 import { failureExitCode } from "../src/commands/exit-code.js";
 import { test, expect } from "vitest";
+import { it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import {
   AddNoSkills,
@@ -85,16 +86,18 @@ test.each([
   expect(shown.remediation).toContain("skit setup");
 });
 
-test("SQLite schema failures use the same recovery action as an empty database", () => {
-  const path = "/library/library.sqlite";
-  const reason = Effect.runSync(Effect.flip(Schema.decodeUnknownEffect(Schema.String)(42)));
-  const failure = new InvalidLibraryState({
-    path,
-    reason: { _tag: "SchemaInvalid", failure: reason },
-  });
-  const empty = new InvalidLibraryState({ path, reason: { _tag: "DatabaseEmpty" } });
-  expect(libraryFailure(failure).next).toEqual(libraryFailure(empty).next);
-});
+it.effect("SQLite schema failures use the same recovery action as an empty database", () =>
+  Effect.gen(function* () {
+    const path = "/library/library.sqlite";
+    const reason = yield* Effect.flip(Schema.decodeUnknownEffect(Schema.String)(42));
+    const failure = new InvalidLibraryState({
+      path,
+      reason: { _tag: "SchemaInvalid", failure: reason },
+    });
+    const empty = new InvalidLibraryState({ path, reason: { _tag: "DatabaseEmpty" } });
+    expect(libraryFailure(failure).next).toEqual(libraryFailure(empty).next);
+  }),
+);
 
 test("database damage, refused edits and transaction mistakes have distinct actions", () => {
   const path = "/library/library.sqlite";
