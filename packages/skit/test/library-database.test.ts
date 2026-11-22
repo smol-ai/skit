@@ -705,7 +705,7 @@ it.effect("reports orphaned operation rows without a current state document", ()
       path,
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
-        yield* sql`INSERT INTO library_operations (position, operation_id, document) VALUES (0, 'orphan', '{}')`;
+        yield* sql`INSERT INTO library_operations (position, operation_id, kind, document) VALUES (0, 'orphan', 'setup', '{}')`;
       }),
     );
     const error = yield* Effect.flip(loadLibrary(home));

@@ -101,7 +101,7 @@ export const createLibraryTables = Effect.gen(function* () {
   CHECK ((change = 'added') = (value IS NULL)),
   PRIMARY KEY (entity, key)
 ) STRICT`;
-  yield* sql`CREATE TABLE library_operations (position INTEGER PRIMARY KEY, operation_id TEXT NOT NULL UNIQUE, kind TEXT, document TEXT NOT NULL)`;
+  yield* sql`CREATE TABLE library_operations (position INTEGER PRIMARY KEY, operation_id TEXT NOT NULL UNIQUE, kind TEXT NOT NULL, document TEXT NOT NULL)`;
   yield* sql`CREATE TABLE library_audit_events (sequence INTEGER PRIMARY KEY AUTOINCREMENT,event_id TEXT NOT NULL UNIQUE,document TEXT NOT NULL,operation_ids TEXT NOT NULL DEFAULT '[]')`;
   yield* sql`CREATE TABLE library_import (source TEXT PRIMARY KEY, backup TEXT, hash TEXT, fenced INTEGER NOT NULL CHECK(fenced IN (0,1))) STRICT`;
   yield* sql`CREATE INDEX library_skill_versions_skill ON library_skill_versions (skill_id)`;

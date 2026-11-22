@@ -138,15 +138,6 @@ const databaseIsCurrent = Effect.fn("Library.databaseIsCurrent")(function* (path
         issue: "Unsupported unreleased Library database format",
       },
     });
-  const columns = yield* sql<{ name: string }>`PRAGMA table_info(library_enabled)`;
-  if (!columns.some((column) => column.name === "item_key"))
-    return yield* new InvalidLibraryState({
-      path,
-      reason: {
-        _tag: "InvalidData",
-        issue: "Unsupported unreleased Library enabled-row format",
-      },
-    });
   return rows.length === migrations.length;
 });
 

@@ -23,12 +23,6 @@ import {
 /** Current settings, without exposing the persisted document version. */
 export type Settings = Omit<CurrentMachineDocument, "schemaVersion"> & { readonly path: string };
 
-/** The caller may retain typed inverse evidence while this owner still holds publication authority. */
-export type BeforeSave<E = never, R = never> = (
-  before: Settings,
-  after: Settings,
-) => Effect.Effect<void, E, R>;
-
 const settingsAt = (path: string, document: CurrentMachineDocument): Settings => {
   const { schemaVersion: _version, ...settings } = document;
   return { ...settings, path };
@@ -43,7 +37,7 @@ export const read = Effect.fn("MachineSettings.read")(function* (home: string) {
 });
 
 /** Own the complete read-modify-write, including fibers sharing an inherited root lock. */
-const mutate = Effect.fn("MachineSettings.mutate")(function* <E = never, R = never>(
+const mutate = Effect.fn("MachineSettings.mutate")(function* (
   home: string,
   displayName: string | undefined,
   change: (
@@ -51,7 +45,6 @@ const mutate = Effect.fn("MachineSettings.mutate")(function* <E = never, R = nev
   ) =>
     | Pick<Settings, "discoveryRoots" | "repositories" | "repositoryDecisionsInitialized">
     | undefined,
-  beforeSave?: BeforeSave<E, R>,
 ) {
   yield* loadMachineSettings(home, true);
   return yield* withDatabaseTransaction(
@@ -79,11 +72,6 @@ const mutate = Effect.fn("MachineSettings.mutate")(function* <E = never, R = nev
             }),
         ),
       );
-      if (beforeSave)
-        yield* beforeSave(
-          structuredClone(prior),
-          structuredClone(settingsAt(prior.path, document)),
-        );
       yield* saveMachineRows(prior.path, document);
       return settingsAt(prior.path, document);
     }),
@@ -103,40 +91,31 @@ export const ensureIdentity = Effect.fn("MachineSettings.ensureIdentity")(functi
  * Replace supplied roots and merge supplied decisions, preserving all other settings.
  * Setup records its discovery evidence while joining this owner's transaction.
  */
-export const updateDiscovery = Effect.fn("MachineSettings.updateDiscovery")(function* <
-  E = never,
-  R = never,
->(
+export const updateDiscovery = Effect.fn("MachineSettings.updateDiscovery")(function* (
   home: string,
   choices: {
     readonly discoveryRoots?: readonly string[];
     readonly repositories?: readonly MachineRepositoryDecision[];
     readonly displayName?: string;
   },
-  beforeSave?: BeforeSave<E, R>,
 ) {
-  return yield* mutate(
-    home,
-    choices.displayName,
-    (prior) => {
-      const decisions = new Map(prior.repositories.map((entry) => [resolve(entry.path), entry]));
-      for (const entry of choices.repositories ?? [])
-        decisions.set(resolve(entry.path), { ...decisions.get(resolve(entry.path)), ...entry });
-      return {
-        // Saving roots alone decides nothing about repositories. Marking decisions initialized here
-        // would make later scans inspect only watched repositories, of which there are none.
-        repositoryDecisionsInitialized:
-          prior.repositoryDecisionsInitialized || (choices.repositories?.length ?? 0) > 0,
-        discoveryRoots: [
-          ...new Set((choices.discoveryRoots ?? prior.discoveryRoots).map((path) => resolve(path))),
-        ].sort(),
-        repositories: [...decisions]
-          .map(([path, entry]) => ({ ...entry, path }))
-          .sort((left, right) => left.path.localeCompare(right.path)),
-      };
-    },
-    beforeSave,
-  );
+  return yield* mutate(home, choices.displayName, (prior) => {
+    const decisions = new Map(prior.repositories.map((entry) => [resolve(entry.path), entry]));
+    for (const entry of choices.repositories ?? [])
+      decisions.set(resolve(entry.path), { ...decisions.get(resolve(entry.path)), ...entry });
+    return {
+      // Saving roots alone decides nothing about repositories. Marking decisions initialized here
+      // would make later scans inspect only watched repositories, of which there are none.
+      repositoryDecisionsInitialized:
+        prior.repositoryDecisionsInitialized || (choices.repositories?.length ?? 0) > 0,
+      discoveryRoots: [
+        ...new Set((choices.discoveryRoots ?? prior.discoveryRoots).map((path) => resolve(path))),
+      ].sort(),
+      repositories: [...decisions]
+        .map(([path, entry]) => ({ ...entry, path }))
+        .sort((left, right) => left.path.localeCompare(right.path)),
+    };
+  });
 });
 
 export const setRepositoryDecision = Effect.fn("MachineSettings.setRepositoryDecision")(function* (
@@ -159,35 +138,30 @@ export const setRepositoryDecision = Effect.fn("MachineSettings.setRepositoryDec
   });
 });
 
-/** Save only a reviewed inverse of discovery settings, preserving this machine's provenance. */
-export const restoreDiscovery = Effect.fn("MachineSettings.restoreDiscovery")(function* <
-  E = never,
-  R = never,
->(
+/** Apply the reviewed discovery inverse in the caller's undo transaction. */
+export const applyDiscoveryUndo = Effect.fn("MachineSettings.applyDiscoveryUndo")(function* (
   home: string,
-  expected: Settings,
-  restored: Pick<
-    Settings,
-    "discoveryRoots" | "repositories" | "repositoryDecisionsInitialized" | "displayName"
-  >,
-  beforeSave?: BeforeSave<E, R>,
+  change: {
+    readonly beforeHash: Hash;
+    readonly afterHash: Hash;
+    readonly after: Pick<Settings, "discoveryRoots">;
+  },
 ) {
-  const approved = structuredClone(expected);
-  const choice = structuredClone(restored);
-  return yield* mutate(
+  const path = libraryDatabasePath(home);
+  yield* withDatabaseTransaction(
     home,
-    choice.displayName,
-    () => ({
-      discoveryRoots: choice.discoveryRoots,
-      repositories: choice.repositories,
-      repositoryDecisionsInitialized: choice.repositoryDecisionsInitialized,
+    Effect.gen(function* () {
+      const document = yield* loadMachineSettings(home);
+      const current = settingsAt(path, document ?? emptyMachineDocument());
+      const hash = hashParts([canonicalJson(current)]);
+      if (hash === change.afterHash) return;
+      if (hash !== change.beforeHash || document === undefined)
+        return yield* new LibraryChanged({ path });
+      yield* saveMachineRows(path, {
+        ...document,
+        discoveryRoots: [...change.after.discoveryRoots],
+      });
     }),
-    (before, after) =>
-      Effect.gen(function* () {
-        if (canonicalJson(before) !== canonicalJson(approved))
-          return yield* new LibraryChanged({ path: before.path });
-        if (beforeSave) yield* beforeSave(before, after);
-      }),
   );
 });
 

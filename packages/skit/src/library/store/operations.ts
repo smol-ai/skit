@@ -1,8 +1,6 @@
 import { saveCollectionRemoval, type CollectionRemoval } from "./remove.js";
 import { saveInstalledSkills, type InstalledSkillsChange } from "./installed.js";
 import { Effect, FileSystem, Option, Schema } from "effect";
-import { hashParts } from "../../artifact/descriptor.js";
-import { loadMachineRows, saveMachineRows } from "./machine-rows.js";
 import { CurrentSetupOperation, prepareSetupChanges } from "./setup-intent.js";
 import { setupIntent } from "./intent.js";
 import * as MachineSettings from "../machine-settings.js";
@@ -15,7 +13,6 @@ import { recordedLibrary } from "./intent.js";
 import { snapshotOf, snapshotDatabaseRevision, type Snapshot } from "../snapshot.js";
 import {
   OperationStatus,
-  RecordedSetupStep,
   OperationKind,
   type OperationSummary,
   type OperationStepSummary,
@@ -44,32 +41,8 @@ export type OperationPublication =
 
 export type PendingOperation = Extract<OperationStatus, { readonly _tag: "Pending" }>;
 
-/** Unknown-kind terminal rows must validate as full programs, never fall back to a summary. */
-const decodeOperation = (path: string, document: string, kind?: string | null) =>
-  Effect.gen(function* () {
-    const value = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.JsonObject))(document);
-    const legacyBefore =
-      typeof value.before === "object" &&
-      value.before !== null &&
-      Object.hasOwn(value.before, "intent");
-    const afterIntent =
-      typeof value.after === "object" &&
-      value.after !== null &&
-      Object.hasOwn(value.after, "intent");
-    if (
-      (kind === "setup" || value.kind === "setup" || (kind === null && legacyBefore)) &&
-      (value.setup === undefined || legacyBefore || afterIntent)
-    )
-      return yield* new InvalidLibraryState({
-        path,
-        reason: { _tag: "InvalidData", issue: "Unsupported unreleased setup record" },
-      });
-    if (value._tag !== "Pending" && value.kind === undefined)
-      yield* Schema.decodeUnknownEffect(Schema.Struct({ steps: Schema.Array(RecordedSetupStep) }))(
-        value,
-      );
-    return yield* Schema.decodeUnknownEffect(OperationStatus)(value);
-  }).pipe(
+const decodeOperation = (path: string, document: string) =>
+  Schema.decodeEffect(Schema.fromJsonString(OperationStatus))(document).pipe(
     Effect.catchTag("SchemaError", (failure) =>
       Effect.fail(new InvalidLibraryState({ path, reason: { _tag: "SchemaInvalid", failure } })),
     ),
@@ -83,10 +56,9 @@ const readOperation = Effect.fn("Library.readOperation")(function* (
   const sql = yield* SqlClient.SqlClient;
   const rows = yield* sql<{
     document: string;
-    kind: string | null;
-  }>`SELECT document,kind FROM library_operations WHERE operation_id = ${operationId}`;
+  }>`SELECT document FROM library_operations WHERE operation_id = ${operationId}`;
   if (!rows[0]) return undefined;
-  return yield* decodeOperation(path, rows[0].document, rows[0].kind);
+  return yield* decodeOperation(path, rows[0].document);
 });
 
 /** One compact shape for history, startup diagnostics and settled known-kind records. */
@@ -151,19 +123,17 @@ const loadOperationRows = Effect.fn("Library.loadOperationRows")(function* (home
       const sql = yield* SqlClient.SqlClient;
       const rows = yield* sql<{
         document: string;
-        kind: string | null;
+        kind: string;
       }>`SELECT document, kind FROM library_operations ORDER BY position`;
       return yield* Effect.forEach(rows, (row) =>
         Effect.gen(function* () {
-          const kind = yield* Schema.decodeUnknownEffect(Schema.NullOr(OperationKind))(
-            row.kind,
-          ).pipe(
+          const kind = yield* Schema.decodeUnknownEffect(OperationKind)(row.kind).pipe(
             Effect.mapError(
               (failure) =>
                 new InvalidLibraryState({ path, reason: { _tag: "SchemaInvalid", failure } }),
             ),
           );
-          return { operation: yield* decodeOperation(path, row.document, kind), kind };
+          return { operation: yield* decodeOperation(path, row.document), kind };
         }),
       );
     }),
@@ -182,11 +152,11 @@ export const loadOperationHistory = Effect.fn("Library.loadOperationHistory")(fu
   const rows = yield* loadOperationRows(home);
   return rows.map(({ operation, kind }) => ({
     ...operationSummary(operation),
-    ...(kind === null ? {} : { kind }),
+    kind,
   }));
 });
 
-/** Retained stopped/legacy records need intent and Installed Skills, never caches or Sync bases. */
+/** Retained stopped records need intent and Installed Skills, never caches or Sync bases. */
 const loadRecordedLibrary = Effect.fn("Library.loadRecordedLibrary")(
   function* (path: string) {
     const catalogue = yield* decodeCatalogue(path, yield* loadCatalogueRows());
@@ -355,11 +325,9 @@ export const settleOperation = Effect.fn("Library.settleOperation")(function* (
       if (current?._tag !== "Pending" || canonicalJson(current) !== canonicalJson(base))
         return yield* new LibraryChanged({ path });
       const kinds = yield* sql<{
-        kind: string | null;
+        kind: string;
       }>`SELECT kind FROM library_operations WHERE operation_id = ${base.operationId}`;
-      const kind = yield* Schema.decodeUnknownEffect(Schema.NullOr(OperationKind))(
-        kinds[0]?.kind ?? null,
-      ).pipe(
+      const kind = yield* Schema.decodeUnknownEffect(OperationKind)(kinds[0]?.kind).pipe(
         Effect.mapError(
           (failure) =>
             new InvalidLibraryState({ path, reason: { _tag: "SchemaInvalid", failure } }),
@@ -402,7 +370,7 @@ export const settleOperation = Effect.fn("Library.settleOperation")(function* (
                 ...(setup.discovery === undefined ? {} : { discovery: setup.discovery }),
               },
             }),
-        ...(kind === null ? {} : { kind }),
+        kind,
         operationId: current.operationId,
         steps: current.steps,
         before: current.before,
@@ -423,10 +391,7 @@ export const settleOperation = Effect.fn("Library.settleOperation")(function* (
         [{ entity: "library", id: base.operationId, action: `operation-${terminal._tag}` }],
         [base.operationId],
       );
-      const document = yield* encodeOperation(
-        path,
-        kind === null ? terminal : operationSummary(terminal),
-      );
+      const document = yield* encodeOperation(path, operationSummary(terminal));
       yield* sql`UPDATE library_operations SET document = ${document} WHERE operation_id = ${base.operationId}`;
     }),
   );
@@ -463,21 +428,7 @@ export const saveSetupUndo = Effect.fn("Library.saveSetupUndo")(function* (
       if (!target || !target.setup || target._tag === "Pending")
         return yield* new LibraryChanged({ path });
       if (target._tag === "Undone") return;
-      if (program.discovery) {
-        const current = yield* MachineSettings.read(home);
-        const hash = hashParts([canonicalJson(current)]);
-        if (hash !== program.discovery.beforeHash && hash !== program.discovery.afterHash)
-          return yield* new LibraryChanged({ path });
-        if (hash !== program.discovery.afterHash) {
-          const document = yield* loadMachineRows(path);
-          if (document === undefined) return yield* new LibraryChanged({ path });
-          yield* saveMachineRows(path, {
-            ...document,
-            schemaVersion: 5,
-            discoveryRoots: [...program.discovery.after.discoveryRoots],
-          });
-        }
-      }
+      if (program.discovery) yield* MachineSettings.applyDiscoveryUndo(home, program.discovery);
       yield* saveSetupUndoState(path, next, base, revision);
       const sql = yield* SqlClient.SqlClient;
       // Failed attempts keep backup pointers until the complete inverse has been saved.
