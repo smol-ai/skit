@@ -18,7 +18,7 @@ export const decodeInventoryScan = Effect.fn("Inventory.decodeScan")(function* (
 });
 
 /** Duplicate scan results and child values retain their positions. */
-const createInventoryTables = Effect.gen(function* () {
+export const createInventoryTables = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`CREATE TABLE library_inventory (
     id INTEGER PRIMARY KEY CHECK(id=1),
@@ -29,9 +29,7 @@ const createInventoryTables = Effect.gen(function* () {
     position INTEGER PRIMARY KEY CHECK(position>=0),harness TEXT NOT NULL,path TEXT NOT NULL,
     current_hash TEXT NOT NULL,last_hash TEXT,
     paths_present INTEGER NOT NULL CHECK(paths_present IN (0,1)),
-    harnesses_present INTEGER NOT NULL CHECK(harnesses_present IN (0,1)),
-    extra TEXT CHECK(extra IS NULL OR json_valid(extra))
-  ) STRICT`;
+    harnesses_present INTEGER NOT NULL CHECK(harnesses_present IN (0,1))) STRICT`;
   yield* sql`CREATE TABLE library_unmanaged_paths (
     unmanaged_position INTEGER NOT NULL REFERENCES library_unmanaged_skills(position) ON DELETE CASCADE,
     position INTEGER NOT NULL CHECK(position>=0),path TEXT NOT NULL,
@@ -47,9 +45,7 @@ const createInventoryTables = Effect.gen(function* () {
     canonical_path TEXT NOT NULL,current_hash TEXT NOT NULL,
     marker_reason TEXT CHECK(marker_reason IS NULL OR json_valid(marker_reason)),
     collection_id TEXT,skill_id TEXT,installed_skill_id TEXT,expected_hash TEXT,
-    matches_expected_hash INTEGER CHECK(matches_expected_hash IS NULL OR matches_expected_hash IN (0,1)),
-    extra TEXT CHECK(extra IS NULL OR json_valid(extra))
-  ) STRICT`;
+    matches_expected_hash INTEGER CHECK(matches_expected_hash IS NULL OR matches_expected_hash IN (0,1))) STRICT`;
   yield* sql`CREATE TABLE library_ownership_issue_harnesses (
     issue_position INTEGER NOT NULL REFERENCES library_ownership_issues(position) ON DELETE CASCADE,
     position INTEGER NOT NULL CHECK(position>=0),harness TEXT NOT NULL,
@@ -57,8 +53,7 @@ const createInventoryTables = Effect.gen(function* () {
   ) STRICT`;
   yield* sql`CREATE TABLE library_scan_issues (
     position INTEGER PRIMARY KEY CHECK(position>=0),code TEXT NOT NULL,path TEXT NOT NULL,
-    harness TEXT NOT NULL,target TEXT,extra TEXT CHECK(extra IS NULL OR json_valid(extra))
-  ) STRICT`;
+    harness TEXT NOT NULL,target TEXT) STRICT`;
 });
 
 /** Refresh replaces this cache alone; unchanged results do not cause database writes. */
@@ -249,44 +244,4 @@ export const loadInventoryRows = Effect.fn("Inventory.loadRows")(function* (path
     }
   }
   return yield* decodeInventoryScan(value);
-});
-
-/** Migration owns one short transaction: validate all old values before replacing their layout. */
-export const migrateInventoryRows = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
-  const rows = yield* Schema.decodeUnknownEffect(
-    Schema.Array(
-      Schema.Struct({
-        id: Schema.Literal(1),
-        unmanaged: Schema.NullOr(Schema.String),
-        ownership_issues: Schema.NullOr(Schema.String),
-        scan_issues: Schema.NullOr(Schema.String),
-      }),
-    ),
-  )(yield* sql`SELECT * FROM library_inventory ORDER BY id`);
-  const row = rows[0];
-  let scan: InventoryScan | undefined;
-  if (row) {
-    const value: JsonObject = {};
-    for (const [field, column] of [
-      ["unmanaged", "unmanaged"],
-      ["ownershipIssues", "ownership_issues"],
-      ["scanIssues", "scan_issues"],
-    ]) {
-      const text =
-        column === "unmanaged"
-          ? row.unmanaged
-          : column === "ownership_issues"
-            ? row.ownership_issues
-            : row.scan_issues;
-      if (text !== null)
-        value[field] = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.MutableJson))(
-          text,
-        );
-    }
-    scan = yield* decodeInventoryScan(value);
-  }
-  yield* sql`DROP TABLE library_inventory`;
-  yield* createInventoryTables;
-  if (scan) yield* saveInventoryRows(scan);
 });

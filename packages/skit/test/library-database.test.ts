@@ -623,7 +623,7 @@ it.effect("refuses newer database migrations with the known and observed version
         _tag: "NewerDatabaseMigration",
         databasePath: path,
         migration: 15,
-        supported: 14,
+        supported: 1,
       });
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -763,7 +763,7 @@ const documentDatabase = Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* Migrator.make({})({
         loader: Migrator.fromRecord({
-          "001_library": Effect.gen(function* () {
+          "001_document_library": Effect.gen(function* () {
             yield* sql`CREATE TABLE library_state (id INTEGER PRIMARY KEY CHECK (id = 1), document TEXT NOT NULL)`;
             yield* sql`CREATE TABLE library_operations (position INTEGER PRIMARY KEY, operation_id TEXT NOT NULL UNIQUE, kind TEXT, document TEXT NOT NULL)`;
             yield* sql`CREATE TABLE library_audit_events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, event_id TEXT NOT NULL UNIQUE, document TEXT NOT NULL, operation_ids TEXT NOT NULL DEFAULT '[]')`;
@@ -920,7 +920,7 @@ it.effect("a read-only open refuses a migration-1 database without attempting co
           { document: f.program },
         ]);
         assert.deepStrictEqual(yield* sql`SELECT migration_id, name FROM effect_sql_migrations`, [
-          { migration_id: 1, name: "library" },
+          { migration_id: 1, name: "document_library" },
         ]);
         assert.strictEqual(
           (yield* sql`SELECT name FROM sqlite_master WHERE name = 'library_head'`).length,

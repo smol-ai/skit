@@ -1,5 +1,4 @@
 import { saveLibrary } from "./helpers/library-store.js";
-import { database012 } from "./helpers/library-database-012.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Schema, Layer } from "effect";
 import { SqlClient } from "effect/sql";
@@ -410,7 +409,7 @@ it.effect(
 );
 
 it.effect(
-  "013 and 014 keep duplicate paths and declared metadata after a cold reopen without loose sources",
+  "stored Author rows keep duplicate paths and declared metadata after a cold reopen without loose sources",
   () =>
     Effect.gen(function* () {
       const f = yield* prepared;
@@ -419,7 +418,6 @@ it.effect(
       );
       assert.deepStrictEqual(yield* store.tree(f.hash), f.tree);
       assert.deepStrictEqual(yield* store.revision(f.id), f.revision);
-      yield* database012(f.home);
       yield* f.fs.rename(join(f.directory, "trees"), join(f.directory, "trees-hidden"));
       yield* f.fs.rename(join(f.directory, "revisions"), join(f.directory, "revisions-hidden"));
       const cold = yield* Effect.map(AuthorHistory, (history) => history.engineStore).pipe(

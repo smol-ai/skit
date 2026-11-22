@@ -1,18 +1,10 @@
-import { migrateDeclaredColumns } from "./declared-columns.js";
-import { migrateLibraryRelationships } from "./relationships.js";
-import { migrateAuthorRevisionRows } from "../../author/history-migration.js";
-import { migrateInventoryRows } from "./inventory-rows.js";
-import {
-  createLegacyHistoryTables,
-  prepareLegacyHistorySummaries,
-  removeLegacyPrograms,
-} from "./legacy-history-tables.js";
 import { Context, Effect, FileSystem, Option, Schema } from "effect";
 import { InvalidLibraryState, LibrarySqlError } from "../failures.js";
 import { Migrator, SqlClient } from "effect/sql";
 import { join, resolve } from "node:path";
 
-import { createLibraryTables } from "./tables.js";
+import { createInventoryTables } from "./inventory-rows.js";
+import { createLibraryTables, createMachineTables } from "./tables.js";
 import { withLibraryStateReplacement } from "./writer-lock.js";
 import { syncPaths } from "../../platform/atomic-write.js";
 import { sqliteLayer } from "../../platform/sqlite.js";
@@ -75,73 +67,15 @@ export const withLibraryDatabase = <A, E, R>(
 // The ordered registry is the authority for both execution and readiness validation.
 // Keep it lazy because table owners also use the scoped database connection functions above.
 const libraryMigrations = () => ({
-  "001_keyed_library_rows": Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
+  "001_library": Effect.gen(function* () {
     yield* createLibraryTables;
-    yield* sql`CREATE TABLE library_operations (position INTEGER PRIMARY KEY, operation_id TEXT NOT NULL UNIQUE, kind TEXT, document TEXT NOT NULL)`;
-    yield* sql`CREATE TABLE library_audit_events (sequence INTEGER PRIMARY KEY AUTOINCREMENT,event_id TEXT NOT NULL UNIQUE,document TEXT NOT NULL,operation_ids TEXT NOT NULL DEFAULT '[]')`;
-    yield* sql`CREATE TABLE library_import (id INTEGER PRIMARY KEY CHECK (id = 1), state_backup TEXT, audit_backup TEXT, state_hash TEXT, audit_hash TEXT, fenced INTEGER NOT NULL DEFAULT 0)`;
+    yield* createMachineTables;
+    yield* createInventoryTables;
+    yield* createAuthorStateTables;
+    yield* createAuthorHistoryTables;
+    yield* createAuthorMetadataTables;
+    yield* createFileBytesTable;
   }),
-  "002_machine_rows": Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    const prior = yield* sql<{
-      state_backup: string | null;
-      audit_backup: string | null;
-      state_hash: string | null;
-      audit_hash: string | null;
-      fenced: number;
-    }>`SELECT state_backup,audit_backup,state_hash,audit_hash,fenced FROM library_import WHERE id=1`;
-    yield* sql`DROP TABLE library_import`;
-    yield* sql`CREATE TABLE library_import (source TEXT PRIMARY KEY, backup TEXT, hash TEXT, fenced INTEGER NOT NULL CHECK(fenced IN (0,1))) STRICT`;
-    if (prior[0]) {
-      const row = prior[0];
-      yield* sql`INSERT INTO library_import (source,backup,hash,fenced) VALUES ('state.json',${row.state_backup},${row.state_hash},${row.fenced})`;
-      yield* sql`INSERT INTO library_import (source,backup,hash,fenced) VALUES ('audit.jsonl',${row.audit_backup},${row.audit_hash},1)`;
-    }
-    yield* sql`CREATE TABLE machine (id INTEGER PRIMARY KEY CHECK(id = 1),machine_id TEXT,legacy_machine_id TEXT,display_name TEXT,repository_decisions_initialized INTEGER NOT NULL CHECK(repository_decisions_initialized IN (0,1)),extra TEXT) STRICT`;
-    yield* sql`CREATE TABLE machine_discovery_roots (position INTEGER PRIMARY KEY CHECK(position >= 0),path TEXT NOT NULL) STRICT`;
-    yield* sql`CREATE TABLE machine_repositories (position INTEGER PRIMARY KEY CHECK(position >= 0),path TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('watched','ignored')),extra TEXT NOT NULL CHECK(json_valid(extra))) STRICT`;
-  }),
-  "003_author_state": createAuthorStateTables,
-  "004_library_revision": Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    yield* sql`ALTER TABLE library_device ADD COLUMN revision INTEGER NOT NULL DEFAULT 0 CHECK(revision >= 0 AND revision < 9007199254740991)`;
-    yield* sql`ALTER TABLE library_device DROP COLUMN state_hash`;
-  }),
-  "005_inventory_rows": migrateInventoryRows,
-  "006_legacy_history": createLegacyHistoryTables,
-  "007_author_history": createAuthorHistoryTables,
-  "008_author_metadata": createAuthorMetadataTables,
-  "009_file_bytes": createFileBytesTable,
-  "010_legacy_history_summaries": prepareLegacyHistorySummaries,
-  "011_legacy_history_programs": removeLegacyPrograms,
-  "012_skill_format": Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    // Existing Libraries keep their values; released document field names stay at the codec.
-    for (const table of ["library_skill_versions", "library_collection_version_members"]) {
-      const columns = yield* sql<{ name: string }>`PRAGMA table_info(${sql(table)})`;
-      if (columns.some((column) => column.name === "materialization_profile"))
-        yield* sql`ALTER TABLE ${sql(table)} RENAME COLUMN ${sql("materialization_profile")} TO skill_format`;
-    }
-  }),
-  "013_relationships_and_revision_edits": Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    yield* sql`PRAGMA defer_foreign_keys = ON`;
-    yield* migrateLibraryRelationships;
-    yield* migrateAuthorRevisionRows;
-    const foreignKeys = yield* sql`PRAGMA foreign_key_check`;
-    const integrity = yield* sql<{ integrity_check: string }>`PRAGMA integrity_check`;
-    if (foreignKeys.length > 0 || integrity.length !== 1 || integrity[0]?.integrity_check !== "ok")
-      return yield* new InvalidLibraryState({
-        path: "library.sqlite",
-        reason: {
-          _tag: "InvalidData",
-          issue:
-            "Migration 013 found invalid relationships or database integrity; original rows kept",
-        },
-      });
-  }),
-  "014_declared_columns": migrateDeclaredColumns,
 });
 
 /** Schema changes load only the owner rows whose layout changes; never legacy files. */
@@ -216,13 +150,7 @@ const databaseIsCurrent = Effect.fn("Library.databaseIsCurrent")(function* (path
   return rows.length === migrations.length;
 });
 
-/** Only migration 011 queues compaction. Until successful, each write retries under the writer lock. */
-const libraryNeedsCompaction = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
-  return (yield* sql`SELECT id FROM library_history_compaction`).length > 0;
-});
-
-/** Create or update the shared schema, migrating only rows whose layout changes. */
+/** Create the shared schema or verify the existing database version. */
 export const prepareLibraryDatabase = Effect.fn("Library.prepareDatabase")(function* (
   home: string,
   create = false,
@@ -233,13 +161,7 @@ export const prepareLibraryDatabase = Effect.fn("Library.prepareDatabase")(funct
   const exists = yield* fs.exists(path);
   if (!exists && !create) return false;
   if (exists) {
-    const ready = yield* withLibraryDatabase(
-      path,
-      Effect.gen(function* () {
-        return (yield* databaseIsCurrent(path)) && !(yield* libraryNeedsCompaction);
-      }),
-      true,
-    );
+    const ready = yield* withLibraryDatabase(path, databaseIsCurrent(path), true);
     if (ready) return true;
   }
   yield* withLibraryStateReplacement(
@@ -248,22 +170,6 @@ export const prepareLibraryDatabase = Effect.fn("Library.prepareDatabase")(funct
       if (yield* fs.exists(path)) {
         const current = yield* withLibraryDatabase(path, databaseIsCurrent(path), true);
         if (!current) yield* withLibraryDatabase(path, migrateLibraryDatabase(path));
-        yield* withLibraryDatabase(
-          path,
-          Effect.gen(function* () {
-            if (yield* libraryNeedsCompaction) {
-              const sql = yield* SqlClient.SqlClient;
-              yield* Effect.gen(function* () {
-                yield* sql`VACUUM`;
-                yield* sql`DELETE FROM library_history_compaction`;
-              }).pipe(
-                Effect.catchTag("SqlError", () =>
-                  Effect.logWarning("Library history compaction failed; a later write will retry"),
-                ),
-              );
-            }
-          }),
-        );
         return;
       }
       yield* fs.makeDirectory(root, { recursive: true, mode: 0o700 });

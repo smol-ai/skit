@@ -1,5 +1,4 @@
 import { saveCollectionRemoval, type CollectionRemoval } from "./remove.js";
-import { loadLegacyHistory } from "./legacy-history.js";
 import { saveInstalledSkills, type InstalledSkillsChange } from "./installed.js";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { hashParts } from "../../artifact/descriptor.js";
@@ -181,20 +180,10 @@ export const loadOperationHistory = Effect.fn("Library.loadOperationHistory")(fu
   home: string,
 ) {
   const rows = yield* loadOperationRows(home);
-  const current = rows.map(({ operation, kind }) => ({
+  return rows.map(({ operation, kind }) => ({
     ...operationSummary(operation),
     ...(kind === null ? {} : { kind }),
   }));
-  const byId = new Map(current.map((row) => [row.operationId, row]));
-  const history: OperationSummary[] = [];
-  for (const legacy of yield* loadLegacyHistory(home)) {
-    const active = byId.get(legacy.id);
-    if (active) {
-      history.push(active);
-      byId.delete(legacy.id);
-    } else if (legacy.summary) history.push(legacy.summary);
-  }
-  return [...history, ...byId.values()];
 });
 
 /** Retained stopped/legacy records need intent and Installed Skills, never caches or Sync bases. */

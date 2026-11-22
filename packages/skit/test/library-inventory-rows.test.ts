@@ -3,7 +3,6 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { SqlClient } from "effect/sql";
 import { declaredFixture as fixture } from "./helpers/library-values.js";
-import { writeInventoryV4 } from "./helpers/inventory-v4.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { LibraryWriter, loadLibrary, writeLibrary } from "../src/library/store/library-store.js";
 import { readInventoryState } from "../src/library/store/inventory.js";
@@ -66,12 +65,10 @@ const prepared = Effect.gen(function* () {
 });
 
 it.effect(
-  "inventory migration preserves duplicate observations, child order, absence and declared diagnostics",
+  "inventory rows preserve duplicate observations, child order, absence and declared diagnostics",
   () =>
     Effect.gen(function* () {
       const { home, state, path } = yield* prepared;
-      yield* withLibraryDatabase(path, writeInventoryV4(state));
-      yield* migrateLocalLibraryState(home);
       const loaded = yield* loadLibrary(home);
       assert.strictEqual(libraryStateRevision(loaded), libraryStateRevision(state));
       assert.deepStrictEqual((yield* readInventoryState(home)).value.unmanaged, state.unmanaged);
@@ -97,90 +94,6 @@ it.effect(
         true,
       );
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect(
-  "a failed table replacement restores the old inventory table and every original JSON value",
-  () =>
-    Effect.gen(function* () {
-      const { home, state, path } = yield* prepared;
-      yield* withLibraryDatabase(
-        path,
-        Effect.gen(function* () {
-          const sql = yield* SqlClient.SqlClient;
-          yield* writeInventoryV4(state);
-          // This collision is reached after the old header has been dropped and six new tables created.
-          yield* sql`CREATE TABLE library_scan_issues (evidence TEXT NOT NULL)`;
-          yield* sql`INSERT INTO library_scan_issues(evidence) VALUES('existing collision data')`;
-        }),
-      );
-      const failure = yield* Effect.flip(migrateLocalLibraryState(home));
-      assert.strictEqual(failure._tag, "LibrarySqlError");
-      yield* withLibraryDatabase(
-        path,
-        Effect.gen(function* () {
-          const sql = yield* SqlClient.SqlClient;
-          const [row] = yield* sql<{
-            unmanaged: string;
-            ownership_issues: string;
-            scan_issues: string;
-          }>`SELECT * FROM library_inventory`;
-          assert.strictEqual(row?.unmanaged, JSON.stringify(state.unmanaged));
-          assert.strictEqual(row?.ownership_issues, JSON.stringify(state.ownershipIssues));
-          assert.strictEqual(row?.scan_issues, JSON.stringify(state.scanIssues));
-          assert.deepStrictEqual(
-            yield* sql`SELECT name FROM sqlite_master WHERE name='library_unmanaged_skills'`,
-            [],
-          );
-          assert.deepStrictEqual(
-            yield* sql`SELECT migration_id FROM effect_sql_migrations WHERE migration_id=5`,
-            [],
-          );
-          assert.deepStrictEqual(yield* sql`SELECT evidence FROM library_scan_issues`, [
-            { evidence: "existing collision data" },
-          ]);
-          yield* sql`DROP TABLE library_scan_issues`;
-        }),
-      );
-      yield* migrateLocalLibraryState(home);
-      assert.strictEqual(
-        libraryStateRevision(yield* loadLibrary(home)),
-        libraryStateRevision(state),
-      );
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("invalid old observation JSON is refused before replacing its inventory table", () =>
-  Effect.gen(function* () {
-    const { home, state, path } = yield* prepared;
-    yield* withLibraryDatabase(
-      path,
-      Effect.gen(function* () {
-        const sql = yield* SqlClient.SqlClient;
-        yield* writeInventoryV4(state);
-        yield* sql`PRAGMA ignore_check_constraints=ON`;
-        yield* sql`UPDATE library_inventory SET unmanaged='not-json'`;
-        yield* sql`PRAGMA ignore_check_constraints=OFF`;
-      }),
-    );
-    assert.strictEqual(
-      (yield* Effect.flip(migrateLocalLibraryState(home)))._tag,
-      "LibrarySqlError",
-    );
-    yield* withLibraryDatabase(
-      path,
-      Effect.gen(function* () {
-        const sql = yield* SqlClient.SqlClient;
-        const [row] = yield* sql<{ unmanaged: string }>`SELECT unmanaged FROM library_inventory`;
-        assert.strictEqual(row?.unmanaged, "not-json");
-        assert.deepStrictEqual(
-          yield* sql`SELECT name FROM sqlite_master WHERE name='library_unmanaged_skills'`,
-          [],
-        );
-      }),
-      true,
-    );
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect(
@@ -355,35 +268,4 @@ it.effect("an unset issue-presence flag cannot hide existing observation rows", 
       true,
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect(
-  "a refused migration lock claim is reported instead of claiming the new schema is ready",
-  () =>
-    Effect.gen(function* () {
-      const { home, state, path } = yield* prepared;
-      yield* withLibraryDatabase(
-        path,
-        Effect.gen(function* () {
-          const sql = yield* SqlClient.SqlClient;
-          yield* writeInventoryV4(state);
-          yield* sql`CREATE TRIGGER refuse_inventory_claim BEFORE INSERT ON effect_sql_migrations WHEN NEW.migration_id=5 BEGIN SELECT RAISE(ABORT,'migration fixture refusal'); END`;
-        }),
-      );
-      const failure = yield* Effect.flip(migrateLocalLibraryState(home));
-      assert.strictEqual(failure._tag, "InvalidLibraryState");
-      yield* withLibraryDatabase(
-        path,
-        Effect.gen(function* () {
-          const sql = yield* SqlClient.SqlClient;
-          const [row] = yield* sql<{ unmanaged: string }>`SELECT unmanaged FROM library_inventory`;
-          assert.strictEqual(row?.unmanaged, JSON.stringify(state.unmanaged));
-          assert.deepStrictEqual(
-            yield* sql`SELECT migration_id FROM effect_sql_migrations WHERE migration_id=5`,
-            [],
-          );
-        }),
-        true,
-      );
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

@@ -1,5 +1,4 @@
 import { saveLibrary } from "./helpers/library-store.js";
-import { writeInventoryV4 } from "./helpers/inventory-v4.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { SqlClient } from "effect/sql";
@@ -18,7 +17,6 @@ import {
   makeOperationId,
   makeInstalledSkillId,
 } from "../src/library/entity-ids.js";
-import { libraryStateRevision } from "../src/library/library-state.js";
 import * as Status from "../src/library/installed-skill-status.js";
 
 const prepared = Effect.gen(function* () {
@@ -155,43 +153,6 @@ it.effect("refused audit writes roll back the installed row and transaction coun
     assert.deepStrictEqual(yield* loadLibrary(home), state);
     assert.deepStrictEqual(yield* readLibraryAudit(home), history);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect(
-  "upgrades the existing database to native revisions without changing Library values",
-  () =>
-    Effect.gen(function* () {
-      const { home, state, path } = yield* prepared;
-      yield* withLibraryDatabase(
-        path,
-        Effect.gen(function* () {
-          const sql = yield* SqlClient.SqlClient;
-          // Recreate the previous branch's exact header and inventory layout.
-          yield* writeInventoryV4(state);
-          yield* sql`ALTER TABLE library_device ADD COLUMN state_hash TEXT NOT NULL DEFAULT ''`;
-          yield* sql`UPDATE library_device SET state_hash=${libraryStateRevision(state)}`;
-          yield* sql`ALTER TABLE library_device DROP COLUMN revision`;
-          yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id=4`;
-        }),
-      );
-      yield* migrateLocalLibraryState(home);
-      assert.deepStrictEqual(yield* loadLibrary(home), state);
-      yield* writeLibrary(
-        home,
-        Effect.gen(function* () {
-          assert.strictEqual(yield* (yield* LibraryWriter).revision, 0);
-        }),
-      );
-      yield* withLibraryDatabase(
-        path,
-        Effect.gen(function* () {
-          const sql = yield* SqlClient.SqlClient;
-          const columns = yield* sql<{ name: string }>`PRAGMA table_info(library_device)`;
-          assert.isFalse(columns.some((column) => column.name === "state_hash"));
-        }),
-        true,
-      );
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 for (const invalid of ["missing-skill", "missing-version", "wrong-owner"] as const)
