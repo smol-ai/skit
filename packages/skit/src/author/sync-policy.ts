@@ -1,6 +1,6 @@
 import { DateTime, Option } from "effect";
 import { followSkillMoves } from "./merge/skill-moves.js";
-import { mergeAuthorTree } from "./merge/files.js";
+import { mergeAlignedAuthorTree, mergeAuthorTree } from "./merge/files.js";
 import * as History from "../history/history.js";
 import * as Merge from "../sync/merge.js";
 import type { TreeFile } from "../artifact/tree-entry.js";
@@ -110,11 +110,7 @@ export const mergeAuthorRevisions = (
     };
     editedAt = { ours: times(moved.ours), theirs: times(moved.theirs) };
   }
-  const merged = Merge.runDecided(
-    authorTree({ excluded: new Set(), previouslyExcluded: new Set() }),
-    versions,
-    authorDecider(editedAt),
-  );
+  const merged = Merge.runDecided(mergeAlignedAuthorTree, versions, authorDecider(editedAt));
   const tree = Option.getOrElse(merged.value, () => []);
   return {
     ...merged,

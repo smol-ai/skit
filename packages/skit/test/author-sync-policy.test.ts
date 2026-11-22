@@ -1,6 +1,7 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { Option } from "effect";
 import type * as History from "../src/history/history.js";
+import * as SkillMoves from "../src/author/merge/skill-moves.js";
 import * as Merge from "../src/sync/merge.js";
 import { authorDecider, authorTree, mergeAuthorRevisions } from "../src/author/sync-policy.js";
 
@@ -88,6 +89,7 @@ describe("skit author sync", () => {
   describe("Combining edits", () => {
     describe("For overlapping edits, the version observed later wins.", () => {
       test("a renamed synthesized file carries the latest contributing path time", () => {
+        using alignment = vi.spyOn(SkillMoves, "followSkillMoves");
         const skill = (name: string, body: string) =>
           `---\nname: ${name}\ndescription: Release notes.\n---\n# Notes\n${body}\nKeep them short.\n`;
         const result = mergeAuthorRevisions(
@@ -102,6 +104,7 @@ describe("skit author sync", () => {
           Option.some([entry("changelog/SKILL.md", skill("changelog", "later body"))]),
         );
         expect(result.edits).toEqual({ "changelog/SKILL.md": 2 });
+        expect(alignment).toHaveBeenCalledTimes(1);
       });
       test("a decomposed filename keeps its canonical edit time during merge", () => {
         const native = "cafe\u0301.bin";
