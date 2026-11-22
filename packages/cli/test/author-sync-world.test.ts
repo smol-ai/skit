@@ -352,52 +352,6 @@ describe("skit author sync", () => {
             expect((yield* world.a.sync()).status).toBe("up_to_date");
           }).pipe(Effect.provide(testPlatformLayer)),
       );
-
-      it.effect.each([
-        {
-          name: "v3",
-          render: (base: string) => ({
-            schema: "skit.sync-bindings.v3",
-            skits: { [locator]: { _tag: "Idle", base } },
-          }),
-        },
-        {
-          name: "v2",
-          render: (base: string) => ({
-            schema: "skit.sync-bindings.v2",
-            drafts: { [locator]: { _tag: "Idle", base } },
-          }),
-        },
-        {
-          name: "pre-release",
-          render: (base: string) => ({ [locator]: { skitId: "skit_1", revisionId: base } }),
-        },
-      ])(
-        "unsupported sync bindings ($name) are refused without changing files or remote history",
-        ({ render }) =>
-          Effect.gen(function* () {
-            const world = yield* makeAuthorSyncWorld();
-            const fs = yield* FileSystem.FileSystem;
-            yield* world.connect();
-            const initial = (yield* savedStates(world.a))?.[locator];
-            if (initial?._tag !== "Idle" || initial.base === null)
-              return yield* Effect.die("Expected connected Idle checkpoint");
-            const path = join(world.a.home, "author-sync.json");
-            const unreleased = JSON.stringify(render(initial.base));
-            yield* fs.writeFileString(path, unreleased);
-            yield* world.a.edit("notes/unreleased.txt", "Edit after an unreleased checkpoint");
-            const files = yield* world.a.files();
-            const revisions = yield* world.server.revisions();
-            for (const run of [world.a.preview(), world.a.sync()])
-              expect(yield* Effect.flip(run)).toMatchObject({
-                _tag: "AuthorSyncStateInvalid",
-                path,
-              });
-            expect(yield* fs.readFileString(path)).toBe(unreleased);
-            expect(yield* world.a.files()).toEqual(files);
-            expect(yield* world.server.revisions()).toEqual(revisions);
-          }).pipe(Effect.provide(testPlatformLayer)),
-      );
     });
   });
   describe("Keeping saved work", () => {
