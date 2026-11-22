@@ -204,8 +204,7 @@ save Done or Stopped, retaining evidence for recovery
 
 Each accepted state or progress write accumulates its audit event in the same
 SQLite transaction. History hides an event while an operation it covers is
-Pending. There is no separate event delivery or acknowledgment. Legacy pending
-history-delivery evidence is handled only when importing released state files.
+Pending.
 Startup resumes recorded Pending operations; changed user files cause a stopped
 outcome instead of silently acquiring new consent. This protocol can save several
 checkpoints. It is not a single final state write after all filesystem changes.

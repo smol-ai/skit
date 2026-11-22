@@ -46,10 +46,9 @@ calls `Skits.current`, leaving that state and its representation with its owner.
   discards unreleased Draft content and pointers, retains SKIT rows and Releases,
   and gives each SKIT no current revision. Identity, credentials and Library data
   are retained. See `docs/self-hosting.md` for the deployment ordering.
-- Local Author checkpoints start at `skit.author-sync.v1` in `author-sync.json`,
-  with checkpoints indexed by workspace and SKIT locator. Branch-only intermediate
-  formats are unsupported; no author command or `sync-bindings.json` writer was
-  published, so there is no legacy Author checkpoint loader.
+- Local Author checkpoints are stored in SQLite by workspace and SKIT locator. Branch-only checkpoint
+  formats, including `author-sync.json` and `sync-bindings.json`, were unpublished and
+  have no importer.
 - Author sync/list/delete contract IDs change with their output fields.
 
 Validation must cover current-revision publication state, invalid-content sync,

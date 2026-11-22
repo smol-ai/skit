@@ -114,10 +114,8 @@ own files. SKIT builds and verifies a fresh database schema in a temporary direc
 links it into place without replacing an existing database. The import holds the released
 `.lock` while publishing source backups and refusal files.
 
-- Library state, operation records, and undelivered audit drafts are imported into SQLite.
-  SKIT archives the raw legacy operation records, including completed ones, and can keep
-  supported Pending and Stopped programs available for recovery. The audit importer retains
-  the event objects and their extensions.
+- The Library imports released state file versions 4 through 9 and the released audit
+  log into SQLite. The audit importer retains the event objects and their extensions.
 - The Library commits the import before replacing `state.json` with a version the old CLI
   refuses. If interrupted in that interval, a retry checks the original hash and finishes
   publication. A changed source is kept for inspection.

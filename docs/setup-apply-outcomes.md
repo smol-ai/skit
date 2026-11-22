@@ -16,7 +16,7 @@ The acceptance tests drive `setupCommand` itself with `interactive: true`, a scr
 
 | Store | Where | Written by | Atomicity |
 | --- | --- | --- | --- |
-| **Machine config** | `<home>/machine.json` | `MachineSettings.ensureIdentity` before the steps, when imports or managed copies need an identity; `MachineSettings.updateDiscovery` after them, under the setup's operation ID, which records the discovery folders before and after for undo | Atomic rename, under the home lock |
+| **Machine config** | `<home>/library.sqlite` | `MachineSettings.ensureIdentity` before the steps, when imports or managed copies need an identity; `MachineSettings.updateDiscovery` after them, under the setup's operation ID, which records the discovery folders before and after for undo | One SQLite transaction per mutation under the home lock |
 | **Library state** | `<home>/library.sqlite` | `Library.setup`: the operation record with every step first, then each step's own saves, then each step marked Done | One SQLite transaction per save under the Library writer, held for the whole setup |
 | **Import backup** | `<home>/state.json.v<N>.backup-database`, `<home>/audit.jsonl.backup-database` | Library layer construction over a home holding released files | Written and flushed before `library.sqlite` is published; `state.json` then becomes a newer-version stub |
 | **Originals** | `<home>/originals/<digest>` | Retention, before the state that references it | Content-addressed; unreferenced trees are inert |
@@ -48,7 +48,7 @@ A setup interrupted during S5 stays Pending in the Library database; the next co
 | --- | --- | --- |
 | Guided preview declined, or a dry run | Nothing written; one scan | `declining or previewing the plan applies nothing after one scan` |
 | Library construction over a released `state.json`, including a preview | Loader maintenance only: the original kept beside it as a backup, `library.sqlite` created and `state.json` replaced by a stub | `a foreign record setup would forget changes only the loader's backed-up migration until confirmed` |
-| Non-interactive setup with `--work-dir` | A settings-only setup: an operation record with no steps, then `machine.json` saved under its ID | `non-interactive setup with a work dir records a guarded settings-only operation` |
+| Non-interactive setup with `--work-dir` | A settings-only setup: an operation record with no steps, then the discovery update saved under its ID | `non-interactive setup with a work dir records a guarded settings-only operation` |
 | Any approved apply | One scan after approval, however many steps run | `an approved apply scans once after approval, whatever stages it runs` |
 | Root preparation cannot write to a skills directory | `SetupStopped`; the operation, audit evidence and any machine identity remain durable. No selected skills retained, installed or removed. A retry requires a fresh review; retain-only does not prepare skills directories | `setup-apply-reviewed-plan.test.ts`: denied enabling / fresh retain-only review |
 | A reviewed source or alias changes after recording but before root preparation | `SetupStopped` before retaining anything or installing/moving copies; the changed entry stays untouched | `duplicates.test.ts`: source/alias changed after recording |
@@ -56,8 +56,8 @@ A setup interrupted during S5 stays Pending in the Library database; the next co
 | A replacement is edited after the recorded apply is durably Done but before duplicate cleanup | Apply reports a preservation warning; both copies and the new edits remain; no duplicate moved to recovery | `setup-duplicate-backup.test.ts`: cleanup boundary |
 | A selected file changes after approval, before S2 | `SetupPlanStale`; only the outside change is on disk | `a selected file changed after approval fails stale before any effect` |
 | Another writer commits a Library revision after approval, before S5 | `SetupPlanStale` (before S2) or `StalePlan` (after); only the outside change is in the Library | `a Library change committed after approval fails stale before any effect` |
-| A selected copy changes after S2, before its step is recorded | `StalePlan`; `machine.json` may be written; nothing reaches the Library | `bytes changed between the apply-time scan and a later stage fail stale` |
-| The operation record cannot be saved | That failure; `machine.json` may be written; nothing reaches the Library | `a setup whose record is refused writes nothing to the Library` |
+| A selected copy changes after S2, before its step is recorded | `StalePlan`; the machine identity may already be saved; no Library operation is recorded | `bytes changed between the apply-time scan and a later stage fail stale` |
+| The operation record cannot be saved | That failure; the machine identity may already be saved; no Library operation is recorded | `a setup whose record is refused writes nothing to the Library` |
 | A selected copy changes after the steps are recorded | `SetupStopped`; earlier selections stay managed; the changed copy is not retained; nothing removed | `a selected copy changed after the steps are recorded stops the setup` |
 | A removal selection is edited in place after the steps are recorded | `SetupStopped`; earlier steps stay; the edited copy stays where it is, nothing removed | `a removal selection edited after the steps are recorded stays in place` |
 | An additive step fails | `SetupStopped`; orphan originals may be written; no removal applied | `a failed additive step leaves every selected removal in place` |
