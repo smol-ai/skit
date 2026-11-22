@@ -1,10 +1,11 @@
 import { expectTypeOf, test } from "vitest";
 import type { AuthorHistoryShape } from "../src/author/history.js";
 import { expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Option } from "effect";
+import { Effect, FileSystem, Layer, Option, Schema } from "effect";
 import { join } from "node:path";
 import { backupAuthorHistory, backupAuthorWorkspace } from "../src/author/backup.js";
 import { AuthorHistory } from "../src/author/history.js";
+import { scanAuthorWorkspace } from "../src/author/scan.js";
 import { AuthorWorkspace, WorkspaceId, type WorkspaceLease } from "../src/author/workspace.js";
 import * as History from "../src/history/history.js";
 import * as Sync from "../src/sync/sync.js";
@@ -451,6 +452,12 @@ for (const mismatch of [
         if (!shouldReuse) return;
         const completed = yield* history.refresh(root, received.id);
         expect(completed.id).toBe(received.id);
+        if (nested) {
+          const scan = yield* scanAuthorWorkspace(root);
+          expect(completed.treeHash).toBe(scan.treeHash);
+          const stored = yield* history.engineStore.tree(completed.treeHash);
+          expect(Schema.toEquivalence(History.Tree)(stored, scan.tree)).toBe(true);
+        }
         const posts: string[] = [];
         const remote = {
           post: (id: History.RevisionId) =>
@@ -463,6 +470,10 @@ for (const mismatch of [
         if (nested) {
           const unchanged = yield* history.refresh(root);
           expect(unchanged.id).toBe(received.id);
+          const scan = yield* scanAuthorWorkspace(root);
+          expect(unchanged.treeHash).toBe(scan.treeHash);
+          const stored = yield* history.engineStore.tree(unchanged.treeHash);
+          expect(Schema.toEquivalence(History.Tree)(stored, scan.tree)).toBe(true);
           yield* backupAuthorHistory(lease, key, unchanged, remote);
           expect(posts).toEqual([]);
           yield* withLibraryDatabase(

@@ -333,20 +333,20 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
           latest === undefined
             ? undefined
             : { id: latest, revision: yield* engineStore.revision(latest) };
-        const sameHash = previous?.revision.tree === treeHash;
+        let unchanged = previous?.revision.tree === treeHash;
         let recordedTree: History.Tree = tree;
-        if (previous && !sameHash) {
+        if (previous && !unchanged) {
           const head = yield* engineStore.tree(previous.revision.tree);
           if (yield* matchesReceivedTree(tree, head)) {
-            if (source === undefined) return { ...previous, treeHash };
+            unchanged = true;
             // A different source can still update edit-time provenance for equivalent files.
             recordedTree = head;
           }
         }
-        if (sameHash || Result.isFailure(identity)) {
+        if (unchanged || Result.isFailure(identity)) {
           // Verify the stored tree, and keep the bytes even when there is no device to record as.
           yield* engineStore.putTree(tree);
-          if (previous && sameHash && source === undefined) return { ...previous, treeHash };
+          if (previous && unchanged && source === undefined) return { ...previous, treeHash };
         }
         const recorded = yield* History.record(
           engineStore,
