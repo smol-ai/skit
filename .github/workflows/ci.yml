@@ -27,7 +27,12 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Keep existing D1 migrations unchanged
-        run: node packages/skit-server-effect/scripts/check-frozen-migrations.ts "$MIGRATION_BASE" "$MIGRATION_HEAD"
+        run: |
+          if [[ -n "$MIGRATION_BASE" && ! "$MIGRATION_BASE" =~ ^0+$ ]] &&
+             ! git cat-file -e "${MIGRATION_BASE}^{commit}"; then
+            git fetch --no-tags origin "$MIGRATION_BASE"
+          fi
+          node packages/skit-server-effect/scripts/check-frozen-migrations.ts "$MIGRATION_BASE" "$MIGRATION_HEAD"
         env:
           MIGRATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           MIGRATION_HEAD: ${{ github.sha }}
