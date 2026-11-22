@@ -190,7 +190,10 @@ describe("skit library recovery list", () => {
           libraryDatabasePath(f.home),
           Effect.gen(function* () {
             const sql = yield* SqlClient.SqlClient;
+            // Inject corruption below the schema boundary to exercise the reader.
+            yield* sql`PRAGMA ignore_check_constraints=ON`;
             yield* sql`UPDATE library_audit_events SET document = ${malformed}`;
+            yield* sql`PRAGMA ignore_check_constraints=OFF`;
           }),
         );
 
@@ -238,7 +241,10 @@ describe("skit library recovery inspect", () => {
           libraryDatabasePath(f.home),
           Effect.gen(function* () {
             const sql = yield* SqlClient.SqlClient;
+            // Inject corruption below the schema boundary to exercise the reader.
+            yield* sql`PRAGMA ignore_check_constraints=ON`;
             yield* sql`UPDATE library_audit_events SET document = ${malformed}`;
+            yield* sql`PRAGMA ignore_check_constraints=OFF`;
           }),
         );
         yield* Effect.gen(function* () {

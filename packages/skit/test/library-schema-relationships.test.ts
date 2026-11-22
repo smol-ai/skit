@@ -57,3 +57,34 @@ it.effect(
       );
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+it.effect("SQLite rejects ambiguous enabled rows and invalid operation and audit documents", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-schema-checks-" });
+    const { state } = yield* declaredFixture;
+    yield* saveLibrary(home, state);
+    yield* withLibraryDatabase(
+      libraryDatabasePath(home),
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        const invalid = [
+          sql`INSERT INTO library_enabled(scope,item_key) VALUES('account','neither')`,
+          sql`INSERT INTO library_enabled(scope,item_key,collection_id,skill_id) VALUES('account','both','collection','skill')`,
+          sql`INSERT INTO library_operations(operation_id,kind,document) VALUES('invalid','setup','{')`,
+          sql`INSERT INTO library_operations(operation_id,kind,document) VALUES('blob','setup',CAST('{}' AS BLOB))`,
+          sql`INSERT INTO library_audit_events(event_id,document) VALUES('invalid','{')`,
+          sql`INSERT INTO library_audit_events(event_id,document) VALUES('blob',CAST('{}' AS BLOB))`,
+          sql`INSERT INTO library_audit_events(event_id,document,operation_ids) VALUES('invalid-ids','{}','[')`,
+        ];
+        for (const statement of invalid) {
+          const result = yield* Effect.result(statement);
+          assert.strictEqual(result._tag, "Failure");
+          if (result._tag === "Failure")
+            assert.strictEqual(result.failure.reason._tag, "ConstraintError");
+        }
+        assert.deepStrictEqual(yield* sql`PRAGMA integrity_check`, [{ integrity_check: "ok" }]);
+      }),
+    );
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);

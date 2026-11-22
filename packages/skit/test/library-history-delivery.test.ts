@@ -264,7 +264,10 @@ it.effect(
           f.path,
           Effect.gen(function* () {
             const sql = yield* SqlClient.SqlClient;
+            // Inject corruption below the schema boundary to exercise the reader.
+            yield* sql`PRAGMA ignore_check_constraints=ON`;
             yield* sql`UPDATE library_audit_events SET document='{' WHERE event_id=${original.eventId}`;
+            yield* sql`PRAGMA ignore_check_constraints=OFF`;
           }),
         );
         const result = yield* owner.setup([], { base: yield* owner.read });

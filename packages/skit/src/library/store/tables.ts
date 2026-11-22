@@ -52,6 +52,7 @@ export const createLibraryTables = Effect.gen(function* () {
   item_key      TEXT NOT NULL,
   collection_id TEXT,
   skill_id      TEXT,
+  CHECK ((collection_id IS NULL) <> (skill_id IS NULL)),
   PRIMARY KEY (scope, root, item_key)
 ) STRICT`;
   yield* sql`CREATE TABLE library_invocation_policies (
@@ -101,8 +102,18 @@ export const createLibraryTables = Effect.gen(function* () {
   CHECK ((change = 'added') = (value IS NULL)),
   PRIMARY KEY (entity, key)
 ) STRICT`;
-  yield* sql`CREATE TABLE library_operations (position INTEGER PRIMARY KEY, operation_id TEXT NOT NULL UNIQUE, kind TEXT NOT NULL, document TEXT NOT NULL)`;
-  yield* sql`CREATE TABLE library_audit_events (sequence INTEGER PRIMARY KEY AUTOINCREMENT,event_id TEXT NOT NULL UNIQUE,document TEXT NOT NULL,operation_ids TEXT NOT NULL DEFAULT '[]')`;
+  yield* sql`CREATE TABLE library_operations (
+    position INTEGER PRIMARY KEY,
+    operation_id TEXT NOT NULL UNIQUE,
+    kind TEXT NOT NULL,
+    document TEXT NOT NULL CHECK (json_valid(document))
+  ) STRICT`;
+  yield* sql`CREATE TABLE library_audit_events (
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id TEXT NOT NULL UNIQUE,
+    document TEXT NOT NULL CHECK (json_valid(document)),
+    operation_ids TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(operation_ids))
+  ) STRICT`;
   yield* sql`CREATE TABLE library_import (source TEXT PRIMARY KEY, backup TEXT, hash TEXT, fenced INTEGER NOT NULL CHECK(fenced IN (0,1))) STRICT`;
   yield* sql`CREATE INDEX library_skill_versions_skill ON library_skill_versions (skill_id)`;
   yield* sql`CREATE UNIQUE INDEX library_skill_version_owners ON library_skill_versions(skill_id,skill_version_id)`;
