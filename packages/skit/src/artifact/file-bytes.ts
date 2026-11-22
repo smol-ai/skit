@@ -143,6 +143,8 @@ export const makeFileBytes = Effect.fn("FileBytes.make")(function* (home: string
     files: readonly { readonly hash: Hash; readonly content: Uint8Array }[],
   ) {
     const known = yield* knownMany(files.map(({ hash }) => hash));
+    // Staging can create the home before its database exists. Only a new home adds an entry to its parent.
+    const newHome = files.length > 0 && !(yield* fs.exists(root));
     const facts = new Map<Hash, number>();
     for (const { hash, content } of files)
       if (!(yield* keep(hash, content, known.get(hash)))) facts.set(hash, content.byteLength);
@@ -151,7 +153,7 @@ export const makeFileBytes = Effect.fn("FileBytes.make")(function* (home: string
         ...Array.from(facts.keys(), (hash) => fileBytesPath(root, hash)),
         directory,
         root,
-        dirname(root),
+        ...(newHome ? [dirname(root)] : []),
       ]).pipe(Effect.provideService(FileSystem.FileSystem, fs));
     const register = Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;

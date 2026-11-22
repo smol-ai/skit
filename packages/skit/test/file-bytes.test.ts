@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Deferred, Fiber } from "effect";
 import { SqlClient } from "effect/sql";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { skitLayer } from "../src/platform/layer.js";
 import { lockFile } from "../src/platform/file-lock.js";
 import { systemError } from "effect/PlatformError";
@@ -278,6 +278,7 @@ it.effect(
       );
       assert.strictEqual(parentFlushes.get(join(f.home, "file-bytes")), 1);
       assert.strictEqual(parentFlushes.get(f.home), 1);
+      assert.isFalse(parentFlushes.has(dirname(f.home)));
       assert.deepStrictEqual(
         batch.files.map(({ entry }) => entry),
         contents,
@@ -310,4 +311,26 @@ it.effect(
       for (const { entry, hash } of batch.files)
         assert.deepStrictEqual(yield* f.owner.read(hash), entry);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("staging bytes for a new home also flushes the home’s parent", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const parent = yield* fs.makeTempDirectoryScoped({ prefix: "skit-byte-home-parent-" });
+    const home = join(parent, "home");
+    const opened: string[] = [];
+    const owner = yield* makeFileBytes(home).pipe(
+      Effect.provideService(FileSystem.FileSystem, {
+        ...fs,
+        open: (path, options) =>
+          Effect.gen(function* () {
+            if (options?.flag === "r") opened.push(path);
+            return yield* fs.open(path, options);
+          }),
+      }),
+    );
+    yield* owner.keep(content);
+    assert.strictEqual(opened.filter((path) => path === parent).length, 1);
+    assert.isTrue(yield* fs.exists(home));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
