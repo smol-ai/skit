@@ -45,7 +45,7 @@ it.effect("Remove is repeatable across working directories with ordered reposito
     const script = `import { readFileSync } from 'node:fs'; import { Effect } from ${JSON.stringify(effect)}; import { edit } from ${JSON.stringify(url)}; import { skitLayer } from ${JSON.stringify(platform)}; const state=JSON.parse(readFileSync(process.argv[1],'utf8')); const before=JSON.stringify(state); const result=await Effect.runPromise(edit(state,{_tag:'Remove',collectionId:process.argv[2]}).pipe(Effect.provide(skitLayer))); process.stdout.write(JSON.stringify({next:result.next,unchanged:before===JSON.stringify(state)}));`;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const results = [];
-    for (const cwd of ["/private/tmp", packageRoot]) {
+    for (const cwd of [temp, packageRoot]) {
       const child = yield* spawner.spawn(
         ChildProcess.make(
           process.execPath,
@@ -85,7 +85,6 @@ it.effect("Enabled stores small old and new fields on the fixture and fifty repo
     const { state } = yield* fixture;
     const skill = state.skills[0];
     assert.ok(skill);
-    const measurements = [];
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-apply-fields-" });
     const library = yield* Library.Service.pipe(
@@ -133,18 +132,8 @@ it.effect("Enabled stores small old and new fields on the fixture and fifty repo
         );
         const bytes = Buffer.byteLength(JSON.stringify(roundTrip.bodyChange));
         assert.isBelow(bytes, 25_000);
-        measurements.push({
-          repositories: count,
-          change: enabled ? "enable-policy" : "disable",
-          fieldsBytes: bytes,
-          libraryBytes: Buffer.byteLength(JSON.stringify(base)),
-        });
         base = next;
       }
     }
-    yield* fs.writeFileString(
-      "/private/tmp/skit-apply-field-sizes.json",
-      JSON.stringify(measurements, null, 2),
-    );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

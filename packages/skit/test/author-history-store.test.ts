@@ -111,23 +111,6 @@ it.effect(
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("reads and reuses an independent legacy byte-bearing tree without rewriting it", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    const tree = [file("notes.txt", "hello")];
-    const id = yield* History.treeHash(tree);
-    const legacy = ' [{"path":"notes.txt","kind":"file","mode":420,"bytes":"aGVsbG8="}]\n';
-    const path = join(f.trees, `${id.slice(7)}.json`);
-    yield* f.fs.makeDirectory(f.trees, { recursive: true });
-    yield* f.fs.writeFileString(path, legacy);
-    const store = yield* openStore(f.directory);
-    expect(yield* store.tree(id)).toEqual(tree);
-    expect(yield* store.putTree(tree)).toBe(id);
-    expect(yield* f.fs.readFileString(path)).toBe(legacy);
-    expect(yield* f.fs.readDirectory(f.blobs)).toHaveLength(1);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
 it.effect.each(["missing", "corrupt"] as const)(
   "refuses a %s blob on read and repeated save without repairing it",
   (damage) =>

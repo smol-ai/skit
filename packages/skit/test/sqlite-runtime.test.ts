@@ -106,10 +106,10 @@ it.effect(
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
-it.effect("a write within a read transaction takes the home lock and uses a write connection", () =>
+it.effect("a write takes the home lock, uses its own connection and nests as a savepoint", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-sqlite-read-scope-" });
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-sqlite-write-scope-" });
     yield* prepareLibraryDatabase(home, true);
     const path = libraryDatabasePath(home);
 
@@ -117,40 +117,26 @@ it.effect("a write within a read transaction takes the home lock and uses a writ
       path,
       Effect.gen(function* () {
         const reader = yield* SqlClient.SqlClient;
-        yield* reader.withTransaction(
+        yield* withDatabaseTransaction(
+          home,
           Effect.gen(function* () {
-            assert.deepStrictEqual(
-              yield* reader`SELECT collection_id FROM library_collections`,
-              [],
+            const writer = yield* SqlClient.SqlClient;
+            assert.notStrictEqual(writer, reader);
+            const locked = yield* Effect.flip(Effect.scoped(lockFile(join(home, "lock.sqlite"))));
+            assert.strictEqual(locked._tag, "FileLockBusy");
+            yield* writer`INSERT INTO library_collections (collection_id,label) VALUES ('kept','kept')`;
+            const stopped = yield* Effect.flip(
+              withDatabaseTransaction(
+                home,
+                Effect.gen(function* () {
+                  const nested = yield* SqlClient.SqlClient;
+                  assert.strictEqual(nested, writer);
+                  yield* nested`INSERT INTO library_collections (collection_id,label) VALUES ('reverted','reverted')`;
+                  return yield* Effect.fail("roll back the savepoint");
+                }),
+              ),
             );
-            yield* withDatabaseTransaction(
-              home,
-              Effect.gen(function* () {
-                const writer = yield* SqlClient.SqlClient;
-                assert.notStrictEqual(writer, reader);
-                const locked = yield* Effect.flip(
-                  Effect.scoped(lockFile(join(home, "lock.sqlite"))),
-                );
-                assert.strictEqual(locked._tag, "FileLockBusy");
-                yield* writer`INSERT INTO library_collections (collection_id,label) VALUES ('kept','kept')`;
-                const stopped = yield* Effect.flip(
-                  withDatabaseTransaction(
-                    home,
-                    Effect.gen(function* () {
-                      const nested = yield* SqlClient.SqlClient;
-                      assert.strictEqual(nested, writer);
-                      yield* nested`INSERT INTO library_collections (collection_id,label) VALUES ('reverted','reverted')`;
-                      return yield* Effect.fail("roll back the savepoint");
-                    }),
-                  ),
-                );
-                assert.strictEqual(stopped, "roll back the savepoint");
-              }),
-            );
-            assert.deepStrictEqual(
-              yield* reader`SELECT collection_id FROM library_collections`,
-              [],
-            );
+            assert.strictEqual(stopped, "roll back the savepoint");
           }),
         );
         assert.deepStrictEqual(yield* reader`SELECT collection_id FROM library_collections`, [

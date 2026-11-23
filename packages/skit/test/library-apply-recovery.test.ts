@@ -639,7 +639,6 @@ it.effect("the store refuses an old pending Apply intact", () =>
 
 it.effect("Apply records stay small on the 575 KB Library fixture", () =>
   Effect.gen(function* () {
-    const measurements = [];
     const { installed_skills: _installed, ...publication } = LibraryStateFields;
     const oldCopies = Schema.Struct({
       before: LibraryStateDocument,
@@ -736,24 +735,7 @@ it.effect("Apply records stay small on the 575 KB Library fixture", () =>
       assert.isAbove(observed.length, 0);
       const first = observed[0]!;
       assert.isBelow(first.step, first.oldStep / 10);
-      measurements.push({
-        intent: operation,
-        fixtureBytes: Buffer.byteLength(JSON.stringify(large)),
-        liveBytes: Buffer.byteLength(JSON.stringify(before)),
-        first,
-        largest: {
-          step: Math.max(...observed.map((item) => item.step)),
-          oldStep: Math.max(...observed.map((item) => item.oldStep)),
-          operation: Math.max(...observed.map((item) => item.operation)),
-          oldOperation: Math.max(...observed.map((item) => item.oldOperation)),
-          row: Math.max(...observed.map((item) => item.row)),
-        },
-      });
     }
-    yield* (yield* FileSystem.FileSystem).writeFileString(
-      "/private/tmp/skit-apply-record-sizes.json",
-      JSON.stringify(measurements, null, 2),
-    );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
