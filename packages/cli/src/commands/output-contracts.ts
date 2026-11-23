@@ -115,6 +115,15 @@ export const outputContracts = {
     }),
   ),
   authorDelete: effectOutput("skit.author.delete.v2", AuthorSkitDeleteResponse),
+  authorPull: effectOutput(
+    "skit.author.pull.v1",
+    Schema.Struct({
+      identity: Schema.String,
+      directory: Schema.String,
+      revision_id: Schema.String,
+      paths: Schema.Array(Schema.String),
+    }),
+  ),
   add: addOutputContracts.add,
   addPreview: addOutputContracts.addPreview,
   list: listOutputContracts.list,

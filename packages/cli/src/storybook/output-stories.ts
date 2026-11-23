@@ -434,6 +434,16 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     }),
   ),
   resultStory(
+    "author-pull",
+    "pulled",
+    result("authorPull", {
+      identity: "skit://registry.example/smol-ai/review-tools",
+      directory: "/Users/ada/review-tools",
+      revision_id: `sha256:${"3".repeat(64)}`,
+      paths: ["README.md", "skills/review/SKILL.md", "skit.json"],
+    }),
+  ),
+  resultStory(
     "author-delete",
     "delete-ready",
     result("authorDelete", {

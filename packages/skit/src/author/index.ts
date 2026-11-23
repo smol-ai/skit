@@ -66,6 +66,7 @@ export { backupAuthorWorkspace } from "./backup.js";
 
 export { listAuthorSkits, AuthorListIdentityError } from "./list.js";
 export { deleteAuthorSkit } from "./delete.js";
+export { pullAuthorSkit } from "./pull.js";
 export { publishAuthorWorkspace } from "./publish.js";
 export { PublicationBlocked } from "./failures.js";
 // Error names that inferred CLI declarations must be able to name; constructors stay internal.
@@ -76,7 +77,9 @@ export type {
   DestinationFormInvalid,
   DirectoryAlreadyInLibrary,
   NoRemoteHome,
+  NoRevisionToPull,
   NotAnAuthorWorkspace,
+  PullDirectoryNotEmpty,
   VisibilityNotAccepted,
 } from "./failures.js";
 

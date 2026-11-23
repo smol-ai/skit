@@ -698,6 +698,18 @@ const contractPresenters: ContractPresenters = {
   authorInvocation: presentAuthorInvocation,
   authorWatch: presentAuthorWatch,
   authorDelete: presentAuthorDelete,
+  authorPull: (data) => [
+    Block.Status({
+      tone: "ok",
+      text: [`Pulled ${data.identity} (${metadataRevision(data.revision_id)})`],
+    }),
+    Block.Fields({
+      rows: [
+        { label: "Directory", value: [{ code: data.directory }] },
+        { label: "Files", value: [String(data.paths.length)] },
+      ],
+    }),
+  ],
   publish: (data) => [
     Block.Status({
       tone: "ok",

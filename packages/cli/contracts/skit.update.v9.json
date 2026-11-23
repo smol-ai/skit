@@ -18283,6 +18283,44 @@
             "_tag": {
               "type": "string",
               "enum": [
+                "PullDirectoryNotEmpty"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "NoRevisionToPull"
+              ]
+            },
+            "locator": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "locator"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
                 "PublicationBlocked"
               ]
             },
@@ -40310,6 +40348,44 @@
           },
           "required": [
             "_tag"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "PullDirectoryNotEmpty"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "NoRevisionToPull"
+              ]
+            },
+            "locator": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "locator"
           ],
           "additionalProperties": true
         },

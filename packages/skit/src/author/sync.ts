@@ -12,6 +12,7 @@ import { AuthorHistory, authorHistoryStoreError } from "./history.js";
 import {
   LocalFilesChangedDuringSync,
   AuthorRemoteAlreadyExists,
+  PullDirectoryNotEmpty,
   VisibilityNotAccepted,
 } from "./failures.js";
 import { scanAuthorSyncTree } from "./local-tree.js";
@@ -53,6 +54,12 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
     readonly home: string;
     readonly to?: string;
     readonly visibility?: AuthorVisibility;
+    /**
+     * `author pull`: this sync may only receive. Its Registry cannot record a revision or move
+     * `current`, so a directory that turns out to hold files fails before anything is sent or
+     * written.
+     */
+    readonly receiveOnly?: boolean;
   },
   registryAccess: Pick<AuthorRegistry<E, R, P>, "origin" | "connect">,
   heldLease?: WorkspaceLease,
@@ -203,7 +210,10 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
     // The engine's store reports what it cannot read back; that is unusable history.
     const storeFailure = (error: History.StoreError) => Effect.fail(authorHistoryStoreError(error));
 
-    const registry = api.remote;
+    const refuse = () => Effect.fail(new PullDirectoryNotEmpty({ path: root }));
+    const registry: Sync.Remote<P | PullDirectoryNotEmpty> = options.receiveOnly
+      ? { ...api.remote, post: refuse, move: refuse }
+      : api.remote;
     // This workspace's checkpoint: none until it has an identity (A5). Decoding the saved
     // checkpoints comes before creating anything or replacing a base.
     const workspaceId = applying?.workspaceId ?? previewed?.workspaceId;
@@ -408,9 +418,11 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
       planned._tag === "Blocked" && removal !== undefined && removal.allowAllRemovals;
     if (planned._tag === "Blocked" && !approvedRemoval)
       return { status: "blocked", changed: false, ...planned.removal } satisfies AuthorSyncResult;
-    yield* backupAuthorHistory(applying.lease, key, applying.observation, registry).pipe(
-      Effect.catchIf(Schema.is(History.StoreError), storeFailure),
-    );
+    // A receive-only sync sends no backup either; the next ordinary sync backs up what it saved.
+    if (!options.receiveOnly)
+      yield* backupAuthorHistory(applying.lease, key, applying.observation, registry).pipe(
+        Effect.catchIf(Schema.is(History.StoreError), storeFailure),
+      );
     const { outcome } = yield* Sync.run({
       store: history.engineStore,
       remote: registry,
@@ -444,9 +456,10 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
       });
     // Record what sync wrote as this workspace's latest observation.
     const completed = yield* history.refresh(root, outcome.revision);
-    yield* backupAuthorHistory(applying.lease, key, completed, registry).pipe(
-      Effect.catchIf(Schema.is(History.StoreError), storeFailure),
-    );
+    if (!options.receiveOnly)
+      yield* backupAuthorHistory(applying.lease, key, completed, registry).pipe(
+        Effect.catchIf(Schema.is(History.StoreError), storeFailure),
+      );
     if (waitingForRemoval !== undefined)
       return { ...waitingForRemoval, changed: outcome.status !== "up_to_date" };
     if (destination._tag !== "ConnectedRemote")
