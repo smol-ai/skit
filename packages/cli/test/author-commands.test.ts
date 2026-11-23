@@ -21,6 +21,7 @@ it.effect(
           "init",
           "validate",
           "sync",
+          "pull",
           "watch",
           "publish",
           "list",

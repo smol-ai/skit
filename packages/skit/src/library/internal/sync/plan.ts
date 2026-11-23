@@ -40,12 +40,12 @@ const collectionSource = (
   collection: Collection,
   workspace?: { readonly label: string; readonly authority?: string },
 ) => {
-  const acquisition = sourceImports(manifest, collection.collection_id)[0];
-  const source = collection.upstream?.source_identity ?? acquisition?.source_identity;
+  const sourceImport = sourceImports(manifest, collection.collection_id)[0];
+  const source = collection.upstream?.source_identity ?? sourceImport?.source_identity;
   if (source === undefined) return {};
   if (source.kind === "registry") {
     const revision =
-      acquisition?.source_identity.kind === "registry" ? acquisition.revision : undefined;
+      sourceImport?.source_identity.kind === "registry" ? sourceImport.revision : undefined;
     return {
       source_kind: source.kind,
       authority: source.authority,
