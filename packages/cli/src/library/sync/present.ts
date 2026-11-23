@@ -23,41 +23,68 @@ const skillChange = (action: Change["action"], names: readonly string[]): Change
     ? []
     : [{ action, label: names.length <= 5 ? names.join(", ") : plural(names.length, "Skill") }];
 
-const collectionChange = (change: Extract<PlanChange, { kind: "collection" }>): Change => ({
-  action: change.action,
-  label:
-    change.label_before && change.label_after && change.label_before !== change.label_after
-      ? `${change.label_before} → ${change.label_after}`
-      : change.label,
-  ...(change.source_kind === "authored-workspace"
-    ? {
-        detail:
-          change.action === "add"
-            ? `${sourceKinds[change.source_kind]}, ${plural(change.skills_added.length, "Skill")}`
-            : sourceKinds[change.source_kind],
-      }
-    : change.action === "add"
-      ? { detail: plural(change.skills_added.length, "Skill") }
-      : {}),
-  ...(change.action === "update"
-    ? {
-        children: [
-          ...skillChange("add", change.skills_added),
-          ...skillChange("update", change.skills_changed),
-          ...skillChange("remove", change.skills_removed),
-        ],
-      }
-    : {}),
-});
+const sourceDetails = ({
+  source_kind,
+  authority,
+  release_version,
+}: {
+  readonly source_kind?: keyof typeof sourceKinds;
+  readonly authority?: string;
+  readonly release_version?: string;
+}): readonly string[] => {
+  if (source_kind === undefined) return [];
+  const host =
+    authority === undefined
+      ? undefined
+      : URL.parse(authority.includes("://") ? authority : `https://${authority}`)?.host ||
+        undefined;
+  if (source_kind === "registry" && (host !== undefined || release_version !== undefined))
+    return [host, release_version].filter((value) => value !== undefined);
+  return source_kind === "authored-workspace" && host !== undefined
+    ? [sourceKinds[source_kind], host]
+    : [sourceKinds[source_kind]];
+};
 
-const enabledChange = (change: Extract<PlanChange, { kind: "enabled" }>): Change => ({
-  action: change.action,
-  label: "Enabled Skills",
-  children: [
-    ...change.items_added.map((item): Change => ({ action: "add", label: item.label })),
-    ...change.items_removed.map((item): Change => ({ action: "remove", label: item.label })),
-  ],
-});
+const collectionChange = (change: Extract<PlanChange, { kind: "collection" }>): Change => {
+  const details = [
+    ...sourceDetails(change),
+    ...(change.action === "add" ? [plural(change.skills_added.length, "Skill")] : []),
+  ];
+  return {
+    action: change.action,
+    label:
+      change.label_before && change.label_after && change.label_before !== change.label_after
+        ? `${change.label_before} → ${change.label_after}`
+        : change.label,
+    ...(details.length > 0 ? { detail: details.join(", ") } : {}),
+    ...(change.action === "update"
+      ? {
+          children: [
+            ...skillChange("add", change.skills_added),
+            ...skillChange("update", change.skills_changed),
+            ...skillChange("remove", change.skills_removed),
+          ],
+        }
+      : {}),
+  };
+};
+
+const enabledChange = (change: Extract<PlanChange, { kind: "enabled" }>): Change => {
+  const entry = (action: Change["action"], item: (typeof change.items_added)[number]): Change => {
+    const detail = [item.collection_label, ...sourceDetails(item)]
+      .filter((part) => part !== undefined)
+      .join(", ");
+    return { action, label: item.label, ...(detail === "" ? {} : { detail }) };
+  };
+  return {
+    action: change.action,
+    label: "Enabled Skills",
+    children: [
+      ...change.items_added.map((item) => entry("add", item)),
+      ...change.items_removed.map((item) => entry("remove", item)),
+    ],
+  };
+};
 
 export const syncIssue = (issue: SyncIssue): ListItem =>
   Schema.is(SyncConflictDetail)(issue)
@@ -174,7 +201,6 @@ export function presentLibrarySyncPlan(plan: SyncPlan): Block[] {
 export function presentLibrarySync(data: SyncResult): Block[] {
   const folders = data.author_workspaces ?? [];
   return [
-    ...presentLibrarySyncResult(data),
     ...(folders.length
       ? [
           Block.Heading({ text: "Author Workspaces" }),
@@ -192,7 +218,7 @@ export function presentLibrarySync(data: SyncResult): Block[] {
                     : [
                         folder.sync?.status === "ready"
                           ? `ready to ${folder.sync.action}`
-                          : (folder.sync?.status ??
+                          : (folder.sync?.status.replaceAll("_", " ") ??
                             (folder.status === "pull_ready"
                               ? "ready to pull"
                               : (folder.installation ?? folder.status))),
@@ -215,6 +241,7 @@ export function presentLibrarySync(data: SyncResult): Block[] {
             ],
           }),
         ]),
+    ...presentLibrarySyncResult(data),
   ];
 }
 

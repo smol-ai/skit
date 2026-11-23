@@ -209,15 +209,18 @@ export function openSyncSession(
         _tag: "Stopped" as const,
         result: { ...note, ...conflict(transition.conflicts, remote?.revision_id) },
       };
-    const labels = new Map<string, string>();
+    const workspaces = new Map<string, { label: string; authority?: string }>();
     for (const collection of merge.alignedLocal.collections) {
       if (collection.upstream?.source_identity.kind !== "authored-workspace") continue;
       const source = yield* readCollectionSource(merge.alignedLocal, collection, home);
       if (source?.workspace_status === "connected")
-        labels.set(collection.collection_id, source.name);
+        workspaces.set(collection.collection_id, {
+          label: source.name,
+          authority: source.authority,
+        });
     }
     const facts: SyncChanges = {
-      ...planLibrarySync(merge.alignedLocal, remoteManifest, desired, labels),
+      ...planLibrarySync(merge.alignedLocal, remoteManifest, desired, workspaces),
       ...(merge.enabledResolution ? { enabled_resolution: merge.enabledResolution } : {}),
     };
     const prepare = (content: Library.StagedContent, local = false) => {

@@ -1129,6 +1129,12 @@
                       "well-known"
                     ]
                   },
+                  "authority": {
+                    "type": "string"
+                  },
+                  "release_version": {
+                    "type": "string"
+                  },
                   "label": {
                     "type": "string"
                   },
@@ -1203,6 +1209,28 @@
                         },
                         "label": {
                           "type": "string"
+                        },
+                        "collection_label": {
+                          "type": "string"
+                        },
+                        "source_kind": {
+                          "type": "string",
+                          "enum": [
+                            "github",
+                            "git",
+                            "registry",
+                            "url",
+                            "archive",
+                            "local",
+                            "authored-workspace",
+                            "well-known"
+                          ]
+                        },
+                        "authority": {
+                          "type": "string"
+                        },
+                        "release_version": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -1225,6 +1253,28 @@
                           ]
                         },
                         "label": {
+                          "type": "string"
+                        },
+                        "collection_label": {
+                          "type": "string"
+                        },
+                        "source_kind": {
+                          "type": "string",
+                          "enum": [
+                            "github",
+                            "git",
+                            "registry",
+                            "url",
+                            "archive",
+                            "local",
+                            "authored-workspace",
+                            "well-known"
+                          ]
+                        },
+                        "authority": {
+                          "type": "string"
+                        },
+                        "release_version": {
                           "type": "string"
                         }
                       },
@@ -1284,6 +1334,12 @@
                       "well-known"
                     ]
                   },
+                  "authority": {
+                    "type": "string"
+                  },
+                  "release_version": {
+                    "type": "string"
+                  },
                   "label": {
                     "type": "string"
                   },
@@ -1358,6 +1414,28 @@
                         },
                         "label": {
                           "type": "string"
+                        },
+                        "collection_label": {
+                          "type": "string"
+                        },
+                        "source_kind": {
+                          "type": "string",
+                          "enum": [
+                            "github",
+                            "git",
+                            "registry",
+                            "url",
+                            "archive",
+                            "local",
+                            "authored-workspace",
+                            "well-known"
+                          ]
+                        },
+                        "authority": {
+                          "type": "string"
+                        },
+                        "release_version": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -1380,6 +1458,28 @@
                           ]
                         },
                         "label": {
+                          "type": "string"
+                        },
+                        "collection_label": {
+                          "type": "string"
+                        },
+                        "source_kind": {
+                          "type": "string",
+                          "enum": [
+                            "github",
+                            "git",
+                            "registry",
+                            "url",
+                            "archive",
+                            "local",
+                            "authored-workspace",
+                            "well-known"
+                          ]
+                        },
+                        "authority": {
+                          "type": "string"
+                        },
+                        "release_version": {
                           "type": "string"
                         }
                       },

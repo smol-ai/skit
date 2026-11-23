@@ -2136,7 +2136,14 @@ export const outputStories: ReadonlyArray<OutputStory> = [
           {
             kind: "enabled",
             action: "update",
-            items_added: [{ kind: "skill", label: "cli-ux" }],
+            items_added: [
+              {
+                kind: "skill",
+                label: "cli-ux",
+                collection_label: "swyxio/skills",
+                source_kind: "github",
+              },
+            ],
             items_removed: [{ kind: "collection", label: "NVIDIA/skills" }],
           },
         ],
@@ -2152,13 +2159,66 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     "library-sync",
     "author-workspaces",
     result("librarySync", {
-      status: "clean",
+      status: "push_ready",
+      plan: {
+        local: [],
+        remote: [
+          {
+            kind: "collection",
+            action: "remove",
+            subject_id: "release-tools",
+            label: "tim/tools",
+            source_kind: "registry",
+            authority: "https://registry.example",
+            release_version: "1.2.0",
+            skills_added: [],
+            skills_removed: ["review"],
+            skills_changed: [],
+            evidence_only: false,
+          },
+          {
+            kind: "collection",
+            action: "add",
+            subject_id: "authored-tools",
+            label: "tim/tools",
+            source_kind: "authored-workspace",
+            authority: "https://registry.example",
+            skills_added: ["review"],
+            skills_removed: [],
+            skills_changed: [],
+            evidence_only: false,
+          },
+          {
+            kind: "enabled",
+            action: "update",
+            items_added: [
+              {
+                kind: "skill",
+                label: "review",
+                collection_label: "tim/tools",
+                source_kind: "authored-workspace",
+                authority: "https://registry.example",
+              },
+            ],
+            items_removed: [
+              {
+                kind: "skill",
+                label: "review",
+                collection_label: "tim/tools",
+                source_kind: "registry",
+                authority: "https://registry.example",
+                release_version: "1.2.0",
+              },
+            ],
+          },
+        ],
+      },
       author_workspaces: [
         {
           identity: "skit://registry.example/tim/tools",
           directory: "/work/tools",
           status: "sync",
-          sync: { status: "ready", changed: false, action: "pull" },
+          sync: { status: "up_to_date", changed: false, revision_id: `sha256:${"a".repeat(64)}` },
         },
         {
           identity: "skit://registry.example/tim/notes",

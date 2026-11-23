@@ -169,6 +169,7 @@ it.effect("names the authored Collection in plan data", () =>
           kind: "collection",
           label: "swyx/tools",
           source_kind: "authored-workspace",
+          authority: origin,
         }),
       ]),
     );
@@ -294,12 +295,13 @@ it.effect("continues Library sync when an Author Workspace is busy", () =>
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("does not recreate a deleted workspace with a checkpoint", () =>
+it.effect("omits a deleted workspace from preview and does not recreate it on apply", () =>
   Effect.gen(function* () {
     const { fs, onDevice, userB, homeB, second, sync, userA, homeA } = yield* world();
     expect((yield* onDevice(userA, homeA, "a", sync(true))).status).toBe("pushed");
     yield* onDevice(userB, homeB, "b", sync(true));
     yield* fs.remove(second, { recursive: true });
+    expect((yield* onDevice(userB, homeB, "b", sync(false))).author_workspaces).toEqual([]);
     expect((yield* onDevice(userB, homeB, "b", sync(true))).author_workspaces).toEqual([]);
     expect(yield* fs.exists(second)).toBe(false);
   }).pipe(Effect.provide(testPlatformLayer)),

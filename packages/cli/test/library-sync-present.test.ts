@@ -28,12 +28,44 @@ describe("presentLibrarySyncPlan", () => {
         { ...collection, action: "update", label: "Refetched", evidence_only: true },
       ],
       remote: [
-        { ...collection, action: "add", label: "Docs", skills_added: ["write"] },
+        {
+          ...collection,
+          action: "remove",
+          label: "Docs",
+          source_kind: "registry",
+          authority: "https://registry.example:8443",
+          release_version: "1.2.0+original",
+        },
+        {
+          ...collection,
+          action: "add",
+          label: "Docs",
+          source_kind: "authored-workspace",
+          authority: "http://localhost:8810",
+          skills_added: ["write"],
+        },
         {
           kind: "enabled",
           action: "update",
-          items_added: [{ kind: "skill", label: "review" }],
-          items_removed: [],
+          items_added: [
+            {
+              kind: "skill",
+              label: "review",
+              collection_label: "Docs",
+              source_kind: "authored-workspace",
+              authority: "http://localhost:8810",
+            },
+          ],
+          items_removed: [
+            {
+              kind: "skill",
+              label: "review",
+              collection_label: "Docs",
+              source_kind: "registry",
+              authority: "https://registry.example:8443",
+              release_version: "1.2.0+original",
+            },
+          ],
         },
       ],
     });
@@ -63,7 +95,10 @@ describe("presentLibrarySyncPlan", () => {
         children: [
           Block.Changes({
             title: "Collections",
-            items: [{ action: "add", label: "Docs", detail: "1 Skill" }],
+            items: [
+              { action: "remove", label: "Docs", detail: "registry.example:8443, 1.2.0+original" },
+              { action: "add", label: "Docs", detail: "Author workspace, localhost:8810, 1 Skill" },
+            ],
           }),
           Block.Changes({
             title: "Enabled",
@@ -71,13 +106,24 @@ describe("presentLibrarySyncPlan", () => {
               {
                 action: "update",
                 label: "Enabled Skills",
-                children: [{ action: "add", label: "review" }],
+                children: [
+                  {
+                    action: "add",
+                    label: "review",
+                    detail: "Docs, Author workspace, localhost:8810",
+                  },
+                  {
+                    action: "remove",
+                    label: "review",
+                    detail: "Docs, registry.example:8443, 1.2.0+original",
+                  },
+                ],
               },
             ],
           }),
         ],
       }),
-      Block.Note({ text: ["Plan: 1 to add, 2 to update."] }),
+      Block.Note({ text: ["Plan: 1 to add, 2 to update, 1 to remove."] }),
     ]);
   });
 });
@@ -88,8 +134,18 @@ describe("presentLibrarySync", () => {
       status: "pull_ready",
       merge_base: "empty-first-sync",
       plan: { local: [], remote: [] },
+      author_workspaces: [
+        {
+          identity: "skit://registry.example/tim/tools",
+          directory: "/work/tools",
+          status: "sync",
+          sync: { status: "up_to_date", changed: false, revision_id: "revision" },
+        },
+      ],
     });
     expect(blocks.map((block) => block._tag)).toEqual([
+      "Heading",
+      "List",
       "Heading",
       "Group",
       "Group",
@@ -97,6 +153,19 @@ describe("presentLibrarySync", () => {
       "Note",
       "Status",
     ]);
+    expect(blocks[1]).toMatchObject({
+      items: [
+        {
+          text: [
+            "skit://registry.example/tim/tools",
+            " at ",
+            { code: "/work/tools" },
+            " — ",
+            "up to date",
+          ],
+        },
+      ],
+    });
     expect(blocks.at(-1)).toMatchObject({ _tag: "Status", tone: "info" });
   });
 

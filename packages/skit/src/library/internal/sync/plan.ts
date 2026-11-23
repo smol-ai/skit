@@ -1,4 +1,10 @@
-import { Enabled, currentSkillVersion, type LibraryManifest } from "../../library-contracts.js";
+import {
+  Enabled,
+  currentSkillVersion,
+  sourceImports,
+  type Collection,
+  type LibraryManifest,
+} from "../../library-contracts.js";
 import { canonicalJson } from "../../../shared/json.js";
 import { Schema } from "effect";
 import { normalizeLibraryManifest } from "../../manifest.js";
@@ -29,37 +35,67 @@ const collectionGraph = (manifest: LibraryManifest, collectionId: string) => {
   };
 };
 
+const collectionSource = (
+  manifest: LibraryManifest,
+  collection: Collection,
+  workspace?: { readonly label: string; readonly authority?: string },
+) => {
+  const acquisition = sourceImports(manifest, collection.collection_id)[0];
+  const source = collection.upstream?.source_identity ?? acquisition?.source_identity;
+  if (source === undefined) return {};
+  if (source.kind === "registry") {
+    const revision =
+      acquisition?.source_identity.kind === "registry" ? acquisition.revision : undefined;
+    return {
+      source_kind: source.kind,
+      authority: source.authority,
+      ...(revision === undefined || revision === "latest" ? {} : { release_version: revision }),
+    };
+  }
+  return {
+    source_kind: source.kind,
+    ...(source.kind === "authored-workspace" && workspace?.authority !== undefined
+      ? { authority: workspace.authority }
+      : {}),
+  };
+};
+
 /** The items of `from` that `to` lacks, labelled with Collection or Skill names. */
 const entriesMissing = (
   manifest: LibraryManifest,
   from: readonly Enabled[] | undefined,
   to: readonly Enabled[] | undefined,
-  labels: ReadonlyMap<string, string>,
+  workspaces: ReadonlyMap<string, { readonly label: string; readonly authority?: string }>,
 ): readonly SyncEnabledItem[] =>
   (from ?? [])
     .filter((item) => !(to ?? []).some((other) => Schema.toEquivalence(Enabled)(item, other)))
-    .map((item) =>
-      "collection" in item
-        ? {
-            kind: "collection" as const,
-            label:
-              labels.get(item.collection) ??
-              manifest.collections.find(
-                (collection) => collection.collection_id === item.collection,
-              )?.label ??
-              item.collection,
-          }
+    .map((item) => {
+      const skill =
+        "skill" in item
+          ? manifest.skills.find((candidate) => candidate.skill_id === item.skill)
+          : undefined;
+      const collectionId = "collection" in item ? item.collection : skill?.collection_id;
+      const collection = manifest.collections.find(
+        (candidate) => candidate.collection_id === collectionId,
+      );
+      const workspace = collectionId === undefined ? undefined : workspaces.get(collectionId);
+      const label = workspace?.label ?? collection?.label;
+      const source =
+        collection === undefined ? {} : collectionSource(manifest, collection, workspace);
+      return "collection" in item
+        ? { kind: "collection", label: label ?? item.collection, ...source }
         : {
-            kind: "skill" as const,
-            label:
-              manifest.skills.find((skill) => skill.skill_id === item.skill)?.name ?? item.skill,
-          },
-    );
+            kind: "skill",
+            label: skill?.name ?? item.skill,
+            ...(label === undefined ? {} : { collection_label: label }),
+            ...source,
+          };
+    });
 
 const changes = (
   before: LibraryManifest,
   after: LibraryManifest,
-  labels: ReadonlyMap<string, string>,
+  workspaces: ReadonlyMap<string, { readonly label: string; readonly authority?: string }>,
 ): readonly SyncChange[] => {
   const collectionIds = [
     ...new Set([
@@ -85,14 +121,20 @@ const changes = (
       .filter(([name, hash]) => skillsBefore.has(name) && skillsBefore.get(name) !== hash)
       .map(([name]) => name)
       .sort();
-    const label = labels.get(collectionId);
-    const source = (desired ?? previous)?.upstream?.source_identity;
+    const workspace = workspaces.get(collectionId);
+    const label = workspace?.label;
+    const source =
+      desired !== undefined
+        ? collectionSource(after, desired, workspace)
+        : previous === undefined
+          ? {}
+          : collectionSource(before, previous, workspace);
     return [
       {
         kind: "collection",
         action: action(previous, desired),
         subject_id: collectionId,
-        ...(source === undefined ? {} : { source_kind: source.kind }),
+        ...source,
         label: label ?? desired?.label ?? previous?.label ?? collectionId,
         ...(previous === undefined ? {} : { label_before: label ?? previous.label }),
         ...(desired === undefined ? {} : { label_after: label ?? desired.label }),
@@ -122,8 +164,8 @@ const changes = (
         {
           kind: "enabled",
           action: action(previous, desired),
-          items_added: entriesMissing(after, desired, previous, labels),
-          items_removed: entriesMissing(before, previous, desired, labels),
+          items_added: entriesMissing(after, desired, previous, workspaces),
+          items_removed: entriesMissing(before, previous, desired, workspaces),
         },
       ];
     });
@@ -134,13 +176,16 @@ export const planLibrarySync = (
   local: LibraryManifest,
   remote: LibraryManifest,
   desired: LibraryManifest,
-  labels: ReadonlyMap<string, string> = new Map(),
+  workspaces: ReadonlyMap<
+    string,
+    { readonly label: string; readonly authority?: string }
+  > = new Map(),
 ): SyncChanges => {
   const normalizedLocal = normalizeLibraryManifest(local);
   const normalizedRemote = normalizeLibraryManifest(remote);
   const normalizedDesired = normalizeLibraryManifest(desired);
   return {
-    local: changes(normalizedLocal, normalizedDesired, labels),
-    remote: changes(normalizedRemote, normalizedDesired, labels),
+    local: changes(normalizedLocal, normalizedDesired, workspaces),
+    remote: changes(normalizedRemote, normalizedDesired, workspaces),
   };
 };
