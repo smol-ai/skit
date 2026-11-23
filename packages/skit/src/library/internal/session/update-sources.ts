@@ -224,6 +224,7 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <E, R>(
             const error = Cause.isFailReason(reason) ? reason.error : reason.defect;
             if (
               Predicate.isTagged(error, "InvalidLibraryState") ||
+              Predicate.isTagged(error, "LibrarySqlError") ||
               Predicate.isTagged(error, "HomeBusy") ||
               Predicate.isTagged(error, "LibraryChanged") ||
               Predicate.isTagged(error, "Library.StalePlan") ||

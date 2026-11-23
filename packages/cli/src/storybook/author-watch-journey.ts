@@ -1,4 +1,4 @@
-import { Cause, Deferred, Effect, Fiber, Layer, Ref, Schedule } from "effect";
+import { Cause, Deferred, Effect, Schema, Fiber, Layer, Ref, Schedule } from "effect";
 import { skitLayer, skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { authorWorkspaceLayer, type AuthorWatchEvent } from "@smolai/skit-core/author";
 import { makeAuthorSyncWorld } from "../platform/author-sync-fixture/world.js";
@@ -7,63 +7,22 @@ import { Renderer } from "../terminal/renderer.js";
 import { result } from "../commands/result.js";
 import type { TypeCommand } from "./interaction-recorder.js";
 import type { ScenarioStory } from "./journey-stories.js";
-import type { CheckRule } from "./rules.js";
-
-// Rules without a successful check in a scenario remain unproven in Atlas.
-const rules = {
-  offline: "A Registry failure is reported as a sync retry",
-  saved: "An offline authored edit is saved locally",
-  once: "An unchanged sync failure is reported once",
-  installed: "An offline authored edit reaches its installed copy",
-  unregistered: "An unregistered workspace reports no installed copies",
-  recovered: "Sync recovery is reported after the Registry returns",
-  recoveredOnce: "An unchanged sync recovery is reported once",
-  delivered: "The offline authored edit reaches the other device",
-  conserved: "The offline authored edit remains recoverable",
-  silent: "Idle sync stays silent",
-  native: "Native filesystem events deliver an atomic save",
-  converged: "Two watching devices converge after an atomic save without manual sync",
-  copyA: "An atomic save reaches device a's installed copy",
-  copyB: "An atomic save reaches device b's installed copy",
-  remote: "The Registry keeps the atomic save",
-  stalled: "Local history saves a newer edit while a Registry request is stalled",
-  stopped: "Stopping watch interrupts its in-flight sync",
-  restarted: "A new sync can complete after watch stops",
-  invalid: "Invalid authored Skills hold installation",
-  pending: "Pending removals hold installation",
-  held: "A held installation keeps the installed instructions",
-  configuration: "Installation reports configuration changes",
-  issues: "Installation reports changed issues even when installed copies are unchanged",
-  removal: "Watch confirms a stable removal across passes",
-  nonblocking: "A pending removal does not block foreground sync",
-  observeFailure: "An workspace scan failure is reported",
-  observeOnce: "An unchanged workspace scan failure is reported once",
-  observeRecovery: "Workspace scan recovery is reported after a failure",
-  installFailure: "An installation failure is reported",
-  installOnce: "An unchanged installation failure is reported once",
-  installRecovery: "Installation recovery is reported after a failure",
-  eventsFailure: "A native event stream failure is reported",
-  eventsOnce: "An unchanged native event stream failure is reported once",
-  eventsRecovery: "Native event recovery is reported after a failure",
-  root: "Watch refuses a replaced root",
-  identity: "Watch refuses a changed workspace identity",
-  rescan: "Rescans save edits while native events fail",
-  eventsRestart: "Native watching restarts after a stream failure",
-  connected: "Watch refuses startup without a connected remote",
-  identified: "Watch refuses startup without a workspace identity",
-};
 
 type WatchWorld = Effect.Success<ReturnType<typeof makeAuthorSyncWorld>>;
 const retry = { schedule: Schedule.spaced("100 millis"), times: 150 };
 
-const runOffline = (registered: boolean, world: WatchWorld, typed: TypeCommand, check: CheckRule) =>
+const runOffline = (registered: boolean, world: WatchWorld, typed: TypeCommand) =>
   Effect.gen(function* () {
     const events = yield* Ref.make<readonly AuthorWatchEvent[]>([]);
     const renderer = yield* Renderer;
-    const awaitEvent = (rule: string, matches: (event: AuthorWatchEvent) => boolean) =>
+    const awaitEvent = (matches: (event: AuthorWatchEvent) => boolean) =>
       Effect.gen(function* () {
         const trace = yield* Ref.get(events);
-        yield* check(rule, trace.some(matches), { events: trace });
+        yield* Schema.decodeUnknownEffect(
+          Schema.Literal(true).annotate({
+            message: "Scenario assertion failed: " + JSON.stringify({ events: trace }),
+          }),
+        )(trace.some(matches));
       }).pipe(Effect.retry(retry));
     yield* typed("skit author watch");
     const watcher = yield* world.a.startWatch((event) =>
@@ -71,36 +30,41 @@ const runOffline = (registered: boolean, world: WatchWorld, typed: TypeCommand, 
         .result(result("authorWatch", event))
         .pipe(Effect.andThen(Ref.update(events, (trace) => [...trace, event]))),
     );
-    yield* awaitEvent(
-      rules.offline,
-      (event) => event.event === "retrying" && event.operation === "sync",
-    );
+    yield* awaitEvent((event) => event.event === "retrying" && event.operation === "sync");
     const path = "skills/review/SKILL.md";
     const content =
       "---\nname: review\ndescription: Review code.\n---\n# Review\nCheck changed behavior and its evidence.\n";
     yield* world.a.edit(path, content, "remote");
-    yield* awaitEvent(
-      rules.saved,
-      (event) => event.event === "saved_locally" && event.paths.includes(path),
-    );
+    yield* awaitEvent((event) => event.event === "saved_locally" && event.paths.includes(path));
     // Observe two more production foreground intervals before checking suppression.
     yield* Effect.sleep("6500 millis");
     const offline = yield* Ref.get(events);
-    yield* check(
-      rules.once,
+    yield* Schema.decodeUnknownEffect(
+      Schema.Literal(true).annotate({
+        message: "Scenario assertion failed: " + JSON.stringify({ events: offline }),
+      }),
+    )(
       offline.filter((event) => event.event === "retrying" && event.operation === "sync").length ===
         1,
-      { events: offline },
     );
     if (registered) {
       const installed = yield* world.a.installed("review/SKILL.md");
-      yield* check(rules.installed, installed.includes("Check changed behavior"), {
-        installed,
-        events: offline,
-      });
+      yield* Schema.decodeUnknownEffect(
+        Schema.Literal(true).annotate({
+          message:
+            "Scenario assertion failed: " +
+            JSON.stringify({
+              installed,
+              events: offline,
+            }),
+        }),
+      )(installed.includes("Check changed behavior"));
     } else {
-      yield* check(
-        rules.unregistered,
+      yield* Schema.decodeUnknownEffect(
+        Schema.Literal(true).annotate({
+          message: "Scenario assertion failed: " + JSON.stringify({ events: offline }),
+        }),
+      )(
         offline.some(
           (event) =>
             event.event === "installation" &&
@@ -108,37 +72,44 @@ const runOffline = (registered: boolean, world: WatchWorld, typed: TypeCommand, 
             event.installed === 0 &&
             event.installed_copies.length === 0,
         ),
-        { events: offline },
       );
     }
     yield* world.server.setOnline("a", true);
-    yield* awaitEvent(
-      rules.recovered,
-      (event) => event.event === "recovered" && event.operation === "sync",
-    );
+    yield* awaitEvent((event) => event.event === "recovered" && event.operation === "sync");
     yield* Effect.sleep("3500 millis");
     const trace = yield* Ref.get(events);
-    yield* check(
-      rules.recoveredOnce,
+    yield* Schema.decodeUnknownEffect(
+      Schema.Literal(true).annotate({
+        message: "Scenario assertion failed: " + JSON.stringify({ events: trace }),
+      }),
+    )(
       trace.filter((event) => event.event === "recovered" && event.operation === "sync").length ===
         1,
-      { events: trace },
     );
-    yield* check(
-      rules.silent,
-      !trace.some((event) => event.event === "sync" && event.result.status === "up_to_date"),
-      { events: trace },
-    );
+    yield* Schema.decodeUnknownEffect(
+      Schema.Literal(true).annotate({
+        message: "Scenario assertion failed: " + JSON.stringify({ events: trace }),
+      }),
+    )(!trace.some((event) => event.event === "sync" && event.result.status === "up_to_date"));
     yield* world.a.restart();
     yield* Fiber.await(watcher);
     yield* world.b.sync();
     const actual = yield* world.b.read(path);
-    yield* check(rules.delivered, actual === content, { path, actual, expected: content });
+    yield* Schema.decodeUnknownEffect(
+      Schema.Literal(true).annotate({
+        message:
+          "Scenario assertion failed: " + JSON.stringify({ path, actual, expected: content }),
+      }),
+    )(actual === content);
     const missing = yield* world.missing(yield* world.copies());
-    yield* check(rules.conserved, missing.length === 0, { missing });
+    yield* Schema.decodeUnknownEffect(
+      Schema.Literal(true).annotate({
+        message: "Scenario assertion failed: " + JSON.stringify({ missing }),
+      }),
+    )(missing.length === 0);
   });
 
-const runAtomicSave = (world: WatchWorld, typed: TypeCommand, check: CheckRule) =>
+const runAtomicSave = (world: WatchWorld, typed: TypeCommand) =>
   Effect.gen(function* () {
     const expectedInstalled = (yield* world.b.installed("review/SKILL.md")).replace(
       "# Review",
@@ -179,45 +150,68 @@ const runAtomicSave = (world: WatchWorld, typed: TypeCommand, check: CheckRule) 
     yield* world.a.saveAtomically(path, content);
     yield* Effect.gen(function* () {
       const events = yield* Ref.get(eventsA);
-      yield* check(
-        rules.native,
+      yield* Schema.decodeUnknownEffect(
+        Schema.Literal(true).annotate({
+          message: "Scenario assertion failed: " + JSON.stringify({ device: "a", events }),
+        }),
+      )(
         events.some(
           (event) =>
             event.event === "saved_locally" &&
             event.trigger === "filesystem" &&
             event.paths.includes(path),
         ),
-        { device: "a", events },
       );
     }).pipe(Effect.retry(retry));
     yield* Effect.gen(function* () {
       const actual = yield* world.b.read(path);
-      yield* check(rules.converged, actual === content, {
-        actual,
-        expected: content,
-        eventsA: yield* Ref.get(eventsA),
-        eventsB: yield* Ref.get(eventsB),
-      });
+      yield* Schema.decodeUnknownEffect(
+        Schema.Literal(true).annotate({
+          message:
+            "Scenario assertion failed: " +
+            JSON.stringify({
+              actual,
+              expected: content,
+              eventsA: yield* Ref.get(eventsA),
+              eventsB: yield* Ref.get(eventsB),
+            }),
+        }),
+      )(actual === content);
     }).pipe(Effect.retry(retry));
     yield* Effect.gen(function* () {
       const actual = yield* world.a.installed("review/SKILL.md");
-      yield* check(rules.copyA, actual === expectedInstalled, {
-        actual,
-        expected: expectedInstalled,
-        events: yield* Ref.get(eventsA),
-      });
+      yield* Schema.decodeUnknownEffect(
+        Schema.Literal(true).annotate({
+          message:
+            "Scenario assertion failed: " +
+            JSON.stringify({
+              actual,
+              expected: expectedInstalled,
+              events: yield* Ref.get(eventsA),
+            }),
+        }),
+      )(actual === expectedInstalled);
     }).pipe(Effect.retry(retry));
     yield* Effect.gen(function* () {
       const actual = yield* world.b.installed("review/SKILL.md");
-      yield* check(rules.copyB, actual === expectedInstalled, {
-        actual,
-        expected: expectedInstalled,
-        events: yield* Ref.get(eventsB),
-      });
+      yield* Schema.decodeUnknownEffect(
+        Schema.Literal(true).annotate({
+          message:
+            "Scenario assertion failed: " +
+            JSON.stringify({
+              actual,
+              expected: expectedInstalled,
+              events: yield* Ref.get(eventsB),
+            }),
+        }),
+      )(actual === expectedInstalled);
     }).pipe(Effect.retry(retry));
     const revisions = yield* world.server.revisions();
-    yield* check(
-      rules.remote,
+    yield* Schema.decodeUnknownEffect(
+      Schema.Literal(true).annotate({
+        message: "Scenario assertion failed: " + JSON.stringify({ revisions }),
+      }),
+    )(
       revisions.some(({ tree }) =>
         tree.some(
           (entry) =>
@@ -226,11 +220,10 @@ const runAtomicSave = (world: WatchWorld, typed: TypeCommand, check: CheckRule) 
             Buffer.from(entry.bytes).toString() === content,
         ),
       ),
-      { revisions },
     );
   });
 
-const runStalled = (world: WatchWorld, typed: TypeCommand, check: CheckRule) =>
+const runStalled = (world: WatchWorld, typed: TypeCommand) =>
   Effect.gen(function* () {
     const gate = yield* world.server.gate("a", "after-post");
     const ready = yield* Deferred.make<void>();
@@ -254,8 +247,13 @@ const runStalled = (world: WatchWorld, typed: TypeCommand, check: CheckRule) =>
     yield* world.a.edit("offline.txt", "second offline edit");
     yield* Effect.gen(function* () {
       const trees = yield* storedTreesAt(world.a.home);
-      yield* check(
-        rules.stalled,
+      yield* Schema.decodeUnknownEffect(
+        Schema.Literal(true).annotate({
+          message:
+            "Scenario assertion failed: " +
+            JSON.stringify({ trees, events: yield* Ref.get(events) }),
+        }),
+      )(
         trees.some(({ tree }) =>
           tree.some(
             (entry) =>
@@ -264,20 +262,31 @@ const runStalled = (world: WatchWorld, typed: TypeCommand, check: CheckRule) =>
               Buffer.from(entry.bytes).toString() === "second offline edit",
           ),
         ),
-        { trees, events: yield* Ref.get(events) },
       );
     }).pipe(Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 80 }));
     yield* world.a.restart();
     const stopped = yield* Fiber.await(watcher);
-    yield* check(rules.stopped, stopped._tag === "Failure" && Cause.hasInterrupts(stopped.cause), {
-      stopped,
-      events: yield* Ref.get(events),
-    });
+    yield* Schema.decodeUnknownEffect(
+      Schema.Literal(true).annotate({
+        message:
+          "Scenario assertion failed: " +
+          JSON.stringify({
+            stopped,
+            events: yield* Ref.get(events),
+          }),
+      }),
+    )(stopped._tag === "Failure" && Cause.hasInterrupts(stopped.cause));
     yield* gate.release();
     const synced = yield* world.a.sync();
-    yield* check(rules.restarted, ["pushed", "merged", "up_to_date"].includes(synced.status), {
-      synced,
-    });
+    yield* Schema.decodeUnknownEffect(
+      Schema.Literal(true).annotate({
+        message:
+          "Scenario assertion failed: " +
+          JSON.stringify({
+            synced,
+          }),
+      }),
+    )(["pushed", "merged", "up_to_date"].includes(synced.status));
   });
 
 const platform = Layer.mergeAll(
@@ -294,7 +303,6 @@ const worldLabels = {
 
 export const authorWatchScenarioSet = {
   command: "author watch",
-  rules: Object.values(rules),
   worldLabels,
   scenarios: [
     ...[true, false].map((registered) => ({
@@ -307,8 +315,7 @@ export const authorWatchScenarioSet = {
         registerA: registered,
         registerB: false,
       },
-      run: (world: WatchWorld, typed: TypeCommand, check: CheckRule) =>
-        runOffline(registered, world, typed, check),
+      run: (world: WatchWorld, typed: TypeCommand) => runOffline(registered, world, typed),
     })),
     {
       name: "author-watch/atomic-save",
@@ -332,14 +339,14 @@ export const authorWatchScenarioSet = {
         world: scenario.world,
         worldLabels: worldLabels satisfies Record<keyof typeof scenario.world, string>,
         answers: [],
-        run: (root: string, typed: TypeCommand, check: CheckRule) =>
+        run: (root: string, typed: TypeCommand) =>
           Effect.gen(function* () {
             const world = yield* makeAuthorSyncWorld(root);
             yield* world.connect();
             if (scenario.world.registerA) yield* world.a.registerAndEnable();
             if (scenario.world.registerB) yield* world.b.registerAndEnable();
             yield* world.server.setOnline("a", scenario.world.registryOnline);
-            yield* scenario.run(world, typed, check);
+            yield* scenario.run(world, typed);
           }).pipe(Effect.scoped, Effect.provide(platform)),
       }) satisfies ScenarioStory<unknown, Renderer>,
   ),

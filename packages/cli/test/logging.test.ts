@@ -45,14 +45,6 @@ it.effect(
           }),
           summary: "Setup stopped, but could not record it",
         },
-        {
-          notice: LibraryRecoveryNotice.cases.HistoryDeliveryPending.make({
-            home,
-            actionId: operationId,
-            failure,
-          }),
-          summary: "Library history delivery is pending",
-        },
       ];
       const incoming: Logger.Options<unknown>[] = [];
       const forwarded: Logger.Options<unknown>[] = [];
@@ -74,7 +66,7 @@ it.effect(
         Effect.provide(Logger.layer([probe])),
         Effect.provideService(References.MinimumLogLevel, "Debug"),
       );
-      expect(forwarded).toHaveLength(5);
+      expect(forwarded).toHaveLength(4);
       for (const [index, entry] of forwarded.entries()) {
         expect(entry.fiber).toBe(incoming[index]!.fiber);
         expect(entry.date).toBe(incoming[index]!.date);

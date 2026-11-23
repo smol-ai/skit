@@ -63,11 +63,7 @@ import * as InstalledSkills from "./installed-skills.js";
 import type { InventoryRootOptions } from "./routing/roots.js";
 import type { HttpClient } from "effect/http";
 import type { LibraryLayerError, LibraryStateReadError } from "./store/library-store.js";
-import type {
-  OperationStatus as StoredOperationStatus,
-  RecordedSetupStep,
-  SetupStep,
-} from "./store/state-schema.js";
+import type { SetupStep } from "./store/state-schema.js";
 import { type LibraryAuditEvent, type LibraryAuditInvalid } from "./audit/audit-log.js";
 import { type Snapshot } from "./snapshot.js";
 import { type SetupError, type SetupResult, type StartupRecovery } from "./internal/setup/run.js";
@@ -116,17 +112,10 @@ export type {
   ManageNewSelection,
   SetupStep,
 } from "./store/state-schema.js";
-/** History reports steps and evidence, without private installed-change checkpoints. */
-type ReportedOperation<O> = {
-  readonly [K in keyof O as K extends "preparation" ? never : K]: K extends "steps"
-    ? readonly Omit<RecordedSetupStep, "applies">[]
-    : O[K];
-};
-type OperationStatus = ReportedOperation<StoredOperationStatus>;
 
 export interface History {
   readonly events: readonly LibraryAuditEvent[];
-  readonly operations: readonly OperationStatus[];
+  readonly operations: readonly import("./store/state-schema.js").OperationSummary[];
 }
 
 /** The operation applied, with its complete or partial result kept intact. */
@@ -275,7 +264,10 @@ export interface Interface {
    */
   readonly setup: (
     steps: readonly SetupStep[],
-    options: { readonly base: Snapshot },
+    options: {
+      readonly base: Snapshot;
+      readonly machineChoices?: import("./store/state-schema.js").SetupRecord["machineChoices"];
+    },
   ) => Effect.Effect<SetupResult, SetupError>;
   readonly content: {
     /** Read-only availability for a passive sync preview; no paths escape the owner. */

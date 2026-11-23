@@ -4,6 +4,8 @@ import { FileIdentityNumber, LinkStat } from "../../../platform/link-stat.js";
 
 import { recoveryFingerprint } from "../recovery/evidence.js";
 import { RecoveryInvalid } from "../../store/operation-failures.js";
+import { Hash } from "../../../shared/hash.js";
+import { isCanonicalRelativePath } from "../../../shared/relative-path.js";
 
 const Identity = { dev: FileIdentityNumber, ino: FileIdentityNumber };
 const Anchor = Schema.Struct({ path: Schema.String, physicalPath: Schema.String, ...Identity });
@@ -45,7 +47,15 @@ export const UndoAction = Schema.Struct({
   path: Schema.String,
   kind: Schema.Literals(["release-ownership", "restore", "remove-created"]),
   source: Schema.optionalKey(Schema.String),
-  transfer: Schema.optionalKey(Schema.Literals(["move", "copy", "rebuild"])),
+  transfer: Schema.optionalKey(Schema.Literals(["move", "copy", "rebuild", "original"])),
+  original: Schema.optionalKey(
+    Schema.Struct({
+      hash: Hash,
+      path: Schema.String.check(
+        Schema.makeFilter((path) => path === "." || isCanonicalRelativePath(path)),
+      ),
+    }),
+  ),
   /** Bound before a staged entry can be renamed into the destination. */
   after: Schema.optionalKey(UndoPath),
   staged: Schema.optionalKey(UndoPath),

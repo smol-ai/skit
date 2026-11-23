@@ -1,6 +1,6 @@
 import { LibraryRecoveryNotice } from "../../recovery-notice.js";
 import { samePathChain } from "../../../platform/path-evidence.js";
-import { Data, Effect } from "effect";
+import { Data, Effect, type Result } from "effect";
 import type { ApplyError } from "../../library-plan.js";
 import * as InstalledSkills from "../../installed-skills.js";
 import * as Status from "../../installed-skill-status.js";
@@ -18,10 +18,10 @@ import type { RecordedInstalledChange, SyncFolder } from "../../store/state-sche
 import { execute } from "./installed-changes.js";
 import { saveStep } from "./recorded.js";
 import {
-  body,
+  hashBody,
+  prepareApplyState,
   copiesOf,
   finalRows,
-  publication,
   rowAfter,
   same,
   type ApplyStep,
@@ -39,7 +39,7 @@ const pathOf = (step: ApplyStep, change: RecordedInstalledChange) =>
     ? change.row.path
     : change._tag === "Fail"
       ? change.path
-      : step.before.installed_skills.find((row) => row.installed_skill_id === change.id)?.path;
+      : step.previousInstalledSkills.find((row) => row.installed_skill_id === change.id)?.path;
 const observation = (folder: InstalledSkills.Folder): SyncFolder => ({
   ...folder,
   entry: folder.entry._tag === "Absent" ? "Absent" : folder.entry.kind,
@@ -59,11 +59,6 @@ const matchesRow = (folder: InstalledSkills.Folder, row: InstalledSkill) => {
     marker.expected_hash === row.expected_hash
   );
 };
-const expectedState = (step: ApplyStep, current: LibraryState): LibraryState => ({
-  ...step.next,
-  installed_skills: finalRows(step),
-  operations: current.operations,
-});
 const withRow = (
   state: LibraryState,
   change: RecordedInstalledChange,
@@ -104,8 +99,9 @@ export const checkApply = Effect.fn("Library.checkRecordedApply")(function* (ste
   const state = yield* loadLibrary(home);
   const files = yield* InstalledSkills.Service;
   const changed = (path: string) => new InstalledSkills.Changed({ path });
+  const bodyHash = yield* hashBody(state);
   if (step.phase._tag === "Done") {
-    if (!same(publication(state), publication(expectedState(step, state))))
+    if (bodyHash !== step.afterHash || !same(state.installed_skills, finalRows(step)))
       return yield* changed(libraryStatePath(home));
     for (const saved of step.phase.folders) {
       const current = yield* files.inspect(saved.path);
@@ -114,14 +110,11 @@ export const checkApply = Effect.fn("Library.checkRecordedApply")(function* (ste
     }
     return state;
   }
-  if (
-    !same(body(publication(state)), body(step.before)) &&
-    !same(body(publication(state)), step.next)
-  )
+  if (bodyHash !== step.beforeHash && bodyHash !== step.afterHash)
     return yield* changed(libraryStatePath(home));
   const after = finalRows(step);
   for (const row of state.installed_skills) {
-    const prior = step.before.installed_skills.find(
+    const prior = step.previousInstalledSkills.find(
       (item) => item.installed_skill_id === row.installed_skill_id,
     );
     const next = after.find((item) => item.installed_skill_id === row.installed_skill_id);
@@ -132,7 +125,7 @@ export const checkApply = Effect.fn("Library.checkRecordedApply")(function* (ste
     )
       return yield* changed(row.path);
   }
-  for (const prior of step.before.installed_skills)
+  for (const prior of step.previousInstalledSkills)
     if (
       !state.installed_skills.some((row) => row.installed_skill_id === prior.installed_skill_id) &&
       !step.changes.some(
@@ -151,7 +144,7 @@ export const checkApply = Effect.fn("Library.checkRecordedApply")(function* (ste
       if (
         change?._tag === "Install" &&
         state.installed_skills.some((row) => same(row, change.row)) &&
-        !step.before.installed_skills.some((row) => same(row, change.row))
+        !step.previousInstalledSkills.some((row) => same(row, change.row))
       )
         return yield* changed(saved.path);
       continue;
@@ -161,7 +154,7 @@ export const checkApply = Effect.fn("Library.checkRecordedApply")(function* (ste
       current.entry._tag === "Absent" &&
       (change?._tag === "Install" || change?._tag === "Uninstall")
     ) {
-      const prior = step.before.installed_skills.find((row) => row.path === saved.path);
+      const prior = step.previousInstalledSkills.find((row) => row.path === saved.path);
       if (prior && (yield* backedUp(saved, prior))) continue;
     }
     return yield* changed(saved.path);
@@ -178,9 +171,11 @@ export const apply = Effect.fn("Library.applyRecordedChanges")(function* (
 ) {
   const writer = yield* LibraryWriter;
   const files = yield* InstalledSkills.Service;
+  let revision = yield* writer.revision;
   let step = saved;
   let current = yield* checkApply(step);
   if (step.phase._tag === "Pending") {
+    const target = yield* prepareApplyState(step, current, "after", writer.home);
     const roots = step.changes.flatMap((change) =>
       change._tag === "Install" ? [change.row.root] : [],
     );
@@ -208,15 +203,42 @@ export const apply = Effect.fn("Library.applyRecordedChanges")(function* (
     }
     if (step.save === "before") {
       const next = {
-        ...step.next,
+        ...target,
         installed_skills: current.installed_skills,
-        operations: current.operations,
       };
       if (libraryStateRevision(next) !== libraryStateRevision(current)) {
-        yield* writer.save(next, current);
+        if (
+          step.bodyChange?._tag === "Enabled" &&
+          step.bodyChange.fields.every(({ field }) =>
+            [
+              "enabled",
+              "invocation_policies",
+              "repositories",
+              "device_skill_selection",
+              "pending_device_selection_origin",
+            ].includes(field),
+          )
+        )
+          revision = yield* writer.saveEnabled(next, current, revision);
+        else {
+          yield* writer.save(next, current, revision);
+          revision = yield* writer.revision;
+        }
         current = next;
       }
     }
+    const saveRow = (change: RecordedInstalledChange, row: InstalledSkill | undefined) =>
+      Effect.gen(function* () {
+        if (change._tag === "Fail") return;
+        const id =
+          change._tag === "Install" || change._tag === "Save"
+            ? change.row.installed_skill_id
+            : change.id;
+        const before = current.installed_skills.find((item) => item.installed_skill_id === id);
+        if (same(before, row)) return;
+        revision = yield* writer.saveInstalledSkill(row, before, revision);
+        current = withRow(current, change, row);
+      });
     for (const change of step.changes) {
       const path = pathOf(step, change);
       const folder =
@@ -236,7 +258,7 @@ export const apply = Effect.fn("Library.applyRecordedChanges")(function* (
             cause: new InstalledSkills.Changed({ path: folder.path }),
           });
         if (!alreadyWritten && before.evidence !== folder.evidence) {
-          const prior = step.before.installed_skills.find((row) => row.path === folder.path);
+          const prior = step.previousInstalledSkills.find((row) => row.path === folder.path);
           const displaced =
             folder.entry._tag === "Absent" &&
             prior &&
@@ -251,35 +273,25 @@ export const apply = Effect.fn("Library.applyRecordedChanges")(function* (
       }
       if (!alreadyWritten && !alreadyAbsent) {
         if (change._tag === "Install" && change.verification === "manage") {
-          const pending = withRow(current, change, Status.pending(change.row));
-          if (libraryStateRevision(pending) !== libraryStateRevision(current)) {
-            yield* writer.save(pending, current);
-            current = pending;
-          }
+          yield* saveRow(change, Status.pending(change.row));
         }
         yield* execute(
           change,
-          { ...step.next, installed_skills: current.installed_skills, operations: [] },
+          { ...target, installed_skills: current.installed_skills },
           folder,
           libraryOriginalsPath(writer.home),
           libraryVariantsPath(writer.home),
         ).pipe(
           Effect.tapError(() =>
             Effect.gen(function* () {
-              const prior = step.before.installed_skills.find((row) => row.path === path);
+              const prior = step.previousInstalledSkills.find((row) => row.path === path);
               if (
                 !prior ||
                 path === undefined ||
                 (yield* files.inspect(path)).entry._tag !== "Absent"
               )
                 return;
-              const pending = withRow(
-                current,
-                change,
-                prior.status === "suppressed" ? prior : Status.pending(prior),
-              );
-              yield* writer.save(pending, current);
-              current = pending;
+              yield* saveRow(change, prior.status === "suppressed" ? prior : Status.pending(prior));
             }).pipe(
               Effect.catch((error) =>
                 Effect.logWarning(
@@ -299,7 +311,7 @@ export const apply = Effect.fn("Library.applyRecordedChanges")(function* (
       }
       const prior =
         change._tag === "Uninstall"
-          ? step.before.installed_skills.find((row) => row.installed_skill_id === change.id)
+          ? step.previousInstalledSkills.find((row) => row.installed_skill_id === change.id)
           : undefined;
       // Until the whole batch commits, a moved predecessor remains recorded as pending.
       const after = prior
@@ -307,28 +319,25 @@ export const apply = Effect.fn("Library.applyRecordedChanges")(function* (
           ? prior
           : Status.pending(prior)
         : rowAfter(step, change);
-      const next = withRow(current, change, after);
-      if (libraryStateRevision(next) !== libraryStateRevision(current)) {
-        yield* writer.save(next, current);
-        current = next;
-      }
+      yield* saveRow(change, after);
     }
     yield* checkApply(step);
     const foldersAfter = yield* Effect.forEach(step.folders, (folder) =>
       Effect.map(files.inspect(folder.path), observation),
     );
     step = { ...step, phase: { _tag: "Done", folders: foldersAfter } };
-    yield* saveStep(operationId, index, step, batch, expectedState(step, current), current);
+    yield* saveStep(operationId, index, step, batch, target, current, revision);
   }
   const touched = step.changes.flatMap((change) =>
     change._tag === "Install" || change._tag === "Save"
       ? [change.row]
       : change._tag === "Fail"
         ? []
-        : step.before.installed_skills.filter((row) => row.installed_skill_id === change.id),
+        : step.previousInstalledSkills.filter((row) => row.installed_skill_id === change.id),
   );
-  yield* settleBackups({ ...step.before, operations: [] }, touched);
-  return applyOutcome(step, yield* loadLibrary(writer.home), {
+  const prior = yield* Effect.result(prepareApplyState(step, current, "before", writer.home));
+  yield* settleBackups(prior, touched);
+  return yield* applyOutcome(step, yield* loadLibrary(writer.home), {
     _tag: "Applied",
     results: [],
     copies: copiesOf(step),
@@ -336,7 +345,7 @@ export const apply = Effect.fn("Library.applyRecordedChanges")(function* (
 }, Effect.scoped);
 /** Called only after committing state, including when startup verifies a completed apply. */
 const settleBackups = Effect.fn("Library.settleApplyBackups")(function* (
-  prior: LibraryState,
+  prior: Result.Result<LibraryState, Effect.Error<ReturnType<typeof prepareApplyState>>>,
   rows: readonly InstalledSkill[],
 ) {
   const { home } = yield* LibraryWriter;
@@ -350,10 +359,21 @@ const settleBackups = Effect.fn("Library.settleApplyBackups")(function* (
   for (const copy of unique)
     yield* Effect.gen(function* () {
       for (const backup of yield* files.backups.scan(copy.root, copy.installed_skill_id)) {
-        const reproducible = yield* files.backups
-          .check(backup, prior, libraryOriginalsPath(home), copy.installed_skill_id)
-          .pipe(Effect.orElseSucceed(() => false));
+        const reproducible =
+          prior._tag === "Success" &&
+          (yield* files.backups
+            .check(backup, prior.success, libraryOriginalsPath(home), copy.installed_skill_id)
+            .pipe(Effect.orElseSucceed(() => false)));
         yield* reproducible ? files.backups.discard(backup) : files.backups.keep(backup);
+        if (prior._tag === "Failure")
+          yield* Effect.logWarning(
+            LibraryRecoveryNotice.cases.BackupsStillPending.make({
+              home,
+              installedSkillId: copy.installed_skill_id,
+              path: copy.path,
+              failure: prior.failure,
+            }),
+          );
       }
     }).pipe(
       Effect.catch((error) =>

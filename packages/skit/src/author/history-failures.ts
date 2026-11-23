@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
+import { InvalidLibraryState, LibrarySqlError } from "../library/failures.js";
 import { SchemaFailure } from "../shared/schema-issue.js";
 import * as History from "../history/history.js";
 import * as Sync from "../sync/sync.js";
@@ -9,7 +10,7 @@ export const AuthorHistoryInvalidReason = Schema.TaggedUnion({
   AmbiguousWorkspace: {},
   JournalVersionInvalid: { failure: SchemaFailure },
   JournalWorkspaceMismatch: { expected: Schema.String, actual: Schema.String },
-  JournalFailure: { cause: Schema.Defect() },
+  JournalFailure: { cause: Schema.Union([InvalidLibraryState, LibrarySqlError, Schema.Defect()]) },
   JournalSchemaInvalid: { failure: SchemaFailure },
   StoreFailure: { failure: History.StoreError },
   HistoryInsideWorkspace: { workspace: WorkspaceRoot, resolved: Schema.Boolean },

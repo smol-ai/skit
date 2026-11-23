@@ -1,7 +1,7 @@
-import { Effect, FileSystem } from "effect";
+import { Effect } from "effect";
 import type { Hash } from "../shared/hash.js";
 import type { LibraryManifest, SnapshotArchive } from "./library-contracts.js";
-import { collectionVersionPath } from "./collection-version.js";
+import { hasCollectionVersion } from "./internal/content/read-collection-version.js";
 
 /** Captured local archives plus availability observations. Preparation verifies bytes before use. */
 export interface CollectionVersionPlan {
@@ -16,7 +16,6 @@ export const planCollectionVersions = Effect.fn("Library.planCollectionVersions"
   manifest: LibraryManifest,
   options: { readonly originalsPath: string; readonly localArchives: readonly SnapshotArchive[] },
 ) {
-  const fs = yield* FileSystem.FileSystem;
   const available = new Set(options.localArchives.map((archive) => archive.digest));
   const seen = new Set<Hash>();
   const snapshots = new Set(manifest.snapshot_digests);
@@ -27,8 +26,7 @@ export const planCollectionVersions = Effect.fn("Library.planCollectionVersions"
     if (seen.has(copy.hash)) continue;
     seen.add(copy.hash);
     if (available.has(copy.hash)) continue;
-    if (yield* fs.exists(collectionVersionPath(options.originalsPath, copy.hash)))
-      reusable.push(copy.hash);
+    if (yield* hasCollectionVersion(options.originalsPath, copy.hash)) reusable.push(copy.hash);
     else if (snapshots.has(copy.hash)) download.push(copy.hash);
     else reacquire.push(copy.collection_version_id);
   }

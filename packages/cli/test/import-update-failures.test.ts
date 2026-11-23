@@ -104,3 +104,30 @@ it("formats every update refusal after a JSON roundtrip", () => {
   }
   expect(classifyFailure(failures[2]).message).toContain("object missing");
 });
+
+it("database recovery advice preserves the authoritative database and names a usable next step", () => {
+  const path = "/test/home/library.sqlite";
+  for (const reason of [
+    { _tag: "DatabaseIntegrityInvalid", databasePath: path, result: ["corrupt"] },
+    { _tag: "OperationStateMissing", databasePath: path },
+  ] as const) {
+    const advice = classifyFailure(new InvalidLibraryState({ path, reason })).remediation;
+    expect(advice).toContain("entire Library home");
+    expect(advice).toContain("-wal/-shm");
+    expect(advice).toContain("verified complete Library backup");
+    expect(advice).not.toContain("skit setup");
+  }
+  const newer = classifyFailure(
+    new InvalidLibraryState({
+      path,
+      reason: {
+        _tag: "NewerDatabaseMigration",
+        databasePath: path,
+        migration: 99,
+        supported: 10,
+      },
+    }),
+  ).remediation;
+  expect(newer).toContain("build that supports");
+  expect(newer).not.toContain("skit setup");
+});

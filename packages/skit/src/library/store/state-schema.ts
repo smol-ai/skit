@@ -1,8 +1,10 @@
+import { DiscoveryEvidence, MachineRepositoryDecision } from "../machine-document.js";
+import { SetupIntentChanges } from "./setup-intent.js";
+import { SetupIntent } from "./setup-intent.js";
 import {
   FileIdentity,
   FolderEvidence,
   LinkEvidence,
-  StepError,
   SetupStopReason,
 } from "./operation-failures.js";
 export {
@@ -13,37 +15,18 @@ export {
   SetupStopReason,
 } from "./operation-failures.js";
 import { InstalledSkillInvalidReason } from "../installation/install-enabled.js";
-import { OwnershipIssue } from "../../installed-skills/metadata.js";
-import { SkillAssessmentAcceptance } from "../assessment-acceptance.js";
+
 import { Schema } from "effect";
 import {
   CollectionId,
-  CollectionVersionId,
-  ImportId,
   InstalledSkillId,
   MachineId,
   OperationId,
   SkillId,
   SkillVersionId,
 } from "../entity-ids.js";
-import {
-  Collection,
-  Skill,
-  CollectionVersion,
-  Import,
-  LibraryManifest,
-  Enabled,
-  SkillsShLockFileEntry,
-  SkitSource,
-} from "../library-contracts.js";
-import {
-  DeviceSkillSelection,
-  InstalledSkill,
-  InstalledSkillInstalled,
-  Invocation,
-  InvocationPolicies,
-  Repository,
-} from "../device-state.js";
+import { SkillsShLockFileEntry, SkitSource } from "../library-contracts.js";
+import { InstalledSkill, InstalledSkillInstalled, Invocation } from "../device-state.js";
 import { UndoFile, UndoPath, UndoAction } from "../internal/setup/undo-evidence.js";
 import { RecoveryInspection } from "../recovery-facts.js";
 import { EnabledChange } from "../enabled-change.js";
@@ -54,94 +37,12 @@ import { HarnessName } from "../../harnesses/contracts.js";
 import { InstallDestination } from "../../installed-skills/destination.js";
 import { InstallScope } from "../scope.js";
 
-// Decoded state is readonly except where the transaction API revises a candidate in place.
-// Each Schema.mutableKey below marks one such field; every other field stays readonly, so
-// the schema records exactly which parts of a snapshot the reconciler is allowed to touch.
-// Schema.optional retains existing candidate undefined values; JSON omits those keys.
-export const InventoryScanIssue = Schema.Union([
-  Schema.Struct({
-    path: Schema.String,
-    harness: HarnessName,
-    code: Schema.Literal("MISSING_ROOT"),
-  }),
-  Schema.Struct({
-    path: Schema.String,
-    harness: HarnessName,
-    code: Schema.Literal("UNREADABLE_PATH"),
-  }),
-  Schema.Struct({
-    path: Schema.String,
-    target: Schema.String,
-    harness: HarnessName,
-    code: Schema.Literal("DANGLING_SYMLINK"),
-  }),
-]);
-export type InventoryScanIssue = typeof InventoryScanIssue.Type;
+export { InventoryScanIssue, SyncAncestry } from "./state-fields.js";
+
+import { LibraryDifference } from "./difference.js";
 /** Where states before v11 recorded a copy, including former per-Harness folders. */
 export const RecordedInstallDestination = Schema.Literals(["agents", "claude", "legacy"]);
 export type RecordedInstallDestination = typeof RecordedInstallDestination.Type;
-const LibraryDeviceStateFields = {
-  unmanaged: Schema.mutableKey(
-    Schema.mutable(
-      Schema.Array(
-        Schema.Struct({
-          harness: HarnessName,
-          /** All Harnesses that observed this one physical path during the latest pass. */
-          harnesses: Schema.optional(Schema.mutable(Schema.Array(HarnessName))),
-          path: Schema.String,
-          paths: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
-          currentHash: Hash,
-          lastHash: Schema.optional(Hash),
-        }),
-      ),
-    ),
-  ),
-  ownershipIssues: Schema.mutableKey(Schema.optional(Schema.mutable(Schema.Array(OwnershipIssue)))),
-  scanIssues: Schema.mutableKey(Schema.optional(Schema.mutable(Schema.Array(InventoryScanIssue)))),
-  assessmentAcceptances: Schema.mutableKey(
-    Schema.optional(Schema.mutable(Schema.Array(SkillAssessmentAcceptance))),
-  ),
-} as const;
-
-/** The accepted remote head is saved atomically with the Library it describes. */
-export const SyncAncestry = Schema.Struct({
-  origin: Schema.NonEmptyString,
-  library_id: Schema.NonEmptyString,
-  revision_id: Schema.NonEmptyString,
-  base_manifest: LibraryManifest,
-});
-export interface SyncAncestry extends Schema.Schema.Type<typeof SyncAncestry> {}
-export const CURRENT_LIBRARY_STATE_VERSION = 12 as const;
-
-/** State fields a publication replaces; operation history is deliberately separate. */
-export const LibraryStateFields = {
-  ...LibraryDeviceStateFields,
-  schemaVersion: Schema.Literal(CURRENT_LIBRARY_STATE_VERSION),
-  sync_ancestry: Schema.optionalKey(SyncAncestry),
-  device_skill_selection: Schema.optionalKey(DeviceSkillSelection),
-  pending_device_selection_origin: Schema.optionalKey(Schema.NonEmptyString),
-  collections: Schema.mutable(Schema.Array(Collection)),
-  skills: Schema.mutable(Schema.Array(Skill)),
-  collection_versions: Schema.mutable(Schema.Array(CollectionVersion)),
-  imports: Schema.mutable(Schema.Array(Import)),
-  /** What is enabled for every project: the account's selection, as this device last saw it. */
-  enabled: Schema.mutable(Schema.Array(Enabled)),
-  invocation_policies: Schema.optionalKey(InvocationPolicies),
-  repositories: Schema.mutable(Schema.Array(Repository)),
-  installed_skills: Schema.mutable(Schema.Array(InstalledSkill)),
-};
-const syncPublication = Schema.Struct(LibraryStateFields);
-export namespace SyncPublication {
-  export interface Type extends Schema.Schema.Type<typeof syncPublication> {}
-}
-export type SyncPublication = SyncPublication.Type;
-export const SyncPublication: Schema.Codec<SyncPublication, unknown> = Schema.Unknown.pipe(
-  Schema.refine(
-    (value): value is SyncPublication =>
-      Schema.is(syncPublication)(value) && !Object.hasOwn(value, "operations"),
-  ),
-);
-
 /** Recorded "nothing here": the before of a created folder, the after of a moved one. */
 export const AbsentEvidence = Schema.TaggedStruct("Absent", {
   path: Schema.String,
@@ -296,13 +197,13 @@ export const SyncFolder = Schema.Struct({
 });
 export type SyncFolder = typeof SyncFolder.Type;
 const syncProgram = Schema.Struct({
-  before: SyncPublication,
-  after: SyncPublication,
+  save: Schema.optionalKey(Schema.Literal("before")),
+  difference: LibraryDifference,
   routing: StepRouting,
   retire: Schema.Array(InstalledSkill),
   drop: Schema.Array(InstalledSkillId),
   manifestDigest: Hash,
-  receipt: Schema.OptionFromOptionalKey(SyncAncestry),
+  receiptAccepted: Schema.Boolean,
   folders: Schema.Array(SyncFolder),
   issues: Schema.Array(Schema.suspend((): Schema.Codec<SyncIssue, unknown> => SyncIssue)),
 });
@@ -310,15 +211,23 @@ export interface SyncProgram extends Schema.Schema.Type<typeof syncProgram> {}
 export interface StoredSyncProgram extends Schema.Codec.Encoded<typeof syncProgram> {}
 export const SyncProgram: Schema.Codec<SyncProgram, StoredSyncProgram> = syncProgram;
 
+const RecordedInstalledSkill = Schema.declare(Schema.is(InstalledSkill), {
+  identifier: "RecordedInstalledSkill",
+  toCodecJson: () => undefined,
+});
+
 /** Exact installed changes, compiled once from a revalidated review. */
 export const RecordedInstalledChange = Schema.Union([
   Schema.TaggedStruct("Install", {
-    row: InstalledSkillInstalled,
+    row: Schema.declare(Schema.is(InstalledSkillInstalled), {
+      identifier: "RecordedInstalledSkillInstalled",
+      toCodecJson: () => undefined,
+    }),
     invocation: Invocation,
     verification: Schema.Literals(["write", "replacement", "manage", "marker"]),
   }),
   Schema.TaggedStruct("Save", {
-    row: InstalledSkill,
+    row: RecordedInstalledSkill,
     result: Schema.Literals(["Unchanged", "Suppressed", "Conflicted"]),
     /** A reviewed edit is copied to variants before its conflict row is saved. */
     backUp: Schema.Boolean,
@@ -339,10 +248,29 @@ export const RecordedInstalledChange = Schema.Union([
   ),
 );
 export type RecordedInstalledChange = typeof RecordedInstalledChange.Type;
-const { installed_skills: _installed, ...applyPublication } = LibraryStateFields;
 const installedApply = Schema.TaggedStruct("Apply", {
-  before: SyncPublication,
-  next: Schema.Struct(applyPublication),
+  beforeHash: Hash,
+  afterHash: Hash,
+  previousInstalledSkills: Schema.Array(
+    Schema.declare(Schema.is(InstalledSkill), {
+      identifier: "PreviousInstalledSkill",
+      toCodecJson: () => undefined,
+    }),
+  ),
+  bodyChange: Schema.optionalKey(
+    Schema.Union([
+      Schema.TaggedStruct("Enabled", {
+        fields: Schema.Array(
+          Schema.Struct({
+            field: Schema.String,
+            before: Schema.optionalKey(Schema.Json),
+            after: Schema.optionalKey(Schema.Json),
+          }),
+        ),
+      }),
+      Schema.TaggedStruct("Remove", { collectionId: CollectionId }),
+    ]),
+  ),
   routing: StepRouting,
   /** Removal keeps the old Collection until its installed folders have been handled. */
   save: Schema.Literals(["before", "after"]),
@@ -386,8 +314,15 @@ export type RecoveryRestore = typeof RecoveryRestore.Type;
 export const UndoProgram = Schema.Struct({
   operationId: Schema.String,
   backupId: Schema.String.check(Schema.isUUID(4)),
-  before: SyncPublication,
-  after: SyncPublication,
+  difference: LibraryDifference,
+  discovery: Schema.optionalKey(
+    Schema.Struct({
+      beforeHash: Hash,
+      afterHash: Hash,
+      before: DiscoveryEvidence,
+      after: DiscoveryEvidence,
+    }),
+  ),
   files: Schema.Array(UndoFile),
   paths: Schema.Array(UndoPath),
   sources: Schema.Array(UndoPath),
@@ -447,43 +382,15 @@ export const RecordedSetupStep = Schema.Struct({
 export type RecordedSetupStep = typeof RecordedSetupStep.Type;
 
 /** The desired fields a setup can change. Retained versions and history are not among them. */
-export const SetupIntent = Schema.Struct({
-  /** The account's global list. */
-  global: Schema.Struct({
-    enabled: Schema.Array(Enabled),
-    invocation_policies: Schema.optionalKey(InvocationPolicies),
-  }),
-  repositories: Schema.Array(Repository),
-  device: Schema.NullOr(DeviceSkillSelection),
-  sources: Schema.optionalKey(
-    Schema.Array(
-      Schema.Struct({
-        collectionId: CollectionId,
-        importId: ImportId,
-        collectionVersionId: CollectionVersionId,
-      }),
-    ),
-  ),
-  memberships: Schema.optionalKey(
-    Schema.Array(Schema.Struct({ collectionId: CollectionId, skillIds: Schema.Array(SkillId) })),
-  ),
-  versions: Schema.Array(
-    Schema.Struct({
-      skillId: SkillId,
-      selected: Schema.NullOr(SkillVersionId),
-      local: Schema.NullOr(SkillVersionId),
-    }),
-  ),
-});
-export type SetupIntent = typeof SetupIntent.Type;
+export { SetupIntent } from "./setup-intent.js";
 
 /**
  * The parts of the Library a setup can change, as one write of its record saw them: before any
  * step ran, and once it finished or stopped. Undo reverses only what changed between the two.
  */
 export const RecordedLibrary = Schema.Struct({
-  intent: SetupIntent,
-  installedSkills: Schema.Array(InstalledSkill),
+  intent: Schema.optionalKey(SetupIntent),
+  installedSkills: Schema.Array(RecordedInstalledSkill),
 });
 export type RecordedLibrary = typeof RecordedLibrary.Type;
 
@@ -492,6 +399,9 @@ export type RecordedLibrary = typeof RecordedLibrary.Type;
  * Every status keeps its steps and their evidence: undo needs a Done or Stopped operation's
  * evidence as much as resuming needs a Pending one's.
  */
+export const OperationKind = Schema.Literals(["setup", "apply", "sync", "undo", "restore"]);
+export type OperationKind = typeof OperationKind.Type;
+
 export const SetupPreparation = Schema.Struct({
   roots: Schema.Array(
     Schema.Struct({
@@ -503,25 +413,92 @@ export const SetupPreparation = Schema.Struct({
 });
 export type SetupPreparation = typeof SetupPreparation.Type;
 
+const SetupRecord = Schema.Struct({
+  changes: SetupIntentChanges,
+  discovery: Schema.optionalKey(
+    Schema.Struct({ before: DiscoveryEvidence, expectedAfter: DiscoveryEvidence }),
+  ),
+  machineChoices: Schema.optionalKey(
+    Schema.Struct({
+      discoveryRoots: Schema.optionalKey(Schema.Array(Schema.String)),
+      repositories: Schema.optionalKey(Schema.Array(MachineRepositoryDecision)),
+      displayName: Schema.optionalKey(Schema.String),
+    }),
+  ),
+});
+export type SetupRecord = typeof SetupRecord.Type;
+
+/** Terminal/history evidence cannot execute filesystem work. */
+export const OperationStepSummary = Schema.Struct({
+  step: Schema.Union([
+    Schema.TaggedStruct("Undo", {
+      program: Schema.Struct({
+        operationId: Schema.String,
+        backupId: Schema.String.check(Schema.isUUID(4)),
+      }),
+    }),
+    Schema.Struct({
+      _tag: Schema.Literals(["Apply", "Sync", "Import", "Manage", "Update", "Remove", "Restore"]),
+    }),
+  ]),
+  before: Schema.Array(PathEvidence),
+  after: Schema.Array(PathEvidence),
+  status: Schema.Literals(["Pending", "Done"]),
+});
+export type OperationStepSummary = typeof OperationStepSummary.Type;
+const operationSummaryFields = {
+  setup: Schema.optionalKey(SetupRecord),
+  operationId: OperationId,
+  kind: Schema.optionalKey(OperationKind),
+  steps: Schema.Array(OperationStepSummary),
+  before: RecordedLibrary,
+};
+export const OperationSummary = Schema.TaggedUnion({
+  Pending: operationSummaryFields,
+  Done: { ...operationSummaryFields, after: RecordedLibrary },
+  Stopped: { ...operationSummaryFields, after: RecordedLibrary, reason: SetupStopReason },
+  Undone: {
+    ...operationSummaryFields,
+    after: RecordedLibrary,
+    reason: Schema.optionalKey(SetupStopReason),
+  },
+});
+export type OperationSummary = typeof OperationSummary.Type;
+
 export const OperationStatus = Schema.TaggedUnion({
   Pending: {
+    setup: Schema.optionalKey(SetupRecord),
+    kind: Schema.optionalKey(OperationKind),
     preparation: Schema.optionalKey(SetupPreparation),
     operationId: OperationId,
     steps: Schema.Array(RecordedSetupStep),
     before: RecordedLibrary,
   },
   Done: {
+    setup: Schema.optionalKey(SetupRecord),
     operationId: OperationId,
-    steps: Schema.Array(RecordedSetupStep),
+    kind: Schema.optionalKey(OperationKind),
+    steps: Schema.Array(Schema.Union([RecordedSetupStep, OperationStepSummary])),
     before: RecordedLibrary,
     after: RecordedLibrary,
   },
   Stopped: {
+    setup: Schema.optionalKey(SetupRecord),
     operationId: OperationId,
-    steps: Schema.Array(RecordedSetupStep),
+    kind: Schema.optionalKey(OperationKind),
+    steps: Schema.Array(Schema.Union([RecordedSetupStep, OperationStepSummary])),
     reason: SetupStopReason,
     before: RecordedLibrary,
     after: RecordedLibrary,
+  },
+  Undone: {
+    setup: Schema.optionalKey(SetupRecord),
+    operationId: OperationId,
+    kind: Schema.optionalKey(OperationKind),
+    steps: Schema.Array(Schema.Union([RecordedSetupStep, OperationStepSummary])),
+    before: RecordedLibrary,
+    after: RecordedLibrary,
+    reason: Schema.optionalKey(SetupStopReason),
   },
 });
 export type OperationStatus = typeof OperationStatus.Type;

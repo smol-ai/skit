@@ -11,11 +11,12 @@ import { inspectInstalledSkillBackups } from "../../../installed-skills/backups.
 import { libraryOriginalsPath } from "../../store/library-store.js";
 import { LinkStat } from "../../../platform/link-stat.js";
 import { pathIsWithin } from "../../../platform/path-identity.js";
-import { collectionVersionPath } from "../../collection-version.js";
+import { collectionVersionPath, originalTreeHash } from "../../collection-version.js";
+import { readCollectionVersion } from "../content/read-collection-version.js";
 import { versionBacking } from "../../library-contracts.js";
 import { writeRawAtomic } from "../../../platform/atomic-write.js";
 import { type InstalledSkill } from "../../device-state.js";
-import { readSkillPathDetails } from "./undo-evidence.js";
+import { readSkillPathDetails, type UndoAction } from "./undo-evidence.js";
 import { inspectRecoveryOperation } from "../recovery/moves.js";
 import { checkSetupGlobalContent } from "./protection.js";
 import { recoveryFingerprint } from "../recovery/evidence.js";
@@ -150,12 +151,7 @@ export const planUndoFiles = Effect.fn("SetupUndo.planFiles")(function* (
   const backups = yield* Effect.forEach(priorBackups, (id) => inspectRecoveryOperation(home, id));
   const conflicts: UndoConflict[] = [];
   const pathDetails: SkillPathDetails[] = [];
-  const actions: {
-    path: string;
-    kind: "release-ownership" | "restore" | "remove-created";
-    source?: string;
-    transfer?: "move" | "copy" | "rebuild";
-  }[] = [];
+  const actions: UndoAction[] = [];
   const moves: { name: string; installedSkill: InstalledSkill }[] = [];
   const affected = new Set<string>();
   const physicalPaths: string[] = [];
@@ -282,6 +278,7 @@ export const planUndoFiles = Effect.fn("SetupUndo.planFiles")(function* (
       continue;
     }
     let source: string | undefined;
+    let originalSource: UndoAction["original"];
     // File recovery calls an occupied destination a conflict. Full undo can first
     // preserve its owned successor, so validate the saved original independently.
     for (const entry of saved) {
@@ -307,17 +304,44 @@ export const planUndoFiles = Effect.fn("SetupUndo.planFiles")(function* (
     }
     // Reconstruction copies immutable retained bytes; it never moves or edits their source.
     if (source === undefined && file.entry.type === "Directory") {
+      const entry = file.entry;
       for (const skill of state.skills)
         for (const version of skill.versions) {
           const backing = versionBacking(state, skill, version);
           if (!backing) continue;
-          const root = collectionVersionPath(libraryOriginalsPath(home), backing.copy.hash);
-          const path =
-            backing.member.source_path === "." ? root : join(root, backing.member.source_path);
-          const evidence = yield* Effect.result(unmarkedAt(path, file.entry.unmarked.by));
-          if (evidence._tag === "Success" && evidence.success === file.entry.unmarked.hash)
-            source = path;
+          const evidence = yield* Effect.result(
+            Effect.scoped(
+              Effect.gen(function* () {
+                const root = yield* readCollectionVersion(
+                  libraryOriginalsPath(home),
+                  backing.copy.hash,
+                );
+                if ((yield* originalTreeHash(root)) !== backing.copy.hash) return false;
+                const path =
+                  backing.member.source_path === "."
+                    ? root
+                    : join(root, backing.member.source_path);
+                return (yield* unmarkedAt(path, entry.unmarked.by)) === entry.unmarked.hash;
+              }),
+            ),
+          );
+          if (evidence._tag === "Success" && evidence.success) {
+            const root = collectionVersionPath(libraryOriginalsPath(home), backing.copy.hash);
+            source =
+              backing.member.source_path === "." ? root : join(root, backing.member.source_path);
+            originalSource = { hash: backing.copy.hash, path: backing.member.source_path };
+          }
         }
+    }
+    if (originalSource !== undefined) {
+      actions.push({
+        path: file.path,
+        kind: "restore",
+        source,
+        transfer: "original",
+        original: originalSource,
+      });
+      continue;
     }
     if (source === undefined && prior && file.entry.markerType === "File") {
       const policy = globalEnabled(restoredState).invocation_policies?.[prior.skill_id];

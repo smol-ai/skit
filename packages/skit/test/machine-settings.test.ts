@@ -1,7 +1,6 @@
-import { systemError } from "effect/PlatformError";
 import { hostname } from "node:os";
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Option, Schema } from "effect";
+import { Effect, FileSystem, Schema } from "effect";
 import { join } from "node:path";
 import * as MachineSettings from "../src/library/machine-settings.js";
 import {
@@ -29,7 +28,7 @@ it.effect("reading missing settings creates no files or directories", () =>
 );
 
 for (const version of [1, 2, 3] as const) {
-  it.effect(`reads v${version} without writing, preserving its identity and discovery roots`, () =>
+  it.effect(`imports v${version}, preserving its identity and discovery roots`, () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-legacy-" });
@@ -50,14 +49,14 @@ for (const version of [1, 2, 3] as const) {
       const settings = yield* MachineSettings.read(home);
       assert.deepStrictEqual(settings.discoveryRoots, ["/saved"]);
       assert.strictEqual(settings.repositoryDecisionsInitialized, false);
-      assert.strictEqual(yield* fs.readFileString(path), bytes);
+      assert.strictEqual(yield* fs.readFileString(`${path}.backup-database`), bytes);
       const identity = yield* MachineSettings.ensureIdentity(home);
       if (version !== 1) {
         assert.strictEqual(
           identity,
           version === 2 ? migratedMachineId(legacyId, legacyId) : machineId,
         );
-        assert.strictEqual(yield* fs.readFileString(path), bytes);
+        assert.strictEqual(yield* fs.readFileString(`${path}.backup-database`), bytes);
       }
       const identified = yield* MachineSettings.read(home);
       assert.strictEqual(identified.repositoryDecisionsInitialized, false);
@@ -65,7 +64,7 @@ for (const version of [1, 2, 3] as const) {
       assert.deepStrictEqual(identified.repositories, []);
       yield* MachineSettings.setRepositoryDecision(home, "/repo", "watched");
       const updated = yield* MachineSettings.read(home);
-      assert.strictEqual(JSON.parse(yield* fs.readFileString(path)).schemaVersion, 6);
+      assert.strictEqual(yield* fs.readFileString(`${path}.backup-database`), bytes);
       assert.strictEqual(updated.machineId, identity);
       assert.strictEqual(updated.displayName, version === 1 ? hostname() : "Existing name");
       assert.deepStrictEqual(updated.discoveryRoots, ["/saved"]);
@@ -89,7 +88,7 @@ it.effect(
         Effect.all(
           [
             MachineSettings.ensureIdentity(home),
-            MachineSettings.updateDiscovery<never>(home, {
+            MachineSettings.updateDiscovery(home, {
               discoveryRoots: ["/second", "/first", "/second"],
               repositories: [{ path: "/one", status: "watched" }],
               displayName: "Discovery name",
@@ -129,15 +128,14 @@ it.effect("refuses an occupied root lock before replacing settings", () =>
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-locked-" });
     yield* MachineSettings.ensureIdentity(home);
-    const path = join(home, "machine.json");
-    const before = yield* fs.readFileString(path);
+    const before = yield* MachineSettings.read(home);
     // Another holder, as another process would be.
     yield* lockFile(join(home, "lock.sqlite"));
     const error = yield* MachineSettings.setRepositoryDecision(home, "/repo", "ignored").pipe(
       Effect.flip,
     );
     assert.strictEqual(error._tag, "HomeBusy");
-    assert.strictEqual(yield* fs.readFileString(path), before);
+    assert.deepStrictEqual(yield* MachineSettings.read(home), before);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -159,7 +157,7 @@ for (const content of ["invalid JSON", JSON.stringify({ schemaVersion: 99 })]) {
           assert.strictEqual(error.reason._tag, "UnsupportedVersion");
           if (error.reason._tag === "UnsupportedVersion") {
             assert.strictEqual(error.reason.version, 99);
-            assert.deepStrictEqual(error.reason.supported, [1, 2, 3, 4, 5, 6]);
+            assert.deepStrictEqual(error.reason.supported, [1, 2, 3, 4, 5]);
           }
         }
       }
@@ -201,7 +199,7 @@ it.effect("explicit names override a saved default and survive later unnamed mut
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("v4 reads stay read-only and preserve an initialized empty repository selection", () =>
+it.effect("v4 imports preserve an initialized empty repository selection", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-v4-" });
@@ -216,7 +214,7 @@ it.effect("v4 reads stay read-only and preserve an initialized empty repository 
     });
     yield* fs.writeFileString(path, bytes);
     assert.strictEqual(yield* MachineSettings.ensureIdentity(home), machineId);
-    assert.strictEqual(yield* fs.readFileString(path), bytes);
+    assert.strictEqual(yield* fs.readFileString(`${path}.backup-database`), bytes);
     const prior = yield* MachineSettings.read(home);
     assert.strictEqual(prior.repositoryDecisionsInitialized, true);
     yield* MachineSettings.updateDiscovery(home, { displayName: "Renamed machine" });
@@ -243,174 +241,32 @@ it.effect("saving discovery roots alone leaves repository decisions undecided", 
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("saves no settings when pre-save inverse evidence fails", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-evidence-" });
-    yield* MachineSettings.updateDiscovery(home, {
-      discoveryRoots: ["/before"],
-      displayName: "Prior name",
-    });
-    const path = join(home, "machine.json");
-    const bytes = yield* fs.readFileString(path);
-    const failure = yield* Effect.flip(
-      MachineSettings.updateDiscovery(home, { discoveryRoots: ["/after"] }, (before, after) =>
-        Effect.gen(function* () {
-          assert.deepStrictEqual(before.discoveryRoots, ["/before"]);
-          assert.deepStrictEqual(after.discoveryRoots, ["/after"]);
-          assert.strictEqual(yield* fs.readFileString(path), bytes);
-          return yield* Effect.fail("inverse-refused");
-        }),
-      ),
-    );
-    assert.strictEqual(failure, "inverse-refused");
-    assert.strictEqual(yield* fs.readFileString(path), bytes);
-    assert.isTrue(yield* Effect.isSuccess(Effect.scoped(lockFile(join(home, "lock.sqlite")))));
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect(
-  "evidence callbacks cannot redirect validated settings and inverse writes guard the reviewed settings",
-  () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-inverse-" });
-      const before = yield* MachineSettings.updateDiscovery(home, {
-        discoveryRoots: ["/before"],
-        repositories: [{ path: "/original", status: "watched" }],
-        displayName: "Original name",
-      });
-      const after = yield* MachineSettings.updateDiscovery(
-        home,
-        { discoveryRoots: ["/after"] },
-        (_prior, next) =>
-          Effect.sync(() => {
-            // Callback inputs are evidence copies, not writable references to the publication.
-            Object.assign(next, { discoveryRoots: [], path: join(home, "redirected.json") });
-          }),
-      );
-      assert.deepStrictEqual(after.discoveryRoots, ["/after"]);
-      const restored = yield* MachineSettings.restoreDiscovery(home, after, before);
-      assert.deepStrictEqual(restored.discoveryRoots, ["/before"]);
-      assert.strictEqual(restored.machineId, before.machineId);
-      assert.deepStrictEqual(restored.repositories, [{ path: "/original", status: "watched" }]);
-      yield* MachineSettings.updateDiscovery(home, { discoveryRoots: ["/newer"] });
-      const stale = yield* Effect.flip(MachineSettings.restoreDiscovery(home, after, before));
-      assert.strictEqual(stale._tag, "LibraryChanged");
-      assert.deepStrictEqual((yield* MachineSettings.read(home)).discoveryRoots, ["/newer"]);
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("a setup's discovery save records what it replaced, keyed by the setup", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-setup-record-" });
-    const machineId = yield* MachineSettings.ensureIdentity(home);
-    yield* MachineSettings.updateDiscovery(home, { discoveryRoots: ["/before"] });
-    const operationId = makeOperationId();
-
-    const saved = yield* MachineSettings.updateDiscovery(
-      home,
-      { discoveryRoots: ["/after"] },
-      undefined,
-      operationId,
-    );
-
-    assert.deepStrictEqual(saved.discoveryRoots, ["/after"]);
-    assert.deepStrictEqual(
-      yield* MachineSettings.setupRecord(home, operationId),
-      Option.some({
-        operationId,
-        before: { discoveryRoots: ["/before"], machineId },
-        expectedAfter: { discoveryRoots: ["/after"], machineId },
-      }),
-    );
-    assert.isTrue(Option.isNone(yield* MachineSettings.setupRecord(home, makeOperationId())));
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("restoring a setup's discovery folders keeps the identity, name and repositories", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-setup-restore-" });
-    yield* MachineSettings.updateDiscovery(home, { discoveryRoots: ["/before"] });
-    const operationId = makeOperationId();
-    yield* MachineSettings.updateDiscovery(
-      home,
-      {
-        discoveryRoots: ["/after"],
-        repositories: [{ path: "/after/repo", status: "watched" }],
-        displayName: "Renamed by setup",
-      },
-      undefined,
-      operationId,
-    );
-    const after = yield* MachineSettings.read(home);
-
-    assert.strictEqual(yield* MachineSettings.restoreSetupDiscovery(home, operationId), "restored");
-    const restored = yield* MachineSettings.read(home);
-    assert.deepStrictEqual(restored, {
-      ...after,
-      discoveryRoots: ["/before"],
-      undoneSetups: [operationId],
-    });
-    // Restoring again finds it already restored and writes nothing.
-    const bytes = yield* fs.readFileString(join(home, "machine.json"));
-    assert.strictEqual(
-      yield* MachineSettings.restoreSetupDiscovery(home, operationId),
-      "unchanged",
-    );
-    assert.strictEqual(yield* fs.readFileString(join(home, "machine.json")), bytes);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("restoring refuses discovery folders changed since the setup, and a later setup's", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-setup-refuse-" });
-    const first = makeOperationId();
-    yield* MachineSettings.updateDiscovery(home, { discoveryRoots: ["/first"] }, undefined, first);
-    yield* MachineSettings.updateDiscovery(home, { discoveryRoots: ["/edited"] });
-
-    const changed = yield* Effect.flip(MachineSettings.restoreSetupDiscovery(home, first));
-    assert.strictEqual(changed._tag, "LibraryChanged");
-    assert.deepStrictEqual((yield* MachineSettings.read(home)).discoveryRoots, ["/edited"]);
-
-    const second = makeOperationId();
-    yield* MachineSettings.updateDiscovery(
-      home,
-      { discoveryRoots: ["/second"] },
-      undefined,
-      second,
-    );
-    const replaced = yield* Effect.flip(MachineSettings.restoreSetupDiscovery(home, first));
-    assert.strictEqual(replaced._tag, "MachineSettings.SetupNotRecorded");
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("v5 settings read without writing and with no setup records", () =>
+it.effect("v5 settings import backs up the source and fences the released reader", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-v5-" });
-    const text = JSON.stringify({
+    const document = {
       schemaVersion: 5,
       machineId: makeMachineId(),
       displayName: "Current machine",
       discoveryRoots: ["/projects"],
       repositories: [],
       repositoryDecisionsInitialized: true,
-    });
+    };
+    const text = JSON.stringify(document);
     yield* fs.writeFileString(join(home, "machine.json"), text);
-
-    assert.deepStrictEqual((yield* MachineSettings.read(home)).setups, []);
-    assert.strictEqual(yield* fs.readFileString(join(home, "machine.json")), text);
+    const settings = yield* MachineSettings.read(home);
+    assert.deepStrictEqual(settings.discoveryRoots, document.discoveryRoots);
+    assert.strictEqual(yield* fs.readFileString(join(home, "machine.json.backup-database")), text);
+    assert.deepStrictEqual(JSON.parse(yield* fs.readFileString(join(home, "machine.json"))), {
+      schemaVersion: 6,
+    });
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
-
 it.effect("a discovery undo preview is passive and missing settings stay absent", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-undo-preview-" });
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-passive-" });
     const home = join(root, "absent");
     const plan = yield* MachineSettings.planRestoreDiscovery(home, makeOperationId());
     assert.isFalse(plan.changed);
@@ -418,115 +274,4 @@ it.effect("a discovery undo preview is passive and missing settings stay absent"
     assert.deepStrictEqual(plan.conflicts, []);
     assert.isFalse(yield* fs.exists(home));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("a completed discovery inverse cannot later undo independent roots again", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-undo-complete-" });
-    yield* MachineSettings.updateDiscovery(home, { discoveryRoots: ["/before"] });
-    const operationId = makeOperationId();
-    yield* MachineSettings.updateDiscovery(
-      home,
-      { discoveryRoots: ["/after"] },
-      undefined,
-      operationId,
-    );
-    const before = yield* MachineSettings.read(home);
-    const plan = yield* MachineSettings.planRestoreDiscovery(home, operationId);
-    assert.isTrue(plan.changed);
-    assert.strictEqual(yield* MachineSettings.applyRestoreDiscovery(home, plan), "restored");
-    const restored = yield* MachineSettings.read(home);
-    assert.deepStrictEqual(restored.discoveryRoots, ["/before"]);
-    assert.deepStrictEqual(restored.undoneSetups, [operationId]);
-    assert.strictEqual(restored.machineId, before.machineId);
-    // A later edit may deliberately reuse the same roots the setup had chosen.
-    yield* MachineSettings.updateDiscovery(home, {
-      discoveryRoots: ["/after"],
-      repositories: [{ path: "/independent", status: "watched" }],
-    });
-    const bytes = yield* fs.readFileString(join(home, "machine.json"));
-    const repeated = yield* MachineSettings.planRestoreDiscovery(home, operationId);
-    assert.isFalse(repeated.changed);
-    assert.strictEqual(yield* MachineSettings.applyRestoreDiscovery(home, repeated), "unchanged");
-    assert.strictEqual(yield* fs.readFileString(join(home, "machine.json")), bytes);
-    assert.isFalse(yield* fs.exists(join(home, "state.json")));
-    assert.isFalse(yield* fs.exists(join(home, "audit.jsonl")));
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("a discovery inverse refuses stale or edited review data before publication", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-undo-stale-" });
-    const operationId = makeOperationId();
-    yield* MachineSettings.updateDiscovery(
-      home,
-      { discoveryRoots: ["/after"] },
-      undefined,
-      operationId,
-    );
-    const plan = yield* MachineSettings.planRestoreDiscovery(home, operationId);
-    const path = join(home, "machine.json");
-    const bytes = yield* fs.readFileString(path);
-    const forged = { ...plan, after: { ...plan.after, discoveryRoots: ["/unreviewed"] } };
-    assert.strictEqual(
-      (yield* Effect.flip(MachineSettings.applyRestoreDiscovery(home, forged)))._tag,
-      "LibraryChanged",
-    );
-    assert.strictEqual(yield* fs.readFileString(path), bytes);
-    yield* MachineSettings.setRepositoryDecision(home, "/later", "watched");
-    const edited = yield* fs.readFileString(path);
-    assert.strictEqual(
-      (yield* Effect.flip(MachineSettings.applyRestoreDiscovery(home, plan)))._tag,
-      "LibraryChanged",
-    );
-    assert.strictEqual(yield* fs.readFileString(path), edited);
-    const refreshed = yield* MachineSettings.planRestoreDiscovery(home, operationId);
-    yield* MachineSettings.applyRestoreDiscovery(home, refreshed);
-    assert.deepStrictEqual((yield* MachineSettings.read(home)).repositories, [
-      { path: "/later", status: "watched" },
-    ]);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect(
-  "a failed discovery inverse publication keeps its completion unrecorded and retryable",
-  () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-undo-failure-" });
-      const operationId = makeOperationId();
-      yield* MachineSettings.updateDiscovery(
-        home,
-        { discoveryRoots: ["/after"] },
-        undefined,
-        operationId,
-      );
-      const plan = yield* MachineSettings.planRestoreDiscovery(home, operationId);
-      const path = join(home, "machine.json");
-      const bytes = yield* fs.readFileString(path);
-      const failure = yield* MachineSettings.applyRestoreDiscovery(home, plan).pipe(
-        Effect.provideService(FileSystem.FileSystem, {
-          ...fs,
-          rename: (from, to) =>
-            to === path
-              ? Effect.fail(
-                  systemError({
-                    _tag: "PermissionDenied",
-                    module: "FileSystem",
-                    method: "rename",
-                    pathOrDescriptor: to,
-                  }),
-                )
-              : fs.rename(from, to),
-        }),
-        Effect.flip,
-      );
-      assert.strictEqual(failure._tag, "PlatformError");
-      assert.strictEqual(yield* fs.readFileString(path), bytes);
-      assert.deepStrictEqual((yield* MachineSettings.read(home)).undoneSetups, []);
-      yield* MachineSettings.applyRestoreDiscovery(home, plan);
-      assert.deepStrictEqual((yield* MachineSettings.read(home)).undoneSetups, [operationId]);
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

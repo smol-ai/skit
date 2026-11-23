@@ -12083,6 +12083,943 @@
       ],
       "additionalProperties": true
     },
+    "CollectionVersionArchiveInvalidReason": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "InvalidShape"
+              ]
+            },
+            "failure": {
+              "$ref": "#/definitions/SchemaFailureEncoded"
+            }
+          },
+          "required": [
+            "_tag",
+            "failure"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "InvalidBase64"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "DuplicatePath"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "ByteLimitExceeded"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "encoded-file",
+                "tree"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "actual": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "_tag",
+            "kind",
+            "path",
+            "limit",
+            "actual"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "UnsafeSymlink"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "target": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path",
+            "target"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "ChildOfNonDirectory"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "MissingParent"
+              ]
+            },
+            "unreachable": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "_tag",
+            "unreachable"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "HashMismatch"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "archive",
+                "materialized"
+              ]
+            },
+            "expected": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "actual": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "_tag",
+            "kind",
+            "expected",
+            "actual"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "Library.SnapshotArchiveInvalidEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "Library.SnapshotArchiveInvalid"
+          ]
+        },
+        "reason": {
+          "$ref": "#/definitions/CollectionVersionArchiveInvalidReason"
+        }
+      },
+      "required": [
+        "_tag",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "InvalidLibraryStateEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "InvalidLibraryState"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "LegacySourceChanged"
+                  ]
+                },
+                "sourcePath": {
+                  "type": "string"
+                },
+                "backupPath": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "databasePath": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "sourcePath",
+                "backupPath",
+                "databasePath"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "LegacyStateBesideDatabase"
+                  ]
+                },
+                "statePath": {
+                  "type": "string"
+                },
+                "databasePath": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "statePath",
+                "databasePath"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ImportBackupChanged"
+                  ]
+                },
+                "sourcePath": {
+                  "type": "string"
+                },
+                "backupPath": {
+                  "type": "string"
+                },
+                "databasePath": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "sourcePath",
+                "backupPath",
+                "databasePath"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "NewerDatabaseMigration"
+                  ]
+                },
+                "databasePath": {
+                  "type": "string"
+                },
+                "migration": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "supported": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "_tag",
+                "databasePath",
+                "migration",
+                "supported"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "DatabaseEmpty"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "DatabaseMigrationIncomplete"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "DatabaseMigrationsMismatch"
+                  ]
+                },
+                "expected": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "actual": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "_tag",
+                "expected",
+                "actual"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ImportRecordMissing"
+                  ]
+                },
+                "sourcePath": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "sourcePath"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "DocumentEncodingFailed"
+                  ]
+                },
+                "document": {
+                  "type": "string",
+                  "enum": [
+                    "library",
+                    "inventory"
+                  ]
+                }
+              },
+              "required": [
+                "_tag",
+                "document"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "RowIdentityMismatch"
+                  ]
+                },
+                "field": {
+                  "type": "string"
+                },
+                "expected": {
+                  "type": "string"
+                },
+                "actual": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "_tag",
+                "field",
+                "expected",
+                "actual"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "CatalogueRowChanged"
+                  ]
+                },
+                "field": {
+                  "type": "string"
+                },
+                "id": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "_tag",
+                "field",
+                "id"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "DifferenceFieldUnknown"
+                  ]
+                },
+                "field": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "field"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "EnabledSubjectMissing"
+                  ]
+                },
+                "subject": {
+                  "type": "string",
+                  "enum": [
+                    "skill",
+                    "collection"
+                  ]
+                },
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "subject",
+                "id"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "InstalledVersionOwnerMismatch"
+                  ]
+                },
+                "installedId": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                },
+                "expectedSkill": {
+                  "type": "string"
+                },
+                "actualSkill": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "_tag",
+                "installedId",
+                "version",
+                "expectedSkill",
+                "actualSkill"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "InventoryRowsInvalid"
+                  ]
+                },
+                "table": {
+                  "type": "string"
+                },
+                "position": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "_tag",
+                "table"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "InventoryInstalledIdentityChanged"
+                  ]
+                },
+                "expectedCount": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "actualCount": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "installedId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "expectedCount",
+                "actualCount"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "CollectionStillInstalled"
+                  ]
+                },
+                "collectionId": {
+                  "type": "string"
+                },
+                "installedId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "collectionId",
+                "installedId"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "UndoFieldChanged"
+                  ]
+                },
+                "field": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "field"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "OperationStateMissing"
+                  ]
+                },
+                "databasePath": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "databasePath"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "DatabaseIntegrityInvalid"
+                  ]
+                },
+                "databasePath": {
+                  "type": "string"
+                },
+                "result": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "_tag",
+                "databasePath",
+                "result"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "SchemaInvalid"
+                  ]
+                },
+                "failure": {
+                  "$ref": "#/definitions/SchemaFailureEncoded"
+                }
+              },
+              "required": [
+                "_tag",
+                "failure"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ArchiveInvalid"
+                  ]
+                },
+                "failure": {
+                  "$ref": "#/definitions/Library.SnapshotArchiveInvalidEncoded"
+                }
+              },
+              "required": [
+                "_tag",
+                "failure"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "InvalidData"
+                  ]
+                },
+                "issue": {
+                  "type": "string"
+                },
+                "tree": {
+                  "$ref": "#/definitions/TreeErrorReason"
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "UnsupportedVersion"
+                  ]
+                },
+                "version": {
+                  "type": "number"
+                },
+                "oldest": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "current": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "_tag",
+                "oldest",
+                "current"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "MissingRecord"
+                  ]
+                },
+                "record": {
+                  "type": "string",
+                  "enum": [
+                    "pending-operation",
+                    "sync-step",
+                    "sync-program",
+                    "imported-collection",
+                    "folder-evidence",
+                    "installed-row",
+                    "library-state"
+                  ]
+                },
+                "at": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "record"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ContentChanged"
+                  ]
+                },
+                "entry": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ContentMissing"
+                  ]
+                },
+                "entry": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag",
+                "entry"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "InvalidSymlink"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "path",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "LibrarySqlErrorEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "LibrarySqlError"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "cause": {}
+      },
+      "required": [
+        "_tag",
+        "path",
+        "cause"
+      ],
+      "additionalProperties": true
+    },
     "History.StoreMissingEncoded": {
       "type": "object",
       "properties": {
@@ -12216,6 +13153,80 @@
                 "actual"
               ],
               "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "BlobNotFile"
+                  ]
+                },
+                "blob": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                }
+              },
+              "required": [
+                "_tag",
+                "blob"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "BlobSizeMismatch"
+                  ]
+                },
+                "blob": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                },
+                "expected": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "actual": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "_tag",
+                "blob",
+                "expected",
+                "actual"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "EditTimesMismatch"
+                  ]
+                },
+                "paths": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "_tag",
+                "paths"
+              ],
+              "additionalProperties": true
             }
           ]
         }
@@ -12242,6 +13253,28 @@
       "required": [
         "_tag",
         "cause"
+      ],
+      "additionalProperties": true
+    },
+    "History.RecordInvalidEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "History.RecordInvalid"
+          ]
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "_tag",
+        "paths"
       ],
       "additionalProperties": true
     },
@@ -12325,7 +13358,17 @@
                     "JournalFailure"
                   ]
                 },
-                "cause": {}
+                "cause": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/InvalidLibraryStateEncoded"
+                    },
+                    {
+                      "$ref": "#/definitions/LibrarySqlErrorEncoded"
+                    },
+                    {}
+                  ]
+                }
               },
               "required": [
                 "_tag",
@@ -12371,6 +13414,9 @@
                     },
                     {
                       "$ref": "#/definitions/History.StoreFailedEncoded"
+                    },
+                    {
+                      "$ref": "#/definitions/History.RecordInvalidEncoded"
                     }
                   ]
                 }
@@ -12870,6 +13916,28 @@
                 "_tag",
                 "expected",
                 "actual"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "EditTimesMismatch"
+                  ]
+                },
+                "paths": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "_tag",
+                "paths"
               ],
               "additionalProperties": true
             },
@@ -15040,6 +16108,21 @@
                 "_tag": {
                   "type": "string",
                   "enum": [
+                    "FileReplacementNeedsRecovery"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
                     "LockNotFile"
                   ]
                 }
@@ -15139,417 +16222,6 @@
       "required": [
         "_tag",
         "root"
-      ],
-      "additionalProperties": true
-    },
-    "CollectionVersionArchiveInvalidReason": {
-      "anyOf": [
-        {
-          "type": "object",
-          "properties": {
-            "_tag": {
-              "type": "string",
-              "enum": [
-                "InvalidShape"
-              ]
-            },
-            "failure": {
-              "$ref": "#/definitions/SchemaFailureEncoded"
-            }
-          },
-          "required": [
-            "_tag",
-            "failure"
-          ],
-          "additionalProperties": true
-        },
-        {
-          "type": "object",
-          "properties": {
-            "_tag": {
-              "type": "string",
-              "enum": [
-                "InvalidBase64"
-              ]
-            },
-            "path": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "_tag",
-            "path"
-          ],
-          "additionalProperties": true
-        },
-        {
-          "type": "object",
-          "properties": {
-            "_tag": {
-              "type": "string",
-              "enum": [
-                "DuplicatePath"
-              ]
-            },
-            "path": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "_tag",
-            "path"
-          ],
-          "additionalProperties": true
-        },
-        {
-          "type": "object",
-          "properties": {
-            "_tag": {
-              "type": "string",
-              "enum": [
-                "ByteLimitExceeded"
-              ]
-            },
-            "kind": {
-              "type": "string",
-              "enum": [
-                "encoded-file",
-                "tree"
-              ]
-            },
-            "path": {
-              "type": "string"
-            },
-            "limit": {
-              "type": "integer",
-              "minimum": -9007199254740991,
-              "maximum": 9007199254740991
-            },
-            "actual": {
-              "type": "integer",
-              "minimum": -9007199254740991,
-              "maximum": 9007199254740991
-            }
-          },
-          "required": [
-            "_tag",
-            "kind",
-            "path",
-            "limit",
-            "actual"
-          ],
-          "additionalProperties": true
-        },
-        {
-          "type": "object",
-          "properties": {
-            "_tag": {
-              "type": "string",
-              "enum": [
-                "UnsafeSymlink"
-              ]
-            },
-            "path": {
-              "type": "string"
-            },
-            "target": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "_tag",
-            "path",
-            "target"
-          ],
-          "additionalProperties": true
-        },
-        {
-          "type": "object",
-          "properties": {
-            "_tag": {
-              "type": "string",
-              "enum": [
-                "ChildOfNonDirectory"
-              ]
-            },
-            "path": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "_tag",
-            "path"
-          ],
-          "additionalProperties": true
-        },
-        {
-          "type": "object",
-          "properties": {
-            "_tag": {
-              "type": "string",
-              "enum": [
-                "MissingParent"
-              ]
-            },
-            "unreachable": {
-              "type": "integer",
-              "minimum": -9007199254740991,
-              "maximum": 9007199254740991
-            }
-          },
-          "required": [
-            "_tag",
-            "unreachable"
-          ],
-          "additionalProperties": true
-        },
-        {
-          "type": "object",
-          "properties": {
-            "_tag": {
-              "type": "string",
-              "enum": [
-                "HashMismatch"
-              ]
-            },
-            "kind": {
-              "type": "string",
-              "enum": [
-                "archive",
-                "materialized"
-              ]
-            },
-            "expected": {
-              "type": "string",
-              "pattern": "^sha256:[a-f0-9]{64}$"
-            },
-            "actual": {
-              "type": "string",
-              "pattern": "^sha256:[a-f0-9]{64}$"
-            }
-          },
-          "required": [
-            "_tag",
-            "kind",
-            "expected",
-            "actual"
-          ],
-          "additionalProperties": true
-        }
-      ]
-    },
-    "Library.SnapshotArchiveInvalidEncoded": {
-      "type": "object",
-      "properties": {
-        "_tag": {
-          "type": "string",
-          "enum": [
-            "Library.SnapshotArchiveInvalid"
-          ]
-        },
-        "reason": {
-          "$ref": "#/definitions/CollectionVersionArchiveInvalidReason"
-        }
-      },
-      "required": [
-        "_tag",
-        "reason"
-      ],
-      "additionalProperties": true
-    },
-    "InvalidLibraryStateEncoded": {
-      "type": "object",
-      "properties": {
-        "_tag": {
-          "type": "string",
-          "enum": [
-            "InvalidLibraryState"
-          ]
-        },
-        "path": {
-          "type": "string"
-        },
-        "reason": {
-          "anyOf": [
-            {
-              "type": "object",
-              "properties": {
-                "_tag": {
-                  "type": "string",
-                  "enum": [
-                    "SchemaInvalid"
-                  ]
-                },
-                "failure": {
-                  "$ref": "#/definitions/SchemaFailureEncoded"
-                }
-              },
-              "required": [
-                "_tag",
-                "failure"
-              ],
-              "additionalProperties": true
-            },
-            {
-              "type": "object",
-              "properties": {
-                "_tag": {
-                  "type": "string",
-                  "enum": [
-                    "ArchiveInvalid"
-                  ]
-                },
-                "failure": {
-                  "$ref": "#/definitions/Library.SnapshotArchiveInvalidEncoded"
-                }
-              },
-              "required": [
-                "_tag",
-                "failure"
-              ],
-              "additionalProperties": true
-            },
-            {
-              "type": "object",
-              "properties": {
-                "_tag": {
-                  "type": "string",
-                  "enum": [
-                    "InvalidData"
-                  ]
-                },
-                "issue": {
-                  "type": "string"
-                },
-                "tree": {
-                  "$ref": "#/definitions/TreeErrorReason"
-                }
-              },
-              "required": [
-                "_tag"
-              ],
-              "additionalProperties": true
-            },
-            {
-              "type": "object",
-              "properties": {
-                "_tag": {
-                  "type": "string",
-                  "enum": [
-                    "UnsupportedVersion"
-                  ]
-                },
-                "version": {
-                  "type": "number"
-                },
-                "oldest": {
-                  "type": "integer",
-                  "minimum": -9007199254740991,
-                  "maximum": 9007199254740991
-                },
-                "current": {
-                  "type": "integer",
-                  "minimum": -9007199254740991,
-                  "maximum": 9007199254740991
-                }
-              },
-              "required": [
-                "_tag",
-                "oldest",
-                "current"
-              ],
-              "additionalProperties": true
-            },
-            {
-              "type": "object",
-              "properties": {
-                "_tag": {
-                  "type": "string",
-                  "enum": [
-                    "MissingRecord"
-                  ]
-                },
-                "record": {
-                  "type": "string",
-                  "enum": [
-                    "pending-operation",
-                    "sync-step",
-                    "sync-program",
-                    "imported-collection",
-                    "folder-evidence",
-                    "installed-row",
-                    "library-state"
-                  ]
-                },
-                "at": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "_tag",
-                "record"
-              ],
-              "additionalProperties": true
-            },
-            {
-              "type": "object",
-              "properties": {
-                "_tag": {
-                  "type": "string",
-                  "enum": [
-                    "ContentChanged"
-                  ]
-                },
-                "entry": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "_tag"
-              ],
-              "additionalProperties": true
-            },
-            {
-              "type": "object",
-              "properties": {
-                "_tag": {
-                  "type": "string",
-                  "enum": [
-                    "ContentMissing"
-                  ]
-                },
-                "entry": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "_tag",
-                "entry"
-              ],
-              "additionalProperties": true
-            },
-            {
-              "type": "object",
-              "properties": {
-                "_tag": {
-                  "type": "string",
-                  "enum": [
-                    "InvalidSymlink"
-                  ]
-                }
-              },
-              "required": [
-                "_tag"
-              ],
-              "additionalProperties": true
-            }
-          ]
-        }
-      },
-      "required": [
-        "_tag",
-        "path",
-        "reason"
       ],
       "additionalProperties": true
     },
@@ -16512,6 +17184,9 @@
         },
         "path": {
           "type": "string"
+        },
+        "owner": {
+          "type": "string"
         }
       },
       "required": [
@@ -16606,6 +17281,15 @@
             "reason"
           ],
           "additionalProperties": true
+        },
+        {
+          "$ref": "#/definitions/MachineSettingsUnusableEncoded"
+        },
+        {
+          "$ref": "#/definitions/LibraryAuditInvalidEncoded"
+        },
+        {
+          "$ref": "#/definitions/LibrarySqlErrorEncoded"
         },
         {
           "$ref": "#/definitions/InvalidLibraryStateEncoded"
@@ -20324,6 +21008,75 @@
       ],
       "additionalProperties": true
     },
+    "LibraryInvariantFailedEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "LibraryInvariantFailed"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "DatabaseWriteInsideRead"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "DatabaseWriterLockMissing"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ImportInsideTransaction"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "path",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
     "Library.StepDefectEncoded": {
       "type": "object",
       "properties": {
@@ -20340,6 +21093,9 @@
             },
             {
               "$ref": "#/definitions/ArchiveStreamInvalidEncoded"
+            },
+            {
+              "$ref": "#/definitions/LibraryInvariantFailedEncoded"
             },
             {}
           ]
@@ -20482,6 +21238,9 @@
         },
         {
           "$ref": "#/definitions/History.StoreFailedEncoded"
+        },
+        {
+          "$ref": "#/definitions/History.RecordInvalidEncoded"
         },
         {
           "$ref": "#/definitions/Sync.RemoteInvalidEncoded"
@@ -20740,6 +21499,9 @@
         },
         {
           "$ref": "#/definitions/InvalidLibraryStateEncoded"
+        },
+        {
+          "$ref": "#/definitions/LibrarySqlErrorEncoded"
         },
         {
           "$ref": "#/definitions/Library.InvalidIntentEncoded"

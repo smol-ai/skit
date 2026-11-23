@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import { LinkStat } from "@smolai/skit-core/platform";
 import { recoveryInspection, recoveryList } from "./helpers/recovery.js";
 import { withLibraryOwner } from "./helpers/library-owner.js";
@@ -58,118 +59,6 @@ const fixture = Effect.fn("Test.symlinkFixture")(function* () {
   return { fs, root, source, alias, destination, home, options };
 });
 
-it.effect("enable refuses the extra copy before saving intent, and dry-run explains why", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    yield* initializeLibraryMachine(f.home.home);
-    yield* f.home.owned(
-      writingTo(
-        f.home.home,
-        Effect.gen(function* () {
-          const imported = yield* importSource(f.source);
-          const before = yield* f.home.durable;
-          if (imported.collection_id === undefined)
-            return yield* Effect.die("Expected a retained collection");
-          const options = {
-            query: imported.collection_id,
-            all: false,
-            invocation: {
-              scope: { kind: "global" as const },
-              enabled: true,
-              dryRun: false,
-            },
-            roots: f.home.inventory,
-            variantsPath: f.home.variantsPath,
-          };
-          const preview = yield* setLibraryEnabled({
-            ...options,
-            invocation: { ...options.invocation, dryRun: true },
-          });
-          expect(preview.value.duplicates).toEqual([
-            expect.objectContaining({
-              name: "review",
-              harness: "codex",
-              aliases: [expect.objectContaining({ path: f.alias, via: "symlink" })],
-            }),
-          ]);
-          const result = yield* Effect.result(setLibraryEnabled(options));
-          expect(Result.isFailure(result) && result.failure._tag).toBe(
-            "InstalledSkillWouldDuplicate",
-          );
-          expect((yield* f.home.durable).enabled).toEqual(before.enabled);
-          expect(yield* f.fs.exists(f.destination)).toBe(false);
-          yield* setLibraryEnabled({ ...options, allowDuplicate: true });
-          expect(yield* f.fs.readFileString(join(f.destination, "SKILL.md"))).toBe(
-            yield* f.fs.readFileString(join(f.source, "SKILL.md")),
-          );
-          const policyChange = yield* setLibraryEnabled({
-            ...options,
-            invocation: { ...options.invocation, invocation: "explicit" as const },
-          });
-          expect(policyChange.value.duplicates).toBeUndefined();
-          expect((yield* f.home.durable).invocation_policies).toBeDefined();
-        }),
-      ),
-    );
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-);
-
-// Guided setup no longer asks about individual links; `--duplicates` overrides are covered in
-// setup-apply-reviewed-plan.test.ts.
-it.effect("guided setup preserves an individual link to the selected source without asking", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    const interaction = yield* makeScriptedInteraction([["review"], true]);
-    yield* f.home.owned(
-      writingTo(
-        f.home.home,
-        setupCommand({
-          options: f.options,
-          interactive: true,
-          dryRun: false,
-          manageOptions: { installOptions: f.home.installOptions },
-        }).pipe(Effect.provide(interaction.layer)),
-      ),
-    );
-    expect(yield* interaction.remaining).toBe(0);
-    const state = yield* f.home.durable;
-    expect(state.skills.map((skill) => skill.name)).toEqual(["review"]);
-    expect(state.enabled).toHaveLength(1);
-    expect(yield* f.fs.exists(f.source)).toBe(true);
-    expect(yield* f.fs.exists(f.destination)).toBe(true);
-    expect(yield* f.fs.exists(f.alias)).toBe(false);
-    const prompts = yield* interaction.prompts;
-    expect(prompts).toHaveLength(2);
-    expect(prompts[0].choices[0].selected).toBe(false);
-    const [operationId] = yield* recoveryList(f.home.home);
-    const recovery = yield* recoveryInspection(f.home.home, operationId);
-    expect(recovery.entries).toEqual([
-      expect.objectContaining({ path: f.alias, type: "SymbolicLink", status: "saved" }),
-    ]);
-    expect(yield* f.fs.readLink(recovery.entries[0].recoveryPath)).toBe(f.source);
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-);
-
-it.effect("setup consent becomes stale if the alias target changes", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    yield* f.home.owned(
-      Effect.gen(function* () {
-        const plan = yield* runSetup({ ...f.options, repositoryRoots: [], persistRoots: false });
-        yield* f.fs.remove(f.alias);
-        yield* f.fs.symlink("../../Work/skills/review", f.alias);
-        const result = yield* Effect.result(
-          revalidateSetupPlan(
-            { ...f.options, repositoryRoots: [], persistRoots: false },
-            plan.onboarding.planId,
-          ),
-        );
-        expect(Result.isFailure(result)).toBe(true);
-      }),
-    );
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-);
-
 it.effect(
   "observes symlinked roots, preserves aliases, and keeps repository/global checks separate",
   () =>
@@ -195,79 +84,6 @@ it.effect(
         linkPath: join(f.root, ".codex", "skills"),
       });
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-);
-
-it.effect("setup requires a duplicate decision before retaining any selected source", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    yield* initializeLibraryMachine(f.home.home);
-    yield* f.home.owned(
-      writingTo(
-        f.home.home,
-        Effect.gen(function* () {
-          const options = { ...f.options, repositoryRoots: [], persistRoots: false };
-          const scan = yield* runSetup(options);
-          const result = yield* Effect.result(
-            applySetupSelections(options, scan, f.home.installOptions, {
-              ownership: [{ name: "review", sourcePath: f.source }],
-            }),
-          );
-          expect(
-            Result.isFailure(result) &&
-              result.failure._tag === "SetupManageSelectionInvalid" &&
-              result.failure.reason,
-          ).toBe("duplicate-action-required");
-          expect((yield* f.home.snapshot)._tag).toBe("Absent");
-          expect(yield* f.fs.readLink(f.alias)).toBe(f.source);
-        }),
-      ),
-    );
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-);
-
-it.effect("a failed replacement keeps the original alias available", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    yield* initializeLibraryMachine(f.home.home);
-    yield* f.home.owned(
-      writingTo(
-        f.home.home,
-        Effect.gen(function* () {
-          const options = { ...f.options, repositoryRoots: [], persistRoots: false };
-          const scan = yield* runSetup(options);
-          const fs = FileSystem.FileSystem.of({
-            ...f.fs,
-            rename: (from, to) =>
-              to === f.destination
-                ? Effect.fail(
-                    systemError({
-                      _tag: "PermissionDenied",
-                      module: "FileSystem",
-                      method: "rename",
-                      pathOrDescriptor: to,
-                    }),
-                  )
-                : f.fs.rename(from, to),
-          });
-          const result = yield* Effect.result(
-            applySetupSelections(options, scan, f.home.installOptions, {
-              ownership: [
-                { name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" },
-              ],
-            }).pipe(
-              withLibraryOwner(f.home.inventory),
-              Effect.provideService(FileSystem.FileSystem, fs),
-            ),
-          );
-          expect(Result.isFailure(result) && result.failure._tag).toBe("SetupStopped");
-          expect((yield* f.home.durable).skills).toHaveLength(1);
-          expect(yield* f.fs.readLink(f.alias)).toBe(f.source);
-          expect(yield* f.fs.readFileString(join(f.alias, "SKILL.md"))).toContain("Review code.");
-          expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);
-        }),
-      ),
-    );
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("unreadable unrelated entries warn without dropping readable aliases", () =>
@@ -318,147 +134,6 @@ it.effect("does not traverse a repository linked into a skills directory", () =>
     yield* f.fs.copyFile(join(f.source, "SKILL.md"), join(nested, "SKILL.md"));
     yield* f.fs.symlink(repository, join(f.root, ".codex", "skills", "repository"));
     expect(yield* findDuplicates(f.home.inventory, { kind: "global" }, ["review"])).toEqual([]);
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-);
-
-it.effect("setup's alias allowance does not permit an unapproved copy", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    yield* initializeLibraryMachine(f.home.home);
-    const info = yield* (yield* LinkStat).identity.lstat(f.alias);
-    const other = join(f.root, ".codex", "skills", "other");
-    yield* f.fs.makeDirectory(other);
-    yield* f.fs.copyFile(join(f.source, "SKILL.md"), join(other, "SKILL.md"));
-    yield* f.home.owned(
-      writingTo(
-        f.home.home,
-        Effect.gen(function* () {
-          yield* importSource(f.source);
-          const result = yield* Effect.result(
-            setLibraryEnabled({
-              query: "review",
-              all: false,
-              invocation: {
-                scope: { kind: "global" },
-                enabled: true,
-                dryRun: false,
-              },
-              roots: f.home.inventory,
-              variantsPath: f.home.variantsPath,
-              allowedDuplicateSymlinks: [
-                {
-                  path: f.alias,
-                  canonicalPath: f.source,
-                  dev: info.dev,
-                  ino: info.ino,
-                  linkTarget: f.source,
-                },
-              ],
-            }),
-          );
-          expect(Result.isFailure(result) && result.failure._tag).toBe(
-            "InstalledSkillWouldDuplicate",
-          );
-          expect((yield* f.home.durable).enabled).toEqual([]);
-          expect(yield* f.fs.readLink(f.alias)).toBe(f.source);
-        }),
-      ),
-    );
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-);
-
-it.effect(
-  "preserves an alias with a blocked replacement and continues later setup selections",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      yield* initializeLibraryMachine(f.home.home);
-      yield* f.fs.makeDirectory(f.destination, { recursive: true });
-      yield* f.fs.writeFileString(
-        join(f.destination, "SKILL.md"),
-        "---\nname: foreign\ndescription: Another skill\n---\nForeign content.\n",
-      );
-      const later = join(f.root, "Work", "skills", "later");
-      const laterAlias = join(f.root, ".codex", "skills", "later");
-      yield* f.fs.makeDirectory(later);
-      yield* f.fs.writeFileString(
-        join(later, "SKILL.md"),
-        "---\nname: later\ndescription: Later skill\n---\nLater content.\n",
-      );
-      yield* f.fs.symlink(later, laterAlias);
-      yield* f.home.owned(
-        writingTo(
-          f.home.home,
-          Effect.gen(function* () {
-            const options = { ...f.options, repositoryRoots: [], persistRoots: false };
-            const scan = yield* runSetup(options);
-            const applied = yield* applySetupSelections(options, scan, f.home.installOptions, {
-              ownership: [
-                { name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" },
-                { name: "later", sourcePath: later, duplicateAction: "retire-aliases" },
-              ],
-            });
-            expect(applied.warnings).toEqual([
-              expect.objectContaining({
-                name: "review",
-                reason: expect.objectContaining({
-                  _tag: "ApplicationIncomplete",
-                  failure: expect.objectContaining({ _tag: "Library.DestinationsIncomplete" }),
-                }),
-              }),
-              expect.objectContaining({
-                name: "review",
-                reason: expect.objectContaining({ _tag: "ReplacementMissing" }),
-              }),
-            ]);
-            expect(yield* f.fs.readLink(f.alias)).toBe(f.source);
-            expect(yield* f.fs.exists(laterAlias)).toBe(false);
-            expect(
-              yield* f.fs.readFileString(join(f.root, ".agents", "skills", "later", "SKILL.md")),
-            ).toContain("Later content.");
-            expect((yield* f.home.durable).skills).toHaveLength(2);
-          }),
-        ),
-      );
-    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-);
-
-it.effect("guided setup preserves every selected individual link in one operation", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    const source = join(f.root, "Work", "skills", "later");
-    const alias = join(f.root, ".codex", "skills", "later");
-    yield* f.fs.makeDirectory(source, { recursive: true });
-    yield* f.fs.writeFileString(
-      join(source, "SKILL.md"),
-      "---\nname: later\ndescription: Later skill\n---\nLater.\n",
-    );
-    yield* f.fs.symlink(source, alias);
-    const interaction = yield* makeScriptedInteraction([["review", "later"], true]);
-    yield* f.home.owned(
-      writingTo(
-        f.home.home,
-        setupCommand({
-          options: f.options,
-          interactive: true,
-          dryRun: false,
-          manageOptions: { installOptions: f.home.installOptions },
-        }).pipe(Effect.provide(interaction.layer)),
-      ),
-    );
-    expect(yield* interaction.remaining).toBe(0);
-    const state = yield* f.home.durable;
-    expect(state.skills).toHaveLength(2);
-    expect(state.enabled).toHaveLength(2);
-    for (const path of [f.source, source])
-      expect(yield* f.fs.exists(join(path, "SKILL.md"))).toBe(true);
-    for (const path of [f.alias, alias]) expect(yield* f.fs.exists(path)).toBe(false);
-    for (const name of ["review", "later"])
-      expect(yield* f.fs.exists(join(f.root, ".agents", "skills", name, "SKILL.md"))).toBe(true);
-    const operations = yield* recoveryList(f.home.home);
-    expect(operations).toHaveLength(1);
-    const recovery = yield* recoveryInspection(f.home.home, operations[0]);
-    expect(recovery.entries.map((entry) => entry.path).sort()).toEqual([alias, f.alias].sort());
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -629,130 +304,499 @@ for (const operation of ["add", "bind"] as const) {
   );
 }
 
-it.effect("duplicate decisions apply only to copies that setup can enable", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    const scan = yield* f.home.owned(
-      runSetup({ ...f.options, repositoryRoots: [], persistRoots: false }),
-    );
-    const selection = { name: "review", sourcePath: f.source };
-    expect(copyConflict(scan, selection).kind).toBe("retirable");
-    for (const changed of [
-      { scope: "project" as const },
-      { harnesses: [] },
-      { git: { repository: f.root, status: "committed" as const } },
-    ]) {
-      const ineligible = {
-        ...scan,
-        instances: scan.instances.map((instance) =>
-          instance.path === f.source ? { ...instance, ...changed } : instance,
-        ),
-      };
-      expect(copyConflict(ineligible, selection).kind).toBe("none");
-    }
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-);
-
-it.effect("setup keeps retirement consent across its reconnect and add stages", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    const later = join(f.root, "Work", "skills", "later");
-    const laterAlias = join(f.root, ".codex", "skills", "later");
-    const addedAlias = join(f.root, ".codex", "skills", "later-alias");
-    yield* f.fs.makeDirectory(later, { recursive: true });
-    yield* f.fs.writeFileString(
-      join(later, "SKILL.md"),
-      "---\nname: later\ndescription: Later skill\n---\nLater.\n",
-    );
-    yield* f.fs.symlink(later, laterAlias);
-    yield* initializeLibraryMachine(f.home.home);
-    yield* f.home.owned(writingTo(f.home.home, importSource(f.source)));
-    const interaction = yield* makeScriptedInteraction([["review", "later"], true]);
-    const result = yield* f.home.owned(
-      writingTo(
-        f.home.home,
+describe("skit setup", () => {
+  describe("Finding and reviewing", () => {
+    describe("A changed setup must be reviewed again before it can change files.", () => {
+      it.effect("setup consent becomes stale if the alias target changes", () =>
         Effect.gen(function* () {
-          const renderer = yield* Renderer;
-          return yield* setupCommand({
-            options: f.options,
-            interactive: true,
-            dryRun: false,
-            manageOptions: { installOptions: f.home.installOptions },
-          }).pipe(
-            Effect.provideService(Renderer, {
-              ...renderer,
-              // Once setup has recorded its steps, before it runs them, another link appears.
-              withStatus: (message, operation) =>
-                renderer.withStatus(
-                  message,
-                  typeof message === "string" && message.startsWith("Applying setup")
-                    ? Effect.andThen(f.fs.symlink(later, addedAlias).pipe(Effect.orDie), operation)
-                    : operation,
+          const f = yield* fixture();
+          yield* f.home.owned(
+            Effect.gen(function* () {
+              const plan = yield* runSetup({
+                ...f.options,
+                repositoryRoots: [],
+                persistRoots: false,
+              });
+              yield* f.fs.remove(f.alias);
+              yield* f.fs.symlink("../../Work/skills/review", f.alias);
+              const result = yield* Effect.result(
+                revalidateSetupPlan(
+                  { ...f.options, repositoryRoots: [], persistRoots: false },
+                  plan.onboarding.planId,
                 ),
+              );
+              expect(Result.isFailure(result)).toBe(true);
             }),
-            Effect.result,
           );
-        }).pipe(Effect.provide(interaction.layer)),
-      ),
-    );
-    expect(Result.isFailure(result) && result.failure._tag).toBe("SetupStopped");
-    // The earlier approved reconnect succeeded; the newly observed link does not authorize the
-    // add, which stops after retaining its copy's files and before installing anything.
-    expect((yield* f.home.durable).skills.map((skill) => skill.name)).toEqual(["review", "later"]);
-    expect(yield* f.fs.exists(f.alias)).toBe(false);
-    expect(yield* f.fs.exists(f.destination)).toBe(true);
-    expect(yield* f.fs.readLink(laterAlias)).toBe(later);
-    expect(yield* f.fs.readLink(addedAlias)).toBe(later);
-    expect(yield* f.fs.exists(join(f.root, ".agents", "skills", "later"))).toBe(false);
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-);
-
-it.effect.each(["source", "alias"] as const)(
-  "managing stops when a %s changes after the steps are recorded, before installing or moving anything",
-  (changed) =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      yield* initializeLibraryMachine(f.home.home);
-      yield* f.home.owned(
-        Effect.gen(function* () {
-          const scan = yield* runSetup({
-            ...f.options,
-            repositoryRoots: [],
-            persistRoots: false,
-          });
-          const setup = { ...f.options, repositoryRoots: [], persistRoots: false };
-          expect(yield* f.fs.exists(join(f.home.home, "state.json"))).toBe(false);
-          expect(yield* f.fs.exists(f.destination)).toBe(false);
-          const change =
-            changed === "source"
-              ? f.fs.writeFileString(
-                  join(f.source, "SKILL.md"),
-                  "---\nname: review\ndescription: Changed\n---\nChanged after preparation.\n",
-                )
-              : // Keep the old inode alive, then replace the alias with the same target and a new identity.
-                Effect.andThen(
-                  f.fs.rename(f.alias, join(f.root, "displaced-alias")),
-                  f.fs.symlink(f.source, f.alias),
-                );
-          const result = yield* applySetupSelections(
-            setup,
-            scan,
-            f.home.installOptions,
-            {
-              ownership: [
-                { name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" },
-              ],
-            },
-            change,
-          ).pipe(Effect.result);
-          // The Library recorded the steps, then stopped at the copy that no longer matches them.
-          expect(result._tag === "Failure" && result.failure._tag).toBe("SetupStopped");
-          // Root preparation validates every reviewed entry before any retention or installation.
-          expect(yield* f.fs.exists(join(f.home.home, "originals"))).toBe(false);
-          expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);
-          expect(yield* f.fs.exists(f.destination)).toBe(false);
-          expect(yield* f.fs.readLink(f.alias)).toBe(f.source);
-        }),
+        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
       );
-    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-);
+
+      it.effect.each(["source", "alias"] as const)(
+        "managing stops when a %s changes after the steps are recorded, before installing or moving anything",
+        (changed) =>
+          Effect.gen(function* () {
+            const f = yield* fixture();
+            yield* initializeLibraryMachine(f.home.home);
+            yield* f.home.owned(
+              Effect.gen(function* () {
+                const scan = yield* runSetup({
+                  ...f.options,
+                  repositoryRoots: [],
+                  persistRoots: false,
+                });
+                const setup = { ...f.options, repositoryRoots: [], persistRoots: false };
+                expect(yield* f.fs.exists(join(f.home.home, "state.json"))).toBe(false);
+                expect(yield* f.fs.exists(f.destination)).toBe(false);
+                const change =
+                  changed === "source"
+                    ? f.fs.writeFileString(
+                        join(f.source, "SKILL.md"),
+                        "---\nname: review\ndescription: Changed\n---\nChanged after preparation.\n",
+                      )
+                    : // Keep the old inode alive, then replace the alias with the same target and a new identity.
+                      Effect.andThen(
+                        f.fs.rename(f.alias, join(f.root, "displaced-alias")),
+                        f.fs.symlink(f.source, f.alias),
+                      );
+                const result = yield* applySetupSelections(
+                  setup,
+                  scan,
+                  f.home.installOptions,
+                  {
+                    ownership: [
+                      { name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" },
+                    ],
+                  },
+                  change,
+                ).pipe(Effect.result);
+                // The Library recorded the steps, then stopped at the copy that no longer matches them.
+                expect(result._tag === "Failure" && result.failure._tag).toBe("SetupStopped");
+                // Root preparation validates every reviewed entry before any retention or installation.
+                expect(yield* f.fs.exists(join(f.home.home, "originals"))).toBe(false);
+                expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);
+                expect(yield* f.fs.exists(f.destination)).toBe(false);
+                expect(yield* f.fs.readLink(f.alias)).toBe(f.source);
+              }),
+            );
+          }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+      );
+    });
+  });
+});
+
+describe("skit setup", () => {
+  describe("Managing selected copies", () => {
+    describe("Setup manages only the copies selected for it.", () => {
+      // Guided setup no longer asks about individual links; `--duplicates` overrides are covered in
+      // setup-apply-reviewed-plan.test.ts.
+      it.effect(
+        "guided setup preserves an individual link to the selected source without asking",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* fixture();
+            const interaction = yield* makeScriptedInteraction([["review"], true]);
+            yield* f.home.owned(
+              writingTo(
+                f.home.home,
+                setupCommand({
+                  options: f.options,
+                  interactive: true,
+                  dryRun: false,
+                  manageOptions: { installOptions: f.home.installOptions },
+                }).pipe(Effect.provide(interaction.layer)),
+              ),
+            );
+            expect(yield* interaction.remaining).toBe(0);
+            const state = yield* f.home.durable;
+            expect(state.skills.map((skill) => skill.name)).toEqual(["review"]);
+            expect(state.enabled).toHaveLength(1);
+            expect(yield* f.fs.exists(f.source)).toBe(true);
+            expect(yield* f.fs.exists(f.destination)).toBe(true);
+            expect(yield* f.fs.exists(f.alias)).toBe(false);
+            const prompts = yield* interaction.prompts;
+            expect(prompts).toHaveLength(2);
+            expect(prompts[0].choices[0].selected).toBe(false);
+            const [operationId] = yield* recoveryList(f.home.home);
+            const recovery = yield* recoveryInspection(f.home.home, operationId);
+            expect(recovery.entries).toEqual([
+              expect.objectContaining({ path: f.alias, type: "SymbolicLink", status: "saved" }),
+            ]);
+            expect(yield* f.fs.readLink(recovery.entries[0].recoveryPath)).toBe(f.source);
+          }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+      );
+
+      it.effect("setup requires a duplicate decision before retaining any selected source", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture();
+          yield* initializeLibraryMachine(f.home.home);
+          yield* f.home.owned(
+            writingTo(
+              f.home.home,
+              Effect.gen(function* () {
+                const options = { ...f.options, repositoryRoots: [], persistRoots: false };
+                const scan = yield* runSetup(options);
+                const result = yield* Effect.result(
+                  applySetupSelections(options, scan, f.home.installOptions, {
+                    ownership: [{ name: "review", sourcePath: f.source }],
+                  }),
+                );
+                expect(
+                  Result.isFailure(result) &&
+                    result.failure._tag === "SetupManageSelectionInvalid" &&
+                    result.failure.reason,
+                ).toBe("duplicate-action-required");
+                expect((yield* f.home.snapshot)._tag).toBe("Absent");
+                expect(yield* f.fs.readLink(f.alias)).toBe(f.source);
+              }),
+            ),
+          );
+        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+      );
+
+      it.effect("a failed replacement keeps the original alias available", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture();
+          yield* initializeLibraryMachine(f.home.home);
+          yield* f.home.owned(
+            writingTo(
+              f.home.home,
+              Effect.gen(function* () {
+                const options = { ...f.options, repositoryRoots: [], persistRoots: false };
+                const scan = yield* runSetup(options);
+                const fs = FileSystem.FileSystem.of({
+                  ...f.fs,
+                  rename: (from, to) =>
+                    to === f.destination
+                      ? Effect.fail(
+                          systemError({
+                            _tag: "PermissionDenied",
+                            module: "FileSystem",
+                            method: "rename",
+                            pathOrDescriptor: to,
+                          }),
+                        )
+                      : f.fs.rename(from, to),
+                });
+                const result = yield* Effect.result(
+                  applySetupSelections(options, scan, f.home.installOptions, {
+                    ownership: [
+                      { name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" },
+                    ],
+                  }).pipe(
+                    withLibraryOwner(f.home.inventory),
+                    Effect.provideService(FileSystem.FileSystem, fs),
+                  ),
+                );
+                expect(Result.isFailure(result) && result.failure._tag).toBe("SetupStopped");
+                expect((yield* f.home.durable).skills).toHaveLength(1);
+                expect(yield* f.fs.readLink(f.alias)).toBe(f.source);
+                expect(yield* f.fs.readFileString(join(f.alias, "SKILL.md"))).toContain(
+                  "Review code.",
+                );
+                expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);
+              }),
+            ),
+          );
+        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+      );
+
+      it.effect("setup's alias allowance does not permit an unapproved copy", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture();
+          yield* initializeLibraryMachine(f.home.home);
+          const info = yield* (yield* LinkStat).identity.lstat(f.alias);
+          const other = join(f.root, ".codex", "skills", "other");
+          yield* f.fs.makeDirectory(other);
+          yield* f.fs.copyFile(join(f.source, "SKILL.md"), join(other, "SKILL.md"));
+          yield* f.home.owned(
+            writingTo(
+              f.home.home,
+              Effect.gen(function* () {
+                yield* importSource(f.source);
+                const result = yield* Effect.result(
+                  setLibraryEnabled({
+                    query: "review",
+                    all: false,
+                    invocation: {
+                      scope: { kind: "global" },
+                      enabled: true,
+                      dryRun: false,
+                    },
+                    roots: f.home.inventory,
+                    variantsPath: f.home.variantsPath,
+                    allowedDuplicateSymlinks: [
+                      {
+                        path: f.alias,
+                        canonicalPath: f.source,
+                        dev: info.dev,
+                        ino: info.ino,
+                        linkTarget: f.source,
+                      },
+                    ],
+                  }),
+                );
+                expect(Result.isFailure(result) && result.failure._tag).toBe(
+                  "InstalledSkillWouldDuplicate",
+                );
+                expect((yield* f.home.durable).enabled).toEqual([]);
+                expect(yield* f.fs.readLink(f.alias)).toBe(f.source);
+              }),
+            ),
+          );
+        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+      );
+
+      it.effect(
+        "preserves an alias with a blocked replacement and continues later setup selections",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* fixture();
+            yield* initializeLibraryMachine(f.home.home);
+            yield* f.fs.makeDirectory(f.destination, { recursive: true });
+            yield* f.fs.writeFileString(
+              join(f.destination, "SKILL.md"),
+              "---\nname: foreign\ndescription: Another skill\n---\nForeign content.\n",
+            );
+            const later = join(f.root, "Work", "skills", "later");
+            const laterAlias = join(f.root, ".codex", "skills", "later");
+            yield* f.fs.makeDirectory(later);
+            yield* f.fs.writeFileString(
+              join(later, "SKILL.md"),
+              "---\nname: later\ndescription: Later skill\n---\nLater content.\n",
+            );
+            yield* f.fs.symlink(later, laterAlias);
+            yield* f.home.owned(
+              writingTo(
+                f.home.home,
+                Effect.gen(function* () {
+                  const options = { ...f.options, repositoryRoots: [], persistRoots: false };
+                  const scan = yield* runSetup(options);
+                  const applied = yield* applySetupSelections(
+                    options,
+                    scan,
+                    f.home.installOptions,
+                    {
+                      ownership: [
+                        { name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" },
+                        { name: "later", sourcePath: later, duplicateAction: "retire-aliases" },
+                      ],
+                    },
+                  );
+                  expect(applied.warnings).toEqual([
+                    expect.objectContaining({
+                      name: "review",
+                      reason: expect.objectContaining({
+                        _tag: "ApplicationIncomplete",
+                        failure: expect.objectContaining({
+                          _tag: "Library.DestinationsIncomplete",
+                        }),
+                      }),
+                    }),
+                    expect.objectContaining({
+                      name: "review",
+                      reason: expect.objectContaining({ _tag: "ReplacementMissing" }),
+                    }),
+                  ]);
+                  expect(yield* f.fs.readLink(f.alias)).toBe(f.source);
+                  expect(yield* f.fs.exists(laterAlias)).toBe(false);
+                  expect(
+                    yield* f.fs.readFileString(
+                      join(f.root, ".agents", "skills", "later", "SKILL.md"),
+                    ),
+                  ).toContain("Later content.");
+                  expect((yield* f.home.durable).skills).toHaveLength(2);
+                }),
+              ),
+            );
+          }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+      );
+
+      it.effect("guided setup preserves every selected individual link in one operation", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture();
+          const source = join(f.root, "Work", "skills", "later");
+          const alias = join(f.root, ".codex", "skills", "later");
+          yield* f.fs.makeDirectory(source, { recursive: true });
+          yield* f.fs.writeFileString(
+            join(source, "SKILL.md"),
+            "---\nname: later\ndescription: Later skill\n---\nLater.\n",
+          );
+          yield* f.fs.symlink(source, alias);
+          const interaction = yield* makeScriptedInteraction([["review", "later"], true]);
+          yield* f.home.owned(
+            writingTo(
+              f.home.home,
+              setupCommand({
+                options: f.options,
+                interactive: true,
+                dryRun: false,
+                manageOptions: { installOptions: f.home.installOptions },
+              }).pipe(Effect.provide(interaction.layer)),
+            ),
+          );
+          expect(yield* interaction.remaining).toBe(0);
+          const state = yield* f.home.durable;
+          expect(state.skills).toHaveLength(2);
+          expect(state.enabled).toHaveLength(2);
+          for (const path of [f.source, source])
+            expect(yield* f.fs.exists(join(path, "SKILL.md"))).toBe(true);
+          for (const path of [f.alias, alias]) expect(yield* f.fs.exists(path)).toBe(false);
+          for (const name of ["review", "later"])
+            expect(yield* f.fs.exists(join(f.root, ".agents", "skills", name, "SKILL.md"))).toBe(
+              true,
+            );
+          const operations = yield* recoveryList(f.home.home);
+          expect(operations).toHaveLength(1);
+          const recovery = yield* recoveryInspection(f.home.home, operations[0]);
+          expect(recovery.entries.map((entry) => entry.path).sort()).toEqual(
+            [alias, f.alias].sort(),
+          );
+        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+      );
+
+      it.effect("duplicate decisions apply only to copies that setup can enable", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture();
+          const scan = yield* f.home.owned(
+            runSetup({ ...f.options, repositoryRoots: [], persistRoots: false }),
+          );
+          const selection = { name: "review", sourcePath: f.source };
+          expect(copyConflict(scan, selection).kind).toBe("retirable");
+          for (const changed of [
+            { scope: "project" as const },
+            { harnesses: [] },
+            { git: { repository: f.root, status: "committed" as const } },
+          ]) {
+            const ineligible = {
+              ...scan,
+              instances: scan.instances.map((instance) =>
+                instance.path === f.source ? { ...instance, ...changed } : instance,
+              ),
+            };
+            expect(copyConflict(ineligible, selection).kind).toBe("none");
+          }
+        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+      );
+
+      it.effect("setup keeps retirement consent across its reconnect and add stages", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture();
+          const later = join(f.root, "Work", "skills", "later");
+          const laterAlias = join(f.root, ".codex", "skills", "later");
+          const addedAlias = join(f.root, ".codex", "skills", "later-alias");
+          yield* f.fs.makeDirectory(later, { recursive: true });
+          yield* f.fs.writeFileString(
+            join(later, "SKILL.md"),
+            "---\nname: later\ndescription: Later skill\n---\nLater.\n",
+          );
+          yield* f.fs.symlink(later, laterAlias);
+          yield* initializeLibraryMachine(f.home.home);
+          yield* f.home.owned(writingTo(f.home.home, importSource(f.source)));
+          const interaction = yield* makeScriptedInteraction([["review", "later"], true]);
+          const result = yield* f.home.owned(
+            writingTo(
+              f.home.home,
+              Effect.gen(function* () {
+                const renderer = yield* Renderer;
+                return yield* setupCommand({
+                  options: f.options,
+                  interactive: true,
+                  dryRun: false,
+                  manageOptions: { installOptions: f.home.installOptions },
+                }).pipe(
+                  Effect.provideService(Renderer, {
+                    ...renderer,
+                    // Once setup has recorded its steps, before it runs them, another link appears.
+                    withStatus: (message, operation) =>
+                      renderer.withStatus(
+                        message,
+                        typeof message === "string" && message.startsWith("Applying setup")
+                          ? Effect.andThen(
+                              f.fs.symlink(later, addedAlias).pipe(Effect.orDie),
+                              operation,
+                            )
+                          : operation,
+                      ),
+                  }),
+                  Effect.result,
+                );
+              }).pipe(Effect.provide(interaction.layer)),
+            ),
+          );
+          expect(Result.isFailure(result) && result.failure._tag).toBe("SetupStopped");
+          // The earlier approved reconnect succeeded; the newly observed link does not authorize the
+          // add, which stops after retaining its copy's files and before installing anything.
+          expect((yield* f.home.durable).skills.map((skill) => skill.name)).toEqual([
+            "review",
+            "later",
+          ]);
+          expect(yield* f.fs.exists(f.alias)).toBe(false);
+          expect(yield* f.fs.exists(f.destination)).toBe(true);
+          expect(yield* f.fs.readLink(laterAlias)).toBe(later);
+          expect(yield* f.fs.readLink(addedAlias)).toBe(later);
+          expect(yield* f.fs.exists(join(f.root, ".agents", "skills", "later"))).toBe(false);
+        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+      );
+    });
+  });
+});
+
+describe("skit enable", () => {
+  describe("Enable refuses an unapproved copy at an installation destination.", () => {
+    it.effect("enable refuses the extra copy before saving intent, and dry-run explains why", () =>
+      Effect.gen(function* () {
+        const f = yield* fixture();
+        yield* initializeLibraryMachine(f.home.home);
+        yield* f.home.owned(
+          writingTo(
+            f.home.home,
+            Effect.gen(function* () {
+              const imported = yield* importSource(f.source);
+              const before = yield* f.home.durable;
+              if (imported.collection_id === undefined)
+                return yield* Effect.die("Expected a retained collection");
+              const options = {
+                query: imported.collection_id,
+                all: false,
+                invocation: {
+                  scope: { kind: "global" as const },
+                  enabled: true,
+                  dryRun: false,
+                },
+                roots: f.home.inventory,
+                variantsPath: f.home.variantsPath,
+              };
+              const preview = yield* setLibraryEnabled({
+                ...options,
+                invocation: { ...options.invocation, dryRun: true },
+              });
+              expect(preview.value.duplicates).toEqual([
+                expect.objectContaining({
+                  name: "review",
+                  harness: "codex",
+                  aliases: [expect.objectContaining({ path: f.alias, via: "symlink" })],
+                }),
+              ]);
+              const result = yield* Effect.result(setLibraryEnabled(options));
+              expect(Result.isFailure(result) && result.failure._tag).toBe(
+                "InstalledSkillWouldDuplicate",
+              );
+              expect((yield* f.home.durable).enabled).toEqual(before.enabled);
+              expect(yield* f.fs.exists(f.destination)).toBe(false);
+              yield* setLibraryEnabled({ ...options, allowDuplicate: true });
+              expect(yield* f.fs.readFileString(join(f.destination, "SKILL.md"))).toBe(
+                yield* f.fs.readFileString(join(f.source, "SKILL.md")),
+              );
+              const policyChange = yield* setLibraryEnabled({
+                ...options,
+                invocation: { ...options.invocation, invocation: "explicit" as const },
+              });
+              expect(policyChange.value.duplicates).toBeUndefined();
+              expect((yield* f.home.durable).invocation_policies).toBeDefined();
+            }),
+          ),
+        );
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+    );
+  });
+});

@@ -16,8 +16,22 @@ export type StoryState =
 
 /** One rendered screen; seeking and playback never rerun a command. */
 export interface ReplayFrame {
+  /** Original interaction metadata for replay navigation; terminal rendering is separate. */
+  readonly event?:
+    | "Command"
+    | "StatusStarted"
+    | "StatusUpdated"
+    | "StatusEnded"
+    | "Note"
+    | "Instruction"
+    | "Step"
+    | "PromptShown"
+    | "PromptAnswered"
+    | "Result"
+    | "Failure"
+    | "Help";
+  readonly command?: string;
   readonly label: string;
-  readonly rule?: string;
   readonly output: string;
   readonly status?: string;
   readonly prompt?: string;
@@ -121,7 +135,6 @@ export interface CommandCoverage {
   /** The command as typed after `skit`, such as `author sync`. */
   readonly command: string;
   readonly interactive: boolean;
-  readonly rules?: readonly string[];
   readonly scenarios?: readonly {
     readonly name: string;
     readonly description: string;

@@ -1,3 +1,5 @@
+import { prepareLibraryDifference } from "../../store/difference.js";
+import { libraryStatePath } from "../../store/library-store.js";
 import { Revision, snapshotOf, type Snapshot } from "../../snapshot.js";
 import { Effect, Option, Schema, type SchemaIssue } from "effect";
 import { isPlatformError } from "effect/PlatformError";
@@ -19,21 +21,22 @@ import {
 } from "../../library-contracts.js";
 import {
   LibraryState,
+  decodeLibraryState,
   emptyLibraryState,
   libraryManifestFromLocalState,
 } from "../../library-state.js";
-import { SyncAncestry } from "../../store/state-schema.js";
+import {
+  SyncAncestry,
+  StepRouting,
+  SyncFolder,
+  SetupStopReason,
+  type SyncProgram,
+} from "../../store/state-schema.js";
 import { DeviceSkillSelection } from "../../device-state.js";
 import { makeOperationId, OperationId, CollectionVersionId } from "../../entity-ids.js";
 
 import { applyReviewed } from "../../reviewed-plan.js";
-import {
-  StepRouting,
-  SyncFolder,
-  SyncPublication,
-  SetupStopReason,
-  type SyncProgram,
-} from "../../store/state-schema.js";
+
 import { setupOperation } from "../setup/run.js";
 import { planIntent } from "../../plan-changes.js";
 import { prepareDeviceInstallation, withDeviceSkillSelection } from "../../enabled.js";
@@ -53,7 +56,6 @@ import { SyncConflictDetail, SyncConflicted } from "./conflict.js";
 import { SyncEnablementIssue, SyncIssue } from "../../sync-issues.js";
 import { stepError } from "../../store/step-error.js";
 import { DuplicateScanIncomplete } from "../../installed-skill-facts.js";
-import { syncPublication } from "./operation.js";
 
 const Staged = Schema.Struct({
   manifestDigest: Hash,
@@ -63,9 +65,11 @@ const Staged = Schema.Struct({
   state: Schema.Unknown.pipe(Schema.refine(Schema.is(LibraryState))),
 });
 export const SyncIntent = Schema.TaggedStruct("Sync", {
+  saveLocal: Schema.optionalKey(Schema.Boolean),
   deviceSelection: Schema.OptionFromOptionalKey(DeviceSkillSelection),
   pendingOrigin: Schema.OptionFromOptionalKey(Schema.String),
   acceptedBase: Schema.OptionFromOptionalKey(SyncAncestry),
+  mergedBase: Schema.optionalKey(SyncAncestry),
   remote: Schema.OptionFromOptionalKey(
     Schema.Struct({
       origin: Schema.String,
@@ -91,7 +95,7 @@ const syncPlan = Schema.TaggedStruct("Sync", {
   home: Schema.String,
   routing: StepRouting,
   folders: Schema.Array(SyncFolder),
-  next: SyncPublication,
+  next: Schema.Unknown.pipe(Schema.refine(Schema.is(LibraryState))),
   installationIssues: Schema.Array(SyncIssue),
   change: Schema.Struct({
     device: Schema.Unknown.pipe(Schema.refine(Schema.is(LibraryState))),
@@ -163,6 +167,7 @@ class SyncStopped extends Schema.TaggedError<SyncStopped, { readonly brand: uniq
 const digest = (value: unknown) => sha256Hash(new TextEncoder().encode(canonicalJson(value)));
 const normalized = (manifest: LibraryManifest) => normalizeLibraryManifest(manifest);
 const same = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
+
 const emptyManifest = currentLibraryManifest({
   collections: [],
   skills: [],
@@ -225,7 +230,7 @@ export const planSync = Effect.fn("Library.planSync")(function* (
       Effect.mapError(
         (issue) =>
           new InvalidLibraryState({
-            path: `${home}/state.json`,
+            path: libraryStatePath(home),
             reason: { _tag: "SchemaInvalid", failure: new Schema.SchemaError(issue) },
           }),
       ),
@@ -240,6 +245,14 @@ export const planSync = Effect.fn("Library.planSync")(function* (
     return yield* new StalePlan({ reason: { _tag: "SyncChanged", part: "base" } });
   const prior = Option.getOrUndefined(intent.acceptedBase);
   const remote = Option.getOrUndefined(intent.remote);
+  if (
+    intent.mergedBase !== undefined &&
+    (!intent.saveLocal ||
+      remote === undefined ||
+      intent.mergedBase.origin !== remote.origin ||
+      intent.mergedBase.library_id !== Option.getOrUndefined(remote.libraryId))
+  )
+    return yield* new InvalidIntent({ intent: "Sync" });
   const alignmentBase =
     prior !== undefined &&
     remote !== undefined &&
@@ -248,7 +261,7 @@ export const planSync = Effect.fn("Library.planSync")(function* (
       ? prior.base_manifest
       : emptyManifest;
   const aliases = alignLibrary(local, manifest, alignmentBase);
-  const aligned = yield* LibraryState.makeEffect(aliasDevice(state, aliases)).pipe(
+  const aligned = yield* decodeLibraryState(aliasDevice(state, aliases)).pipe(
     Effect.mapError(() => new InvalidIntent({ intent: "Sync" })),
   );
   const device = withDeviceSkillSelection(
@@ -352,7 +365,7 @@ export const planSync = Effect.fn("Library.planSync")(function* (
     home,
     routing,
     folders,
-    next: syncPublication(next),
+    next,
     installationIssues: issues,
     change: {
       device,
@@ -366,14 +379,16 @@ export const planSync = Effect.fn("Library.planSync")(function* (
       collisions: conflicts,
       clean: same(normalized(local), manifest),
       acceptedBase: intent.acceptedBase,
-      remote: Option.match(intent.remote, {
-        onNone: () => ({ _tag: "None" as const }),
-        onSome: (remote) => ({
-          _tag: "Expected" as const,
-          ...remote,
-          manifestDigest: intent.staged.manifestDigest,
-        }),
-      }),
+      remote: intent.saveLocal
+        ? { _tag: "None" as const }
+        : Option.match(intent.remote, {
+            onNone: () => ({ _tag: "None" as const }),
+            onSome: (remote) => ({
+              _tag: "Expected" as const,
+              ...remote,
+              manifestDigest: intent.staged.manifestDigest,
+            }),
+          }),
       staged: intent.staged,
     },
   };
@@ -393,7 +408,7 @@ export const planSync = Effect.fn("Library.planSync")(function* (
   return yield* reviewed.pipe(Effect.mapError(() => new InvalidIntent({ intent: "Sync" })));
 });
 
-/** Verify the receipt and exact review before recording a replayable local program. */
+/** Verify the exact review and any remote receipt before recording a replayable local program. */
 export const applySync = Effect.fn("Library.applySync")(function* (
   home: string,
   request: SyncApplyRequest,
@@ -404,7 +419,7 @@ export const applySync = Effect.fn("Library.applySync")(function* (
     return yield* new StalePlan({
       reason: { _tag: "SyncPlanInvalid", reason: "library-mismatch" },
     });
-  let ancestry = Option.getOrUndefined(approved.intent.acceptedBase);
+  let ancestry = approved.intent.mergedBase ?? Option.getOrUndefined(approved.intent.acceptedBase);
   if (approved.change.remote._tag === "Expected") {
     if (request._tag !== "ApplySynced")
       return yield* new StalePlan({
@@ -456,7 +471,7 @@ export const applySync = Effect.fn("Library.applySync")(function* (
           same(current.device_skill_selection ?? null, fresh.next.device_skill_selection ?? null);
         const next = {
           ...(keepCurrent
-            ? { ...syncPublication(current), installed_skills: fresh.next.installed_skills }
+            ? { ...current, installed_skills: fresh.next.installed_skills }
             : fresh.next),
           ...(ancestry === undefined ? {} : { sync_ancestry: ancestry }),
         };
@@ -468,7 +483,7 @@ export const applySync = Effect.fn("Library.applySync")(function* (
               home,
               base: snapshotOf({
                 present: true,
-                state: { ...next, operations: current.operations },
+                state: next,
               }),
             },
           ).pipe(Effect.provideService(InstalledSkills.Service, files)),
@@ -479,12 +494,12 @@ export const applySync = Effect.fn("Library.applySync")(function* (
             (change) => change._tag !== "Unchanged" && change._tag !== "Protected",
           );
         const sameMetadata = same(
-          { ...syncPublication(current), installed_skills: [] },
+          { ...current, installed_skills: [] },
           { ...next, installed_skills: [] },
         );
         const preview = Option.getOrUndefined(fresh.change.installedSkills);
         const retirement = (preview?.retire.length ?? 0) > 0 || (preview?.remove.length ?? 0) > 0;
-        if (sameMetadata && !work && !retirement)
+        if (base._tag === "Present" && sameMetadata && !work && !retirement)
           return {
             _tag: "Sync" as const,
             result: {
@@ -495,16 +510,15 @@ export const applySync = Effect.fn("Library.applySync")(function* (
             },
           } satisfies SyncOutcome;
         const program: SyncProgram = {
-          before: syncPublication(current),
-          after: next,
+          save: "before",
+          difference: yield* prepareLibraryDifference(current, next, libraryStatePath(home)),
           routing: fresh.routing,
           retire: current.installed_skills.filter((copy) =>
             preview?.retire.includes(copy.installed_skill_id),
           ),
           drop: preview?.remove ?? [],
           manifestDigest: fresh.intent.staged.manifestDigest,
-          receipt:
-            request._tag === "ApplySynced" ? Option.some(request.receipt.ancestry) : Option.none(),
+          receiptAccepted: request._tag === "ApplySynced",
           folders: fresh.folders,
           issues: fresh.installationIssues,
         };
@@ -514,7 +528,7 @@ export const applySync = Effect.fn("Library.applySync")(function* (
             { _tag: "Sync", phase: "publish", sourceStep: 0 },
             { _tag: "Sync", phase: "install", sourceStep: 0 },
           ],
-          { base, operationId: fresh.operationId, replaceDone: false },
+          { base, operationId: fresh.operationId, kind: "sync" },
         );
         if (result._tag === "Stopped") {
           if (result.reason._tag === "StepFailed") {

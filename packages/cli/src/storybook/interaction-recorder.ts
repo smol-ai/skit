@@ -1,6 +1,5 @@
 import type { PromptKind } from "./contracts.js";
 import { Context, Data, Effect, Layer, Ref } from "effect";
-import { RuleFailed, type CheckRule } from "./rules.js";
 import type { CommandFailure, CommandResult } from "../commands/types.js";
 import {
   Prompter,
@@ -22,7 +21,6 @@ export type ScriptedAnswer =
 export type InteractionEvent = Data.TaggedEnum<{
   /** The command line a person would type to run what follows. */
   Command: { readonly line: string };
-  RuleProven: { readonly rule: string };
   PromptShown: {
     readonly kind: PromptKind;
     readonly message: string;
@@ -59,7 +57,6 @@ export type TypeCommand = (line: string) => Effect.Effect<void>;
 interface ScriptedInteraction {
   readonly layer: Layer.Layer<Prompter | Renderer>;
   readonly typed: TypeCommand;
-  readonly checkRule: CheckRule;
   readonly events: Effect.Effect<ReadonlyArray<InteractionEvent>>;
   readonly remaining: Effect.Effect<number>;
   readonly prompts: Effect.Effect<
@@ -233,10 +230,6 @@ export const makeScriptedInteraction = Effect.fn("InteractionRecorder.make")(fun
         Context.add(Renderer, Renderer.of(renderer)),
       ),
     ),
-    checkRule: (rule, satisfied, observed) =>
-      satisfied
-        ? record(InteractionEvent.RuleProven({ rule }))
-        : Effect.fail(new RuleFailed({ rule, observed })),
     typed: (line) => record(InteractionEvent.Command({ line })),
     events: Ref.get(events),
     remaining: Ref.get(answers).pipe(Effect.map((current) => current.length)),

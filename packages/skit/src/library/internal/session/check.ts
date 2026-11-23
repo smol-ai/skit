@@ -3,7 +3,8 @@ import { dirname } from "node:path";
 import { currentSkillVersion, type SkitSource } from "../../library-contracts.js";
 import type { LibraryState } from "../../library-state.js";
 import type { Hash } from "../../../shared/hash.js";
-import { originalTreeHash, collectionVersionPath } from "../../collection-version.js";
+import { originalTreeHash } from "../../collection-version.js";
+import { readCollectionVersion } from "../content/read-collection-version.js";
 import {
   latestSourceImport,
   resolveOwningLibrarySubjects,
@@ -60,7 +61,7 @@ export const checkLibrarySubjects = Effect.fn("Library.checkSubjects")(function*
           collection_version_id: copy.collection_version_id,
           hash: copy.hash,
           original_intact:
-            (yield* originalTreeHash(collectionVersionPath(originalsPath, copy.hash))) ===
+            (yield* originalTreeHash(yield* readCollectionVersion(originalsPath, copy.hash))) ===
             copy.hash,
         });
       }
@@ -96,4 +97,4 @@ export const checkLibrarySubjects = Effect.fn("Library.checkSubjects")(function*
       };
     }),
   );
-});
+}, Effect.scoped);

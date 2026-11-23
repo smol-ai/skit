@@ -1,3 +1,4 @@
+import { LibraryInvariantFailed } from "@smolai/skit-core/library";
 import { AuthorWorkspaceInvariantFailed } from "@smolai/skit-core/author/workspace-contracts";
 import { ArchiveStreamInvalid } from "@smolai/skit-core/universal/consumer";
 import { BootstrapFailure } from "../registry/bootstrap-failures.js";
@@ -142,6 +143,7 @@ const FailureFacts: Schema.Codec<unknown, unknown> = Schema.suspend(() =>
     LibraryDataFailure,
     SetupStoppedOutput,
     AuthorWorkspaceInvariantFailed,
+    LibraryInvariantFailed,
     ArchiveStreamInvalid,
     Schema.Defect(),
   ]).pipe(Schema.decodeTo(Schema.Unknown)),

@@ -2,7 +2,10 @@
 
 ## Status
 
-Accepted; bootstrap policy amended 2026-11-06.
+Accepted. Bootstrap policy was amended on 2026-11-06. The Library and its sync ancestry
+now live in the same SQLite database. The atomicity requirement below applies to their
+shared transaction. See [ADR 0020](0020-treat-projections-as-reconcilable-derived-state.md#amendment-library-database-2026-11-14)
+for the current storage and restore procedure.
 
 ## Context
 

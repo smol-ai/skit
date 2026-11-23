@@ -12,14 +12,20 @@ import type { Enabled } from "./library-contracts.js";
 const enabledKind = (item: Enabled) => ("collection" in item ? "collection" : "skill");
 const enabledId = (item: Enabled) => ("collection" in item ? item.collection : item.skill);
 
-export function normalizeLibraryManifest(manifest: LibraryManifest): LibraryManifest {
-  return currentLibraryManifest({
+type Catalogue = Pick<
+  LibraryManifest,
+  "collections" | "skills" | "collection_versions" | "imports"
+>;
+
+export function normalizeCatalogue<T extends Catalogue>(catalogue: T): T {
+  return {
+    ...catalogue,
     collections: Array.sort(
-      manifest.collections,
+      catalogue.collections,
       Order.mapInput(Order.String, (item: Collection) => item.collection_id),
     ),
     skills: Array.sort(
-      manifest.skills.map((skill) => ({
+      catalogue.skills.map((skill) => ({
         ...skill,
         versions: Array.sort(
           skill.versions,
@@ -29,13 +35,28 @@ export function normalizeLibraryManifest(manifest: LibraryManifest): LibraryMani
       Order.mapInput(Order.String, (item: Skill) => item.skill_id),
     ),
     collection_versions: Array.sort(
-      manifest.collection_versions,
+      catalogue.collection_versions.map((version) => ({
+        ...version,
+        members: Array.sort(
+          version.members,
+          Order.mapInput(
+            Order.String,
+            (item: CollectionVersion["members"][number]) => item.source_path,
+          ),
+        ),
+      })),
       Order.mapInput(Order.String, (item: CollectionVersion) => item.collection_version_id),
     ),
     imports: Array.sort(
-      manifest.imports,
+      catalogue.imports,
       Order.mapInput(Order.String, (item: Import) => item.import_id),
     ),
+  };
+}
+
+export function normalizeLibraryManifest(manifest: LibraryManifest): LibraryManifest {
+  return currentLibraryManifest({
+    ...normalizeCatalogue(manifest),
     snapshot_digests: Array.sort(manifest.snapshot_digests, Order.String),
     enabled: Array.sort(
       manifest.enabled,

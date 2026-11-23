@@ -1,5 +1,4 @@
 import { Effect, FileSystem } from "effect";
-import type { PlatformError } from "effect/PlatformError";
 import { basename, dirname, join } from "node:path";
 export const writeRawAtomic = Effect.fn("Platform.writeRawAtomic")(function* (
   path: string,
@@ -26,13 +25,6 @@ export const writeRawAtomic = Effect.fn("Platform.writeRawAtomic")(function* (
     }),
   );
 });
-
-export function writeJsonAtomic(
-  path: string,
-  value: unknown,
-): Effect.Effect<void, PlatformError, FileSystem.FileSystem> {
-  return writeRawAtomic(path, `${JSON.stringify(value, null, 2)}\n`);
-}
 
 /** Atomically write a complete identity without replacing an existing file. */
 export const writeJsonExclusive = Effect.fn("Platform.writeJsonExclusive")(function* (

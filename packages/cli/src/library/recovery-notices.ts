@@ -19,10 +19,6 @@ export const recoveryNoticeBlocks = (notice: LibraryRecoveryNotice): readonly Bl
       summary: "Setup stopped, but could not record it",
       rows: [{ label: "Operation", value: [{ code: operationId }] }],
     }),
-    HistoryDeliveryPending: ({ actionId }) => ({
-      summary: "Library history delivery is pending",
-      rows: actionId === undefined ? [] : [{ label: "Action", value: [{ code: actionId }] }],
-    }),
   });
   return [
     Block.Note({ text: [detail.summary] }),

@@ -1,73 +1,25 @@
-import { writeRawAtomic, syncPaths } from "../../platform/atomic-write.js";
-import { canonicalJson } from "../../shared/json.js";
 import { Effect, FileSystem, Schema } from "effect";
-import { join } from "node:path";
+import { SqlClient } from "effect/sql";
 import { LibraryAuditEvent } from "./contracts.js";
 export { LibraryAuditChange, LibraryAuditEvent } from "./contracts.js";
 import { LibraryAuditInvalid } from "./failures.js";
 export { LibraryAuditInvalid } from "./failures.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../store/database.js";
 
-const AuditLine = Schema.fromJsonString(LibraryAuditEvent);
-
-/** Deliver a recorded identity once; atomic replacement cannot leave a partial JSONL tail. */
-export const appendLibraryAudit = Effect.fn("LibraryAudit.append")(function* (
-  home: string,
-  recorded: LibraryAuditEvent,
-) {
-  const path = join(home, "audit.jsonl");
-  const event = yield* LibraryAuditEvent.makeEffect(recorded).pipe(
-    Effect.mapError(
-      (issue) =>
-        new LibraryAuditInvalid({
-          path,
-          reason: { _tag: "SchemaInvalid", failure: new Schema.SchemaError(issue) },
-        }),
-    ),
-  );
-  const { events: previous, text } = yield* readAuditContents(home);
-  const delivered = previous.find((item) => item.eventId === event.eventId);
-  if (delivered) {
-    if (canonicalJson(delivered) !== canonicalJson(event))
-      return yield* new LibraryAuditInvalid({
-        path,
-        reason: {
-          _tag: "EventIdentityChanged",
-          eventId: event.eventId,
-          expected: delivered,
-          actual: event,
-        },
-      });
-    yield* syncPaths([path, home]);
-    return delivered;
-  }
-  const encoded = yield* Schema.encodeEffect(AuditLine)(event).pipe(
-    Effect.mapError(
-      (failure) => new LibraryAuditInvalid({ path, reason: { _tag: "SchemaInvalid", failure } }),
-    ),
-  );
-  const separator = text.length && !text.endsWith("\n") ? "\n" : "";
-  yield* writeRawAtomic(path, `${text}${separator}${encoded}\n`);
-  // The state-file acknowledgement may become durable only after this event and its name do.
-  yield* syncPaths([path, home]);
-  return event;
-});
-
-const readAuditContents = Effect.fn("LibraryAudit.readContents")(function* (home: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = join(home, "audit.jsonl");
-  const text = yield* fs
-    .readFileString(path)
-    .pipe(
-      Effect.catchTag("PlatformError", (error) =>
-        error.reason._tag === "NotFound" ? Effect.succeed("") : Effect.fail(error),
-      ),
-    );
-  const events: LibraryAuditEvent[] = [];
-  const lines = text.split("\n");
-  for (let index = 0; index < lines.length; index++) {
-    const line = lines[index]!;
-    if (!line && index === lines.length - 1) continue;
-    const event = yield* Schema.decodeEffect(AuditLine)(line).pipe(
+/** Read completed action events; Pending operations keep their event private. */
+const loadLibraryAudit = Effect.fn("LibraryAudit.load")(function* (path: string) {
+  const sql = yield* SqlClient.SqlClient;
+  const rows = yield* sql<{
+    document: string;
+  }>`SELECT document FROM library_audit_events AS events
+    WHERE NOT EXISTS (
+      SELECT 1 FROM json_each(events.operation_ids) AS associated
+      JOIN library_operations AS operations ON operations.operation_id = associated.value
+      WHERE json_extract(operations.document, '$._tag') = 'Pending'
+    )
+    ORDER BY sequence`;
+  return yield* Effect.forEach(rows, (row, index) =>
+    Schema.decodeEffect(Schema.fromJsonString(LibraryAuditEvent))(row.document).pipe(
       Effect.mapError(
         (failure) =>
           new LibraryAuditInvalid({
@@ -76,12 +28,13 @@ const readAuditContents = Effect.fn("LibraryAudit.readContents")(function* (home
             reason: { _tag: "SchemaInvalid", failure },
           }),
       ),
-    );
-    events.push(event);
-  }
-  return { text, events };
+    ),
+  );
 });
 
 export const readLibraryAudit = Effect.fn("LibraryAudit.list")(function* (home: string) {
-  return (yield* readAuditContents(home)).events;
+  const fs = yield* FileSystem.FileSystem;
+  const path = libraryDatabasePath(home);
+  if (!(yield* fs.exists(path))) return [];
+  return yield* withLibraryDatabase(path, loadLibraryAudit(path), true);
 });

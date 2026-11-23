@@ -5,10 +5,12 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import process from "node:process";
 import { BrowserCrypto } from "@effect/platform-browser";
-import { Effect, Schema } from "effect";
-// This Node test reads the CLI's device state file; it never runs in the Worker.
+import { Effect, Layer, Schema } from "effect";
+// This Node test reads the CLI's Library owner; it never runs in the Worker.
 // oxlint-disable-next-line no-restricted-imports
-import { LibraryState } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
+// oxlint-disable-next-line no-restricted-imports -- Node-only e2e runtime adapters.
+import { skitLayer } from "@smolai/skit-core/platform";
 import { createTestHarness } from "wrangler";
 import { expect, test } from "vitest";
 import type { RuntimeEnv } from "../src/platform/cloudflare.js";
@@ -350,6 +352,9 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
         const revision = {
           tree: yield* History.treeHash(remoteTree),
           parents: [current],
+          edits: Object.fromEntries(
+            remoteTree.map((entry) => [entry.path.normalize("NFC"), Date.now()]),
+          ),
           author: { device: remote.revision.author.device, at: Date.now() },
         };
         return { id: yield* History.revisionId(revision), revision, tree: remoteTree };
@@ -609,10 +614,29 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
       { codex: secondCodex, claude: secondClaude },
       expectedStatus,
     );
-  const state = async (home: string) =>
-    Schema.decodeSync(Schema.fromJsonString(LibraryState))(
-      await readFile(join(home, "state.json"), "utf8"),
+  const snapshot = (home: string) =>
+    // oxlint-disable-next-line skit/no-nested-runtime -- This Node async scenario enters the runtime to read the Library owner after subprocess exit.
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const owner = yield* Library.Service;
+        const saved = yield* owner.read;
+        if (saved._tag !== "Present") return yield* Effect.die("Expected a saved test Library");
+        return saved;
+      }).pipe(
+        Effect.provide(
+          Library.layer({
+            home,
+            roots: {
+              home: join(home, "device"),
+              configHome: join(home, "device", ".config"),
+              overrides: {},
+            },
+          }).pipe(Layer.provide(skitLayer)),
+        ),
+        Effect.scoped,
+      ),
     );
+  const state = async (home: string) => (await snapshot(home)).state;
   try {
     await mkdir(raw, { recursive: true });
     await writeFile(join(raw, "SKILL.md"), rawText);
@@ -822,7 +846,7 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
       "---\nname: killed-review\ndescription: Added before a killed sync.\n---\n\n# Killed\n",
     );
     first(["add", killedRaw]);
-    const stateBeforeKill = await readFile(join(firstHome, "state.json"), "utf8");
+    const stateBeforeKill = await snapshot(firstHome);
     const committed = relayLine("committed");
     await fetch(new URL("/__relay/hold", cliOrigin));
     const killed = spawn(
@@ -861,7 +885,7 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
     expect(killed.kill("SIGKILL")).toBe(true);
     expect(await exited).toEqual({ code: null, signal: "SIGKILL" });
     // The Registry committed, but the device has not accepted that receipt yet.
-    expect(await readFile(join(firstHome, "state.json"), "utf8")).toBe(stateBeforeKill);
+    expect(await snapshot(firstHome)).toEqual(stateBeforeKill);
     const head = await fetch(new URL("/api/library/portable", registryUrl), {
       headers: { authorization: `Bearer ${token}` },
     });
@@ -883,10 +907,9 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "clean" } });
 
     // Two homes race with independent additions. Hold A before forwarding its CAS write,
-    // let B commit, then release A and recover its genuine stale-revision conflict.
+    // let B commit, then release A and verify bounded contention recovery.
     first(["add", join(serverRoot, "test/fixtures/library-sync/racing-left")]);
     second(["add", join(serverRoot, "test/fixtures/library-sync/racing-right")]);
-    const raceStateBefore = await readFile(join(firstHome, "state.json"));
     const expectedCollections = [
       ...new Set(
         [...(await state(firstHome)).collections, ...(await state(secondHome)).collections].map(
@@ -923,7 +946,9 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
       },
     );
     const raceOutput: Buffer[] = [];
-    racing.stderr?.on("data", (chunk: Buffer) => raceOutput.push(chunk));
+    const raceErrors: Buffer[] = [];
+    racing.stdout?.on("data", (chunk: Buffer) => raceOutput.push(chunk));
+    racing.stderr?.on("data", (chunk: Buffer) => raceErrors.push(chunk));
     const raceExit = new Promise<number | null>((resolveExit) => racing.once("exit", resolveExit));
     try {
       expect(await Promise.race([held.then(() => "held"), raceExit.then(() => "exited")])).toBe(
@@ -931,14 +956,17 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
       );
       expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "merged" } });
       await fetch(new URL("/__relay/release", cliOrigin));
-      expect(await raceExit).toBe(1);
-      expect(JSON.parse(Buffer.concat(raceOutput).toString()).error.code).toBe("CONFLICT");
-      expect(await readFile(join(firstHome, "state.json"))).toEqual(raceStateBefore);
+      expect(await raceExit).toBe(0);
+      expect(Buffer.concat(raceErrors).toString()).toBe("");
+      expect(JSON.parse(Buffer.concat(raceOutput).toString()).data.status).toBe("merged");
+      expect((await state(firstHome)).collections.map((item) => item.collection_id).sort()).toEqual(
+        expectedCollections,
+      );
     } finally {
       if (racing.exitCode === null) racing.kill("SIGKILL");
       await raceExit;
     }
-    expect(first(["sync", "--apply"])).toMatchObject({ data: { status: "merged" } });
+    expect(first(["sync", "--apply"])).toMatchObject({ data: { status: "clean" } });
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "merged" } });
     expect(first(["sync", "--apply"])).toMatchObject({ data: { status: "clean" } });
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "clean" } });

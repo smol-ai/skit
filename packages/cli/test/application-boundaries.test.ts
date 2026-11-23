@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import { sourceLayer } from "../src/application.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { addRegistryRemote, readConfig } from "../src/registry/auth.js";
@@ -99,82 +100,18 @@ it.effect("path configuration separates account home, state root, and XDG roots"
   }),
 );
 
-it.effect("parsed configuration commands honor ConfigProvider without a home flag", () =>
+it.effect("Registry writes respect a held writer while Registry listing remains available", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-command-paths-" });
-    const home = join(root, "configured");
-    const failures: CommandFailure[] = [];
-    yield* runCommandTree(
-      skitCommand,
-      ["registry", "add", "fixture", "https://registry.example.test", "--json"],
-      "test",
-    ).pipe(
-      Effect.provide(
-        rendererTestLayer({
-          failure: (value) =>
-            Effect.sync(() => {
-              failures.push(value);
-            }),
-        }).pipe(
-          Layer.provideMerge(ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: home }))),
-        ),
-      ),
-    );
-    assert.deepStrictEqual(failures, []);
-    assert.isTrue(yield* fs.exists(join(home, "auth.json")));
-    assert.isFalse(yield* fs.exists(join(home, "state.json")));
-    assert.isTrue(yield* homeLockIsFree(home));
-  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
-);
 
-it.effect(
-  "listing current Library state remains available while another workflow holds the writer",
-  () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-read-during-write-" });
-      const ready = yield* Deferred.make<void>();
-      const release = yield* Deferred.make<void>();
-      const writer = yield* Effect.gen(function* () {
-        yield* holdHomeLock(home);
-        yield* Deferred.succeed(ready, undefined);
-        yield* Deferred.await(release);
-      }).pipe(Effect.scoped, Effect.forkScoped);
-      yield* Deferred.await(ready);
-      const results: CommandResult[] = [];
-      const failures: CommandFailure[] = [];
-      yield* runCommandTree(skitCommand, ["list", "--json", "--home", home], "test").pipe(
-        Effect.provide(
-          rendererTestLayer({
-            result: (value) =>
-              Effect.sync(() => {
-                results.push(value);
-              }),
-            failure: (value) =>
-              Effect.sync(() => {
-                failures.push(value);
-              }),
-          }),
-        ),
-      );
-      assert.deepStrictEqual(failures, []);
-      assert.strictEqual(results.length, 1);
-      assert.strictEqual(results[0]?.schema, "skit.list.v7");
-      assert.isFalse(yield* homeLockIsFree(home));
-      yield* Deferred.succeed(release, undefined);
-      yield* Fiber.join(writer);
-      assert.isTrue(yield* homeLockIsFree(home));
-    }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
-);
-
-it.effect("Registry configuration commands do not open or create Library storage", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-registry-without-library-" });
+
     const home = join(root, "home");
+
     const results: CommandResult[] = [];
+
     const failures: CommandFailure[] = [];
+
     const run = (args: readonly string[]) =>
       runCommandTree(skitCommand, [...args, "--json", "--home", home], "test").pipe(
         Effect.provide(
@@ -190,23 +127,24 @@ it.effect("Registry configuration commands do not open or create Library storage
           }),
         ),
       );
-    yield* run(["registry", "list"]);
-    assert.isFalse(yield* fs.exists(home));
+
     yield* fs.makeDirectory(home);
+
     yield* fs.writeFileString(join(home, "state.json"), "invalid Library state");
+
     yield* run(["registry", "add", "fixture", "https://registry.example.test"]);
-    yield* run(["registry", "list"]);
-    assert.deepStrictEqual(failures, []);
-    assert.strictEqual(results.length, 3);
-    assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), "invalid Library state");
-    assert.isTrue(yield* homeLockIsFree(home));
-    assert.isFalse(yield* fs.exists(join(home, "audit.jsonl")));
+
     // Configuration writes retain the existing storage exclusion, without state snapshots.
     yield* holdHomeLock(home);
+
     yield* run(["registry", "add", "contended", "https://other.example.test"]);
+
     assert.strictEqual(failures.length, 1);
+
     assert.strictEqual(failures[0]?.code, "CONFLICT");
+
     yield* run(["registry", "list"]);
+
     assert.strictEqual(failures.length, 1);
   }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
 );
@@ -268,3 +206,143 @@ it.effect("separate application boundaries retain their own storage roots", () =
     assert.deepStrictEqual(resolved, homes);
   }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
 );
+
+describe("skit registry add", () => {
+  describe("A Registry name resolves to its origin.", () => {
+    it.effect("parsed configuration commands honor ConfigProvider without a home flag", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-command-paths-" });
+        const home = join(root, "configured");
+        const failures: CommandFailure[] = [];
+        yield* runCommandTree(
+          skitCommand,
+          ["registry", "add", "fixture", "https://registry.example.test", "--json"],
+          "test",
+        ).pipe(
+          Effect.provide(
+            rendererTestLayer({
+              failure: (value) =>
+                Effect.sync(() => {
+                  failures.push(value);
+                }),
+            }).pipe(
+              Layer.provideMerge(
+                ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: home })),
+              ),
+            ),
+          ),
+        );
+        assert.deepStrictEqual(failures, []);
+        assert.isTrue(yield* fs.exists(join(home, "auth.json")));
+        assert.isFalse(yield* fs.exists(join(home, "state.json")));
+        assert.isTrue(yield* homeLockIsFree(home));
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    );
+  });
+});
+
+describe("skit registry list", () => {
+  describe("Registry listing does not need a readable Library.", () => {
+    it.effect("Registry listing works without readable Library storage", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+
+        const root = yield* fs.makeTempDirectoryScoped({
+          prefix: "skit-registry-without-library-",
+        });
+
+        const home = join(root, "home");
+
+        const results: CommandResult[] = [];
+
+        const failures: CommandFailure[] = [];
+
+        const run = (args: readonly string[]) =>
+          runCommandTree(skitCommand, [...args, "--json", "--home", home], "test").pipe(
+            Effect.provide(
+              rendererTestLayer({
+                result: (value) =>
+                  Effect.sync(() => {
+                    results.push(value);
+                  }),
+                failure: (value) =>
+                  Effect.sync(() => {
+                    failures.push(value);
+                  }),
+              }),
+            ),
+          );
+
+        yield* run(["registry", "list"]);
+
+        assert.isFalse(yield* fs.exists(home));
+
+        yield* fs.makeDirectory(home);
+
+        yield* fs.writeFileString(join(home, "state.json"), "invalid Library state");
+
+        yield* run(["registry", "add", "fixture", "https://registry.example.test"]);
+
+        yield* run(["registry", "list"]);
+
+        assert.deepStrictEqual(failures, []);
+
+        assert.strictEqual(results.length, 3);
+
+        assert.strictEqual(
+          yield* fs.readFileString(join(home, "state.json")),
+          "invalid Library state",
+        );
+
+        assert.isTrue(yield* homeLockIsFree(home));
+
+        assert.isFalse(yield* fs.exists(join(home, "audit.jsonl")));
+      }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
+    );
+  });
+});
+
+describe("skit list", () => {
+  describe("List remains available while another workflow holds the Library writer.", () => {
+    it.effect(
+      "listing current Library state remains available while another workflow holds the writer",
+      () =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-read-during-write-" });
+          const ready = yield* Deferred.make<void>();
+          const release = yield* Deferred.make<void>();
+          const writer = yield* Effect.gen(function* () {
+            yield* holdHomeLock(home);
+            yield* Deferred.succeed(ready, undefined);
+            yield* Deferred.await(release);
+          }).pipe(Effect.scoped, Effect.forkScoped);
+          yield* Deferred.await(ready);
+          const results: CommandResult[] = [];
+          const failures: CommandFailure[] = [];
+          yield* runCommandTree(skitCommand, ["list", "--json", "--home", home], "test").pipe(
+            Effect.provide(
+              rendererTestLayer({
+                result: (value) =>
+                  Effect.sync(() => {
+                    results.push(value);
+                  }),
+                failure: (value) =>
+                  Effect.sync(() => {
+                    failures.push(value);
+                  }),
+              }),
+            ),
+          );
+          assert.deepStrictEqual(failures, []);
+          assert.strictEqual(results.length, 1);
+          assert.strictEqual(results[0]?.schema, "skit.list.v7");
+          assert.isFalse(yield* homeLockIsFree(home));
+          yield* Deferred.succeed(release, undefined);
+          yield* Fiber.join(writer);
+          assert.isTrue(yield* homeLockIsFree(home));
+        }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
+    );
+  });
+});

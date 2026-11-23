@@ -1,7 +1,8 @@
 import { currentSkillVersion, versionBacking, type Skill } from "../../library-contracts.js";
 import { invocationMetadataAdapters } from "../../../harnesses/invocation-metadata.js";
 import { readSkitDescriptor } from "../../../artifact/skit.js";
-import { originalTreeHash, collectionVersionPath } from "../../collection-version.js";
+import { originalTreeHash } from "../../collection-version.js";
+import { readCollectionVersion } from "../content/read-collection-version.js";
 import { ImportContentInvalid } from "../../failures.js";
 import { resolveDeclaredInvocation } from "../../../invocation/conformance.js";
 import { type LibraryState } from "../../library-state.js";
@@ -14,18 +15,17 @@ export type AuthorInvocationRead = Result.Result<AuthorInvocation, AuthorInvocat
 
 /** Verify retained bytes and read invocation evidence, without install assessment or writes. */
 const readInvocation = Effect.fn("Library.readSkillInvocation")(function* (
-  state: LibraryState,
-  originalsPath: string,
+  state: Pick<LibraryState, "skills" | "collection_versions" | "imports">,
+  root: string | undefined,
   skill: Skill,
   hashTree: (path: string) => ReturnType<typeof originalTreeHash>,
 ) {
   const version = currentSkillVersion(state, skill);
   const backing = version === undefined ? undefined : versionBacking(state, skill, version);
-  if (backing === undefined)
+  if (backing === undefined || root === undefined)
     return yield* new ImportContentInvalid({
       reason: { _tag: "BackingMissing", skillName: skill.name },
     });
-  const root = collectionVersionPath(originalsPath, backing.copy.hash);
   if ((yield* hashTree(root)) !== backing.copy.hash)
     return yield* new ImportContentInvalid({
       reason: { _tag: "ContentChanged", kind: "collection", skillName: skill.name },
@@ -82,12 +82,27 @@ const readInvocation = Effect.fn("Library.readSkillInvocation")(function* (
  * Checked failures become per-row evidence; defects and interruption still propagate.
  */
 export const makeLibrarySkillInvocationReader = Effect.fn("Library.skillInvocationReader")(
-  function* (state: LibraryState, originalsPath: string) {
+  function* (
+    state: Pick<LibraryState, "skills" | "collection_versions" | "imports">,
+    originalsPath: string,
+  ) {
     const hashes = yield* Cache.make({
       capacity: Math.max(1, state.collection_versions.length + state.skills.length),
       lookup: originalTreeHash,
     });
+    const roots = yield* Cache.make({
+      capacity: Math.max(1, state.collection_versions.length),
+      lookup: (hash: import("../../../shared/hash.js").Hash) =>
+        readCollectionVersion(originalsPath, hash),
+    });
     return (skill: Skill) =>
-      Effect.result(readInvocation(state, originalsPath, skill, (path) => Cache.get(hashes, path)));
+      Effect.gen(function* () {
+        const version = currentSkillVersion(state, skill);
+        const backing = version === undefined ? undefined : versionBacking(state, skill, version);
+        const root = backing === undefined ? undefined : yield* Cache.get(roots, backing.copy.hash);
+        return yield* Effect.result(
+          readInvocation(state, root, skill, (path) => Cache.get(hashes, path)),
+        );
+      });
   },
 );

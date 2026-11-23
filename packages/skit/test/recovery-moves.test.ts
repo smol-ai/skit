@@ -1,3 +1,4 @@
+import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
 import {
   prepareRecoveryMoves,
   readRecoveryRestore,
@@ -106,7 +107,7 @@ it.effect(
       );
       const repeated = yield* readRecoveryRestore(f.home, f.operationId);
       expect((yield* restoreRecorded(f.home, repeated)).planId).toBe(restored.planId);
-      expect(yield* f.fs.exists(join(f.home, "state.json"))).toBe(false);
+      expect((yield* inspectLocalLibraryState(join(f.home))).present).toBe(false);
     }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -331,36 +332,6 @@ it.effect("move records save exact device and inode numbers as text", () =>
     );
     expect(record.schemaVersion).toBe(3);
     expect(record.entries[0]).toMatchObject({ dev: String(info.dev), ino: String(info.ino) });
-  }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect("v2 move records with numeric device and inode numbers still restore", () =>
-  Effect.gen(function* () {
-    const f = yield* recoveryFixture();
-    yield* f.plan.apply();
-    const path = join(f.plan.recoveryDirectory, "receipt.json");
-    const current = JSON.parse(yield* f.fs.readFileString(path));
-    const numeric = (identity: { dev: string; ino: string }) => ({
-      dev: Number(identity.dev),
-      ino: Number(identity.ino),
-    });
-    const v2 = JSON.stringify({
-      schemaVersion: 2,
-      entries: current.entries.map(
-        (entry: { dev: string; ino: string; parent: { dev: string; ino: string } }) => ({
-          ...entry,
-          ...numeric(entry),
-          parent: { ...entry.parent, ...numeric(entry.parent) },
-        }),
-      ),
-    });
-    yield* f.fs.writeFileString(path, v2);
-    const preview = yield* readRecoveryRestore(f.home, f.operationId);
-    expect(preview.summary.entries.map((entry) => entry.status)).toEqual(["saved", "saved"]);
-    const restored = yield* restoreRecorded(f.home, preview);
-    expect(restored.entries.map((entry) => entry.status)).toEqual(["at-original", "at-original"]);
-    expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe("original skill");
-    expect(yield* f.fs.readFileString(path)).toBe(v2);
   }).pipe(Effect.provide(skitLayer)),
 );
 

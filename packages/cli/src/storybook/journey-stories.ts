@@ -5,7 +5,6 @@ import * as Library from "@smolai/skit-core/library";
 
 import { scenarioSets } from "./scenario-sets.js";
 import type { StartingWorld } from "./contracts.js";
-import { authorSyncJourneys } from "./author-sync-journey.js";
 import { doctorJourneys } from "./doctor-journey.js";
 import { syncJourney } from "./sync-journey.js";
 import { setupJourney } from "./setup-journey.js";
@@ -22,8 +21,6 @@ import type { Prompter } from "../terminal/prompter.js";
 import type { Renderer } from "../terminal/renderer.js";
 import type { ScriptedAnswer, TypeCommand } from "./interaction-recorder.js";
 
-import type { CheckRule } from "./rules.js";
-
 export interface JourneyStory<A, E, R> {
   readonly _tag: "Journey";
   readonly name: string;
@@ -34,7 +31,7 @@ export interface JourneyStory<A, E, R> {
   readonly answers: ReadonlyArray<ScriptedAnswer>;
   /** Runs the journey in a fresh home folder the runner creates; its paths display under `~`. */
   /** Runs in a fresh home; `typed` records each command line before the command it starts. */
-  readonly run: (home: string, typed: TypeCommand, check: CheckRule) => Effect.Effect<A, E, R>;
+  readonly run: (home: string, typed: TypeCommand) => Effect.Effect<A, E, R>;
   readonly finalState: (result: A) => string;
 }
 
@@ -96,7 +93,6 @@ export const journeyStories: ReadonlyArray<
       string,
       Effect.Error<
         | ReturnType<(typeof scenarioSets)[number]["scenarios"][number]["run"]>
-        | ReturnType<(typeof authorSyncJourneys)[number]["run"]>
         | ReturnType<(typeof doctorJourneys)[number]["run"]>
         | ReturnType<typeof previewEnable>
         | ReturnType<typeof syncJourney>
@@ -110,8 +106,7 @@ export const journeyStories: ReadonlyArray<
     >
 > = [
   ...doctorJourneys,
-  ...authorSyncJourneys,
-  ...scenarioSets.flatMap((set) => set.scenarios),
+  ...scenarioSets.flatMap((set) => [...set.scenarios]),
   {
     _tag: "Journey",
     name: "preview-enable-portable-collection",

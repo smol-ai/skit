@@ -1,3 +1,4 @@
+import { LibraryInvariantFailed, LibraryInvariantReason } from "@smolai/skit-core/library";
 import {
   AuthorWorkspaceInvariantFailed,
   AuthorWorkspaceInvariantReason,
@@ -18,6 +19,14 @@ export const invariantFailure = (error: unknown): string | undefined => {
       TreesDiffer: () =>
         `An author write supplied files outside its saved checkpoint: ${error.root}`,
     });
+  if (Schema.is(LibraryInvariantFailed)(error)) {
+    const summary = LibraryInvariantReason.match(error.reason, {
+      DatabaseWriteInsideRead: () => "A Library write started inside a read transaction",
+      DatabaseWriterLockMissing: () => "A Library write started without the writer lock",
+      ImportInsideTransaction: () => "A Library import started inside a database transaction",
+    });
+    return `${summary}: ${error.path}`;
+  }
   if (Schema.is(ArchiveStreamInvalid)(error))
     return `ZIP writer supplied an unsupported output stream for ${error.path}`;
   return undefined;

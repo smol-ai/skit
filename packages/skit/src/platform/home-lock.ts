@@ -53,8 +53,9 @@ const semaphoreFor = (semaphores: Map<string, Semaphore.Semaphore>, root: string
  * serialize their own writes here; this grants no LibraryWriter. Across processes it
  * is an exclusive SQLite transaction on `<home>/lock.sqlite` (ADR-0026): the file never
  * holds data and is never unlinked, so the OS releases the lock when its holder exits, even on
- * SIGKILL. It never waits: a lock another process holds fails `HomeBusy` at once. A `.lock` left
- * by an earlier SKIT means nothing and is ignored.
+ * SIGKILL. It never waits: a lock another process holds fails `HomeBusy` at once. Ordinary
+ * database writes ignore the earlier `.lock` protocol. The legacy importer still fences released
+ * 0.3.0 writers through `.lock`, their only cross-process lock; it cannot infer a dead owner.
  */
 export const withLock = Effect.fn("HomeLock.with")(function* <A, E, R>(
   home: string,

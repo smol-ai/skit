@@ -140,8 +140,8 @@ export function aliasManifest(manifest: LibraryManifest, aliases: LibraryAliases
 }
 
 /**
- * Device references move with the records they name, keeping their content. On-disk ownership of a
- * reidentified Skill must be retired before a state carrying these aliases is saved.
+ * Device references move with the records they name, keeping their content. The pending Sync
+ * program retains old ownership while the live rows move to these identities.
  */
 export function aliasDevice(state: LibraryState, aliases: LibraryAliases): LibraryState {
   return {

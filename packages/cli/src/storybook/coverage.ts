@@ -1,7 +1,5 @@
 import type { ContractCoverage, CommandCoverage } from "./contracts.js";
-import { authorSyncDetails, authorSyncGaps } from "./author-sync-inventory.js";
 import { scenarioSets } from "./scenario-sets.js";
-import { authorSyncScenarioInventory } from "./author-sync-journey.js";
 import { doctorScenarioInventory } from "./doctor-journey.js";
 import { Effect, SchemaAST } from "effect";
 import { outputContracts } from "../commands/output-contracts.js";
@@ -177,13 +175,6 @@ export const commandCoverage = commandDocuments(skitCommand).pipe(
       return {
         command: command.path.join(" "),
         ...(command.path.join(" ") === "doctor" ? { scenarios: doctorScenarioInventory } : {}),
-        ...(command.path.join(" ") === "author sync"
-          ? {
-              scenarios: [...authorSyncScenarioInventory, ...authorSyncGaps],
-              details: authorSyncDetails,
-            }
-          : {}),
-        ...(scenarioSet === undefined ? {} : { rules: scenarioSet.rules }),
         interactive: command.interactive,
         invocation: command.invocation,
         contracts,

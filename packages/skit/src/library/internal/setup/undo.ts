@@ -1,9 +1,20 @@
+import { prepareSetupChanges, type SetupIntentChanges } from "../../store/setup-intent.js";
+import { prepareLibraryDifference } from "../../store/difference.js";
+import {
+  libraryStatePath,
+  loadOperations,
+  operationSummary,
+  libraryOriginalsPath,
+  writeLibrary,
+  inspectLocalLibraryState,
+} from "../../store/library-store.js";
 import { setupOperation } from "./run.js";
 import { snapshotOf, type Snapshot } from "../../snapshot.js";
 import { StalePlan } from "../../library-plan.js";
 import { UndoPlan, type UndoIntent, type UndoResult } from "./undo-plan.js";
 import {
   OperationStatus,
+  OperationSummary,
   type UndoProgram,
   type FolderEvidence,
   type LinkEvidence,
@@ -14,13 +25,9 @@ import { Effect, Option, Schema } from "effect";
 import { canonicalJson } from "../../../shared/json.js";
 import { hashParts } from "../../../artifact/descriptor.js";
 import { emptyLibraryState, libraryStateRevision } from "../../library-state.js";
-import {
-  libraryOriginalsPath,
-  writeLibrary,
-  inspectLocalLibraryState,
-} from "../../store/library-store.js";
+
 import { LinkStat } from "../../../platform/link-stat.js";
-import { setupIntent, type SetupIntent } from "./intent.js";
+import { setupIntent, SetupIntent } from "../../store/intent.js";
 import { sourceImports } from "../../library-contracts.js";
 import { makeOperationId, type CollectionId } from "../../entity-ids.js";
 import * as MachineSettings from "../../machine-settings.js";
@@ -40,8 +47,7 @@ const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonic
 
 /** A setup as undo reads it: what it changed, and its record, which the undo plan covers. */
 interface SetupRecord extends SetupChanges {
-  readonly before: SetupIntent;
-  readonly after: SetupIntent;
+  readonly changes: SetupIntentChanges;
   readonly conflicts: readonly UndoConflict[];
   readonly evidence: unknown;
 }
@@ -101,9 +107,24 @@ const setupFile = Effect.fn("SetupUndo.setupFile")(function* (
   return { path: evidence.path, anchor, entry } satisfies UndoFile;
 });
 
-/** A setup recorded in state.json: its steps' evidence and what it held before and after. */
-const recordedSetup = Effect.fn("SetupUndo.recordedSetup")(function* (operation: OperationStatus) {
+/** A setup recorded in the Library store: its steps' evidence and what it held before and after. */
+const recordedSetup = Effect.fn("SetupUndo.recordedSetup")(function* (
+  operation: OperationStatus,
+  path: string,
+) {
   const after = operation._tag === "Pending" ? operation.before : operation.after;
+  let changes = operation.setup?.changes;
+  if (changes === undefined) {
+    const [beforeIntent, afterIntent] = yield* Effect.all([
+      Schema.decodeUnknownEffect(SetupIntent)(operation.before.intent),
+      Schema.decodeUnknownEffect(SetupIntent)(after.intent),
+    ]).pipe(
+      Effect.mapError(
+        () => new RecoveryInvalid({ reason: { _tag: "InvalidData", record: "setup-evidence" } }),
+      ),
+    );
+    changes = yield* prepareSetupChanges(beforeIntent, afterIntent, path);
+  }
   const evidence = operation.steps.flatMap(({ before }) =>
     before.flatMap((item) => (item._tag === "Retained" ? [] : [item])),
   );
@@ -111,8 +132,7 @@ const recordedSetup = Effect.fn("SetupUndo.recordedSetup")(function* (operation:
   for (const item of evidence)
     if (!files.some((file) => file.path === item.path)) files.push(yield* setupFile(item));
   return {
-    before: operation.before.intent,
-    after: after.intent,
+    changes,
     installedSkillsBefore: operation.before.installedSkills,
     installedSkillsAfter: after.installedSkills,
     files,
@@ -140,7 +160,7 @@ const recordedSetup = Effect.fn("SetupUndo.recordedSetup")(function* (operation:
           : operation._tag === "Pending"
             ? [{ _tag: "UnsupportedOperation", kind: "pending" }]
             : [],
-    evidence: yield* Schema.encodeEffect(OperationStatus)(operation).pipe(
+    evidence: yield* Schema.encodeEffect(OperationSummary)(operationSummary(operation)).pipe(
       Effect.mapError(
         () => new RecoveryInvalid({ reason: { _tag: "InvalidData", record: "setup-evidence" } }),
       ),
@@ -156,13 +176,7 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
   const inspected = yield* inspectLocalLibraryState(home);
   const baseRevision = snapshotOf(inspected).revision;
   const state = inspected.present ? inspected.state : emptyLibraryState();
-  const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
-    state.operations,
-  ).pipe(
-    Effect.mapError(
-      () => new RecoveryInvalid({ reason: { _tag: "InvalidData", record: "setup-record" } }),
-    ),
-  );
+  const operations = yield* loadOperations(home);
   const recorded = operations.find((operation) => operation.operationId === operationId);
   if (!/^[a-zA-Z0-9_-]+$/.test(operationId))
     return yield* new RecoveryInvalid({ reason: { _tag: "InvalidData", record: "operation-id" } });
@@ -170,7 +184,7 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
     return yield* new RecoveryInvalid({
       reason: { _tag: "MissingRecord", record: "undo-record", at: operationId },
     });
-  const setup = yield* recordedSetup(recorded);
+  const setup = yield* recordedSetup(recorded, libraryStatePath(home));
   const priorBackups: string[] = [];
   const undoRecords = operations.flatMap((operation) =>
     operation.steps.flatMap(({ step }) =>
@@ -180,21 +194,26 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
     ),
   );
   priorBackups.push(...undoRecords.map((item) => item.program.backupId));
-  const done = undoRecords.some((item) => item.operation._tag === "Done");
+  const done = recorded._tag === "Undone";
+  const discovery = yield* MachineSettings.planRestoreDiscovery(
+    home,
+    operationId,
+    recorded.setup?.discovery,
+    recorded._tag === "Undone",
+  );
   // Only identity is needed for a new source-import observation. Settings undo stays with its owner.
   const machineId = (yield* MachineSettings.read(home)).machineId;
-  const conflicts: UndoConflict[] = [...setup.conflicts];
+  const conflicts: UndoConflict[] = [...setup.conflicts, ...discovery.conflicts];
   const sources = done
     ? { conflicts: [], evidence: [], restorations: [] }
     : yield* prepareSetupSourceUndo(
         state,
-        setup.before,
-        setup.after,
+        setup.changes,
         libraryOriginalsPath(home),
         machineId,
         undoSourceImports,
       );
-  const intent = reverseSetupIntent(state, setup.before, setup.after, sources.restorations);
+  const intent = reverseSetupIntent(state, setup.changes, sources.restorations);
   conflicts.push(...sources.conflicts, ...intent.conflicts);
   const files = done
     ? undefined
@@ -213,8 +232,15 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
   const planId = hashParts([
     canonicalJson({
       saved: setup.evidence,
+      undo: undoRecords.map((item) => ({
+        operationId: item.operation.operationId,
+        status: item.operation._tag,
+        target: item.program.operationId,
+        backupId: item.program.backupId,
+      })),
       revision: libraryStateRevision(state),
       machineId,
+      discovery: discovery.planId,
       sources: sources.evidence,
       files: files && {
         pathDetails: files.pathDetails,
@@ -224,6 +250,34 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
       conflicts,
     }),
   ]);
+  const sourceSelections = yield* Effect.forEach(sources.restorations, (restored) =>
+    Effect.gen(function* () {
+      const collection = state.collections.find(
+        (item) => item.collection_id === restored.collection_id,
+      );
+      const source = sourceImports(state, restored.collection_id)[0];
+      const from = state.collection_versions.find(
+        (item) => item.collection_version_id === source?.collection_version_id,
+      );
+      const to = state.collection_versions.find(
+        (item) => item.collection_version_id === restored.collection_version_id,
+      );
+      if (!collection || !from || !to)
+        return yield* new RecoveryInvalid({
+          reason: {
+            _tag: "MissingRecord",
+            record: "source-evidence",
+            at: restored.collection_id,
+          },
+        });
+      return {
+        collectionId: restored.collection_id,
+        label: collection.label,
+        fromSnapshot: from.hash,
+        toSnapshot: to.hash,
+      };
+    }),
+  );
   return {
     summary: {
       operationId,
@@ -234,20 +288,9 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
           ? ("conflicted" as const)
           : ("ready" as const),
       conflicts: done ? [] : conflicts,
-      files: done ? [] : files!.actions.map(({ path, kind }) => ({ path, kind })),
-      sourceSelections: sources.restorations.map((restored) => ({
-        collectionId: restored.collection_id,
-        label: state.collections.find((item) => item.collection_id === restored.collection_id)!
-          .label,
-        fromSnapshot: state.collection_versions.find(
-          (item) =>
-            item.collection_version_id ===
-            sourceImports(state, restored.collection_id)[0].collection_version_id,
-        )!.hash,
-        toSnapshot: state.collection_versions.find(
-          (item) => item.collection_version_id === restored.collection_version_id,
-        )!.hash,
-      })),
+      files: files?.actions.map(({ path, kind }) => ({ path, kind })) ?? [],
+      sourceSelections,
+      settingsChanged: !done && discovery.changed,
       intentChanged: !done && !equal(setupIntent(state), setupIntent(next)),
     },
     setup,
@@ -257,6 +300,7 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
     next: done ? state : next,
     files,
     sourceImports: sources.evidence,
+    discovery,
   };
 });
 
@@ -318,13 +362,12 @@ export const applyUndo = Effect.fn("Library.applyUndo")(function* (home: string,
           return yield* new RecoveryInvalid({
             reason: { _tag: "MissingRecord", record: "undo-files" },
           });
-        const { operations: _beforeOperations, ...before } = current.state;
-        const { operations: _afterOperations, ...after } = current.next;
+        const before = current.state;
+        const after = current.next;
         const program: UndoProgram = {
           operationId: approved.intent.operationId,
           backupId: approved.backupId,
-          before,
-          after,
+          difference: yield* prepareLibraryDifference(before, after, libraryStatePath(home)),
           files: current.setup.files,
           paths: current.files.pathDetails,
           sources: current.files.sourceEvidence,
@@ -332,11 +375,31 @@ export const applyUndo = Effect.fn("Library.applyUndo")(function* (home: string,
           actions: current.files.actions,
           preserve: current.files.preserve,
           preserved: false,
+          ...(current.discovery.recorded
+            ? {
+                discovery: {
+                  beforeHash: hashParts([canonicalJson(current.discovery.before)]),
+                  afterHash: hashParts([canonicalJson(current.discovery.after)]),
+                  before: {
+                    discoveryRoots: current.discovery.before.discoveryRoots,
+                    ...(current.discovery.before.machineId === undefined
+                      ? {}
+                      : { machineId: current.discovery.before.machineId }),
+                  },
+                  after: {
+                    discoveryRoots: current.discovery.after.discoveryRoots,
+                    ...(current.discovery.after.machineId === undefined
+                      ? {}
+                      : { machineId: current.discovery.after.machineId }),
+                  },
+                },
+              }
+            : {}),
         };
         const result = yield* setupOperation([{ _tag: "Undo", program }], {
           base: current.snapshot,
           operationId: makeOperationId(),
-          replaceDone: false,
+          kind: "undo",
         });
         if (result._tag === "Stopped")
           return yield* new RecoveryInvalid({

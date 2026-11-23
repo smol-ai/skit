@@ -1,8 +1,11 @@
 import { failureExitCode } from "../src/commands/exit-code.js";
 import { test, expect } from "vitest";
-import { Schema } from "effect";
+import { it } from "@effect/vitest";
+import { Cause, Effect, Schema } from "effect";
 import {
   AddNoSkills,
+  InvalidLibraryState,
+  LibraryInvariantFailed,
   SetupImportInvalid,
   LibrarySubjectNotFound,
   LibrarySubjectAmbiguous,
@@ -10,8 +13,13 @@ import {
   CollectionRemovalMissing,
   SkillRemovalRequiresCollection,
 } from "@smolai/skit-core/library";
-import { LibraryDataFailure } from "../src/library/failures.js";
-import { classifyFailure } from "../src/commands/failure-classification.js";
+import { LibraryDataFailure, libraryFailure } from "../src/library/failures.js";
+import { CommandError } from "../src/commands/error-output.js";
+import {
+  classifyFailure,
+  commandError,
+  commandFailure,
+} from "../src/commands/failure-classification.js";
 
 test("source and removal failures retain facts and codes after decoding, with words supplied by the CLI", () => {
   const cases = [
@@ -82,4 +90,53 @@ test.each([
   expect(shown.message).toContain(words);
   expect(shown.message).not.toContain(reason);
   expect(shown.remediation).toContain("skit setup");
+});
+
+it.effect("SQLite schema failures use the same recovery action as an empty database", () =>
+  Effect.gen(function* () {
+    const path = "/library/library.sqlite";
+    const reason = yield* Effect.flip(Schema.decodeUnknownEffect(Schema.String)(42));
+    const failure = new InvalidLibraryState({
+      path,
+      reason: { _tag: "SchemaInvalid", failure: reason },
+    });
+    const empty = new InvalidLibraryState({ path, reason: { _tag: "DatabaseEmpty" } });
+    expect(libraryFailure(failure).next).toEqual(libraryFailure(empty).next);
+  }),
+);
+
+test("database damage, refused edits and encoding failures have distinct actions", () => {
+  const path = "/library/library.sqlite";
+  const action = (reason: InvalidLibraryState["reason"]) => {
+    const error = new InvalidLibraryState({ path, reason });
+    return libraryFailure(error).next;
+  };
+  const backup = action({ _tag: "DatabaseEmpty" });
+  const report = action({ _tag: "DocumentEncodingFailed", document: "library" });
+  const review = action({ _tag: "UndoFieldChanged", field: "unmanaged" });
+  expect(action({ _tag: "DocumentEncodingFailed", document: "inventory" })).toEqual(report);
+  expect(action({ _tag: "EnabledSubjectMissing", subject: "skill", id: "skill" })).toEqual(review);
+  expect(new Set([backup, report, review].map((value) => JSON.stringify(value))).size).toBe(3);
+});
+
+test("Library invariant defects retain their facts in the command output", () => {
+  const failure = new LibraryInvariantFailed({
+    path: "/library/library.sqlite",
+    reason: { _tag: "DatabaseWriterLockMissing" },
+  });
+  const cause = Cause.die(failure);
+  const wire = Schema.encodeSync(CommandError)(commandError(cause));
+  const stored = Schema.decodeUnknownSync(CommandError)(JSON.parse(JSON.stringify(wire)));
+  expect(stored.cause.reasons).toMatchObject([
+    {
+      _tag: "Die",
+      defect: { _tag: failure._tag, path: failure.path, reason: failure.reason },
+    },
+  ]);
+  expect(commandFailure(stored.cause).explanation).toContainEqual(
+    expect.objectContaining({
+      _tag: "Fields",
+      rows: [{ label: "Database", value: [{ path: failure.path }] }],
+    }),
+  );
 });

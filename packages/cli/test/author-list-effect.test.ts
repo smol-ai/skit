@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import { failureExitCode } from "../src/commands/exit-code.js";
 import { Layer, Deferred, Effect, Fiber, Result } from "effect";
 import { NodeServices } from "@effect/platform-node";
@@ -74,6 +75,13 @@ it.effect.each([
     authState: Result.fail(new RegistryOriginInvalid({ origin: "bad-url" })),
     response: page(),
     code: "OPERATION_FAILED",
+    exitCode: 1,
+  },
+  {
+    label: "no configured account",
+    authState: authState({}),
+    response: page(),
+    code: "AUTHENTICATION_REQUIRED",
     exitCode: 1,
   },
   {
@@ -154,56 +162,6 @@ it.effect.each([
   }),
 );
 
-it.effect.each(["first", "later", "body"] as const)(
-  "interrupting %s aborts before another page",
-  (stage) =>
-    Effect.gen(function* () {
-      const ready = yield* Deferred.make<void>();
-      let requests = 0;
-      let finalized = false;
-      const fetcher: TestHttpHandler = (_request, _url, signal) => {
-        requests++;
-        if (stage === "later" && requests === 1) return Effect.succeed(page("next"));
-        if (stage === "body")
-          return Effect.succeed(
-            new Response(
-              new ReadableStream(
-                {
-                  // The body is pulled by the web Response, outside the runtime, so it signals
-                  // readiness through an unsafe completion.
-                  pull(controller) {
-                    signal.addEventListener(
-                      "abort",
-                      () => {
-                        finalized = true;
-                        controller.error(signal.reason);
-                      },
-                      { once: true },
-                    );
-                    Deferred.doneUnsafe(ready, Effect.void);
-                  },
-                },
-                { highWaterMark: 0 },
-              ),
-            ),
-          );
-        return Deferred.succeed(ready, undefined).pipe(
-          Effect.andThen(Effect.never),
-          Effect.onInterrupt(() =>
-            Effect.sync(() => {
-              finalized = true;
-            }),
-          ),
-        );
-      };
-      const fiber = yield* Effect.forkChild(listWithTransport(input, fetcher));
-      yield* Deferred.await(ready);
-      yield* Fiber.interrupt(fiber);
-      expect(finalized).toBe(true);
-      expect(requests).toBe(stage === "later" ? 2 : 1);
-    }),
-);
-
 it.effect("request and body rejections use Effect HTTP's typed failure channel", () =>
   Effect.forEach(["request", "body"] as const, (stage) => {
     let requests = 0;
@@ -265,55 +223,6 @@ it.effect("expected transport, contract and identity failures use declared chann
   }),
 );
 
-it.effect.each([false, true])("page 1000 terminal=%s retains guard position", (terminal) =>
-  Effect.gen(function* () {
-    let requests = 0;
-    const exit = yield* Effect.exit(
-      listWithTransport(input, () =>
-        Effect.sync(() => {
-          requests++;
-          return page(terminal && requests === 1000 ? null : String(requests), []);
-        }),
-      ),
-    );
-    expect(requests).toBe(1000);
-    expect(exit._tag).toBe(terminal ? "Success" : "Failure");
-  }),
-);
-
-it.effect.each([false, true])("item limit terminal=%s retains terminal acceptance", (terminal) =>
-  Effect.gen(function* () {
-    let requests = 0;
-    const exit = yield* Effect.exit(
-      listWithTransport(input, () =>
-        Effect.sync(() => {
-          requests++;
-          return page(
-            requests === 1 ? "next" : terminal ? null : "again",
-            Array.from({ length: requests === 1 ? 100000 : 1 }, () => item),
-          );
-        }),
-      ),
-    );
-    expect(requests).toBe(2);
-    expect(exit._tag).toBe(terminal ? "Success" : "Failure");
-  }),
-);
-
-it.effect("later failure discards accumulated inventory", () =>
-  Effect.gen(function* () {
-    let requests = 0;
-    const value = yield* listWithTransport(input, () =>
-      Effect.sync(() => {
-        requests++;
-        return requests === 1 ? page("next") : new Response("broken");
-      }),
-    ).pipe(Effect.match({ onFailure: (error) => error, onSuccess: (value) => value }));
-    expect(value).toBeInstanceOf(SkitContractError);
-    expect(requests).toBe(2);
-  }),
-);
-
 it.effect.each([null, [], 3, { error: null }, { error: {} }])(
   "invalid rejection body %j has a deliberate diagnostic",
   (body) =>
@@ -336,3 +245,116 @@ it.effect("identity validation is selectively recoverable", () =>
     expect(value).toBe("invalid");
   }),
 );
+
+describe("skit author list", () => {
+  describe("List refuses an incomplete inventory if a later page fails.", () => {
+    it.effect("later failure discards accumulated inventory", () =>
+      Effect.gen(function* () {
+        let requests = 0;
+        const value = yield* listWithTransport(input, () =>
+          Effect.sync(() => {
+            requests++;
+            return requests === 1 ? page("next") : new Response("broken");
+          }),
+        ).pipe(Effect.match({ onFailure: (error) => error, onSuccess: (value) => value }));
+        expect(value).toBeInstanceOf(SkitContractError);
+        expect(requests).toBe(2);
+      }),
+    );
+  });
+});
+
+describe("skit author list", () => {
+  describe("Cancelling the authored list stops fetching more pages.", () => {
+    it.effect.each(["first", "later", "body"] as const)(
+      "interrupting %s aborts before another page",
+      (stage) =>
+        Effect.gen(function* () {
+          const ready = yield* Deferred.make<void>();
+          let requests = 0;
+          let finalized = false;
+          const fetcher: TestHttpHandler = (_request, _url, signal) => {
+            requests++;
+            if (stage === "later" && requests === 1) return Effect.succeed(page("next"));
+            if (stage === "body")
+              return Effect.succeed(
+                new Response(
+                  new ReadableStream(
+                    {
+                      // The body is pulled by the web Response, outside the runtime, so it signals
+                      // readiness through an unsafe completion.
+                      pull(controller) {
+                        signal.addEventListener(
+                          "abort",
+                          () => {
+                            finalized = true;
+                            controller.error(signal.reason);
+                          },
+                          { once: true },
+                        );
+                        Deferred.doneUnsafe(ready, Effect.void);
+                      },
+                    },
+                    { highWaterMark: 0 },
+                  ),
+                ),
+              );
+            return Deferred.succeed(ready, undefined).pipe(
+              Effect.andThen(Effect.never),
+              Effect.onInterrupt(() =>
+                Effect.sync(() => {
+                  finalized = true;
+                }),
+              ),
+            );
+          };
+          const fiber = yield* Effect.forkChild(listWithTransport(input, fetcher));
+          yield* Deferred.await(ready);
+          yield* Fiber.interrupt(fiber);
+          expect(finalized).toBe(true);
+          expect(requests).toBe(stage === "later" ? 2 : 1);
+        }),
+    );
+  });
+});
+
+describe("skit author list", () => {
+  describe("List stops a Registry response that never finishes its inventory.", () => {
+    it.effect.each([false, true])("page 1000 terminal=%s retains guard position", (terminal) =>
+      Effect.gen(function* () {
+        let requests = 0;
+        const exit = yield* Effect.exit(
+          listWithTransport(input, () =>
+            Effect.sync(() => {
+              requests++;
+              return page(terminal && requests === 1000 ? null : String(requests), []);
+            }),
+          ),
+        );
+        expect(requests).toBe(1000);
+        expect(exit._tag).toBe(terminal ? "Success" : "Failure");
+      }),
+    );
+
+    it.effect.each([false, true])(
+      "item limit terminal=%s retains terminal acceptance",
+      (terminal) =>
+        Effect.gen(function* () {
+          let requests = 0;
+          const exit = yield* Effect.exit(
+            listWithTransport(input, () =>
+              Effect.sync(() => {
+                requests++;
+                return page(
+                  requests === 1 ? "next" : terminal ? null : "again",
+                  Array.from({ length: requests === 1 ? 100000 : 1 }, () => item),
+                );
+              }),
+            ),
+          );
+          expect(requests).toBe(2);
+          expect(exit._tag).toBe(terminal ? "Success" : "Failure");
+        }),
+    );
+  });
+});

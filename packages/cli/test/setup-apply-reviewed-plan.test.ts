@@ -1,3 +1,5 @@
+import * as Library from "@smolai/skit-core/library";
+import { describe } from "@effect/vitest";
 import { recoveryInspection } from "./helpers/recovery.js";
 import { join } from "node:path";
 import { Effect, Exit, FileSystem, Option } from "effect";
@@ -14,7 +16,7 @@ import {
 } from "@smolai/skit-core/library/setup";
 import { SetupReviewInputInvalid } from "@smolai/skit-core/library/setup/failures";
 
-import { prepareSetupUndo } from "../src/library/setup/undo.js";
+import { prepareSetupUndo } from "@smolai/skit-core/library/setup";
 import { captureDisk, diskChanges, noDiskChanges } from "./helpers/disk-snapshot.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";
 import { withSandboxDenying } from "./helpers/sandbox.js";
@@ -125,299 +127,399 @@ const fixture = Effect.fn("Test.setupApplyReviewedPlan")(function* (input: {
 const failure = (exit: Exit.Exit<unknown, unknown>) =>
   Exit.isFailure(exit) ? Option.getOrUndefined(Exit.findErrorOption(exit)) : undefined;
 
-it.effect(
-  "denied enabling records a stopped setup without retention; a fresh retain-only review needs no skills-directory writes",
-  () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const f = yield* fixture({ alias: true, parentAlias: true });
-      // Leave only the duplicate copy whose approved action is retention without enabling.
-      yield* fs.remove(join(f.root, ".claude", "skills", "beta"), { recursive: true });
-      const reviewed = yield* f.review;
-      const before = yield* captureDisk(f.disk);
-      const denied = withSandboxDenying(join(f.root, ".agents"));
+describe("skit setup", () => {
+  describe("Finding and reviewing", () => {
+    describe("A changed setup must be reviewed again before it can change files.", () => {
+      it.effect(
+        "applying with different discovery roots rejects the plan without saving them",
+        () =>
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.FileSystem;
+            const f = yield* fixture({ alias: false });
+            const reviewedRoot = join(f.root, "first");
+            const otherRoot = join(f.root, "second");
+            yield* fs.makeDirectory(reviewedRoot);
+            yield* fs.makeDirectory(otherRoot);
+            const interaction = yield* makeScriptedInteraction([]);
+            const reviewed = yield* f.home.owned(
+              setupCommand({
+                options: f.options,
+                workDirFlag: reviewedRoot,
+                interactive: false,
+                dryRun: true,
+              }).pipe(Effect.provide(interaction.layer)),
+            );
+            const before = yield* captureDisk(f.disk);
 
-      const refused = yield* f
-        .run({ planId: reviewed.onboarding.planId, duplicates: "retire-aliases" })
-        .pipe(denied);
-      assert.instanceOf(failure(refused), SetupStopped);
-      const changes = yield* diskChanges(before);
-      assert.deepStrictEqual(
-        changes.created.map(({ path }) => join(...path)).sort(),
-        ["audit.jsonl", "machine.json", "state.json"].map((name) => join(f.home.home, name)).sort(),
+            const refused = yield* f.run({
+              planId: reviewed.onboarding.planId,
+              workDirFlag: otherRoot,
+            });
+            assert.instanceOf(failure(refused), SetupPlanStale);
+            assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
+
+            const applied = yield* f.run({
+              planId: reviewed.onboarding.planId,
+              workDirFlag: reviewedRoot,
+            });
+            assert.isTrue(Exit.isSuccess(applied));
+            assert.deepStrictEqual((yield* MachineSettings.read(f.home.home)).discoveryRoots, [
+              reviewedRoot,
+            ]);
+          }).pipe(Effect.provide(skitLayer), Effect.scoped),
       );
-      assert.deepStrictEqual(changes.changed, []);
-      assert.deepStrictEqual(changes.deleted, []);
-      const stopped = yield* f.home.durable;
-      assert.deepStrictEqual(stopped.skills, []);
-      assert.deepStrictEqual(stopped.installed_skills, []);
-      assert.deepStrictEqual(
-        stopped.operations.map((operation) => operation._tag),
-        ["Stopped"],
+
+      it.effect(
+        "changed repository decisions invalidate a reviewed plan even without skill changes",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* fixture({ alias: false });
+            const reviewed = yield* f.review;
+            yield* MachineSettings.updateDiscovery(f.home.home, {
+              repositories: [{ path: join(f.root, "repo"), status: "ignored" }],
+            });
+            const before = yield* captureDisk(f.disk);
+
+            const refused = yield* f.run({ planId: reviewed.onboarding.planId });
+            assert.instanceOf(failure(refused), SetupPlanStale);
+            assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
+          }).pipe(Effect.provide(skitLayer), Effect.scoped),
       );
-      assert.isFalse(yield* fs.exists(join(f.root, ".agents")));
 
-      // The stopped record changes the Library revision; the old plan grants no further consent.
-      const afterRefusal = yield* captureDisk(f.disk);
-      const staleRetry = yield* f
-        .run({ planId: reviewed.onboarding.planId, duplicates: "retain-only" })
-        .pipe(denied);
-      assert.instanceOf(failure(staleRetry), SetupPlanStale);
-      assert.deepStrictEqual(yield* diskChanges(afterRefusal), noDiskChanges);
-      const refreshed = yield* f.review;
-      const imported = yield* f
-        .run({ planId: refreshed.onboarding.planId, duplicates: "retain-only" })
-        .pipe(denied);
-      assert.isTrue(Exit.isSuccess(imported));
-      const state = yield* f.home.durable;
-      assert.deepStrictEqual(
-        state.skills.map((skill) => skill.name),
-        ["alpha"],
+      it.effect("a plan ID that no longer matches the machine applies nothing", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture({ alias: false });
+          const before = yield* captureDisk(f.disk);
+
+          const exit = yield* f.run({ planId: `sha256:${"0".repeat(64)}` });
+
+          assert.instanceOf(failure(exit), SetupPlanStale);
+          assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
+        }).pipe(Effect.provide(skitLayer), Effect.scoped),
       );
-      assert.deepStrictEqual(state.installed_skills, []);
-      assert.strictEqual(
-        yield* fs.readLink(join(f.root, "config", "devin", "skills", "alpha")),
-        join(f.root, "Work", "skills", "alpha"),
-      );
-      assert.isFalse(yield* fs.exists(join(f.root, ".agents")));
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("applying with different discovery roots rejects the plan without saving them", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const f = yield* fixture({ alias: false });
-    const reviewedRoot = join(f.root, "first");
-    const otherRoot = join(f.root, "second");
-    yield* fs.makeDirectory(reviewedRoot);
-    yield* fs.makeDirectory(otherRoot);
-    const interaction = yield* makeScriptedInteraction([]);
-    const reviewed = yield* f.home.owned(
-      setupCommand({
-        options: f.options,
-        workDirFlag: reviewedRoot,
-        interactive: false,
-        dryRun: true,
-      }).pipe(Effect.provide(interaction.layer)),
-    );
-    const before = yield* captureDisk(f.disk);
-
-    const refused = yield* f.run({ planId: reviewed.onboarding.planId, workDirFlag: otherRoot });
-    assert.instanceOf(failure(refused), SetupPlanStale);
-    assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
-
-    const applied = yield* f.run({ planId: reviewed.onboarding.planId, workDirFlag: reviewedRoot });
-    assert.isTrue(Exit.isSuccess(applied));
-    assert.deepStrictEqual((yield* MachineSettings.read(f.home.home)).discoveryRoots, [
-      reviewedRoot,
-    ]);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect(
-  "changed repository decisions invalidate a reviewed plan even without skill changes",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture({ alias: false });
-      const reviewed = yield* f.review;
-      yield* MachineSettings.updateDiscovery(f.home.home, {
-        repositories: [{ path: join(f.root, "repo"), status: "ignored" }],
-      });
-      const before = yield* captureDisk(f.disk);
-
-      const refused = yield* f.run({ planId: reviewed.onboarding.planId });
-      assert.instanceOf(failure(refused), SetupPlanStale);
-      assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("applying the reviewed plan ID starts managing every recommended copy", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture({ alias: false });
-    const reviewed = yield* f.review;
-    assert.deepStrictEqual(
-      reviewed.onboarding.recommended.copies.map((copy) => copy.name),
-      ["alpha", "beta"],
-    );
-
-    const exit = yield* f.run({ planId: reviewed.onboarding.planId });
-
-    assert.isTrue(Exit.isSuccess(exit));
-    const state = yield* f.home.durable;
-    assert.deepStrictEqual(state.skills.map((skill) => skill.name).sort(), ["alpha", "beta"]);
-    assert.isNotEmpty(state.installed_skills);
-    assert.isTrue(
-      state.installed_skills.every((installedSkill) => installedSkill.status === "installed"),
-    );
-    // The result reports what happened, so a caller need not re-observe to find out.
-    const report = Exit.isSuccess(exit) ? exit.value : undefined;
-    assert.deepStrictEqual(
-      report?.added.map((copy) => copy.name),
-      ["alpha", "beta"],
-    );
-    assert.strictEqual(report?.installedSkills.length, state.installed_skills.length);
-    assert.deepStrictEqual(report?.leftAlone, []);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("a plan ID that no longer matches the machine applies nothing", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture({ alias: false });
-    const before = yield* captureDisk(f.disk);
-
-    const exit = yield* f.run({ planId: `sha256:${"0".repeat(64)}` });
-
-    assert.instanceOf(failure(exit), SetupPlanStale);
-    assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect(
-  "selected enablement automatically preserves redundant aliases and can be fully undone",
-  () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const f = yield* fixture({ alias: true });
-      const reviewed = yield* f.review;
-      const alias = join(f.root, "config", "devin", "skills", "alpha");
-      const source = join(f.root, "Work", "skills", "alpha");
-      const originalLink = yield* fs.readLink(alias);
-      const applied = yield* f.run({ planId: reviewed.onboarding.planId });
-      assert.isTrue(Exit.isSuccess(applied));
-      if (!Exit.isSuccess(applied) || !applied.value.operationId)
-        return yield* Effect.die(new Error("Missing applied setup operation"));
-      const operationId = applied.value.operationId;
-      assert.isFalse(yield* fs.exists(alias));
-      assert.strictEqual(yield* fs.readFileString(join(source, "SKILL.md")), skillBytes("alpha"));
-      const recovery = yield* recoveryInspection(f.home.home, operationId);
-      const saved = recovery.entries.find((entry) => entry.path === alias);
-      assert.strictEqual(saved?.status, "saved");
-      assert.strictEqual(yield* fs.readLink(saved!.recoveryPath), originalLink);
-      const state = yield* f.home.durable;
-      assert.deepStrictEqual(state.skills.map((skill) => skill.name).sort(), ["alpha", "beta"]);
-      assert.isTrue(
-        state.installed_skills.every((installedSkill) => installedSkill.status === "installed"),
-      );
-      yield* f.home.owned((yield* f.home.owned(prepareSetupUndo(operationId))).apply());
-      assert.strictEqual(yield* fs.readLink(alias), originalLink);
-      assert.deepStrictEqual((yield* f.home.durable).enabled, []);
-      assert.strictEqual(yield* fs.readFileString(join(source, "SKILL.md")), skillBytes("alpha"));
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("retiring aliases reports where the symlinks and their move records were saved", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const f = yield* fixture({ alias: true });
-    const reviewed = yield* f.review;
-
-    const applied = yield* f.run({
-      planId: reviewed.onboarding.planId,
-      duplicates: "retire-aliases",
     });
+  });
+});
 
-    assert.isTrue(Exit.isSuccess(applied));
-    const directories = Exit.isSuccess(applied)
-      ? (applied.value.aliasRecoveryDirectories ?? [])
-      : [];
-    assert.lengthOf(directories, 1);
-    assert.isTrue(yield* fs.exists(directories[0]!));
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
+describe("skit setup", () => {
+  describe("Managing selected copies", () => {
+    describe("Setup manages only the copies selected for it.", () => {
+      it.effect(
+        "denied enabling records a stopped setup without retention; a fresh retain-only review needs no skills-directory writes",
+        () =>
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.FileSystem;
+            const f = yield* fixture({ alias: true, parentAlias: true });
+            // Leave only the duplicate copy whose approved action is retention without enabling.
+            yield* fs.remove(join(f.root, ".claude", "skills", "beta"), { recursive: true });
+            const reviewed = yield* f.review;
+            const before = yield* captureDisk(f.disk);
+            const denied = withSandboxDenying(join(f.root, ".agents"));
 
-it.effect("identical copies at each target are managed in place, not left to conflict", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture({ alias: false, identical: true });
-    const reviewed = yield* f.review;
+            const refused = yield* f
+              .run({ planId: reviewed.onboarding.planId, duplicates: "retire-aliases" })
+              .pipe(denied);
+            assert.instanceOf(failure(refused), SetupStopped);
+            const changes = yield* diskChanges(before);
+            assert.deepStrictEqual(
+              changes.created.map(({ path }) => join(...path)).sort(),
+              ["library.sqlite", "machine.json", "state.json"]
+                .map((name) => join(f.home.home, name))
+                .sort(),
+            );
+            assert.strictEqual(
+              yield* fs.readFileString(join(f.home.home, "machine.json")),
+              '{"schemaVersion":6}\n',
+            );
+            assert.deepStrictEqual(changes.changed, []);
+            assert.deepStrictEqual(changes.deleted, []);
+            const stopped = yield* f.home.durable;
+            assert.deepStrictEqual(stopped.skills, []);
+            assert.deepStrictEqual(stopped.installed_skills, []);
+            assert.deepStrictEqual(
+              (yield* f.home.owned(
+                Effect.flatMap(Library.Service, (library) => library.history),
+              )).operations.map((operation) => operation._tag),
+              ["Stopped"],
+            );
+            assert.isFalse(yield* fs.exists(join(f.root, ".agents")));
 
-    const exit = yield* f.run({ planId: reviewed.onboarding.planId });
+            // The stopped record changes the Library revision; the old plan grants no further consent.
+            const afterRefusal = yield* captureDisk(f.disk);
+            const staleRetry = yield* f
+              .run({ planId: reviewed.onboarding.planId, duplicates: "retain-only" })
+              .pipe(denied);
+            assert.instanceOf(failure(staleRetry), SetupPlanStale);
+            assert.deepStrictEqual(yield* diskChanges(afterRefusal), noDiskChanges);
+            const refreshed = yield* f.review;
+            const imported = yield* f
+              .run({ planId: refreshed.onboarding.planId, duplicates: "retain-only" })
+              .pipe(denied);
+            assert.isTrue(Exit.isSuccess(imported));
+            const state = yield* f.home.durable;
+            assert.deepStrictEqual(
+              state.skills.map((skill) => skill.name),
+              ["alpha"],
+            );
+            assert.deepStrictEqual(state.installed_skills, []);
+            assert.strictEqual(
+              yield* fs.readLink(join(f.root, "config", "devin", "skills", "alpha")),
+              join(f.root, "Work", "skills", "alpha"),
+            );
+            assert.isFalse(yield* fs.exists(join(f.root, ".agents")));
+          }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      );
 
-    assert.isTrue(Exit.isSuccess(exit));
-    const state = yield* f.home.durable;
-    const gamma = state.installed_skills.filter((installedSkill) =>
-      installedSkill.path.endsWith("/gamma"),
+      it.effect("applying the reviewed plan ID starts managing every recommended copy", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture({ alias: false });
+          const reviewed = yield* f.review;
+          assert.deepStrictEqual(
+            reviewed.onboarding.recommended.copies.map((copy) => copy.name),
+            ["alpha", "beta"],
+          );
+
+          const exit = yield* f.run({ planId: reviewed.onboarding.planId });
+
+          assert.isTrue(Exit.isSuccess(exit));
+          const state = yield* f.home.durable;
+          assert.deepStrictEqual(state.skills.map((skill) => skill.name).sort(), ["alpha", "beta"]);
+          assert.isNotEmpty(state.installed_skills);
+          assert.isTrue(
+            state.installed_skills.every((installedSkill) => installedSkill.status === "installed"),
+          );
+          // The result reports what happened, so a caller need not re-observe to find out.
+          const report = Exit.isSuccess(exit) ? exit.value : undefined;
+          assert.deepStrictEqual(
+            report?.added.map((copy) => copy.name),
+            ["alpha", "beta"],
+          );
+          assert.strictEqual(report?.installedSkills.length, state.installed_skills.length);
+          assert.deepStrictEqual(report?.leftAlone, []);
+        }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      );
+
+      it.effect("identical copies at each target are managed in place, not left to conflict", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture({ alias: false, identical: true });
+          const reviewed = yield* f.review;
+
+          const exit = yield* f.run({ planId: reviewed.onboarding.planId });
+
+          assert.isTrue(Exit.isSuccess(exit));
+          const state = yield* f.home.durable;
+          const gamma = state.installed_skills.filter((installedSkill) =>
+            installedSkill.path.endsWith("/gamma"),
+          );
+          assert.deepStrictEqual(
+            gamma.map((installedSkill) => installedSkill.status),
+            ["installed", "installed"],
+          );
+          for (const skills of [
+            join(f.root, ".claude", "skills"),
+            join(f.root, ".agents", "skills"),
+          ])
+            assert.strictEqual(
+              (yield* inspectOwnershipMarker(join(skills, "gamma"))).kind,
+              "valid",
+            );
+        }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      );
+
+      it.effect(
+        "selected enablement preserves destination links automatically and retain-only remains an override",
+        () =>
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.FileSystem;
+            const link = (f: { root: string }) => join(f.root, ".claude", "skills", "delta");
+            const source = (f: { root: string }) => join(f.root, "dotfiles", "skills", "delta");
+
+            const imported = yield* fixture({ alias: false, linked: true });
+            const importedPlan = (yield* imported.review).onboarding.planId;
+            const kept = yield* imported.run({ planId: importedPlan, duplicates: "retain-only" });
+            assert.isTrue(Exit.isSuccess(kept));
+            assert.strictEqual(yield* fs.readLink(link(imported)), source(imported));
+            assert.include(
+              (yield* imported.home.durable).skills.map((skill) => skill.name),
+              "delta",
+            );
+
+            const retired = yield* fixture({ alias: false, linked: true, parentAlias: true });
+            const retiredPlan = (yield* retired.review).onboarding.planId;
+            const replaced = yield* retired.run({ planId: retiredPlan });
+            assert.isTrue(Exit.isSuccess(replaced));
+            assert.strictEqual((yield* inspectOwnershipMarker(link(retired))).kind, "valid");
+            const backups = join(retired.root, ".claude", ".skit-backups");
+            const saved = (yield* fs.readDirectory(backups)).filter(
+              (entry) => entry !== ".gitignore",
+            );
+            assert.lengthOf(saved, 1);
+            assert.strictEqual(yield* fs.readLink(join(backups, saved[0]!)), source(retired));
+            if (!Exit.isSuccess(replaced) || !replaced.value.operationId)
+              return yield* Effect.die(new Error("Missing setup operation"));
+            const inverse = yield* retired.home.owned(prepareSetupUndo(replaced.value.operationId));
+            assert.deepStrictEqual(inverse.summary.conflicts, []);
+            yield* retired.home.owned(inverse.apply());
+            assert.strictEqual(yield* fs.readLink(link(retired)), source(retired));
+            assert.strictEqual(
+              yield* fs.readFileString(join(source(retired), "SKILL.md")),
+              skillBytes("delta"),
+            );
+          }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      );
+
+      it.effect("keep-both is refused for a linked skill before anything is written", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture({ alias: false, linked: true });
+          const planId = (yield* f.review).onboarding.planId;
+          const before = yield* captureDisk(f.disk);
+
+          const refused = failure(yield* f.run({ planId, duplicates: "keep-both" }));
+
+          assert.instanceOf(refused, SetupReviewInputInvalid);
+          assert.strictEqual(
+            (refused as SetupReviewInputInvalid).reason._tag,
+            "KeepBothReplacesLink",
+          );
+          assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
+        }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      );
+
+      it.effect(
+        "a skills.sh destination alias can be retained explicitly or preserved automatically",
+        () =>
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.FileSystem;
+            const f = yield* fixture({ alias: false, skillsSh: true });
+            const reviewed = yield* f.review;
+            assert.deepStrictEqual(
+              reviewed.onboarding.candidates.find((candidate) => candidate.name === "eps")
+                ?.destinationLinks,
+              [join(f.root, ".claude", "skills", "eps")],
+            );
+
+            const kept = yield* f.run({
+              planId: reviewed.onboarding.planId,
+              duplicates: "retain-only",
+            });
+            assert.isTrue(Exit.isSuccess(kept));
+            assert.strictEqual(
+              yield* fs.readLink(join(f.root, ".claude", "skills", "eps")),
+              join(f.root, ".agents", "skills", "eps"),
+            );
+          }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      );
+    });
+  });
+});
+
+describe("skit setup", () => {
+  describe("Managing selected copies", () => {
+    describe("Setup saves a recoverable copy before replacing an approved duplicate.", () => {
+      it.effect(
+        "retiring aliases reports where the symlinks and their move records were saved",
+        () =>
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.FileSystem;
+            const f = yield* fixture({ alias: true });
+            const reviewed = yield* f.review;
+
+            const applied = yield* f.run({
+              planId: reviewed.onboarding.planId,
+              duplicates: "retire-aliases",
+            });
+
+            assert.isTrue(Exit.isSuccess(applied));
+            const directories = Exit.isSuccess(applied)
+              ? (applied.value.aliasRecoveryDirectories ?? [])
+              : [];
+            assert.lengthOf(directories, 1);
+            assert.isTrue(yield* fs.exists(directories[0]!));
+          }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      );
+
+      it.effect("setup saves the approved duplicate alias before changing ownership", () =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+
+          const f = yield* fixture({ alias: true });
+
+          const reviewed = yield* f.review;
+
+          const alias = join(f.root, "config", "devin", "skills", "alpha");
+
+          const source = join(f.root, "Work", "skills", "alpha");
+
+          const originalLink = yield* fs.readLink(alias);
+
+          const applied = yield* f.run({ planId: reviewed.onboarding.planId });
+
+          assert.isTrue(Exit.isSuccess(applied));
+
+          if (!Exit.isSuccess(applied) || !applied.value.operationId)
+            return yield* Effect.die(new Error("Missing applied setup operation"));
+
+          const operationId = applied.value.operationId;
+
+          assert.isFalse(yield* fs.exists(alias));
+
+          assert.strictEqual(
+            yield* fs.readFileString(join(source, "SKILL.md")),
+            skillBytes("alpha"),
+          );
+
+          const recovery = yield* recoveryInspection(f.home.home, operationId);
+
+          const saved = recovery.entries.find((entry) => entry.path === alias);
+
+          assert.strictEqual(saved?.status, "saved");
+
+          assert.strictEqual(yield* fs.readLink(saved!.recoveryPath), originalLink);
+
+          const state = yield* f.home.durable;
+
+          assert.deepStrictEqual(state.skills.map((skill) => skill.name).sort(), ["alpha", "beta"]);
+
+          assert.isTrue(
+            state.installed_skills.every((installedSkill) => installedSkill.status === "installed"),
+          );
+        }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      );
+    });
+  });
+});
+
+describe("skit library undo", () => {
+  describe("Undo restores files saved by the selected setup.", () => {
+    it.effect("Undo restores an approved duplicate alias and clears its selection", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+
+        const f = yield* fixture({ alias: true });
+
+        const reviewed = yield* f.review;
+
+        const alias = join(f.root, "config", "devin", "skills", "alpha");
+
+        const source = join(f.root, "Work", "skills", "alpha");
+
+        const originalLink = yield* fs.readLink(alias);
+
+        const applied = yield* f.run({ planId: reviewed.onboarding.planId });
+
+        if (!Exit.isSuccess(applied) || !applied.value.operationId)
+          return yield* Effect.die(new Error("Missing applied setup operation"));
+
+        const operationId = applied.value.operationId;
+
+        yield* f.home.owned((yield* f.home.owned(prepareSetupUndo(operationId))).apply());
+
+        assert.strictEqual(yield* fs.readLink(alias), originalLink);
+
+        assert.deepStrictEqual((yield* f.home.durable).enabled, []);
+
+        assert.strictEqual(yield* fs.readFileString(join(source, "SKILL.md")), skillBytes("alpha"));
+      }).pipe(Effect.provide(skitLayer), Effect.scoped),
     );
-    assert.deepStrictEqual(
-      gamma.map((installedSkill) => installedSkill.status),
-      ["installed", "installed"],
-    );
-    for (const skills of [join(f.root, ".claude", "skills"), join(f.root, ".agents", "skills")])
-      assert.strictEqual((yield* inspectOwnershipMarker(join(skills, "gamma"))).kind, "valid");
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect(
-  "selected enablement preserves destination links automatically and retain-only remains an override",
-  () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const link = (f: { root: string }) => join(f.root, ".claude", "skills", "delta");
-      const source = (f: { root: string }) => join(f.root, "dotfiles", "skills", "delta");
-
-      const imported = yield* fixture({ alias: false, linked: true });
-      const importedPlan = (yield* imported.review).onboarding.planId;
-      const kept = yield* imported.run({ planId: importedPlan, duplicates: "retain-only" });
-      assert.isTrue(Exit.isSuccess(kept));
-      assert.strictEqual(yield* fs.readLink(link(imported)), source(imported));
-      assert.include(
-        (yield* imported.home.durable).skills.map((skill) => skill.name),
-        "delta",
-      );
-
-      const retired = yield* fixture({ alias: false, linked: true, parentAlias: true });
-      const retiredPlan = (yield* retired.review).onboarding.planId;
-      const replaced = yield* retired.run({ planId: retiredPlan });
-      assert.isTrue(Exit.isSuccess(replaced));
-      assert.strictEqual((yield* inspectOwnershipMarker(link(retired))).kind, "valid");
-      const backups = join(retired.root, ".claude", ".skit-backups");
-      const saved = (yield* fs.readDirectory(backups)).filter((entry) => entry !== ".gitignore");
-      assert.lengthOf(saved, 1);
-      assert.strictEqual(yield* fs.readLink(join(backups, saved[0]!)), source(retired));
-      if (!Exit.isSuccess(replaced) || !replaced.value.operationId)
-        return yield* Effect.die(new Error("Missing setup operation"));
-      const inverse = yield* retired.home.owned(prepareSetupUndo(replaced.value.operationId));
-      assert.deepStrictEqual(inverse.summary.conflicts, []);
-      yield* retired.home.owned(inverse.apply());
-      assert.strictEqual(yield* fs.readLink(link(retired)), source(retired));
-      assert.strictEqual(
-        yield* fs.readFileString(join(source(retired), "SKILL.md")),
-        skillBytes("delta"),
-      );
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("keep-both is refused for a linked skill before anything is written", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture({ alias: false, linked: true });
-    const planId = (yield* f.review).onboarding.planId;
-    const before = yield* captureDisk(f.disk);
-
-    const refused = failure(yield* f.run({ planId, duplicates: "keep-both" }));
-
-    assert.instanceOf(refused, SetupReviewInputInvalid);
-    assert.strictEqual((refused as SetupReviewInputInvalid).reason._tag, "KeepBothReplacesLink");
-    assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect(
-  "a skills.sh destination alias can be retained explicitly or preserved automatically",
-  () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const f = yield* fixture({ alias: false, skillsSh: true });
-      const reviewed = yield* f.review;
-      assert.deepStrictEqual(
-        reviewed.onboarding.candidates.find((candidate) => candidate.name === "eps")
-          ?.destinationLinks,
-        [join(f.root, ".claude", "skills", "eps")],
-      );
-
-      const kept = yield* f.run({ planId: reviewed.onboarding.planId, duplicates: "retain-only" });
-      assert.isTrue(Exit.isSuccess(kept));
-      assert.strictEqual(
-        yield* fs.readLink(join(f.root, ".claude", "skills", "eps")),
-        join(f.root, ".agents", "skills", "eps"),
-      );
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
+  });
+});

@@ -73,3 +73,16 @@ test("unsafe lock facts retain native SQLite errors without core-authored reason
   });
   expect(classifyFailure(changed).message).toContain("lease belongs to a different root");
 });
+
+test("author sync reports the saved file when both versions need manual recovery", () => {
+  const path = "/author/.skit/replace-example/previous";
+  const unsafe = restored({
+    _tag: "AuthorWorkspaceUnsafe",
+    path,
+    reason: { _tag: "FileReplacementNeedsRecovery" },
+  });
+  expect(classifyFailure(unsafe)).toMatchObject({
+    message: `Author sync kept a displaced entry at ${path}`,
+    remediation: expect.stringContaining("review both versions"),
+  });
+});

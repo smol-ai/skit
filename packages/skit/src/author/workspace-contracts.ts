@@ -21,6 +21,7 @@ export type SyncStateInvalidReason = typeof SyncStateInvalidReason.Type;
 export const WorkspaceUnsafeReason = Schema.TaggedUnion({
   RootChanged: {},
   ControlNotDirectory: {},
+  FileReplacementNeedsRecovery: {},
   LockNotFile: {},
   LockFailed: { cause: FileLockFailureCause },
   LeaseRootMismatch: { leaseRoot: Schema.String },

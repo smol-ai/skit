@@ -47,180 +47,27 @@ const logout = (handler: TestHttpHandler, home: string, selectedOrigin?: string)
 const authHome = Effect.flatMap(FileSystem.FileSystem, (fs) =>
   fs.makeTempDirectoryScoped({ prefix: "skit-auth-" }),
 );
-
-describe("saved login reuse", () => {
-  const seed = (home: string, expiresAt = "2999-01-01T00:00:00Z") =>
-    Effect.flatMap(FileSystem.FileSystem, (fs) =>
-      fs.writeFileString(
-        join(home, "auth.json"),
-        JSON.stringify({
-          schemaVersion: 1,
-          defaultRegistry: "default",
-          registryAliases: { default: "https://skit.example" },
-          servers: {
-            "https://skit.example": {
-              token: "saved-test-token",
-              tokenId: "saved-id",
-              tokenPrefix: "saved-prefix",
-              scopes: ["library:sync"],
-              expiresAt,
-            },
+const seed = (home: string, expiresAt = "2999-01-01T00:00:00Z") =>
+  Effect.flatMap(FileSystem.FileSystem, (fs) =>
+    fs.writeFileString(
+      join(home, "auth.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        defaultRegistry: "default",
+        registryAliases: { default: "https://skit.example" },
+        servers: {
+          "https://skit.example": {
+            token: "saved-test-token",
+            tokenId: "saved-id",
+            tokenPrefix: "saved-prefix",
+            scopes: ["library:sync"],
+            expiresAt,
           },
-        }),
-        { mode: 0o600 },
-      ),
-    );
-
-  it.effect("reuses a server-validated credential without prompts or replacement", () =>
-    Effect.gen(function* () {
-      const home = yield* authHome;
-      yield* seed(home);
-      const interaction = yield* makeScriptedInteraction([]);
-      const observed: string[] = [];
-      const handler: TestHttpHandler = (request) =>
-        Effect.sync(() => {
-          observed.push(request.method);
-          expect(request.headers.authorization).toBe("Bearer saved-test-token");
-          return Response.json({ error: "library_not_found" }, { status: 404 });
-        });
-      const value = yield* authLoginCommand({
-        registry: "https://skit.example",
-        home,
-        scopes: ["library:sync"],
-        interactive: false,
-      }).pipe(
-        Effect.provide(
-          interaction.layer.pipe(
-            Layer.provideMerge(registryHttpLayer(testHttpClientLayer(handler))),
-          ),
-        ),
-      );
-      expect(value).toMatchObject({
-        alreadyAuthenticated: true,
-        credentialPath: join(home, "auth.json"),
-      });
-      expect(yield* interaction.prompts).toEqual([]);
-      expect(observed).toEqual(["GET"]);
-      const access = yield* registryCredentials({ home, command: "skit sync" });
-      expect(access.token).toBe("saved-test-token");
-    }).pipe(Effect.provide(testPlatformLayer)),
+        },
+      }),
+      { mode: 0o600 },
+    ),
   );
-
-  for (const status of [200, 403]) {
-    it.effect(`accepts an authenticated credential check with status ${status}`, () =>
-      Effect.gen(function* () {
-        const home = yield* authHome;
-        yield* seed(home);
-        const interaction = yield* makeScriptedInteraction([]);
-        const value = yield* authLoginCommand({
-          home,
-          scopes: ["library:sync"],
-          interactive: false,
-        }).pipe(
-          Effect.provide(
-            interaction.layer.pipe(
-              Layer.provideMerge(
-                registryHttpLayer(
-                  testHttpClientLayer(() =>
-                    Effect.succeed(
-                      Response.json(
-                        status === 200 ? { library: null } : { error: "insufficient_scope" },
-                        { status },
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-        expect(value).toMatchObject({ alreadyAuthenticated: true });
-        expect(yield* interaction.prompts).toEqual([]);
-      }).pipe(Effect.provide(testPlatformLayer)),
-    );
-  }
-
-  it.effect("expired credentials need a new interactive login without sending the bearer", () =>
-    Effect.gen(function* () {
-      const home = yield* authHome;
-      yield* seed(home, "1969-01-01T00:00:00Z");
-      const interaction = yield* makeScriptedInteraction([]);
-      const failure = yield* Effect.flip(
-        authLoginCommand({ home, scopes: ["library:sync"], interactive: false }).pipe(
-          Effect.provide(
-            interaction.layer.pipe(
-              Layer.provideMerge(
-                registryHttpLayer(
-                  testHttpClientLayer(() =>
-                    Effect.sync(() => expect.fail("Expired bearer was sent")),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-      expect(failure._tag).toBe("InteractiveLoginUnavailable");
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
-
-  it.effect("revoked credentials require login and server failures do not collect a password", () =>
-    Effect.gen(function* () {
-      const home = yield* authHome;
-      yield* seed(home);
-      const interaction = yield* makeScriptedInteraction([]);
-      for (const status of [401, 503]) {
-        const failure = yield* Effect.flip(
-          authLoginCommand({ home, scopes: ["library:sync"], interactive: false }).pipe(
-            Effect.provide(
-              interaction.layer.pipe(
-                Layer.provideMerge(
-                  registryHttpLayer(
-                    testHttpClientLayer(() =>
-                      Effect.succeed(Response.json({ error: "unavailable" }, { status })),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-        expect(failure._tag).toBe(status === 401 ? "InteractiveLoginUnavailable" : "SignInFailed");
-      }
-      expect(yield* interaction.prompts).toEqual([]);
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
-
-  it.effect("explicit relogin prompts and persists a replacement for later commands", () =>
-    Effect.gen(function* () {
-      const home = yield* authHome;
-      yield* seed(home);
-      const interaction = yield* makeScriptedInteraction(["user@example.test", "not-stored"]);
-      const requests: Array<{ url: string; init?: RequestInit }> = [];
-      const value = yield* authLoginCommand({
-        home,
-        scopes: ["library:sync"],
-        interactive: true,
-        relogin: true,
-      }).pipe(
-        Effect.provide(
-          interaction.layer.pipe(
-            Layer.provideMerge(registryHttpLayer(testHttpClientLayer(successfulServer(requests)))),
-          ),
-        ),
-      );
-      expect(value).toMatchObject({
-        alreadyAuthenticated: false,
-        credentialPath: join(home, "auth.json"),
-      });
-      expect((yield* interaction.prompts).map((prompt) => prompt.kind)).toEqual([
-        "text",
-        "password",
-      ]);
-      expect((yield* registryCredentials({ home })).token).toBe("skit_pat_secret_one");
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
-});
 const readText = (path: string) =>
   Effect.flatMap(FileSystem.FileSystem, (fs) => fs.readFileString(path));
 
@@ -310,308 +157,100 @@ function successfulServer(requests: Array<{ url: string; init?: RequestInit }>):
     });
 }
 
-describe("CLI authentication journey", () => {
-  it.effect("signs in to the hosted Registry when no Registry is configured", () =>
-    Effect.gen(function* () {
-      const home = yield* authHome;
-      expect(yield* resolveLoginTarget(undefined, home)).toBe("https://skit.smol.ai");
-      expect(yield* Effect.flip(resolveLoginTarget("missing", home))).toMatchObject({
-        _tag: "RegistryAliasNotFound",
-        alias: "missing",
-      });
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
-
-  it.effect("rejects scopes the selected Registry does not advertise before sign-in", () =>
-    Effect.gen(function* () {
-      const home = yield* authHome;
-      const observed: string[] = [];
-      const exit = yield* Effect.exit(
-        login(
-          {
-            origin: "https://skit.example",
-            email: "user@example.test",
-            password: "secret",
-            scopes: ["authoring:write"],
-            home,
-          },
-          (request) =>
-            Effect.sync(() => {
-              observed.push(new URL(request.url).pathname);
-              return Response.json({
-                schema: "skit.server.v1",
-                download: "/api/skits/{owner}/{slug}/releases/{version}/download",
-                scopes: ["library:sync"],
-              });
-            }),
-        ),
-      );
-
-      expect(observed).toEqual(["/.well-known/skit"]);
-      expect(exit._tag).toBe("Failure");
-      if (exit._tag === "Failure") expect(String(exit.cause)).toContain("authoring:write");
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
-
-  it.effect(
-    "exchanges a password session for a stored expiring PAT and signs the session out",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const home = yield* authHome;
-        const requests: Array<{ url: string; init?: RequestInit }> = [];
-        yield* login(
-          {
-            origin: "https://skit.example",
-            email: "user@example.test",
-            password: "not-stored",
-            scopes: ["library:sync"],
-            home,
-          },
-          successfulServer(requests),
-        );
-
-        expect(requests.map(({ url }) => new URL(url).pathname)).toEqual([
-          "/.well-known/skit",
-          "/api/auth/sign-in/email",
-          "/api/tokens",
-          "/api/auth/sign-out",
-        ]);
-        const mint = requests[2].init!;
-        expect(new Headers(mint.headers).get("origin")).toBe("https://skit.example");
-        expect(new Headers(mint.headers).get("cookie")).toContain("skit-auth.session_token=");
-        expect(payload(mint)).not.toContain("not-stored");
-        const path = join(home, "auth.json");
-        expect((yield* fs.stat(path)).mode & 0o777).toBe(0o600);
-        expect(yield* readText(path)).not.toContain("not-stored");
-        const storedConfig = JSON.parse(yield* readText(path));
-        expect(storedConfig).not.toHaveProperty("activeOrigin");
-        expect(storedConfig).toMatchObject({
-          defaultRegistry: "default",
-          registryAliases: { default: "https://skit.example" },
-        });
-        expect(yield* registryCredentials({ home })).toMatchObject({
-          origin: "https://skit.example",
-          token: "skit_pat_secret_one",
-          tokenId: "pat_one",
-          scopes: ["library:sync"],
-          source: "stored",
-        });
-        expect(yield* resolveLoginTarget(undefined, home)).toBe("https://skit.example");
-        expect(yield* resolveLoginTarget("default", home)).toBe("https://skit.example");
-      }).pipe(Effect.provide(testPlatformLayer)),
-  );
-
-  it.effect("reports an unknown expiry honestly when an older server omits it", () =>
-    Effect.gen(function* () {
-      const home = yield* authHome;
-      const requests: Array<{ url: string; init?: RequestInit }> = [];
-      const base = successfulServer(requests);
-      const server: TestHttpHandler = (request, url, signal) =>
-        Effect.gen(function* () {
-          const response = yield* base(request, url, signal);
-          if (request.url.endsWith("/api/tokens") && request.method === "POST") {
-            const { expires_at: _omitted, ...body } = yield* Schema.decodeUnknownEffect(
-              MintedToken,
-            )(yield* HttpClientResponse.fromWeb(request, response).json).pipe(Effect.orDie);
-            return Response.json(body, { status: 201 });
-          }
-          return response;
-        });
-
-      const result = yield* login(
-        {
-          origin: "https://skit.example",
-          email: "user@example.test",
-          password: "secret",
-          scopes: ["library:sync"],
-          home,
-        },
-        server,
-      );
-
-      expect(result).not.toHaveProperty("expiresAt");
-      expect(yield* registryCredentials({ home })).toMatchObject({
-        source: "stored",
-        expiresAt: undefined,
-      });
-      expect(yield* readText(join(home, "auth.json"))).not.toContain("expiresAt");
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
-
-  it.effect("a second login preserves the first configured default", () =>
-    Effect.gen(function* () {
-      const home = yield* authHome;
-      const requests: Array<{ url: string; init?: RequestInit }> = [];
-      const server = successfulServer(requests);
-      for (const origin of ["https://one.example", "https://two.example"])
-        yield* login(
-          {
-            origin,
-            email: "user@example.test",
-            password: "secret",
-            scopes: ["authoring:write"],
-            home,
-          },
-          server,
-        );
-
-      expect(yield* registryCredentials({ home })).toMatchObject({
-        origin: "https://one.example",
-        token: "skit_pat_secret_one",
-      });
-      expect(yield* registryCredentials({ origin: "https://one.example", home })).toMatchObject({
-        origin: "https://one.example",
-        token: "skit_pat_secret_one",
-        source: "stored",
-      });
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
-
-  it.effect("revokes the active PAT before removing it locally", () =>
-    Effect.gen(function* () {
-      const home = yield* authHome;
-      const requests: Array<{ url: string; init?: RequestInit }> = [];
-      const server = successfulServer(requests);
-      yield* login(
-        {
-          origin: "https://skit.example",
-          email: "user@example.test",
-          password: "secret",
-          scopes: ["library:sync"],
-          home,
-        },
-        server,
-      );
-      requests.length = 0;
-
-      expect(yield* logout(server, home)).toEqual({
+it.effect("exchanges a password session for a stored expiring PAT and signs the session out", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* authHome;
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    yield* login(
+      {
         origin: "https://skit.example",
-        revoked: true,
-      });
-      expect(requests).toHaveLength(1);
-      expect(new Headers(requests[0].init?.headers).get("authorization")).toBe(
-        "Bearer skit_pat_secret_one",
-      );
-      expect(yield* registryCredentials({ home })).toMatchObject({
-        source: "none",
-        token: undefined,
-      });
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
+        email: "user@example.test",
+        password: "not-stored",
+        scopes: ["library:sync"],
+        home,
+      },
+      successfulServer(requests),
+    );
 
-  it.effect("revokes a minted PAT when temporary-session sign-out fails", () =>
-    Effect.gen(function* () {
-      const home = yield* authHome;
-      const requests: Array<{ url: string; init?: RequestInit }> = [];
-      const base = successfulServer(requests);
-      const server: TestHttpHandler = (request, url, signal) =>
-        request.url.endsWith("/api/auth/sign-out")
-          ? Effect.sync(() => {
-              requests.push({ url: request.url, init: requestInit(request) });
-              return new Response(null, { status: 503 });
-            })
-          : base(request, url, signal);
+    expect(requests.map(({ url }) => new URL(url).pathname)).toEqual([
+      "/.well-known/skit",
+      "/api/auth/sign-in/email",
+      "/api/tokens",
+      "/api/auth/sign-out",
+    ]);
+    const mint = requests[2].init!;
+    expect(new Headers(mint.headers).get("origin")).toBe("https://skit.example");
+    expect(new Headers(mint.headers).get("cookie")).toContain("skit-auth.session_token=");
+    expect(payload(mint)).not.toContain("not-stored");
+    const path = join(home, "auth.json");
+    expect((yield* fs.stat(path)).mode & 0o777).toBe(0o600);
+    expect(yield* readText(path)).not.toContain("not-stored");
+    const storedConfig = JSON.parse(yield* readText(path));
+    expect(storedConfig).not.toHaveProperty("activeOrigin");
+    expect(storedConfig).toMatchObject({
+      defaultRegistry: "default",
+      registryAliases: { default: "https://skit.example" },
+    });
+    expect(yield* registryCredentials({ home })).toMatchObject({
+      origin: "https://skit.example",
+      token: "skit_pat_secret_one",
+      tokenId: "pat_one",
+      scopes: ["library:sync"],
+      source: "stored",
+    });
+    expect(yield* resolveLoginTarget(undefined, home)).toBe("https://skit.example");
+    expect(yield* resolveLoginTarget("default", home)).toBe("https://skit.example");
+  }).pipe(Effect.provide(testPlatformLayer)),
+);
 
-      const failure = yield* Effect.flip(
-        login(
-          {
-            origin: "https://skit.example",
-            email: "user@example.test",
-            password: "secret",
-            scopes: ["library:sync"],
-            home,
-          },
-          server,
-        ),
-      );
-      expect(failure.message).toContain("Sign out failed");
-      expect(requests.map(({ url }) => new URL(url).pathname)).toContain("/api/tokens/pat_one");
-      expect(yield* registryCredentials({ home })).toMatchObject({ source: "none" });
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
-
-  it.effect("reports when both temporary-session cleanup operations fail", () =>
-    Effect.gen(function* () {
-      const home = yield* authHome;
-      const requests: Array<{ url: string; init?: RequestInit }> = [];
-      const base = successfulServer(requests);
-      const server: TestHttpHandler = (request, url, signal) =>
-        request.url.endsWith("/api/auth/sign-out") || request.url.includes("/api/tokens/pat_")
-          ? Effect.succeed(new Response(null, { status: 503 }))
-          : base(request, url, signal);
-
-      const failure = yield* Effect.flip(
-        login(
-          {
-            origin: "https://skit.example",
-            email: "user@example.test",
-            password: "secret",
-            scopes: ["library:sync"],
-            home,
-          },
-          server,
-        ),
-      );
-      expect(failure).toMatchObject({
-        _tag: "SignInFailed",
-        reason: {
-          _tag: "SessionEndFailed",
-          cleanup: { _tag: "ResponseRejected", status: 503 },
-          credential: {
-            tokenId: "pat_one",
-            tokenPrefix: "skit_pat_secret_on",
-            cleanup: { _tag: "ResponseRejected", status: 503 },
-          },
-        },
-      });
-      expect(failure.message).toContain("The temporary session may still be live");
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
-
-  it.effect(
-    "keeps the received status when the credential error code describes a different status",
-    () =>
+it.effect("reports an unknown expiry honestly when an older server omits it", () =>
+  Effect.gen(function* () {
+    const home = yield* authHome;
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const base = successfulServer(requests);
+    const server: TestHttpHandler = (request, url, signal) =>
       Effect.gen(function* () {
-        const home = yield* authHome;
-        const base = successfulServer([]);
-        const server: TestHttpHandler = (request, url, signal) =>
-          url.pathname === "/api/tokens" && request.method === "POST"
-            ? Effect.succeed(Response.json({ error: "invalid_request" }, { status: 503 }))
-            : base(request, url, signal);
-        const failure = yield* login(
-          {
-            origin: "https://skit.example",
-            email: "user@example.test",
-            password: "secret",
-            scopes: ["library:sync"],
-            home,
-          },
-          server,
-        ).pipe(Effect.flip);
-        expect(failure).toMatchObject({
-          _tag: "SignInFailed",
-          reason: {
-            _tag: "RequestFailed",
-            operation: "credential-create",
-            status: 503,
-          },
-        });
-        expect(failure.message).toContain("could not be confirmed");
-      }).pipe(Effect.provide(testPlatformLayer)),
-  );
+        const response = yield* base(request, url, signal);
+        if (request.url.endsWith("/api/tokens") && request.method === "POST") {
+          const { expires_at: _omitted, ...body } = yield* Schema.decodeUnknownEffect(MintedToken)(
+            yield* HttpClientResponse.fromWeb(request, response).json,
+          ).pipe(Effect.orDie);
+          return Response.json(body, { status: 201 });
+        }
+        return response;
+      });
 
-  it.effect("keeps credential-creation rejection when temporary-session sign-out also fails", () =>
+    const result = yield* login(
+      {
+        origin: "https://skit.example",
+        email: "user@example.test",
+        password: "secret",
+        scopes: ["library:sync"],
+        home,
+      },
+      server,
+    );
+
+    expect(result).not.toHaveProperty("expiresAt");
+    expect(yield* registryCredentials({ home })).toMatchObject({
+      source: "stored",
+      expiresAt: undefined,
+    });
+    expect(yield* readText(join(home, "auth.json"))).not.toContain("expiresAt");
+  }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.effect(
+  "keeps the received status when the credential error code describes a different status",
+  () =>
     Effect.gen(function* () {
       const home = yield* authHome;
-      const requests: Array<{ url: string; init?: RequestInit }> = [];
-      const base = successfulServer(requests);
+      const base = successfulServer([]);
       const server: TestHttpHandler = (request, url, signal) =>
         url.pathname === "/api/tokens" && request.method === "POST"
-          ? Effect.succeed(Response.json({ error: "unauthorized" }, { status: 401 }))
-          : url.pathname === "/api/auth/sign-out"
-            ? Effect.succeed(new Response("session cleanup unavailable", { status: 503 }))
-            : base(request, url, signal);
+          ? Effect.succeed(Response.json({ error: "invalid_request" }, { status: 503 }))
+          : base(request, url, signal);
       const failure = yield* login(
         {
           origin: "https://skit.example",
@@ -625,349 +264,88 @@ describe("CLI authentication journey", () => {
       expect(failure).toMatchObject({
         _tag: "SignInFailed",
         reason: {
-          _tag: "SessionEndFailed",
-          cleanup: { _tag: "ResponseRejected", status: 503, body: "session cleanup unavailable" },
-          original: { _tag: "SignInRejected", operation: "credential-create" },
+          _tag: "RequestFailed",
+          operation: "credential-create",
+          status: 503,
         },
       });
-      expect(yield* registryCredentials({ home })).toMatchObject({ source: "none" });
+      expect(failure.message).toContain("could not be confirmed");
     }).pipe(Effect.provide(testPlatformLayer)),
-  );
+);
 
-  it.effect(
-    "keeps the exact storage error when revocation of the unsaved credential is rejected",
-    () =>
-      Effect.gen(function* () {
-        const home = yield* authHome;
-        const fs = yield* FileSystem.FileSystem;
-        const path = join(home, "auth.json");
-        const original = systemError({
-          _tag: "PermissionDenied",
-          module: "FileSystem",
-          method: "rename",
-          pathOrDescriptor: path,
-        });
-        const requests: Array<{ url: string; init?: RequestInit }> = [];
-        const base = successfulServer(requests);
-        const seen: string[] = [];
-        const server: TestHttpHandler = (request, url, signal) => {
-          seen.push(`${request.method} ${url.pathname}`);
-          return request.method === "DELETE"
-            ? Effect.succeed(new Response(null, { status: 503 }))
-            : base(request, url, signal);
-        };
-        const failure = yield* login(
-          {
-            origin: "https://skit.example",
-            email: "user@example.test",
-            password: "secret",
-            scopes: ["library:sync"],
-            home,
-          },
-          server,
-        ).pipe(
-          Effect.provideService(FileSystem.FileSystem, {
-            ...fs,
-            rename: (from, to) => (to === path ? Effect.fail(original) : fs.rename(from, to)),
-          }),
-          Effect.flip,
-        );
-        expect(failure).toMatchObject({
-          _tag: "SignInFailed",
-          reason: {
-            _tag: "StorageCleanupFailed",
-            cleanup: { _tag: "ResponseRejected", status: 503 },
-            tokenId: "pat_one",
-          },
-        });
-        if (failure._tag !== "SignInFailed" || failure.reason._tag !== "StorageCleanupFailed")
-          return yield* Effect.die("Expected failed credential cleanup");
-        expect(failure.reason.original).toBe(original);
-        expect(seen).toEqual([
-          "GET /.well-known/skit",
-          "POST /api/auth/sign-in/email",
-          "POST /api/tokens",
-          "POST /api/auth/sign-out",
-          "DELETE /api/tokens/pat_one",
-        ]);
-        expect(yield* fs.exists(path)).toBe(false);
-      }).pipe(Effect.provide(testPlatformLayer)),
-  );
-
-  it.effect("logging in again rotates the credential for that origin", () =>
-    Effect.gen(function* () {
-      const home = yield* authHome;
-      const requests: Array<{ url: string; init?: RequestInit }> = [];
-      const server = successfulServer(requests);
-      const credentials = (scopes: Array<"library:sync" | "authoring:write">) => ({
-        origin: "https://skit.example",
+it.effect("environment origin and token override stored authentication", () =>
+  Effect.gen(function* () {
+    const home = yield* authHome;
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    yield* login(
+      {
+        origin: "https://stored.example",
         email: "user@example.test",
         password: "secret",
-        scopes,
-        home,
-      });
-      yield* login(credentials(["library:sync"]), server);
-      yield* login(credentials(["library:sync", "authoring:write"]), server);
-
-      expect(yield* registryCredentials({ home })).toMatchObject({
-        tokenId: "pat_two",
-        token: "skit_pat_secret_two",
-        scopes: ["library:sync", "authoring:write"],
-      });
-      expect(requests.map(({ url }) => new URL(url).pathname)).toContain("/api/tokens/pat_one");
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
-
-  it.effect("keeps the previous stored credential working when replacement cannot be saved", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const home = yield* authHome;
-      const requests: Array<{ url: string; init?: RequestInit }> = [];
-      const server = successfulServer(requests);
-      const input = {
-        origin: "https://skit.example",
-        email: "user@example.test",
-        password: "secret",
-        scopes: ["library:sync"] as const,
-        home,
-      };
-      yield* login({ ...input, scopes: [...input.scopes] }, server);
-      requests.length = 0;
-      const unwritableAfterMint: TestHttpHandler = (request, url, signal) =>
-        server(request, url, signal).pipe(
-          Effect.tap(() => {
-            if (request.url.endsWith("/api/tokens") && request.method === "POST")
-              return fs.chmod(home, 0o500).pipe(Effect.orDie);
-            if (request.url.endsWith("/api/tokens/pat_two") && request.method === "DELETE")
-              return fs.chmod(home, 0o700).pipe(Effect.orDie);
-            return Effect.void;
-          }),
-        );
-      const exit = yield* Effect.exit(
-        login({ ...input, scopes: [...input.scopes] }, unwritableAfterMint),
-      ).pipe(Effect.ensuring(fs.chmod(home, 0o700).pipe(Effect.orDie)));
-      expect(exit._tag).toBe("Failure");
-
-      expect(yield* registryCredentials({ home })).toMatchObject({ tokenId: "pat_one" });
-      const revoked = requests
-        .filter(({ init }) => init?.method === "DELETE")
-        .map(({ url }) => new URL(url).pathname);
-      expect(revoked).toEqual(["/api/tokens/pat_two"]);
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
-
-  it.effect("keeps the new credential and warns when the previous token cannot be revoked", () =>
-    Effect.gen(function* () {
-      const home = yield* authHome;
-      const requests: Array<{ url: string; init?: RequestInit }> = [];
-      const base = successfulServer(requests);
-      const server: TestHttpHandler = (request, url, signal) =>
-        request.url.endsWith("/api/tokens/pat_one") && request.method === "DELETE"
-          ? Effect.sync(() => {
-              requests.push({ url: request.url, init: requestInit(request) });
-              return new Response(null, { status: 503 });
-            })
-          : base(request, url, signal);
-      const input = {
-        origin: "https://skit.example",
-        email: "user@example.test",
-        password: "secret",
-        scopes: ["library:sync"] as const,
-        home,
-      };
-      yield* login({ ...input, scopes: [...input.scopes] }, server);
-      const result = yield* login({ ...input, scopes: [...input.scopes] }, server);
-
-      expect(result.warning).toMatchObject({
-        _tag: "PreviousCredentialNotRevoked",
-        tokenId: "pat_one",
-        cleanup: { _tag: "ResponseRejected", status: 503 },
-      });
-      expect(yield* registryCredentials({ home })).toMatchObject({ tokenId: "pat_two" });
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
-
-  it.effect("logout preserves a default even when its credential is removed", () =>
-    Effect.gen(function* () {
-      const home = yield* authHome;
-      const requests: Array<{ url: string; init?: RequestInit }> = [];
-      const server = successfulServer(requests);
-      yield* login(
-        {
-          origin: "https://one.example",
-          email: "user@example.test",
-          password: "secret",
-          scopes: ["library:sync"],
-          home,
-        },
-        server,
-      );
-      yield* login(
-        {
-          origin: "https://two.example",
-          email: "user@example.test",
-          password: "secret",
-          scopes: ["library:sync"],
-          home,
-        },
-        server,
-      );
-
-      yield* logout(server, home, "https://one.example");
-      expect(yield* registryCredentials({ home })).toMatchObject({
-        origin: "https://one.example",
-        token: undefined,
-      });
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
-
-  it.effect("environment origin and token override stored authentication", () =>
-    Effect.gen(function* () {
-      const home = yield* authHome;
-      const requests: Array<{ url: string; init?: RequestInit }> = [];
-      yield* login(
-        {
-          origin: "https://stored.example",
-          email: "user@example.test",
-          password: "secret",
-          scopes: ["library:sync"],
-          home,
-        },
-        successfulServer(requests),
-      );
-      expect(
-        yield* registryCredentials({ home }).pipe(withEnvironment(environmentCredential)),
-      ).toMatchObject({
-        origin: "https://environment.example",
-        token: "skit_pat_environment",
-        source: "environment",
-      });
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
-
-  it.effect("legacy activeOrigin is ignored and removed on the next write", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const home = yield* authHome;
-      const credential = (suffix: string) => ({
-        token: `secret-${suffix}`,
-        tokenId: suffix,
-        tokenPrefix: `secret-${suffix}`,
         scopes: ["library:sync"],
-      });
-      yield* fs.writeFileString(
-        join(home, "auth.json"),
-        JSON.stringify({
-          schemaVersion: 1,
-          activeOrigin: "https://two.example",
-          servers: {
-            "https://one.example": credential("one"),
-            "https://two.example": credential("two"),
-          },
-        }),
-      );
+        home,
+      },
+      successfulServer(requests),
+    );
+    expect(
+      yield* registryCredentials({ home }).pipe(withEnvironment(environmentCredential)),
+    ).toMatchObject({
+      origin: "https://environment.example",
+      token: "skit_pat_environment",
+      source: "environment",
+    });
+  }).pipe(Effect.provide(testPlatformLayer)),
+);
 
-      expect(yield* Effect.flip(registryCredentials({ home }))).toMatchObject({
-        _tag: "RegistrySelectionAmbiguous",
-        origins: ["https://one.example", "https://two.example"],
-      });
-      yield* addRegistryRemote("one", "https://one.example", home);
-      const stored = JSON.parse(yield* fs.readFileString(join(home, "auth.json")));
-      expect(stored).not.toHaveProperty("activeOrigin");
-      expect(stored).not.toHaveProperty("defaultRegistry");
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
-
-  it.effect("logout without a target refuses multiple credentials", () =>
-    Effect.gen(function* () {
-      const home = yield* authHome;
-      const requests: Array<{ url: string; init?: RequestInit }> = [];
-      const server = successfulServer(requests);
-      for (const origin of ["https://one.example", "https://two.example"])
-        yield* login(
-          {
-            origin,
-            email: "user@example.test",
-            password: "secret",
-            scopes: ["library:sync"],
-            home,
-          },
-          server,
-        );
-      requests.length = 0;
-
-      expect(yield* Effect.flip(logout(server, home))).toMatchObject({
-        _tag: "RegistrySelectionAmbiguous",
-        origins: ["https://one.example", "https://two.example"],
-      });
-      expect(requests).toEqual([]);
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
-
-  it.effect("status lists environment credentials as a distinct row", () =>
-    Effect.gen(function* () {
-      const home = yield* authHome;
-      const requests: Array<{ url: string; init?: RequestInit }> = [];
-      yield* login(
-        {
-          origin: "https://stored.example",
-          email: "user@example.test",
-          password: "secret",
-          scopes: ["library:sync"],
-          home,
+it.effect("legacy activeOrigin is ignored and removed on the next write", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* authHome;
+    const credential = (suffix: string) => ({
+      token: `secret-${suffix}`,
+      tokenId: suffix,
+      tokenPrefix: `secret-${suffix}`,
+      scopes: ["library:sync"],
+    });
+    yield* fs.writeFileString(
+      join(home, "auth.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        activeOrigin: "https://two.example",
+        servers: {
+          "https://one.example": credential("one"),
+          "https://two.example": credential("two"),
         },
-        successfulServer(requests),
-      );
-      const status = yield* registryStatus(home).pipe(withEnvironment(environmentCredential));
-      expect(status.credentials).toMatchObject([
-        { origin: "https://stored.example", source: "stored" },
-        { origin: "https://environment.example", source: "environment" },
-      ]);
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
+      }),
+    );
 
-  it.effect("matching environment credentials bypass an invalid auth file", () =>
-    Effect.gen(function* () {
-      const home = yield* authHome;
-      const fs = yield* FileSystem.FileSystem;
-      yield* fs.writeFileString(join(home, "auth.json"), "{");
-      expect(
-        yield* registryCredentials({ origin: "https://environment.example", home }).pipe(
-          withEnvironment(environmentCredential),
-        ),
-      ).toMatchObject({
-        origin: "https://environment.example",
-        token: "skit_pat_environment",
-        source: "environment",
-      });
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
+    expect(yield* Effect.flip(registryCredentials({ home }))).toMatchObject({
+      _tag: "RegistrySelectionAmbiguous",
+      origins: ["https://one.example", "https://two.example"],
+    });
+    yield* addRegistryRemote("one", "https://one.example", home);
+    const stored = JSON.parse(yield* fs.readFileString(join(home, "auth.json")));
+    expect(stored).not.toHaveProperty("activeOrigin");
+    expect(stored).not.toHaveProperty("defaultRegistry");
+  }).pipe(Effect.provide(testPlatformLayer)),
+);
 
-  it.effect("an environment origin does not disguise a stored token as an environment token", () =>
-    Effect.gen(function* () {
-      const home = yield* authHome;
-      const requests: Array<{ url: string; init?: RequestInit }> = [];
-      yield* login(
-        {
-          origin: "https://stored.example",
-          email: "user@example.test",
-          password: "secret",
-          scopes: ["library:sync"],
-          home,
-        },
-        successfulServer(requests),
-      );
-      expect(
-        yield* registryCredentials({ home }).pipe(
-          withEnvironment({ SKIT_SERVER_URL: "https://stored.example" }),
-        ),
-      ).toMatchObject({
-        token: "skit_pat_secret_one",
-        source: "stored",
-      });
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
-});
+it.effect("matching environment credentials bypass an invalid auth file", () =>
+  Effect.gen(function* () {
+    const home = yield* authHome;
+    const fs = yield* FileSystem.FileSystem;
+    yield* fs.writeFileString(join(home, "auth.json"), "{");
+    expect(
+      yield* registryCredentials({ origin: "https://environment.example", home }).pipe(
+        withEnvironment(environmentCredential),
+      ),
+    ).toMatchObject({
+      origin: "https://environment.example",
+      token: "skit_pat_environment",
+      source: "environment",
+    });
+  }).pipe(Effect.provide(testPlatformLayer)),
+);
 
 it.effect("attaches artifact identity to Registry requests", () =>
   Effect.scoped(
@@ -990,3 +368,708 @@ it.effect("attaches artifact identity to Registry requests", () =>
     ),
   ),
 );
+
+describe("skit auth login", () => {
+  describe("Choosing a Registry", () => {
+    describe("Signing in to another Registry leaves the configured default unchanged.", () => {
+      it.effect("a second login preserves the first configured default", () =>
+        Effect.gen(function* () {
+          const home = yield* authHome;
+          const requests: Array<{ url: string; init?: RequestInit }> = [];
+          const server = successfulServer(requests);
+          for (const origin of ["https://one.example", "https://two.example"])
+            yield* login(
+              {
+                origin,
+                email: "user@example.test",
+                password: "secret",
+                scopes: ["authoring:write"],
+                home,
+              },
+              server,
+            );
+
+          expect(yield* registryCredentials({ home })).toMatchObject({
+            origin: "https://one.example",
+            token: "skit_pat_secret_one",
+          });
+          expect(yield* registryCredentials({ origin: "https://one.example", home })).toMatchObject(
+            {
+              origin: "https://one.example",
+              token: "skit_pat_secret_one",
+              source: "stored",
+            },
+          );
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+    });
+  });
+});
+
+describe("skit auth login", () => {
+  describe("Choosing a Registry", () => {
+    describe("Login refuses scopes the Registry does not offer.", () => {
+      it.effect("rejects scopes the selected Registry does not advertise before sign-in", () =>
+        Effect.gen(function* () {
+          const home = yield* authHome;
+          const observed: string[] = [];
+          const exit = yield* Effect.exit(
+            login(
+              {
+                origin: "https://skit.example",
+                email: "user@example.test",
+                password: "secret",
+                scopes: ["authoring:write"],
+                home,
+              },
+              (request) =>
+                Effect.sync(() => {
+                  observed.push(new URL(request.url).pathname);
+                  return Response.json({
+                    schema: "skit.server.v1",
+                    download: "/api/skits/{owner}/{slug}/releases/{version}/download",
+                    scopes: ["library:sync"],
+                  });
+                }),
+            ),
+          );
+
+          expect(observed).toEqual(["/.well-known/skit"]);
+          expect(exit._tag).toBe("Failure");
+          if (exit._tag === "Failure") expect(String(exit.cause)).toContain("authoring:write");
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+    });
+  });
+});
+
+describe("skit auth login", () => {
+  describe("Choosing a Registry", () => {
+    describe("Login without a configured Registry uses the hosted Registry.", () => {
+      it.effect("signs in to the hosted Registry when no Registry is configured", () =>
+        Effect.gen(function* () {
+          const home = yield* authHome;
+          expect(yield* resolveLoginTarget(undefined, home)).toBe("https://skit.smol.ai");
+          expect(yield* Effect.flip(resolveLoginTarget("missing", home))).toMatchObject({
+            _tag: "RegistryAliasNotFound",
+            alias: "missing",
+          });
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+    });
+  });
+});
+
+describe("skit auth login", () => {
+  describe("Keeping credentials usable", () => {
+    describe("A valid saved credential can be reused without another sign-in.", () => {
+      it.effect("reuses a server-validated credential without prompts or replacement", () =>
+        Effect.gen(function* () {
+          const home = yield* authHome;
+          yield* seed(home);
+          const interaction = yield* makeScriptedInteraction([]);
+          const observed: string[] = [];
+          const handler: TestHttpHandler = (request) =>
+            Effect.sync(() => {
+              observed.push(request.method);
+              expect(request.headers.authorization).toBe("Bearer saved-test-token");
+              return Response.json({ error: "library_not_found" }, { status: 404 });
+            });
+          const value = yield* authLoginCommand({
+            registry: "https://skit.example",
+            home,
+            scopes: ["library:sync"],
+            interactive: false,
+          }).pipe(
+            Effect.provide(
+              interaction.layer.pipe(
+                Layer.provideMerge(registryHttpLayer(testHttpClientLayer(handler))),
+              ),
+            ),
+          );
+          expect(value).toMatchObject({
+            alreadyAuthenticated: true,
+            credentialPath: join(home, "auth.json"),
+          });
+          expect(yield* interaction.prompts).toEqual([]);
+          expect(observed).toEqual(["GET"]);
+          const access = yield* registryCredentials({ home, command: "skit sync" });
+          expect(access.token).toBe("saved-test-token");
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+
+      for (const status of [200, 403]) {
+        it.effect(`accepts an authenticated credential check with status ${status}`, () =>
+          Effect.gen(function* () {
+            const home = yield* authHome;
+            yield* seed(home);
+            const interaction = yield* makeScriptedInteraction([]);
+            const value = yield* authLoginCommand({
+              home,
+              scopes: ["library:sync"],
+              interactive: false,
+            }).pipe(
+              Effect.provide(
+                interaction.layer.pipe(
+                  Layer.provideMerge(
+                    registryHttpLayer(
+                      testHttpClientLayer(() =>
+                        Effect.succeed(
+                          Response.json(
+                            status === 200 ? { library: null } : { error: "insufficient_scope" },
+                            { status },
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+            expect(value).toMatchObject({ alreadyAuthenticated: true });
+            expect(yield* interaction.prompts).toEqual([]);
+          }).pipe(Effect.provide(testPlatformLayer)),
+        );
+      }
+    });
+  });
+});
+
+describe("skit auth login", () => {
+  describe("Keeping credentials usable", () => {
+    describe("A saved replacement remains usable if the old credential cannot be revoked.", () => {
+      it.effect(
+        "keeps the new credential and warns when the previous token cannot be revoked",
+        () =>
+          Effect.gen(function* () {
+            const home = yield* authHome;
+            const requests: Array<{ url: string; init?: RequestInit }> = [];
+            const base = successfulServer(requests);
+            const server: TestHttpHandler = (request, url, signal) =>
+              request.url.endsWith("/api/tokens/pat_one") && request.method === "DELETE"
+                ? Effect.sync(() => {
+                    requests.push({ url: request.url, init: requestInit(request) });
+                    return new Response(null, { status: 503 });
+                  })
+                : base(request, url, signal);
+            const input = {
+              origin: "https://skit.example",
+              email: "user@example.test",
+              password: "secret",
+              scopes: ["library:sync"] as const,
+              home,
+            };
+            yield* login({ ...input, scopes: [...input.scopes] }, server);
+            const result = yield* login({ ...input, scopes: [...input.scopes] }, server);
+
+            expect(result.warning).toMatchObject({
+              _tag: "PreviousCredentialNotRevoked",
+              tokenId: "pat_one",
+              cleanup: { _tag: "ResponseRejected", status: 503 },
+            });
+            expect(yield* registryCredentials({ home })).toMatchObject({ tokenId: "pat_two" });
+          }).pipe(Effect.provide(testPlatformLayer)),
+      );
+    });
+  });
+});
+
+describe("skit auth login", () => {
+  describe("Keeping credentials usable", () => {
+    describe("Login does not replace a saved credential when the replacement cannot be saved.", () => {
+      it.effect(
+        "keeps the exact storage error when revocation of the unsaved credential is rejected",
+        () =>
+          Effect.gen(function* () {
+            const home = yield* authHome;
+            const fs = yield* FileSystem.FileSystem;
+            const path = join(home, "auth.json");
+            const original = systemError({
+              _tag: "PermissionDenied",
+              module: "FileSystem",
+              method: "rename",
+              pathOrDescriptor: path,
+            });
+            const requests: Array<{ url: string; init?: RequestInit }> = [];
+            const base = successfulServer(requests);
+            const seen: string[] = [];
+            const server: TestHttpHandler = (request, url, signal) => {
+              seen.push(`${request.method} ${url.pathname}`);
+              return request.method === "DELETE"
+                ? Effect.succeed(new Response(null, { status: 503 }))
+                : base(request, url, signal);
+            };
+            const failure = yield* login(
+              {
+                origin: "https://skit.example",
+                email: "user@example.test",
+                password: "secret",
+                scopes: ["library:sync"],
+                home,
+              },
+              server,
+            ).pipe(
+              Effect.provideService(FileSystem.FileSystem, {
+                ...fs,
+                rename: (from, to) => (to === path ? Effect.fail(original) : fs.rename(from, to)),
+              }),
+              Effect.flip,
+            );
+            expect(failure).toMatchObject({
+              _tag: "SignInFailed",
+              reason: {
+                _tag: "StorageCleanupFailed",
+                cleanup: { _tag: "ResponseRejected", status: 503 },
+                tokenId: "pat_one",
+              },
+            });
+            if (failure._tag !== "SignInFailed" || failure.reason._tag !== "StorageCleanupFailed")
+              return yield* Effect.die("Expected failed credential cleanup");
+            expect(failure.reason.original).toBe(original);
+            expect(seen).toEqual([
+              "GET /.well-known/skit",
+              "POST /api/auth/sign-in/email",
+              "POST /api/tokens",
+              "POST /api/auth/sign-out",
+              "DELETE /api/tokens/pat_one",
+            ]);
+            expect(yield* fs.exists(path)).toBe(false);
+          }).pipe(Effect.provide(testPlatformLayer)),
+      );
+
+      it.effect(
+        "keeps the previous stored credential working when replacement cannot be saved",
+        () =>
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.FileSystem;
+            const home = yield* authHome;
+            const requests: Array<{ url: string; init?: RequestInit }> = [];
+            const server = successfulServer(requests);
+            const input = {
+              origin: "https://skit.example",
+              email: "user@example.test",
+              password: "secret",
+              scopes: ["library:sync"] as const,
+              home,
+            };
+            yield* login({ ...input, scopes: [...input.scopes] }, server);
+            requests.length = 0;
+            const unwritableAfterMint: TestHttpHandler = (request, url, signal) =>
+              server(request, url, signal).pipe(
+                Effect.tap(() => {
+                  if (request.url.endsWith("/api/tokens") && request.method === "POST")
+                    return fs.chmod(home, 0o500).pipe(Effect.orDie);
+                  if (request.url.endsWith("/api/tokens/pat_two") && request.method === "DELETE")
+                    return fs.chmod(home, 0o700).pipe(Effect.orDie);
+                  return Effect.void;
+                }),
+              );
+            const exit = yield* Effect.exit(
+              login({ ...input, scopes: [...input.scopes] }, unwritableAfterMint),
+            ).pipe(Effect.ensuring(fs.chmod(home, 0o700).pipe(Effect.orDie)));
+            expect(exit._tag).toBe("Failure");
+
+            expect(yield* registryCredentials({ home })).toMatchObject({ tokenId: "pat_one" });
+            const revoked = requests
+              .filter(({ init }) => init?.method === "DELETE")
+              .map(({ url }) => new URL(url).pathname);
+            expect(revoked).toEqual(["/api/tokens/pat_two"]);
+          }).pipe(Effect.provide(testPlatformLayer)),
+      );
+    });
+  });
+});
+
+describe("skit auth login", () => {
+  describe("Password fallback", () => {
+    describe("A login without a person present does not ask for a password.", () => {
+      it.effect("expired credentials need a new interactive login without sending the bearer", () =>
+        Effect.gen(function* () {
+          const home = yield* authHome;
+          yield* seed(home, "1969-01-01T00:00:00Z");
+          const interaction = yield* makeScriptedInteraction([]);
+          const failure = yield* Effect.flip(
+            authLoginCommand({ home, scopes: ["library:sync"], interactive: false }).pipe(
+              Effect.provide(
+                interaction.layer.pipe(
+                  Layer.provideMerge(
+                    registryHttpLayer(
+                      testHttpClientLayer(() =>
+                        Effect.sync(() => expect.fail("Expired bearer was sent")),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+          expect(failure._tag).toBe("InteractiveLoginUnavailable");
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+
+      it.effect(
+        "revoked credentials require login and server failures do not collect a password",
+        () =>
+          Effect.gen(function* () {
+            const home = yield* authHome;
+            yield* seed(home);
+            const interaction = yield* makeScriptedInteraction([]);
+            for (const status of [401, 503]) {
+              const failure = yield* Effect.flip(
+                authLoginCommand({ home, scopes: ["library:sync"], interactive: false }).pipe(
+                  Effect.provide(
+                    interaction.layer.pipe(
+                      Layer.provideMerge(
+                        registryHttpLayer(
+                          testHttpClientLayer(() =>
+                            Effect.succeed(Response.json({ error: "unavailable" }, { status })),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+              expect(failure._tag).toBe(
+                status === 401 ? "InteractiveLoginUnavailable" : "SignInFailed",
+              );
+            }
+            expect(yield* interaction.prompts).toEqual([]);
+          }).pipe(Effect.provide(testPlatformLayer)),
+      );
+    });
+  });
+});
+
+describe("skit auth login", () => {
+  describe("Password fallback", () => {
+    describe("A failed sign-in does not save a newly minted credential.", () => {
+      it.effect("revokes a minted PAT when temporary-session sign-out fails", () =>
+        Effect.gen(function* () {
+          const home = yield* authHome;
+          const requests: Array<{ url: string; init?: RequestInit }> = [];
+          const base = successfulServer(requests);
+          const server: TestHttpHandler = (request, url, signal) =>
+            request.url.endsWith("/api/auth/sign-out")
+              ? Effect.sync(() => {
+                  requests.push({ url: request.url, init: requestInit(request) });
+                  return new Response(null, { status: 503 });
+                })
+              : base(request, url, signal);
+
+          const failure = yield* Effect.flip(
+            login(
+              {
+                origin: "https://skit.example",
+                email: "user@example.test",
+                password: "secret",
+                scopes: ["library:sync"],
+                home,
+              },
+              server,
+            ),
+          );
+          expect(failure.message).toContain("Sign out failed");
+          expect(requests.map(({ url }) => new URL(url).pathname)).toContain("/api/tokens/pat_one");
+          expect(yield* registryCredentials({ home })).toMatchObject({ source: "none" });
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+
+      it.effect("reports when both temporary-session cleanup operations fail", () =>
+        Effect.gen(function* () {
+          const home = yield* authHome;
+          const requests: Array<{ url: string; init?: RequestInit }> = [];
+          const base = successfulServer(requests);
+          const server: TestHttpHandler = (request, url, signal) =>
+            request.url.endsWith("/api/auth/sign-out") || request.url.includes("/api/tokens/pat_")
+              ? Effect.succeed(new Response(null, { status: 503 }))
+              : base(request, url, signal);
+
+          const failure = yield* Effect.flip(
+            login(
+              {
+                origin: "https://skit.example",
+                email: "user@example.test",
+                password: "secret",
+                scopes: ["library:sync"],
+                home,
+              },
+              server,
+            ),
+          );
+          expect(failure).toMatchObject({
+            _tag: "SignInFailed",
+            reason: {
+              _tag: "SessionEndFailed",
+              cleanup: { _tag: "ResponseRejected", status: 503 },
+              credential: {
+                tokenId: "pat_one",
+                tokenPrefix: "skit_pat_secret_on",
+                cleanup: { _tag: "ResponseRejected", status: 503 },
+              },
+            },
+          });
+          expect(failure.message).toContain("The temporary session may still be live");
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+
+      it.effect(
+        "keeps credential-creation rejection when temporary-session sign-out also fails",
+        () =>
+          Effect.gen(function* () {
+            const home = yield* authHome;
+            const requests: Array<{ url: string; init?: RequestInit }> = [];
+            const base = successfulServer(requests);
+            const server: TestHttpHandler = (request, url, signal) =>
+              url.pathname === "/api/tokens" && request.method === "POST"
+                ? Effect.succeed(Response.json({ error: "unauthorized" }, { status: 401 }))
+                : url.pathname === "/api/auth/sign-out"
+                  ? Effect.succeed(new Response("session cleanup unavailable", { status: 503 }))
+                  : base(request, url, signal);
+            const failure = yield* login(
+              {
+                origin: "https://skit.example",
+                email: "user@example.test",
+                password: "secret",
+                scopes: ["library:sync"],
+                home,
+              },
+              server,
+            ).pipe(Effect.flip);
+            expect(failure).toMatchObject({
+              _tag: "SignInFailed",
+              reason: {
+                _tag: "SessionEndFailed",
+                cleanup: {
+                  _tag: "ResponseRejected",
+                  status: 503,
+                  body: "session cleanup unavailable",
+                },
+                original: { _tag: "SignInRejected", operation: "credential-create" },
+              },
+            });
+            expect(yield* registryCredentials({ home })).toMatchObject({ source: "none" });
+          }).pipe(Effect.provide(testPlatformLayer)),
+      );
+    });
+  });
+});
+
+describe("skit auth login", () => {
+  describe("Password fallback", () => {
+    describe("Forced login replaces the saved credential for that Registry.", () => {
+      it.effect("explicit relogin prompts and persists a replacement for later commands", () =>
+        Effect.gen(function* () {
+          const home = yield* authHome;
+          yield* seed(home);
+          const interaction = yield* makeScriptedInteraction(["user@example.test", "not-stored"]);
+          const requests: Array<{ url: string; init?: RequestInit }> = [];
+          const value = yield* authLoginCommand({
+            home,
+            scopes: ["library:sync"],
+            interactive: true,
+            relogin: true,
+          }).pipe(
+            Effect.provide(
+              interaction.layer.pipe(
+                Layer.provideMerge(
+                  registryHttpLayer(testHttpClientLayer(successfulServer(requests))),
+                ),
+              ),
+            ),
+          );
+          expect(value).toMatchObject({
+            alreadyAuthenticated: false,
+            credentialPath: join(home, "auth.json"),
+          });
+          expect((yield* interaction.prompts).map((prompt) => prompt.kind)).toEqual([
+            "text",
+            "password",
+          ]);
+          expect((yield* registryCredentials({ home })).token).toBe("skit_pat_secret_one");
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+
+      it.effect("logging in again rotates the credential for that origin", () =>
+        Effect.gen(function* () {
+          const home = yield* authHome;
+          const requests: Array<{ url: string; init?: RequestInit }> = [];
+          const server = successfulServer(requests);
+          const credentials = (scopes: Array<"library:sync" | "authoring:write">) => ({
+            origin: "https://skit.example",
+            email: "user@example.test",
+            password: "secret",
+            scopes,
+            home,
+          });
+          yield* login(credentials(["library:sync"]), server);
+          yield* login(credentials(["library:sync", "authoring:write"]), server);
+
+          expect(yield* registryCredentials({ home })).toMatchObject({
+            tokenId: "pat_two",
+            token: "skit_pat_secret_two",
+            scopes: ["library:sync", "authoring:write"],
+          });
+          expect(requests.map(({ url }) => new URL(url).pathname)).toContain("/api/tokens/pat_one");
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+    });
+  });
+});
+
+describe("skit auth logout", () => {
+  describe("Logout revokes the selected credential before forgetting it.", () => {
+    it.effect("revokes the active PAT before removing it locally", () =>
+      Effect.gen(function* () {
+        const home = yield* authHome;
+        const requests: Array<{ url: string; init?: RequestInit }> = [];
+        const server = successfulServer(requests);
+        yield* login(
+          {
+            origin: "https://skit.example",
+            email: "user@example.test",
+            password: "secret",
+            scopes: ["library:sync"],
+            home,
+          },
+          server,
+        );
+        requests.length = 0;
+
+        expect(yield* logout(server, home)).toEqual({
+          origin: "https://skit.example",
+          revoked: true,
+        });
+        expect(requests).toHaveLength(1);
+        expect(new Headers(requests[0].init?.headers).get("authorization")).toBe(
+          "Bearer skit_pat_secret_one",
+        );
+        expect(yield* registryCredentials({ home })).toMatchObject({
+          source: "none",
+          token: undefined,
+        });
+      }).pipe(Effect.provide(testPlatformLayer)),
+    );
+  });
+});
+
+describe("skit auth logout", () => {
+  describe("Logout leaves the configured default Registry unchanged.", () => {
+    it.effect("logout preserves a default even when its credential is removed", () =>
+      Effect.gen(function* () {
+        const home = yield* authHome;
+        const requests: Array<{ url: string; init?: RequestInit }> = [];
+        const server = successfulServer(requests);
+        yield* login(
+          {
+            origin: "https://one.example",
+            email: "user@example.test",
+            password: "secret",
+            scopes: ["library:sync"],
+            home,
+          },
+          server,
+        );
+        yield* login(
+          {
+            origin: "https://two.example",
+            email: "user@example.test",
+            password: "secret",
+            scopes: ["library:sync"],
+            home,
+          },
+          server,
+        );
+
+        yield* logout(server, home, "https://one.example");
+        expect(yield* registryCredentials({ home })).toMatchObject({
+          origin: "https://one.example",
+          token: undefined,
+        });
+      }).pipe(Effect.provide(testPlatformLayer)),
+    );
+  });
+});
+
+describe("skit auth logout", () => {
+  describe("Logout refuses an ambiguous Registry choice.", () => {
+    it.effect("logout without a target refuses multiple credentials", () =>
+      Effect.gen(function* () {
+        const home = yield* authHome;
+        const requests: Array<{ url: string; init?: RequestInit }> = [];
+        const server = successfulServer(requests);
+        for (const origin of ["https://one.example", "https://two.example"])
+          yield* login(
+            {
+              origin,
+              email: "user@example.test",
+              password: "secret",
+              scopes: ["library:sync"],
+              home,
+            },
+            server,
+          );
+        requests.length = 0;
+
+        expect(yield* Effect.flip(logout(server, home))).toMatchObject({
+          _tag: "RegistrySelectionAmbiguous",
+          origins: ["https://one.example", "https://two.example"],
+        });
+        expect(requests).toEqual([]);
+      }).pipe(Effect.provide(testPlatformLayer)),
+    );
+  });
+});
+
+describe("skit auth status", () => {
+  describe("Status distinguishes environment credentials from saved credentials.", () => {
+    it.effect("status lists environment credentials as a distinct row", () =>
+      Effect.gen(function* () {
+        const home = yield* authHome;
+        const requests: Array<{ url: string; init?: RequestInit }> = [];
+        yield* login(
+          {
+            origin: "https://stored.example",
+            email: "user@example.test",
+            password: "secret",
+            scopes: ["library:sync"],
+            home,
+          },
+          successfulServer(requests),
+        );
+        const status = yield* registryStatus(home).pipe(withEnvironment(environmentCredential));
+        expect(status.credentials).toMatchObject([
+          { origin: "https://stored.example", source: "stored" },
+          { origin: "https://environment.example", source: "environment" },
+        ]);
+      }).pipe(Effect.provide(testPlatformLayer)),
+    );
+
+    it.effect(
+      "an environment origin does not disguise a stored token as an environment token",
+      () =>
+        Effect.gen(function* () {
+          const home = yield* authHome;
+          const requests: Array<{ url: string; init?: RequestInit }> = [];
+          yield* login(
+            {
+              origin: "https://stored.example",
+              email: "user@example.test",
+              password: "secret",
+              scopes: ["library:sync"],
+              home,
+            },
+            successfulServer(requests),
+          );
+          expect(
+            yield* registryCredentials({ home }).pipe(
+              withEnvironment({ SKIT_SERVER_URL: "https://stored.example" }),
+            ),
+          ).toMatchObject({
+            token: "skit_pat_secret_one",
+            source: "stored",
+          });
+        }).pipe(Effect.provide(testPlatformLayer)),
+    );
+  });
+});

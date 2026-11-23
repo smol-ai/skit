@@ -1,15 +1,23 @@
+import { loadOperations, LibraryWriter, loadLibrary } from "../src/library/store/library-store.js";
+import { SqlClient } from "effect/sql";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
 import { libraryDoctorReport } from "../src/library/inventory/doctor-report.js";
 import { scanInventory } from "../src/library/inventory/refresh.js";
 import { inspectInstalledSkill } from "../src/installed-skills/files.js";
-import { makeSkillId, makeInstalledSkillId } from "../src/library/entity-ids.js";
-import { openLibrary, inLibrary } from "./helpers/library-store.js";
+import {
+  makeSkillId,
+  makeInstalledSkillId,
+  makeSkillVersionId,
+  migratedMachineId,
+} from "../src/library/entity-ids.js";
+import { openLibrary, inLibrary, testRoots } from "./helpers/library-store.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Result } from "effect";
 import { systemError } from "effect/PlatformError";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
-import { makeSkillVersionId, migratedMachineId } from "../src/library/entity-ids.js";
+
 import { currentSkillVersion, versionBacking } from "../src/library/library-contracts.js";
 import { collectionVersionPath } from "../src/library/collection-version.js";
 import {
@@ -22,13 +30,11 @@ import {
 
 import type { LibraryState } from "../src/library/library-state.js";
 import type { InstalledSkill } from "../src/library/device-state.js";
-import { LibraryWriter, loadLibrary } from "../src/library/store/library-store.js";
 
 import { skitLayer } from "../src/platform/layer.js";
 import * as Library from "../src/library/library.js";
 import { losslessTree, installedSkillStagingDirectory } from "../src/installed-skills/backups.js";
 import { inspectOwnershipMarker } from "../src/installed-skills/marker-inspection.js";
-import { testRoots } from "./helpers/library-store.js";
 
 const machineId = migratedMachineId(
   "019950c0-4c00-7000-8000-000000000001",
@@ -490,8 +496,8 @@ it.effect("checks every retained input before relocating any installed copy", ()
     // The complete input set is checked before relocation starts. The prior copies stay live.
     assert.deepStrictEqual(after.installed_skills, before.installed_skills);
     assert.isFalse(yield* fs.exists(join(newRoot, "review")));
-    assert.deepStrictEqual(withoutOperations(after), withoutOperations(before));
-    assert.strictEqual(after.operations.at(-1)?._tag, "Stopped");
+    assert.deepStrictEqual(after, before);
+    assert.strictEqual((yield* loadOperations(home)).at(-1)?._tag, "Stopped");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -637,8 +643,6 @@ const divergingOn = (path: string) =>
         }),
     })),
   );
-
-const withoutOperations = ({ operations: _operations, ...state }: LibraryState) => state;
 
 it.effect(
   "manages equal content in place, keeping its excluded entries and empty directories",
@@ -965,37 +969,44 @@ for (const stale of ["observed-successor", "settle-failure"] as const)
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 
-/** The identity of the file `state.json` is: every save replaces it with a new one. */
-const stateFile = (home: string) =>
-  Effect.flatMap(FileSystem.FileSystem, (fs) => fs.stat(join(home, "state.json"))).pipe(
-    Effect.map((info) => info.ino),
-  );
-
 it.effect("a batch that changes nothing on disk or in state saves nothing", () =>
   Effect.gen(function* () {
-    const { fs, home, load, project } = yield* installedSkillFixture();
+    const { load, project } = yield* installedSkillFixture();
     yield* project();
     const before = yield* load;
-    const bytes = yield* fs.readFileString(join(home, "state.json"));
-    const file = yield* stateFile(home);
     yield* project();
-    assert.deepStrictEqual(yield* stateFile(home), file);
-    assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), bytes);
     assert.deepStrictEqual(yield* load, before);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("an unchanged batch still saves onto its loaded state before settling a backup", () =>
+it.effect("an unchanged batch keeps its backup pending until final progress commits", () =>
   Effect.gen(function* () {
     const { fs, home, targetRoot, load, project } = yield* installedSkillFixture();
     yield* project();
     const installedSkill = (yield* load).installed_skills[0]!;
     // Killed after moving the intact copy aside and restoring it, before publishing anything.
     yield* fs.copy(yield* interruptedBackup(installedSkill), installedSkill.path);
-    const file = yield* stateFile(home);
+    yield* withLibraryDatabase(
+      libraryDatabasePath(home),
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`CREATE TRIGGER refuse_state BEFORE UPDATE ON library_operations
+        WHEN json_extract(NEW.document, '$.steps[0].step.phase._tag') = 'Done'
+        BEGIN SELECT RAISE(ABORT, 'fixture final progress failure'); END`;
+      }),
+    );
+    assert.strictEqual((yield* Effect.flip(project()))._tag, "LibrarySqlError");
+    assert.isTrue(
+      (yield* backupsBeside(targetRoot)).some((backup) => backup.disposition === "pending"),
+    );
+    yield* withLibraryDatabase(
+      libraryDatabasePath(home),
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`DROP TRIGGER refuse_state`;
+      }),
+    );
     yield* project();
-    // The publication proves the state the backup is judged against is still the Library's.
-    assert.notDeepEqual(yield* stateFile(home), file);
     assert.deepStrictEqual(yield* backupsBeside(targetRoot), []);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -1020,7 +1031,7 @@ it.effect("a backup is never settled against a state the Library has moved on fr
 
 it.effect("keeps Library rows and records a stop when a replacement fails verification", () =>
   Effect.gen(function* () {
-    const { fs, targetRoot, load, edit, project } = yield* installedSkillFixture();
+    const { fs, home, targetRoot, load, edit, project } = yield* installedSkillFixture();
     const target = join(targetRoot, "review");
     yield* project();
     yield* edit(explicitPolicies);
@@ -1028,8 +1039,8 @@ it.effect("keeps Library rows and records a stop when a replacement fails verifi
     const failed = yield* project().pipe(Effect.provide(divergingOn(target)), Effect.result);
     assert.strictEqual(Result.isFailure(failed), true);
     assert.strictEqual(yield* fs.exists(target), true);
-    assert.deepStrictEqual(withoutOperations(yield* load), withoutOperations(before));
-    assert.strictEqual((yield* load).operations.at(-1)?._tag, "Stopped");
+    assert.deepStrictEqual(yield* load, before);
+    assert.strictEqual((yield* loadOperations(home)).at(-1)?._tag, "Stopped");
     assert.deepStrictEqual(
       (yield* backupsBeside(targetRoot)).map((backup) => backup.disposition),
       ["pending"],

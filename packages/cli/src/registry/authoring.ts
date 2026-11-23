@@ -61,7 +61,10 @@ const authorInventoryApi = Effect.fn("Registry.authorInventory")(function* (inpu
   token?: string;
 }) {
   if (!input.origin || !input.token)
-    return yield* new AuthenticationRequired({ origin: input.origin, scopes: "authoring:write" });
+    return yield* new AuthenticationRequired({
+      ...(input.origin === undefined ? {} : { origin: input.origin }),
+      scopes: "authoring:write",
+    });
   const parse = (value: string) =>
     Schema.decodeEffect(Schema.URLFromString)(value).pipe(
       Effect.mapError(() => new RegistryOriginInvalid({ origin: value })),

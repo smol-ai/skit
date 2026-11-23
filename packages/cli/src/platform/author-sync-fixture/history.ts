@@ -1,6 +1,8 @@
 import { Effect, FileSystem, Layer, Option, Schema, Stream } from "effect";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
+import { SqlClient } from "effect/sql";
+import { sqliteLayer } from "@smolai/skit-core/platform";
 import * as History from "@smolai/skit-core/history";
 import { authorLayer as owners, refreshAuthorWorkspace } from "@smolai/skit-core/author";
 
@@ -29,29 +31,113 @@ const Manifest = Schema.fromJsonString(
   }),
 );
 
+/** Independent SQL evidence; this never calls the owner or imports legacy state. */
+const nativeMetadata = Effect.fn("Fixture.nativeHistoryEvidence")(
+  function* (fs: FileSystem.FileSystem, home: string, kind: History.Kind, hash?: string) {
+    const filename = join(home, "library.sqlite");
+    if (!(yield* fs.exists(filename))) return { text: undefined, hashes: [] };
+    return yield* Effect.scoped(
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        return yield* sql.withTransaction(
+          Effect.gen(function* () {
+            const hashes = (yield* Schema.decodeUnknownEffect(
+              Schema.Array(Schema.Struct({ hash: Schema.String })),
+            )(
+              kind === "tree"
+                ? yield* sql`SELECT hash FROM author_trees ORDER BY hash`
+                : yield* sql`SELECT hash FROM author_revisions ORDER BY hash`,
+            )).map((row) => row.hash);
+            if (hash === undefined) return { text: undefined, hashes };
+            if (kind === "revision") {
+              const rows =
+                yield* sql`SELECT tree_hash,author_device,author_at,edits_json FROM author_revisions WHERE hash=${hash}`;
+              if (rows[0] !== undefined) {
+                const row = yield* Schema.decodeUnknownEffect(
+                  Schema.Struct({
+                    tree_hash: Schema.String,
+                    author_device: Schema.String,
+                    author_at: Schema.Int,
+                    edits_json: Schema.String,
+                  }),
+                )(rows[0]);
+                const parents = yield* Schema.decodeUnknownEffect(
+                  Schema.Array(Schema.Struct({ position: Schema.Int, parent_hash: Schema.String })),
+                )(
+                  yield* sql`SELECT position,parent_hash FROM author_revision_parents WHERE revision_hash=${hash} ORDER BY position`,
+                );
+                for (const [index, parent] of parents.entries())
+                  yield* Schema.decodeUnknownEffect(Schema.Literal(index))(parent.position);
+                return {
+                  hashes,
+                  text: JSON.stringify({
+                    edits: yield* Schema.decodeEffect(Schema.fromJsonString(History.EditTimes))(
+                      row.edits_json,
+                    ),
+                    tree: row.tree_hash,
+                    parents: parents.map((parent) => parent.parent_hash),
+                    author: { device: row.author_device, at: row.author_at },
+                  }),
+                };
+              }
+            } else if ((yield* sql`SELECT hash FROM author_trees WHERE hash=${hash}`).length > 0) {
+              const rows = yield* Schema.decodeUnknownEffect(
+                Schema.Array(
+                  Schema.Struct({
+                    position: Schema.Int,
+                    path: Schema.String,
+                    kind: Schema.Literals(["file", "directory", "symlink"]),
+                    mode: Schema.NullOr(Schema.Int),
+                    blob: Schema.NullOr(Schema.String),
+                    target: Schema.NullOr(Schema.String),
+                  }),
+                ),
+              )(
+                yield* sql`SELECT position,path,kind,mode,blob,target FROM author_tree_entries WHERE tree_hash=${hash} ORDER BY position`,
+              );
+              for (const [index, row] of rows.entries())
+                yield* Schema.decodeUnknownEffect(Schema.Literal(index))(row.position);
+              return {
+                hashes,
+                text: JSON.stringify({
+                  schema: "skit.author-tree.v1",
+                  entries: rows.map((row) => ({
+                    kind: row.kind,
+                    path: row.path,
+                    ...(row.kind === "file"
+                      ? { mode: row.mode, blob: row.blob }
+                      : row.kind === "symlink"
+                        ? { target: row.target }
+                        : {}),
+                  })),
+                }),
+              };
+            }
+            return { hashes, text: undefined };
+          }),
+        );
+      }).pipe(Effect.provide(sqliteLayer({ filename, readonly: true }))),
+    );
+  },
+  Effect.mapError((cause) => new History.StoreFailed({ cause })),
+);
+
 /** Independent, read-only disk evidence. It cannot obtain an Author lease or mutate a store. */
 const historyAt = Effect.fn("Fixture.historyEvidence")(function* (home: string) {
   const fs = yield* FileSystem.FileSystem;
-  const folder = (kind: History.Kind) =>
-    join(home, "history", kind === "tree" ? "trees" : "revisions");
   const failed = (cause: unknown) => new History.StoreFailed({ cause });
   const store = yield* History.makeStore({
     read: (kind, hash) =>
       Effect.gen(function* () {
-        const text = yield* fs.readFileString(join(folder(kind), `${hash.slice(7)}.json`)).pipe(
-          Effect.asSome,
-          Effect.catchReason("PlatformError", "NotFound", () => Effect.succeedNone),
-          Effect.mapError(failed),
-        );
+        const text = Option.fromUndefinedOr((yield* nativeMetadata(fs, home, kind, hash)).text);
         if (kind !== "tree" || Option.isNone(text)) return text;
         const manifest = Schema.decodeOption(Manifest)(text.value);
-        if (Option.isNone(manifest)) return text; // Legacy byte-bearing trees and malformed documents go through the canonical verifier.
+        if (Option.isNone(manifest)) return text;
         const tree = yield* Effect.forEach(manifest.value.entries, (entry) =>
           Effect.gen(function* () {
             if (entry.kind !== "file") return entry;
-            const bytes = yield* fs
-              .readFile(join(home, "history", "blobs", entry.blob.slice(7)))
-              .pipe(Effect.mapError(failed));
+            const canonical = join(home, "file-bytes", entry.blob.slice(7));
+            const bytes = yield* fs.readFile(canonical).pipe(Effect.mapError(failed));
             if (`sha256:${createHash("sha256").update(bytes).digest("hex")}` !== entry.blob)
               return yield* new History.StoreCorrupt({
                 kind,
@@ -73,17 +159,17 @@ const historyAt = Effect.fn("Fixture.historyEvidence")(function* (home: string) 
       }),
     write: () => Effect.die("History evidence is read-only"),
     has: (kind, hash) =>
-      fs.exists(join(folder(kind), `${hash.slice(7)}.json`)).pipe(Effect.mapError(failed)),
+      Effect.gen(function* () {
+        const native = yield* nativeMetadata(fs, home, kind, hash);
+        return native.text !== undefined;
+      }),
     list: (kind) =>
-      fs.readDirectory(folder(kind)).pipe(
-        Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed([])),
-        Effect.flatMap((names) =>
-          Effect.forEach(names.filter((name) => /^[a-f0-9]{64}\.json$/.test(name)).sort(), (name) =>
-            Schema.decodeEffect(History.TreeHash)(`sha256:${name.slice(0, -5)}`),
-          ),
-        ),
-        Effect.mapError(failed),
-      ),
+      Effect.gen(function* () {
+        const native = yield* nativeMetadata(fs, home, kind);
+        return yield* Effect.forEach(native.hashes, (hash) =>
+          Schema.decodeEffect(History.TreeHash)(hash),
+        ).pipe(Effect.mapError(failed));
+      }),
   });
   return store;
 });

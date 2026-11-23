@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 import { Clock, Effect, Result } from "effect";
-import { collectionVersionPath } from "../../collection-version.js";
+import { readCollectionVersion } from "../content/read-collection-version.js";
 import type { LibraryState } from "../../library-state.js";
 import { inspectSkillsShCompatibleHash } from "../../setup/skills-sh/compatible-hash.js";
 import type { LibrarySubject } from "../../subject-resolution.js";
@@ -71,7 +71,7 @@ export const checkSkillsShSubject = Effect.fn("SkillsSh.checkSubject")(function*
       })),
     };
   const tip = evidence.commit;
-  const root = collectionVersionPath(originalsPath, collectionVersion.hash);
+  const root = yield* readCollectionVersion(originalsPath, collectionVersion.hash);
   const members: SkillsShUpdateMember[] = [];
   for (const lockFileEntry of lockFileEntries) {
     const claimed = lockFileEntry.computed_hash ?? lockFileEntry.skill_folder_hash;
@@ -197,4 +197,4 @@ export const checkSkillsShSubject = Effect.fn("SkillsSh.checkSubject")(function*
     );
   }
   return { checked_at: checkedAt, members };
-});
+}, Effect.scoped);

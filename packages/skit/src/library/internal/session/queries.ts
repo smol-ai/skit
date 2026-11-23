@@ -5,6 +5,12 @@ import { Context, Effect, Option } from "effect";
 import { join } from "node:path";
 import type { Interface } from "../../library.js";
 import { libraryView } from "./library-view.js";
+import { libraryListing } from "./listing.js";
+import {
+  readLibraryListing,
+  readInstalledSkillList,
+  readSkillsShCollectionIds,
+} from "../../store/queries.js";
 import { emptyLibraryState } from "../../library-state.js";
 import type { Snapshot } from "../../snapshot.js";
 import type { LibraryStateReadError } from "../../store/library-store.js";
@@ -37,15 +43,26 @@ export const libraryQueries = (
           { home, active: files.active },
         ),
     );
+  const listingFor = (options?: { readonly base: Snapshot }) =>
+    options === undefined
+      ? Effect.map(readLibraryListing(home), (rows) =>
+          libraryListing(rows, join(home, "originals")),
+        )
+      : Effect.succeed(
+          libraryListing(
+            options.base._tag === "Present" ? options.base.state : emptyLibraryState(),
+            join(home, "originals"),
+          ),
+        );
   return {
     workspaceClaims: Effect.fn("Library.readWorkspaceClaims")(function* (root: string) {
       return yield* (yield* viewFor()).readWorkspaceClaims(root).pipe(Effect.provide(platform));
     }),
-    installedSkills: Effect.map(viewFor(), (view) => view.installedSkills),
+    installedSkills: readInstalledSkillList(home).pipe(Effect.provide(platform)),
     manifest: Effect.flatMap(viewFor(), (view) => view.readManifest()).pipe(
       Effect.provide(platform),
     ),
-    skillsShCollectionIds: Effect.map(viewFor(), (view) => view.skillsShCollectionIds),
+    skillsShCollectionIds: readSkillsShCollectionIds(home).pipe(Effect.provide(platform)),
     descriptionLoad: Effect.fn("Library.readDescriptionLoad")(function* (
       subject: { readonly collection: string } | { readonly skills: readonly string[] },
       options?: { readonly base: Snapshot },
@@ -82,9 +99,11 @@ export const libraryQueries = (
         .previewSourceUpdates(query, inspectSource)
         .pipe(Effect.provide(platform));
     }),
-    skills: Effect.fn("Library.skills")(function* (options?: { readonly base: Snapshot }) {
-      return yield* (yield* viewFor(options)).readSkills().pipe(Effect.provide(platform));
-    }),
+    skills: Effect.fn("Library.skills")((options?: { readonly base: Snapshot }) =>
+      Effect.gen(function* () {
+        return yield* (yield* listingFor(options)).readSkills();
+      }).pipe(Effect.provide(platform)),
+    ),
     suggestCleanup: (
       budgets: readonly CleanupBudget[],
       usage: UsageReport,
@@ -98,7 +117,7 @@ export const libraryQueries = (
       ),
     list: Effect.fn("Library.list")((options?: { readonly base: Snapshot }) =>
       Effect.gen(function* () {
-        const view = yield* viewFor(options);
+        const view = yield* listingFor(options);
         const subjects = yield* view.readSubjects();
         return {
           subjects,

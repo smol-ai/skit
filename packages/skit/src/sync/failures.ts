@@ -4,6 +4,7 @@ import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 const RemoteInvalidReason = Schema.TaggedUnion({
   TreeMismatch: { expected: History.TreeHash, actual: History.TreeHash },
+  EditTimesMismatch: { paths: Schema.Array(Schema.String) },
   RevisionMismatch: { actual: History.RevisionId },
 });
 type RemoteInvalidReason = typeof RemoteInvalidReason.Type;

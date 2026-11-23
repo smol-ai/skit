@@ -32,11 +32,6 @@ export const blockGallery: ReadonlyArray<{ readonly name: string; readonly block
       operationId: recoveryAction,
       failure: recoveryFailure,
     }),
-    LibraryRecoveryNotice.cases.HistoryDeliveryPending.make({
-      home: recoveryHome,
-      actionId: recoveryAction,
-      failure: recoveryFailure,
-    }),
   ].map((notice) => ({
     name: `Recovery notice body | ${notice._tag}`,
     blocks: [...recoveryNoticeBlocks(notice)],

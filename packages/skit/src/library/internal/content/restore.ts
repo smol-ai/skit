@@ -8,13 +8,14 @@ import { collectionVersionPath, originalTreeHash } from "../../collection-versio
 import { resolveSkitSource } from "../../../sources/resolve.js";
 import { deterministicTreeHash } from "../../../artifact/skit.js";
 import { prepareImport } from "../../import-collection.js";
-import { Effect, FileSystem, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { join } from "node:path";
 
 import { writeCollectionVersion } from "./collection-version.js";
+import { hasCollectionVersion, readCollectionVersion } from "./read-collection-version.js";
 import { readSnapshotArchive, writeVerifiedSnapshot } from "../../snapshot-archive.js";
 import { verifySnapshotArchive } from "../../snapshot-archive-universal.js";
-import { currentLibraryState, LibraryState } from "../../library-state.js";
+import { currentLibraryState, LibraryState, decodeLibraryState } from "../../library-state.js";
 import {
   importCanBeRefetched,
   type Import,
@@ -213,8 +214,7 @@ export const completeRestoreArchives = Effect.fn("Library.completeRestoreArchive
     });
   const progress = options.progress ?? silentRestoreProgress;
   const archives = new Map(plan.localArchives.map((archive) => [archive.digest, archive]));
-  const fs = yield* FileSystem.FileSystem;
-  const existingPaths = new Map<string, string>();
+  const reusable = new Set<Hash>();
   if (plan.reusable.length) {
     const phase = { kind: "verify-local", total: plan.reusable.length } as const;
     yield* progress.around(
@@ -229,12 +229,17 @@ export const completeRestoreArchives = Effect.fn("Library.completeRestoreArchive
             )?.input.value ?? hash;
           yield* progress.tick({ phase, completed: index, subject });
           // Replan on retry rather than silently adding an unplanned transfer.
-          if (!(yield* fs.exists(path)))
+          if (!(yield* hasCollectionVersion(options.originalsPath, hash)))
             return yield* new RestoreInvalid({
               reason: { _tag: "ReusableCopyMissing", hash, path },
             });
-          if ((yield* originalTreeHash(path)) !== hash) return yield* new ContentAddressCollision();
-          existingPaths.set(hash, path);
+          const actual = yield* Effect.scoped(
+            readCollectionVersion(options.originalsPath, hash).pipe(
+              Effect.flatMap(originalTreeHash),
+            ),
+          );
+          if (actual !== hash) return yield* new ContentAddressCollision();
+          reusable.add(hash);
           yield* progress.tick({ phase, completed: index + 1, subject });
         }
       }),
@@ -291,10 +296,10 @@ export const completeRestoreArchives = Effect.fn("Library.completeRestoreArchive
   }
   // Plans describe observations, not authority to omit required content.
   for (const copy of manifest.collection_versions) {
-    if (!archives.has(copy.hash) && !existingPaths.has(copy.hash))
+    if (!archives.has(copy.hash) && !reusable.has(copy.hash))
       return yield* new RestoreInvalid({ reason: { _tag: "CopyNotAvailable", hash: copy.hash } });
   }
-  return { archives: [...archives.values()], existingPaths };
+  return { archives: [...archives.values()], reusable: [...reusable] };
 });
 
 /**
@@ -314,7 +319,6 @@ export const restoredState = Effect.fn("Library.restoredState")(function* (
       repositories: [],
       installed_skills: [],
       unmanaged: [],
-      operations: [],
     }),
   ).pipe(
     Effect.mapError(
@@ -335,15 +339,14 @@ export const importRestoreArchives = Effect.fn("Library.importRestoreArchives")(
   manifest: LibraryManifest,
   available: {
     readonly archives: readonly SnapshotArchive[];
-    readonly existingPaths: ReadonlyMap<string, string>;
+    readonly reusable: readonly Hash[];
   },
   options: RestoreOptions,
 ) {
   const progress = options.progress ?? silentRestoreProgress;
-  const { archives, existingPaths } = available;
+  const { archives, reusable } = available;
   const received = new Map(archives.map((archive) => [archive.digest, archive]));
-  const fs = yield* FileSystem.FileSystem;
-  const verifiedPaths = new Map(existingPaths);
+  const verifiedPaths = new Map<Hash, string>();
   const phase: RestorePhase = { kind: "retain", total: manifest.collection_versions.length };
   if (phase.total)
     yield* progress.around(
@@ -362,12 +365,20 @@ export const importRestoreArchives = Effect.fn("Library.importRestoreArchives")(
           if (path !== undefined && (yield* originalTreeHash(path)) !== tree.hash)
             return yield* new ContentAddressCollision();
           if (path === undefined) {
-            path = collectionVersionPath(options.originalsPath, tree.hash);
-            if (yield* fs.exists(path)) {
+            if (yield* hasCollectionVersion(options.originalsPath, tree.hash)) {
+              path = yield* readCollectionVersion(options.originalsPath, tree.hash);
               // Existing immutable objects still need verification, but no unpack/copy cycle.
               if ((yield* originalTreeHash(path)) !== tree.hash)
                 return yield* new ContentAddressCollision();
             } else {
+              if (reusable.includes(tree.hash))
+                return yield* new RestoreInvalid({
+                  reason: {
+                    _tag: "ReusableCopyMissing",
+                    hash: tree.hash,
+                    path: collectionVersionPath(options.originalsPath, tree.hash),
+                  },
+                });
               if (archive === undefined)
                 return yield* new RestoreInvalid({
                   reason: { _tag: "CopyNotAvailable", hash: tree.hash },
@@ -465,7 +476,7 @@ export const blendRestoredState = Effect.fn("Library.blendRestoredState")(functi
     });
   // This device's invocation overrides apply to whatever the restored Library enables.
   const { invocation_policies: localPolicies, ...device } = current;
-  return yield* LibraryState.makeEffect({
+  return yield* decodeLibraryState({
     ...device,
     collections: restored.collections,
     skills: restored.skills,
@@ -477,12 +488,12 @@ export const blendRestoredState = Effect.fn("Library.blendRestoredState")(functi
       : { invocation_policies: localPolicies }),
   }).pipe(
     Effect.mapError(
-      (issue) =>
+      (error) =>
         new RestoreInvalid({
           reason: {
             _tag: "StateInvalid",
             stage: "merged-library",
-            failure: new Schema.SchemaError(issue),
+            failure: error,
           },
         }),
     ),

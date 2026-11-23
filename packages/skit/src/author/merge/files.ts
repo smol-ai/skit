@@ -197,35 +197,43 @@ const subtree: Merge.Merger<ReadonlyArray<TreeFile>> = (versions, at, choose) =>
   return { ...result, value: Option.map(result.value, (groups) => Object.values(groups).flat()) };
 };
 
+const fileTreeCodec = {
+  decode: (tree: History.Tree) =>
+    Option.map(
+      Option.all(tree.map((entry) => (entry.kind === "file" ? Option.some(entry) : Option.none()))),
+      (files) => files.sort((left, right) => left.path.localeCompare(right.path)),
+    ),
+  encode: (files: ReadonlyArray<TreeFile>) => files,
+};
+const wholeTree = Merge.whole(Schema.toEquivalence(History.Tree));
+
+/** Merge paths already aligned with their edit times. */
+export const mergeAlignedAuthorTree = Merge.via<History.Tree, ReadonlyArray<TreeFile>>(
+  fileTreeCodec,
+  (versions, at, choose) =>
+    subtree(
+      {
+        base: Option.some(Option.getOrElse(versions.base, () => [])),
+        ours: Option.some(Option.getOrElse(versions.ours, () => [])),
+        theirs: Option.some(Option.getOrElse(versions.theirs, () => [])),
+      },
+      at,
+      choose,
+    ),
+  wholeTree,
+);
+
 /** Align Skill moves first, then merge the hierarchy. Non-file trees keep whole-tree policy. */
-export const mergeAuthorTree: Merge.Merger<History.Tree> = Merge.via<
-  History.Tree,
-  ReadonlyArray<TreeFile>
->(
-  {
-    decode: (tree) =>
-      Option.map(
-        Option.all(
-          tree.map((entry) => (entry.kind === "file" ? Option.some(entry) : Option.none())),
-        ),
-        (files) => files.sort((left, right) => left.path.localeCompare(right.path)),
-      ),
-    encode: (files) => files,
-  },
+export const mergeAuthorTree = Merge.via<History.Tree, ReadonlyArray<TreeFile>>(
+  fileTreeCodec,
   (versions, at, choose) => {
     const index = (files: Option.Option<ReadonlyArray<TreeFile>>) =>
       Record.fromEntries(Option.getOrElse(files, () => []).map((file) => [file.path, file]));
-    const trees = {
+    const aligned = followSkillMoves({
       base: index(versions.base),
       ours: index(versions.ours),
       theirs: index(versions.theirs),
-    };
-    const moved = followSkillMoves(trees);
-    // A rename into the other side's file must stay an explicit path conflict. Alignment
-    // must not invent a side containing both that file and the relocated descendants.
-    const aligned = Object.values(moved).some((side) => History.treePathIssue(Object.values(side)))
-      ? trees
-      : moved;
+    });
     const files = (side: Readonly<Record<string, TreeFile>>) =>
       Object.values(side).sort((left, right) => left.path.localeCompare(right.path));
     return subtree(
@@ -238,7 +246,7 @@ export const mergeAuthorTree: Merge.Merger<History.Tree> = Merge.via<
       choose,
     );
   },
-  Merge.whole(Schema.toEquivalence(History.Tree)),
+  wholeTree,
 );
 
 /** What kind of conflict a file tree merge met, for people and the Registry. */

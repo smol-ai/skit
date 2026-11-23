@@ -1,3 +1,4 @@
+import { describe, it } from "@effect/vitest";
 // `add` and `add --list` must describe the same verbatim acquisition for a Git Source too.
 //
 // Git is the one Source family `add-source-families.test.ts` cannot drive in process: acquisition
@@ -15,8 +16,9 @@ import { chmod, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { Schema } from "effect";
-import { LibraryState } from "@smolai/skit-core/library";
+import { Effect, Schema } from "effect";
+import { savedLibrary } from "./helpers/saved-library.js";
+import { testPlatformLayer } from "./helpers/platform.js";
 import { outputContracts } from "../src/commands/output-contracts.js";
 import { isolatedRoots } from "./helpers/isolated-library.js";
 
@@ -32,7 +34,6 @@ const AddResultDocument = Schema.fromJsonString(
 const AddPreviewDocument = Schema.fromJsonString(
   Schema.Struct({ data: outputContracts.addPreview.schema }),
 );
-const LibraryStateDocument = Schema.fromJsonString(LibraryState);
 const addResult = (text: string) => Schema.decodeSync(AddResultDocument)(text).data;
 
 /** A disposable local repository with a declared Descriptor and two Skills. */
@@ -122,275 +123,318 @@ const gitInvocations = async (log: string): Promise<ReadonlyArray<ReadonlyArray<
     .filter(Boolean)
     .map((line) => line.split("\t"));
 
-test.runIf(realGit)(
-  "preview and add agree for a Git source, and repeat stably",
-  async () => {
-    const root = await mkdtemp(join(tmpdir(), "skit-git-parity-"));
-    try {
-      const fixture = await repository(root);
-      const shim = await gitShim(root, fixture.repo);
-      const roots = isolatedRoots(root);
+describe("skit add", () => {
+  describe("Preview leaves the Library unchanged.", () => {
+    it.live.runIf(realGit)(
+      "preview and add agree for a Git source, and repeat stably",
+      () =>
+        Effect.gen(function* () {
+          const root = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "skit-git-parity-")));
+          try {
+            const fixture = yield* Effect.promise(() => repository(root));
+            const shim = yield* Effect.promise(() => gitShim(root, fixture.repo));
+            const roots = isolatedRoots(root);
 
-      const run = (...args: string[]) =>
-        new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
-          const child = spawn(
-            process.execPath,
-            [
-              bin,
-              ...args,
-              "--json",
-              "--home",
-              roots.home,
-              "--codex-root",
-              roots.codexRoot,
-              "--claude-root",
-              roots.claudeRoot,
-              "--opencode-root",
-              roots.opencodeRoot,
-              "--devin-root",
-              roots.devinRoots[0],
-            ],
-            {
-              env: {
-                ...process.env,
-                PATH: `${shim.directory}:${process.env.PATH}`,
-                SKIT_HOME: roots.home,
-              },
-              stdio: ["ignore", "pipe", "pipe"],
-            },
-          );
-          let stdout = "";
-          let stderr = "";
-          child.stdout!.on("data", (chunk) => (stdout += chunk));
-          child.stderr!.on("data", (chunk) => (stderr += chunk));
-          child.once("error", reject);
-          child.once("close", (code) => resolve({ code, stdout, stderr }));
-        });
+            const run = (...args: string[]) =>
+              new Promise<{ code: number | null; stdout: string; stderr: string }>(
+                (resolve, reject) => {
+                  const child = spawn(
+                    process.execPath,
+                    [
+                      bin,
+                      ...args,
+                      "--json",
+                      "--home",
+                      roots.home,
+                      "--codex-root",
+                      roots.codexRoot,
+                      "--claude-root",
+                      roots.claudeRoot,
+                      "--opencode-root",
+                      roots.opencodeRoot,
+                      "--devin-root",
+                      roots.devinRoots[0],
+                    ],
+                    {
+                      env: {
+                        ...process.env,
+                        PATH: `${shim.directory}:${process.env.PATH}`,
+                        SKIT_HOME: roots.home,
+                      },
+                      stdio: ["ignore", "pipe", "pipe"],
+                    },
+                  );
+                  let stdout = "";
+                  let stderr = "";
+                  child.stdout!.on("data", (chunk) => (stdout += chunk));
+                  child.stderr!.on("data", (chunk) => (stderr += chunk));
+                  child.once("error", reject);
+                  child.once("close", (code) => resolve({ code, stdout, stderr }));
+                },
+              );
 
-      const preview = await run("add", REMOTE, "--list");
-      expect(preview.code, preview.stderr).toBe(0);
-      const previewed = Schema.decodeSync(AddPreviewDocument)(preview.stdout).data;
-      expect(previewed.kind).toBe("authored");
-      expect(previewed.skills.map((skill) => skill.name).sort()).toEqual(["audit", "review"]);
-      // Preview retains nothing: no state, no Original, no installed bytes.
-      expect(existsSync(join(roots.home, "state.json"))).toBe(false);
-      expect(existsSync(join(roots.home, "originals"))).toBe(false);
-      expect(
-        (await gitInvocations(shim.log)).some(
-          (args) => args[0] === "fetch" && args.at(-1) === "HEAD",
-        ),
-      ).toBe(false);
+            const preview = yield* Effect.promise(() => run("add", REMOTE, "--list"));
+            expect(preview.code, preview.stderr).toBe(0);
+            const previewed = Schema.decodeSync(AddPreviewDocument)(preview.stdout).data;
+            expect(previewed.kind).toBe("authored");
+            expect(previewed.skills.map((skill) => skill.name).sort()).toEqual(["audit", "review"]);
+            // Preview retains nothing: no state, no Original, no installed bytes.
+            expect(existsSync(join(roots.home, "state.json"))).toBe(false);
+            expect(existsSync(join(roots.home, "originals"))).toBe(false);
+            expect(
+              (yield* Effect.promise(() => gitInvocations(shim.log))).some(
+                (args) => args[0] === "fetch" && args.at(-1) === "HEAD",
+              ),
+            ).toBe(false);
 
-      const added = await run("add", REMOTE);
-      expect(added.code, added.stderr).toBe(0);
-      const entry = addResult(added.stdout);
-      expect(entry.skills).toEqual(previewed.skills);
-      expect(entry.skills.map((skill) => skill.name).sort()).toEqual(["audit", "review"]);
+            const added = yield* Effect.promise(() => run("add", REMOTE));
+            expect(added.code, added.stderr).toBe(0);
+            const entry = addResult(added.stdout);
+            expect(entry.skills).toEqual(previewed.skills);
+            expect(entry.skills.map((skill) => skill.name).sort()).toEqual(["audit", "review"]);
 
-      const state = Schema.decodeSync(LibraryStateDocument)(
-        await readFile(join(roots.home, "state.json"), "utf8"),
-      );
-      expect(state.collections.map((item) => item.collection_id)).toEqual([entry.collection_id]);
-      expect(state.collection_versions).toHaveLength(1);
-      expect(state.collection_versions[0].hash).toBe(entry.snapshot_digest);
-      expect(state.installed_skills).toEqual([]);
-      // A new add creates no Binding and no installed skill.
-      expect(state.enabled).toEqual([]);
-      expect(state.repositories).toEqual([]);
-      expect(existsSync(join(roots.claudeRoot, "review"))).toBe(false);
+            const state = (yield* savedLibrary(roots.home)).state;
+            expect(state.collections.map((item) => item.collection_id)).toEqual([
+              entry.collection_id,
+            ]);
+            expect(state.collection_versions).toHaveLength(1);
+            expect(state.collection_versions[0].hash).toBe(entry.snapshot_digest);
+            expect(state.installed_skills).toEqual([]);
+            // A new add creates no Binding and no installed skill.
+            expect(state.enabled).toEqual([]);
+            expect(state.repositories).toEqual([]);
+            expect(existsSync(join(roots.claudeRoot, "review"))).toBe(false);
 
-      // A fresh clone of unchanged history reuses the exact retained Version and records nothing new.
-      const beforeRepeat = (await gitInvocations(shim.log)).length;
-      const again = await run("add", REMOTE);
-      expect(again.code, again.stderr).toBe(0);
-      const repeated = addResult(again.stdout);
-      expect(repeated.snapshot_digest).toBe(entry.snapshot_digest);
-      expect(repeated.collection_version_id).toBe(entry.collection_version_id);
-      expect((await gitInvocations(shim.log)).slice(beforeRepeat).map((args) => args[0])).toEqual([
-        "clone",
-        "checkout",
-        "rev-parse",
-      ]);
-      const after = Schema.decodeSync(LibraryStateDocument)(
-        await readFile(join(roots.home, "state.json"), "utf8"),
-      );
-      expect(after.collections).toHaveLength(1);
-      expect(after.collection_versions).toHaveLength(1);
-      expect(after.imports).toHaveLength(1);
-      expect(after.installed_skills).toEqual([]);
+            // A fresh clone of unchanged history reuses the exact retained Version and records nothing new.
+            const beforeRepeat = (yield* Effect.promise(() => gitInvocations(shim.log))).length;
+            const again = yield* Effect.promise(() => run("add", REMOTE));
+            expect(again.code, again.stderr).toBe(0);
+            const repeated = addResult(again.stdout);
+            expect(repeated.snapshot_digest).toBe(entry.snapshot_digest);
+            expect(repeated.collection_version_id).toBe(entry.collection_version_id);
+            expect(
+              (yield* Effect.promise(() => gitInvocations(shim.log)))
+                .slice(beforeRepeat)
+                .map((args) => args[0]),
+            ).toEqual(["clone", "checkout", "rev-parse"]);
+            const after = (yield* savedLibrary(roots.home)).state;
+            expect(after.collections).toHaveLength(1);
+            expect(after.collection_versions).toHaveLength(1);
+            expect(after.imports).toHaveLength(1);
+            expect(after.installed_skills).toEqual([]);
 
-      // Preview after add still agrees and still writes nothing of its own.
-      const previewAgain = await run("add", REMOTE, "--list");
-      expect(previewAgain.code, previewAgain.stderr).toBe(0);
-      const previewedAgain = Schema.decodeSync(AddPreviewDocument)(previewAgain.stdout).data;
-      expect(previewedAgain.skills).toEqual(entry.skills);
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  },
-  60_000,
-);
+            // Preview after add still agrees and still writes nothing of its own.
+            const previewAgain = yield* Effect.promise(() => run("add", REMOTE, "--list"));
+            expect(previewAgain.code, previewAgain.stderr).toBe(0);
+            const previewedAgain = Schema.decodeSync(AddPreviewDocument)(previewAgain.stdout).data;
+            expect(previewedAgain.skills).toEqual(entry.skills);
+          } finally {
+            yield* Effect.promise(() => rm(root, { recursive: true, force: true }));
+          }
+        }).pipe(Effect.provide(testPlatformLayer)),
+      60_000,
+    );
 
-test.runIf(realGit)(
-  "preview and add agree for a plain-Skill Git subpath without a generated wrapper",
-  async () => {
-    const root = await mkdtemp(join(tmpdir(), "skit-git-subpath-"));
-    try {
-      const fixture = await repository(root, true);
-      const shim = await gitShim(root, fixture.repo, "https://github.com/fixtures/tools");
-      const roots = isolatedRoots(root);
-      const source = "https://github.com/fixtures/tools/tree/main/imported";
+    it.live.runIf(realGit)(
+      "preview and add agree for a plain-Skill Git subpath without a generated wrapper",
+      () =>
+        Effect.gen(function* () {
+          const root = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "skit-git-subpath-")));
+          try {
+            const fixture = yield* Effect.promise(() => repository(root, true));
+            const shim = yield* Effect.promise(() =>
+              gitShim(root, fixture.repo, "https://github.com/fixtures/tools"),
+            );
+            const roots = isolatedRoots(root);
+            const source = "https://github.com/fixtures/tools/tree/main/imported";
 
-      const run = (...args: string[]) =>
-        new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
-          const child = spawn(
-            process.execPath,
-            [
-              bin,
-              ...args,
-              "--json",
-              "--home",
-              roots.home,
-              "--codex-root",
-              roots.codexRoot,
-              "--claude-root",
-              roots.claudeRoot,
-              "--opencode-root",
-              roots.opencodeRoot,
-              "--devin-root",
-              roots.devinRoots[0],
-            ],
-            {
-              env: {
-                ...process.env,
-                PATH: `${shim.directory}:${process.env.PATH}`,
-                SKIT_HOME: roots.home,
-              },
-              stdio: ["ignore", "pipe", "pipe"],
-            },
-          );
-          let stdout = "";
-          let stderr = "";
-          child.stdout!.on("data", (chunk) => (stdout += chunk));
-          child.stderr!.on("data", (chunk) => (stderr += chunk));
-          child.once("error", reject);
-          child.once("close", (code) => resolve({ code, stdout, stderr }));
-        });
+            const run = (...args: string[]) =>
+              new Promise<{ code: number | null; stdout: string; stderr: string }>(
+                (resolve, reject) => {
+                  const child = spawn(
+                    process.execPath,
+                    [
+                      bin,
+                      ...args,
+                      "--json",
+                      "--home",
+                      roots.home,
+                      "--codex-root",
+                      roots.codexRoot,
+                      "--claude-root",
+                      roots.claudeRoot,
+                      "--opencode-root",
+                      roots.opencodeRoot,
+                      "--devin-root",
+                      roots.devinRoots[0],
+                    ],
+                    {
+                      env: {
+                        ...process.env,
+                        PATH: `${shim.directory}:${process.env.PATH}`,
+                        SKIT_HOME: roots.home,
+                      },
+                      stdio: ["ignore", "pipe", "pipe"],
+                    },
+                  );
+                  let stdout = "";
+                  let stderr = "";
+                  child.stdout!.on("data", (chunk) => (stdout += chunk));
+                  child.stderr!.on("data", (chunk) => (stderr += chunk));
+                  child.once("error", reject);
+                  child.once("close", (code) => resolve({ code, stdout, stderr }));
+                },
+              );
 
-      const preview = await run("add", source, "--list");
-      expect(preview.code, preview.stderr).toBe(0);
-      const previewed = Schema.decodeSync(AddPreviewDocument)(preview.stdout).data;
-      expect(previewed.kind).toBe("plain");
-      expect(existsSync(join(roots.home, "state.json"))).toBe(false);
+            const preview = yield* Effect.promise(() => run("add", source, "--list"));
+            expect(preview.code, preview.stderr).toBe(0);
+            const previewed = Schema.decodeSync(AddPreviewDocument)(preview.stdout).data;
+            expect(previewed.kind).toBe("plain");
+            expect(existsSync(join(roots.home, "state.json"))).toBe(false);
 
-      const added = await run("add", source);
-      expect(added.code, added.stderr).toBe(0);
-      const entry = addResult(added.stdout);
-      expect(entry.skills).toEqual(previewed.skills);
-      expect(entry.skills.map((skill) => skill.name).sort()).toEqual([
-        "code-review",
-        "security-review",
-      ]);
-      const firstState = Schema.decodeSync(LibraryStateDocument)(
-        await readFile(join(roots.home, "state.json"), "utf8"),
-      );
-      const hex = firstState.collection_versions[0].hash.slice("sha256:".length);
-      const originalPath = join(roots.home, "originals", hex.slice(0, 2), hex);
-      expect(existsSync(join(originalPath, "README.md"))).toBe(false);
-      expect(existsSync(join(originalPath, "skit.json"))).toBe(false);
-      expect(existsSync(join(originalPath, "outside-skill"))).toBe(false);
-      expect(firstState.imports[0]).toMatchObject({ kind: "source", revision: fixture.head });
+            const added = yield* Effect.promise(() => run("add", source));
+            expect(added.code, added.stderr).toBe(0);
+            const entry = addResult(added.stdout);
+            expect(entry.skills).toEqual(previewed.skills);
+            expect(entry.skills.map((skill) => skill.name).sort()).toEqual([
+              "code-review",
+              "security-review",
+            ]);
+            const firstState = (yield* savedLibrary(roots.home)).state;
+            const hex = firstState.collection_versions[0].hash.slice("sha256:".length);
+            const originalPath = join(roots.home, "originals", hex.slice(0, 2), hex);
+            expect(existsSync(join(originalPath, "README.md"))).toBe(false);
+            expect(existsSync(join(originalPath, "skit.json"))).toBe(false);
+            expect(existsSync(join(originalPath, "outside-skill"))).toBe(false);
+            expect(firstState.imports[0]).toMatchObject({ kind: "source", revision: fixture.head });
 
-      // Refreshing reacquires the whole Source at its subpath and finds nothing new.
-      const planned = await run("update", "--dry-run");
-      expect(planned.code, planned.stderr).toBe(0);
-      expect(JSON.parse(planned.stdout).data).toMatchObject([{ changed: false }]);
-      const updated = await run("update");
-      expect(updated.code, updated.stderr).toBe(0);
-      expect(JSON.parse(updated.stdout).data).toMatchObject([{ changed: false }]);
+            // Refreshing reacquires the whole Source at its subpath and finds nothing new.
+            const planned = yield* Effect.promise(() => run("update", "--dry-run"));
+            expect(planned.code, planned.stderr).toBe(0);
+            expect(JSON.parse(planned.stdout).data).toMatchObject([{ changed: false }]);
+            const updated = yield* Effect.promise(() => run("update"));
+            expect(updated.code, updated.stderr).toBe(0);
+            expect(JSON.parse(updated.stdout).data).toMatchObject([{ changed: false }]);
 
-      // A new checkout of the same bytes reuses the verbatim Version and records nothing new.
-      const again = await run("add", source);
-      expect(again.code, again.stderr).toBe(0);
-      const repeated = addResult(again.stdout);
-      expect(repeated.snapshot_digest).toBe(entry.snapshot_digest);
-      expect(repeated.collection_version_id).toBe(entry.collection_version_id);
-      const state = Schema.decodeSync(LibraryStateDocument)(
-        await readFile(join(roots.home, "state.json"), "utf8"),
-      );
-      expect(state.collections).toHaveLength(1);
-      expect(state.collection_versions).toHaveLength(1);
-      expect(state.imports).toHaveLength(1);
-      expect(state.installed_skills).toEqual([]);
-      expect(state.enabled).toEqual([]);
-      expect(state.repositories).toEqual([]);
+            // A new checkout of the same bytes reuses the verbatim Version and records nothing new.
+            const again = yield* Effect.promise(() => run("add", source));
+            expect(again.code, again.stderr).toBe(0);
+            const repeated = addResult(again.stdout);
+            expect(repeated.snapshot_digest).toBe(entry.snapshot_digest);
+            expect(repeated.collection_version_id).toBe(entry.collection_version_id);
+            const state = (yield* savedLibrary(roots.home)).state;
+            expect(state.collections).toHaveLength(1);
+            expect(state.collection_versions).toHaveLength(1);
+            expect(state.imports).toHaveLength(1);
+            expect(state.installed_skills).toEqual([]);
+            expect(state.enabled).toEqual([]);
+            expect(state.repositories).toEqual([]);
 
-      // Following the whole Collection, an upstream change installs and retires Skills.
-      const collectionId = entry.collection_id;
-      if (collectionId === undefined) throw new Error("add reported no Collection");
-      const enabled = await run("enable", collectionId, "--all");
-      expect(enabled.code, enabled.stderr).toBe(0);
-      await rm(join(fixture.repo, "imported", "security-review"), { recursive: true });
-      await mkdir(join(fixture.repo, "imported", "release-notes"), { recursive: true });
-      await writeFile(
-        join(fixture.repo, "imported", "release-notes", "SKILL.md"),
-        "---\nname: release-notes\ndescription: Draft release notes.\n---\n\n# Release Notes\n",
-      );
-      await writeFile(
-        join(fixture.repo, "imported", "code-review", "SKILL.md"),
-        "---\nname: code-review\ndescription: Describe exactly when this skill should be used.\n---\n\n# Code Review v2\n",
-      );
-      for (const args of [
-        ["add", "-A"],
-        ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "change"],
-      ]) {
-        const result = spawnSync("git", args, { cwd: fixture.repo, encoding: "utf8" });
-        expect(result.status, result.stderr).toBe(0);
-      }
-      const expectedChanges = {
-        enabled: ["release-notes"],
-        updated: ["code-review"],
-        removed: ["security-review"],
-        kept: [],
-        new_available: 0,
-      };
-      const updatePlan = await run("update", "--dry-run");
-      expect(updatePlan.code, updatePlan.stderr).toBe(0);
-      expect(JSON.parse(updatePlan.stdout).data).toMatchObject([
-        { changed: true, ...expectedChanges },
-      ]);
-      const applied = await run("update");
-      expect(applied.code, applied.stderr).toBe(0);
-      expect(JSON.parse(applied.stdout).data).toMatchObject([
-        { changed: true, ...expectedChanges },
-      ]);
-      expect((await readdir(roots.codexRoot)).sort()).toEqual(["code-review", "release-notes"]);
+            // Following the whole Collection, an upstream change installs and retires Skills.
+            const collectionId = entry.collection_id;
+            if (collectionId === undefined) throw new Error("add reported no Collection");
+            const enabled = yield* Effect.promise(() => run("enable", collectionId, "--all"));
+            expect(enabled.code, enabled.stderr).toBe(0);
+            yield* Effect.promise(() =>
+              rm(join(fixture.repo, "imported", "security-review"), { recursive: true }),
+            );
+            yield* Effect.promise(() =>
+              mkdir(join(fixture.repo, "imported", "release-notes"), { recursive: true }),
+            );
+            yield* Effect.promise(() =>
+              writeFile(
+                join(fixture.repo, "imported", "release-notes", "SKILL.md"),
+                "---\nname: release-notes\ndescription: Draft release notes.\n---\n\n# Release Notes\n",
+              ),
+            );
+            yield* Effect.promise(() =>
+              writeFile(
+                join(fixture.repo, "imported", "code-review", "SKILL.md"),
+                "---\nname: code-review\ndescription: Describe exactly when this skill should be used.\n---\n\n# Code Review v2\n",
+              ),
+            );
+            for (const args of [
+              ["add", "-A"],
+              [
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-qm",
+                "change",
+              ],
+            ]) {
+              const result = spawnSync("git", args, { cwd: fixture.repo, encoding: "utf8" });
+              expect(result.status, result.stderr).toBe(0);
+            }
+            const expectedChanges = {
+              enabled: ["release-notes"],
+              updated: ["code-review"],
+              removed: ["security-review"],
+              kept: [],
+              new_available: 0,
+            };
+            const updatePlan = yield* Effect.promise(() => run("update", "--dry-run"));
+            expect(updatePlan.code, updatePlan.stderr).toBe(0);
+            expect(JSON.parse(updatePlan.stdout).data).toMatchObject([
+              { changed: true, ...expectedChanges },
+            ]);
+            const applied = yield* Effect.promise(() => run("update"));
+            expect(applied.code, applied.stderr).toBe(0);
+            expect(JSON.parse(applied.stdout).data).toMatchObject([
+              { changed: true, ...expectedChanges },
+            ]);
+            expect((yield* Effect.promise(() => readdir(roots.codexRoot))).sort()).toEqual([
+              "code-review",
+              "release-notes",
+            ]);
 
-      // With one Skill enabled on its own, its deletion upstream keeps it; new Skills are counted.
-      expect((await run("disable", collectionId, "--all")).code).toBe(0);
-      expect((await run("enable", "release-notes")).code).toBe(0);
-      await rm(join(fixture.repo, "imported", "release-notes"), { recursive: true });
-      await mkdir(join(fixture.repo, "imported", "triage"), { recursive: true });
-      await writeFile(
-        join(fixture.repo, "imported", "triage", "SKILL.md"),
-        "---\nname: triage\ndescription: Triage incoming issues.\n---\n\n# Triage\n",
-      );
-      for (const args of [
-        ["add", "-A"],
-        ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "again"],
-      ]) {
-        const result = spawnSync("git", args, { cwd: fixture.repo, encoding: "utf8" });
-        expect(result.status, result.stderr).toBe(0);
-      }
-      const individual = await run("update");
-      expect(individual.code, individual.stderr).toBe(0);
-      expect(JSON.parse(individual.stdout).data).toMatchObject([
-        { enabled: [], removed: [], kept: ["release-notes"], new_available: 1 },
-      ]);
-      expect(await readdir(roots.codexRoot)).toEqual(["release-notes"]);
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  },
-  60_000,
-);
+            // With one Skill enabled on its own, its deletion upstream keeps it; new Skills are counted.
+            expect((yield* Effect.promise(() => run("disable", collectionId, "--all"))).code).toBe(
+              0,
+            );
+            expect((yield* Effect.promise(() => run("enable", "release-notes"))).code).toBe(0);
+            yield* Effect.promise(() =>
+              rm(join(fixture.repo, "imported", "release-notes"), { recursive: true }),
+            );
+            yield* Effect.promise(() =>
+              mkdir(join(fixture.repo, "imported", "triage"), { recursive: true }),
+            );
+            yield* Effect.promise(() =>
+              writeFile(
+                join(fixture.repo, "imported", "triage", "SKILL.md"),
+                "---\nname: triage\ndescription: Triage incoming issues.\n---\n\n# Triage\n",
+              ),
+            );
+            for (const args of [
+              ["add", "-A"],
+              [
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-qm",
+                "again",
+              ],
+            ]) {
+              const result = spawnSync("git", args, { cwd: fixture.repo, encoding: "utf8" });
+              expect(result.status, result.stderr).toBe(0);
+            }
+            const individual = yield* Effect.promise(() => run("update"));
+            expect(individual.code, individual.stderr).toBe(0);
+            expect(JSON.parse(individual.stdout).data).toMatchObject([
+              { enabled: [], removed: [], kept: ["release-notes"], new_available: 1 },
+            ]);
+            expect(yield* Effect.promise(() => readdir(roots.codexRoot))).toEqual([
+              "release-notes",
+            ]);
+          } finally {
+            yield* Effect.promise(() => rm(root, { recursive: true, force: true }));
+          }
+        }).pipe(Effect.provide(testPlatformLayer)),
+      60_000,
+    );
+  });
+});

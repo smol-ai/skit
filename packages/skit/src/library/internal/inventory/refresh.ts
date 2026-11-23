@@ -1,3 +1,4 @@
+import { readInventoryState } from "../../store/inventory.js";
 import { Revision, type Snapshot } from "../../snapshot.js";
 import { Clock, Effect, Schema } from "effect";
 import { Hash } from "../../../shared/hash.js";
@@ -134,7 +135,8 @@ export const applyInventory = Effect.fn("Library.applyInventory")(function* (
     (again, base) =>
       Effect.gen(function* () {
         const loaded = base._tag === "Present" ? base.state : emptyLibraryState();
-        yield* (yield* LibraryWriter).save(again.change.next, loaded);
+        const inventory = yield* readInventoryState(home);
+        yield* (yield* LibraryWriter).saveInventory(again.change.next, loaded, inventory.revision);
         const keptBackups: InstalledSkills.Backup[] = [];
         for (const step of again.backups) {
           yield* files

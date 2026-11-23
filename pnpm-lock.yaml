@@ -117,6 +117,9 @@ importers:
       '@effect/platform-node':
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)(redis@6.2.1)
+      '@effect/sql-sqlite-bun':
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)
       '@effect/sql-sqlite-node':
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)
@@ -532,6 +535,11 @@ packages:
 
   '@effect/sql-d1@4.1.2':
     resolution: {integrity: sha512-7uzFwDg/SQali/+Edp6H/t0nQSXtdDsNO8dHkC8xl45/YITJ6F5Os0pBZdXMCdtqehekhDM3qzTtJut4rLGcEA==}
+    peerDependencies:
+      effect: 4.1.2
+
+  '@effect/sql-sqlite-bun@4.1.2':
+    resolution: {integrity: sha512-Cwe0fSqklOg8pjoY+i0rszSciI3WiKfauQc+k+okpcfTGqON45YZ3a9XmP4uUbk7dhim3qiPP92IjBjL6jDZgw==}
     peerDependencies:
       effect: 4.1.2
 
@@ -3416,6 +3424,10 @@ snapshots:
   '@effect/sql-d1@4.1.2(effect@4.1.2)':
     dependencies:
       '@cloudflare/workers-types': 5.20261031.1
+      effect: 4.1.2
+
+  '@effect/sql-sqlite-bun@4.1.2(effect@4.1.2)':
+    dependencies:
       effect: 4.1.2
 
   '@effect/sql-sqlite-node@4.1.2(effect@4.1.2)':

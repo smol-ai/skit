@@ -26,7 +26,6 @@ it.effect("TUI logs explain every notice and retain the native logger context", 
         failure,
       }),
       LibraryRecoveryNotice.cases.SetupStopNotRecorded.make({ home, operationId, failure }),
-      LibraryRecoveryNotice.cases.HistoryDeliveryPending.make({ home, failure }),
     ];
     const incoming: Logger.Options<unknown>[] = [];
     const forwarded: Logger.Options<unknown>[] = [];
@@ -48,7 +47,7 @@ it.effect("TUI logs explain every notice and retain the native logger context", 
       Effect.provide(Logger.layer([probe])),
       Effect.provideService(References.MinimumLogLevel, "Debug"),
     );
-    expect(forwarded).toHaveLength(5);
+    expect(forwarded).toHaveLength(4);
     for (const [index, entry] of forwarded.entries()) {
       expect(entry.fiber).toBe(incoming[index]!.fiber);
       expect(entry.date).toBe(incoming[index]!.date);

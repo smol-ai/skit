@@ -13,6 +13,7 @@ export type { TreeRequirements } from "./tree-requirements.js";
 export type { AuthorIgnoreRepository } from "../artifact/plain-author-ignore.js";
 
 export { LinkStat } from "./link-stat.js";
+export { sqliteLayer } from "./sqlite.js";
 
 export { HomeBusy } from "./lock-failures.js";
 export { PlatformErrorSchema } from "./error-schema.js";

@@ -1,4 +1,10 @@
-import { assert, it } from "@effect/vitest";
+import { loadOperations, loadLibrary } from "../src/library/store/library-store.js";
+import { libraryDatabasePath } from "../src/library/store/database.js";
+import { testRoots } from "./helpers/library-store.js";
+import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
+
+import { describe, assert, it } from "@effect/vitest";
+
 import { Effect, Exit, FileSystem, Option, Schema } from "effect";
 import { join } from "node:path";
 import * as Library from "../src/library/library.js";
@@ -7,7 +13,6 @@ import { readPathEvidence } from "../src/library/folder-evidence.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { systemError } from "effect/PlatformError";
-import { testRoots } from "./helpers/library-store.js";
 
 const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -81,27 +86,21 @@ it.effect(
         assert.strictEqual(history.operations.length, 1);
         assert.strictEqual(history.operations[0]._tag, "Done");
         assert.strictEqual(history.operations[0].steps[0].step._tag, "Import");
-        assert.strictEqual(history.operations[0].steps[0].after[0]._tag, "Retained");
+        assert.deepStrictEqual(history.operations[0].steps[0].after, []);
         assert.strictEqual(history.operations[0].steps[1].step._tag, "Manage");
       }).pipe(Effect.provide(Library.layer(f.config)));
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 it.effect(
-  "existing Manage previews preserve unknown state and take ownership without changing Skill bytes",
+  "existing Manage previews leave saved state unchanged and take ownership without changing Skill bytes",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture;
       yield* Effect.gen(function* () {
         const library = yield* Library.Service;
         const imported = yield* library.import.collection(f.request);
-        const statePath = join(f.home, "state.json");
-        const saved = JSON.parse(yield* f.fs.readFileString(statePath));
-        yield* f.fs.writeFileString(
-          statePath,
-          JSON.stringify({ ...saved, future: { keep: "future data" } }),
-        );
-        const before = yield* f.fs.readFileString(statePath);
+        const before = yield* loadLibrary(f.home);
         const plan = yield* library.plan(
           {
             _tag: "Manage",
@@ -122,14 +121,13 @@ it.effect(
           { base: yield* library.read },
         );
         assert.isTrue(Option.isSome(plan.change.selections[0].enable));
-        assert.strictEqual(yield* f.fs.readFileString(statePath), before);
+        assert.deepStrictEqual(yield* loadLibrary(f.home), before);
         const outcome = yield* library.apply({ _tag: "Apply", plan: yield* portable(plan) });
         assert.strictEqual(outcome.result.imported.length, 0);
         assert.strictEqual(outcome.result.results.length, 1);
         assert.strictEqual(outcome.result.results[0].application.status, "complete");
         assert.strictEqual(yield* f.fs.readFileString(join(f.copy, "SKILL.md")), f.bytes);
-        const after = JSON.parse(yield* f.fs.readFileString(statePath));
-        assert.deepStrictEqual(after.future, { keep: "future data" });
+        const after = yield* loadLibrary(f.home);
         assert.strictEqual(after.installed_skills[0].status, "installed");
       }).pipe(Effect.provide(Library.layer(f.config)));
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
@@ -201,10 +199,10 @@ for (const edit of [false, true])
                 : f.fs.link(from, to),
           }),
         );
-        const state = JSON.parse(yield* f.fs.readFileString(join(f.home, "state.json")));
-        assert.strictEqual(state.operations[0]._tag, "Pending");
-        assert.strictEqual(state.operations[0].steps[0].status, "Done");
-        assert.strictEqual(state.operations[0].steps[1].status, "Pending");
+
+        assert.strictEqual((yield* loadOperations(f.home))[0]._tag, "Pending");
+        assert.strictEqual((yield* loadOperations(f.home))[0].steps[0].status, "Done");
+        assert.strictEqual((yield* loadOperations(f.home))[0].steps[1].status, "Pending");
         if (edit) yield* f.fs.writeFileString(join(f.copy, "SKILL.md"), "operator changed bytes\n");
         yield* Effect.gen(function* () {
           const library = yield* Library.Service;
@@ -243,7 +241,7 @@ it.effect("changed folders, altered plans and another Library are refused before
       const stale = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
       assert.strictEqual(stale._tag, "Failure");
       if (stale._tag === "Failure") assert.strictEqual(stale.failure._tag, "Library.StalePlan");
-      assert.isFalse(yield* f.fs.exists(join(f.home, "state.json")));
+      assert.isFalse((yield* inspectLocalLibraryState(join(f.home))).present);
       yield* f.fs.writeFileString(join(f.copy, "SKILL.md"), f.bytes);
       return plan;
     }).pipe(Effect.provide(Library.layer(f.config)));
@@ -252,7 +250,7 @@ it.effect("changed folders, altered plans and another Library are refused before
       const refused = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
       assert.strictEqual(refused._tag, "Failure");
       if (refused._tag === "Failure") assert.strictEqual(refused.failure._tag, "Library.StalePlan");
-      assert.isFalse(yield* f.fs.exists(join(f.root, "other-library", "state.json")));
+      assert.isFalse((yield* inspectLocalLibraryState(join(f.root, "other-library"))).present);
     }).pipe(Effect.provide(Library.layer({ ...f.config, home: join(f.root, "other-library") })));
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
@@ -268,7 +266,7 @@ it.effect(
         const result = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
         assert.strictEqual(result._tag, "Failure");
         if (result._tag === "Failure") assert.strictEqual(result.failure._tag, "PlatformError");
-        assert.isFalse(yield* f.fs.exists(join(f.home, "state.json")));
+        assert.isFalse((yield* inspectLocalLibraryState(join(f.home))).present);
         assert.isFalse(yield* f.fs.exists(join(f.home, "originals")));
         assert.isFalse(yield* f.fs.exists(join(f.copy, ".skit-ownership.json")));
         assert.strictEqual(yield* f.fs.readFileString(join(f.copy, "SKILL.md")), f.bytes);
@@ -276,97 +274,21 @@ it.effect(
         Effect.provide(Library.layer(f.config)),
         Effect.provideService(FileSystem.FileSystem, {
           ...f.fs,
-          rename: (from, to) =>
-            to === join(f.home, "state.json")
+          chmod: (path, mode) =>
+            path === libraryDatabasePath(f.home)
               ? Effect.fail(
                   systemError({
                     _tag: "PermissionDenied",
                     module: "FileSystem",
-                    method: "rename",
-                    pathOrDescriptor: to,
+                    method: "chmod",
+                    pathOrDescriptor: path,
                   }),
                 )
-              : f.fs.rename(from, to),
+              : f.fs.chmod(path, mode),
         }),
       );
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
-
-for (const readable of [true, false])
-  it.effect(
-    `approved duplicates ${readable ? "move to the previewed recovery directory" : "stay when their harness cannot read the replacement"}`,
-    () =>
-      Effect.gen(function* () {
-        const f = yield* fixture;
-        const legacy = join(f.root, "opencode-skills");
-        const duplicate = join(legacy, "review");
-        yield* f.fs.makeDirectory(duplicate, { recursive: true });
-        yield* f.fs.writeFileString(join(duplicate, "SKILL.md"), f.bytes);
-        const observed = yield* readPathEvidence(duplicate);
-        if (Option.isNone(observed) || observed.value._tag !== "Directory")
-          return yield* Effect.die("Expected duplicate");
-        const copy = observed.value;
-        const intent: Library.ManageIntent = {
-          _tag: "Manage",
-          mode: "new",
-          selections: [
-            {
-              ...f.intent.selections[0],
-              mode: "new",
-              importFrom: { _tag: "Import", request: f.request },
-              currentHash: Option.some(f.source.treeHash),
-              equalCopies: [],
-              ownership: Option.some({
-                harnesses: ["codex"],
-                machineId: Option.some(makeMachineId()),
-              }),
-              duplicates: Option.some("preserve-duplicates"),
-              approvedCopies: [copy],
-            },
-          ],
-        };
-        const config: Library.Config = {
-          home: f.home,
-          roots: {
-            home: f.root,
-            configHome: join(f.root, "config"),
-            overrides: { codex: [f.agents], opencode: readable ? [f.agents, legacy] : [legacy] },
-          },
-        };
-        yield* Effect.gen(function* () {
-          const library = yield* Library.Service;
-          const plan = yield* library.plan(intent, { base: yield* library.read });
-          const backup = plan.change.selections[0].backup;
-          if (Option.isNone(backup)) return yield* Effect.die("Expected backup preview");
-          assert.isFalse(yield* f.fs.exists(backup.value.recoveryDirectory));
-          assert.strictEqual(yield* f.fs.readFileString(join(duplicate, "SKILL.md")), f.bytes);
-          const outcome = yield* library.apply({ _tag: "Apply", plan: yield* portable(plan) });
-          if (readable) {
-            assert.deepStrictEqual(outcome.result.recoveryDirectories, [
-              backup.value.recoveryDirectory,
-            ]);
-            assert.isFalse(yield* f.fs.exists(duplicate));
-            assert.strictEqual(
-              yield* f.fs.readFileString(
-                join(backup.value.recoveryDirectory, "1-review", "SKILL.md"),
-              ),
-              f.bytes,
-            );
-          } else {
-            assert.deepStrictEqual(outcome.result.recoveryDirectories, []);
-            assert.isTrue(
-              outcome.result.warnings.some(
-                (warning) => warning.reason._tag === "ReplacementUnreadable",
-              ),
-            );
-            assert.isFalse(yield* f.fs.exists(backup.value.recoveryDirectory));
-            assert.strictEqual(yield* f.fs.readFileString(join(duplicate, "SKILL.md")), f.bytes);
-          }
-          assert.strictEqual(yield* f.fs.readFileString(join(f.copy, "SKILL.md")), f.bytes);
-          assert.isTrue(yield* f.fs.exists(join(f.copy, ".skit-ownership.json")));
-        }).pipe(Effect.provide(Library.layer(config)));
-      }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-  );
 
 it.effect(
   "a failure after recording returns the operation id and leaves completed imports inspectable",
@@ -497,9 +419,103 @@ it.effect("a newly introduced duplicate invalidates Manage without moving either
       const result = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
       assert.strictEqual(result._tag, "Failure");
       if (result._tag === "Failure") assert.strictEqual(result.failure._tag, "Library.StalePlan");
-      assert.isFalse(yield* f.fs.exists(join(f.home, "state.json")));
+      assert.isFalse((yield* inspectLocalLibraryState(join(f.home))).present);
       assert.strictEqual(yield* f.fs.readFileString(join(duplicate, "SKILL.md")), f.bytes);
       assert.strictEqual(yield* f.fs.readFileString(join(f.copy, "SKILL.md")), f.bytes);
     }).pipe(Effect.provide(Library.layer(config)));
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
+
+describe("skit setup", () => {
+  describe("Managing selected copies", () => {
+    describe("Setup saves a recoverable copy before replacing an approved duplicate.", () => {
+      for (const readable of [true, false])
+        it.effect(
+          `approved duplicates ${readable ? "move to the previewed recovery directory" : "stay when their harness cannot read the replacement"}`,
+          () =>
+            Effect.gen(function* () {
+              const f = yield* fixture;
+              const legacy = join(f.root, "opencode-skills");
+              const duplicate = join(legacy, "review");
+              yield* f.fs.makeDirectory(duplicate, { recursive: true });
+              yield* f.fs.writeFileString(join(duplicate, "SKILL.md"), f.bytes);
+              const observed = yield* readPathEvidence(duplicate);
+              if (Option.isNone(observed) || observed.value._tag !== "Directory")
+                return yield* Effect.die("Expected duplicate");
+              const copy = observed.value;
+              const intent: Library.ManageIntent = {
+                _tag: "Manage",
+                mode: "new",
+                selections: [
+                  {
+                    ...f.intent.selections[0],
+                    mode: "new",
+                    importFrom: { _tag: "Import", request: f.request },
+                    currentHash: Option.some(f.source.treeHash),
+                    equalCopies: [],
+                    ownership: Option.some({
+                      harnesses: ["codex"],
+                      machineId: Option.some(makeMachineId()),
+                    }),
+                    duplicates: Option.some("preserve-duplicates"),
+                    approvedCopies: [copy],
+                  },
+                ],
+              };
+              const config: Library.Config = {
+                home: f.home,
+                roots: {
+                  home: f.root,
+                  configHome: join(f.root, "config"),
+                  overrides: {
+                    codex: [f.agents],
+                    opencode: readable ? [f.agents, legacy] : [legacy],
+                  },
+                },
+              };
+              yield* Effect.gen(function* () {
+                const library = yield* Library.Service;
+                const plan = yield* library.plan(intent, { base: yield* library.read });
+                const backup = plan.change.selections[0].backup;
+                if (Option.isNone(backup)) return yield* Effect.die("Expected backup preview");
+                assert.isFalse(yield* f.fs.exists(backup.value.recoveryDirectory));
+                assert.strictEqual(
+                  yield* f.fs.readFileString(join(duplicate, "SKILL.md")),
+                  f.bytes,
+                );
+                const outcome = yield* library.apply({
+                  _tag: "Apply",
+                  plan: yield* portable(plan),
+                });
+                if (readable) {
+                  assert.deepStrictEqual(outcome.result.recoveryDirectories, [
+                    backup.value.recoveryDirectory,
+                  ]);
+                  assert.isFalse(yield* f.fs.exists(duplicate));
+                  assert.strictEqual(
+                    yield* f.fs.readFileString(
+                      join(backup.value.recoveryDirectory, "1-review", "SKILL.md"),
+                    ),
+                    f.bytes,
+                  );
+                } else {
+                  assert.deepStrictEqual(outcome.result.recoveryDirectories, []);
+                  assert.isTrue(
+                    outcome.result.warnings.some(
+                      (warning) => warning.reason._tag === "ReplacementUnreadable",
+                    ),
+                  );
+                  assert.isFalse(yield* f.fs.exists(backup.value.recoveryDirectory));
+                  assert.strictEqual(
+                    yield* f.fs.readFileString(join(duplicate, "SKILL.md")),
+                    f.bytes,
+                  );
+                }
+                assert.strictEqual(yield* f.fs.readFileString(join(f.copy, "SKILL.md")), f.bytes);
+                assert.isTrue(yield* f.fs.exists(join(f.copy, ".skit-ownership.json")));
+              }).pipe(Effect.provide(Library.layer(config)));
+            }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+        );
+    });
+  });
+});

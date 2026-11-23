@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Layer, Option } from "effect";
 import { createHash } from "node:crypto";
 import { basename, dirname, join } from "node:path";
 import * as Library from "../src/library/library.js";
@@ -11,6 +11,17 @@ import {
   reproducible,
 } from "../src/library/installation/retained-skill.js";
 import { testRoots } from "./helpers/library-store.js";
+import { AuthorHistory } from "../src/author/history.js";
+import { AuthorWorkspace } from "../src/author/workspace.js";
+import { fileBytesPath, makeFileBytes } from "../src/artifact/file-bytes.js";
+import { lockFile } from "../src/platform/file-lock.js";
+import { Hash } from "../src/shared/hash.js";
+import { SqlClient } from "effect/sql";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import { prepareSetupSourceUndo } from "../src/library/internal/setup/undo-sources.js";
+import { prepareSetupChanges } from "../src/library/store/setup-intent.js";
+import { setupIntent } from "../src/library/store/intent.js";
+import { makeImportId } from "../src/library/entity-ids.js";
 
 const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -118,6 +129,203 @@ it.effect("whole-tree reads keep their path and never create composition storage
       f.primary,
     );
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+);
+
+it.effect("Library browsing and checks read compositions without leaking borrowed paths", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const read = Effect.gen(function* () {
+      const library = yield* Library.Service;
+      const skills = yield* library.skills();
+      const skill = skills[0];
+      assert.ok(skill);
+      const content = yield* library.session.readSkillContent(skill.versionId);
+      const description = yield* library.descriptionLoad({
+        collection: f.imported.collection.collection_id,
+      });
+      const checked = yield* library.check(undefined, {
+        inspectSource: () => Effect.succeed({ snapshot_digest: f.imported.snapshotDigest }),
+      });
+      const security = yield* library.securityReview(skill.id);
+      return { skills, content, description, checked, security };
+    }).pipe(
+      Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })),
+      Effect.provideService(FileSystem.FileSystem, f.trackReads),
+    );
+    const original = yield* read;
+    yield* f.convert;
+    assert.deepStrictEqual(yield* read, original);
+    assert.isAbove(f.borrowed.length, 0);
+    for (const path of f.borrowed) assert.isFalse(yield* f.fs.exists(path));
+    assert.isFalse(yield* f.fs.exists(f.retained));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("restore reuses a composition and opens fresh views across preparation and import", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    yield* f.convert;
+    yield* Effect.gen(function* () {
+      const library = yield* Library.Service;
+      const manifest = yield* library.manifest;
+      const plan = yield* library.content.plan(manifest, []);
+      assert.deepStrictEqual(plan.reusable, [f.imported.snapshotDigest]);
+      assert.deepStrictEqual(plan.download, []);
+      assert.deepStrictEqual(plan.reacquire, []);
+      const staged = yield* library.content.stage(manifest, {
+        plan,
+        registry: { origin: "https://registry.fixture", token: Option.none() },
+        download: () => Effect.die("existing composition must not be downloaded"),
+      });
+      assert.deepStrictEqual(staged.reusable, [f.imported.snapshotDigest]);
+      assert.deepStrictEqual(staged.retained, []);
+      assert.deepStrictEqual(staged.missing, []);
+    }).pipe(
+      Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })),
+      Effect.provideService(FileSystem.FileSystem, f.trackReads),
+    );
+    assert.isAtLeast(f.borrowed.length, 2);
+    for (const path of f.borrowed) assert.isFalse(yield* f.fs.exists(path));
+    assert.isFalse(yield* f.fs.exists(f.retained));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect(
+  "source Undo verifies compositions while keeping stable evidence and import references",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      yield* f.convert;
+      yield* Effect.gen(function* () {
+        const library = yield* Library.Service;
+        const before = yield* library.read;
+        if (before._tag !== "Present") return yield* Effect.die("Missing first import");
+        yield* f.fs.writeFileString(
+          join(f.source, "skills/review/SKILL.md"),
+          `${f.primary}Changed.\n`,
+        );
+        yield* library.import.authored({
+          root: f.source,
+          source: { type: "local", path: f.source },
+          input: f.source,
+          importedAt: "2026-11-07T00:00:00.000Z",
+        });
+        const after = yield* library.read;
+        if (after._tag !== "Present") return yield* Effect.die("Missing second import");
+        const changes = yield* prepareSetupChanges(
+          setupIntent(before.state),
+          setupIntent(after.state),
+          f.home,
+        );
+        const undo = yield* prepareSetupSourceUndo(
+          after.state,
+          changes,
+          f.originals,
+          after.state.imports[0]!.machine_id,
+          new Map([
+            [
+              f.imported.collection.collection_id,
+              { importId: makeImportId(), checkedAt: "2026-11-08T00:00:00.000Z" },
+            ],
+          ]),
+        );
+        assert.deepStrictEqual(undo.conflicts, []);
+        assert.deepStrictEqual(undo.evidence, [
+          { path: f.retained, hash: f.imported.snapshotDigest },
+        ]);
+        assert.strictEqual(undo.restorations.length, 1);
+        assert.strictEqual(undo.restorations[0]?.input.value, f.retained);
+        assert.strictEqual(
+          undo.restorations[0]?.collection_version_id,
+          f.imported.collectionVersionId,
+        );
+      }).pipe(
+        Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })),
+        Effect.provideService(FileSystem.FileSystem, f.trackReads),
+      );
+      assert.isAbove(f.borrowed.length, 0);
+      for (const path of f.borrowed) assert.isFalse(yield* f.fs.exists(path));
+      assert.isFalse(yield* f.fs.exists(f.retained));
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect(
+  "Author and Library composition reads share canonical bytes and retain independent modes and copies",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      yield* f.convert;
+      const content = new TextEncoder().encode("shared content\n");
+      const store = yield* Effect.map(AuthorHistory, (history) => history.engineStore).pipe(
+        Effect.provide(
+          AuthorHistory.layer({ home: f.home }).pipe(Layer.provideMerge(AuthorWorkspace.layer)),
+        ),
+      );
+      const author = yield* store.putTree([
+        { kind: "file", path: "shared.txt", mode: 0o644, bytes: content },
+      ]);
+      const run = f.manifest.entries.find((entry) => entry.path === "shared/run.sh");
+      if (run?.kind !== "file") return assert.fail("Missing executable fixture");
+      const byteStore = yield* makeFileBytes(f.home);
+      yield* byteStore.save(yield* f.fs.readFile(f.blobPath(run.blob)));
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* lockFile(join(f.home, "lock.sqlite"));
+          const root = yield* readCollectionVersion(f.originals, f.imported.snapshotDigest);
+          assert.strictEqual(
+            yield* f.fs.readFileString(join(root, "shared/rules.txt")),
+            "shared content\n",
+          );
+          const run = f.manifest.entries.find((entry) => entry.path === "shared/run.sh");
+          if (run?.kind !== "file") return assert.fail("Missing executable fixture");
+          const canonical = fileBytesPath(f.home, Hash.make(run.blob));
+          assert.strictEqual((yield* f.fs.stat(canonical)).mode & 0o777, 0o600);
+          assert.strictEqual((yield* f.fs.stat(join(root, "shared/run.sh"))).mode & 0o777, 0o755);
+          assert.notStrictEqual(
+            (yield* f.fs.stat(canonical)).ino,
+            (yield* f.fs.stat(join(root, "shared/run.sh"))).ino,
+          );
+          yield* f.fs.writeFileString(join(root, "shared/rules.txt"), "edited private read");
+        }),
+      );
+      assert.deepStrictEqual((yield* store.tree(author))[0], {
+        kind: "file",
+        path: "shared.txt",
+        mode: 0o644,
+        bytes: content,
+      });
+      yield* withLibraryDatabase(
+        libraryDatabasePath(f.home),
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          assert.strictEqual((yield* sql`SELECT hash FROM file_bytes`).length, 2);
+          assert.strictEqual((yield* sql`SELECT blob FROM author_tree_entries`).length, 1);
+        }),
+        true,
+      );
+    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+);
+
+it.effect(
+  "a registered missing canonical file is refused without repairing it from the legacy composition",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      yield* f.convert;
+      yield* readCollectionVersion(f.originals, f.imported.snapshotDigest);
+      const entry = f.manifest.entries.find((entry) => entry.kind === "file");
+      if (entry?.kind !== "file") return assert.fail("Missing file");
+      const byteStore = yield* makeFileBytes(f.home);
+      yield* byteStore.save(yield* f.fs.readFile(f.blobPath(entry.blob)));
+      const canonical = fileBytesPath(f.home, Hash.make(entry.blob));
+      yield* f.fs.remove(canonical);
+      assert.isTrue(yield* f.fs.exists(f.blobPath(entry.blob)));
+      assert.strictEqual(
+        (yield* Effect.flip(readCollectionVersion(f.originals, f.imported.snapshotDigest)))._tag,
+        "InvalidLibraryState",
+      );
+      assert.isFalse(yield* f.fs.exists(canonical));
+    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 it.effect("composition read copies are isolated, hash-exact, and removed with their scope", () =>

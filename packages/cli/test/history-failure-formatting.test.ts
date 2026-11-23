@@ -12,7 +12,9 @@ import { WorkspaceId, WorkspaceRoot } from "@smolai/skit-core/author/workspace-c
 import * as History from "@smolai/skit-core/history";
 import { SkitContractError } from "@smolai/skit-core/api";
 import { classifyFailure } from "../src/commands/failure-classification.js";
-import { authorHistoryReason } from "../src/author/history-failures.js";
+import { LibrarySqlError } from "@smolai/skit-core/library";
+import { libraryFailure } from "../src/library/failures.js";
+import { authorHistoryFailure, authorHistoryReason } from "../src/author/history-failures.js";
 
 it.effect("formats every Author history reason in the CLI from preserved facts", () =>
   Effect.gen(function* () {
@@ -99,3 +101,17 @@ it.effect("formats checkpoint, contention and API failures without a core messag
     expect(classifyFailure(stored).message).toContain("name");
   }),
 );
+
+it("uses the Library presentation for a wrapped history database failure", () => {
+  const path = "/state/library.sqlite";
+  const database = new LibrarySqlError({ path, cause: new Error("disk read failed") });
+  const formatted = authorHistoryFailure(
+    new AuthorHistoryInvalid({
+      path,
+      reason: { _tag: "JournalFailure", cause: database },
+    }),
+  );
+  const direct = libraryFailure(database);
+  expect(formatted.explanation.slice(1)).toEqual(direct.explanation);
+  expect(formatted.next).toEqual(direct.next);
+});

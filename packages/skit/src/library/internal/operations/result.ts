@@ -1,5 +1,7 @@
-import { finalRows, same, type ApplyStep } from "./program.js";
-import { enabledAt } from "../../enabled.js";
+import { Effect } from "effect";
+import { LibraryWriter } from "../../store/library-store.js";
+import { finalRows, same, prepareApplyFields, type ApplyStep } from "./program.js";
+import { enabledSetsEqual, enabledAt } from "../../enabled.js";
 import { join } from "node:path";
 import * as InstalledSkills from "../../installed-skills.js";
 import { libraryStateRevision, type LibraryState } from "../../library-state.js";
@@ -81,22 +83,26 @@ const finishChange = (
 };
 
 /** Preserve the original reviewed change in the caller's result, including after a replay. */
-export const applyOutcome = (step: ApplyStep, state: LibraryState, outcome: Outcome): Outcome => {
-  const expected: LibraryState = { ...step.next, installed_skills: [], operations: [] };
+export const applyOutcome = Effect.fn("Library.applyOutcome")(function* (
+  step: ApplyStep,
+  state: LibraryState,
+  outcome: Outcome,
+) {
+  const expected = yield* prepareApplyFields(step, state, "after", (yield* LibraryWriter).home);
   const expectedRows = finalRows(step);
   const requests = step.enabled
     .filter(({ change }) => {
       const found = enabledAt(state, change.scope);
       const wanted = enabledAt(expected, change.scope);
       return (
-        same(found?.enabled ?? [], wanted?.enabled ?? []) &&
+        enabledSetsEqual(found?.enabled ?? [], wanted?.enabled ?? []) &&
         same(found?.invocation_policies ?? {}, wanted?.invocation_policies ?? {})
       );
     })
     .map(({ change, skillIds, targets }) => ({
       paths: new Set([
         ...targets.flatMap((target) => change.skills.map((name) => join(target.root, name))),
-        ...[...step.before.installed_skills, ...expectedRows]
+        ...[...step.previousInstalledSkills, ...expectedRows]
           .filter(
             (copy) =>
               skillIds.includes(copy.skill_id) &&
@@ -144,4 +150,4 @@ export const applyOutcome = (step: ApplyStep, state: LibraryState, outcome: Outc
           : null,
     })),
   };
-};
+});

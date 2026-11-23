@@ -290,6 +290,10 @@ export const Enabled = Schema.Union([
 ]);
 export type Enabled = typeof Enabled.Type;
 
+/** Identity of one enabled row within its scope. */
+export const enabledItemKey = (item: Enabled) =>
+  "skill" in item ? `skill:${item.skill}` : `collection:${item.collection}`;
+
 const sameEnabled = Schema.toEquivalence(Enabled);
 
 /**

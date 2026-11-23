@@ -9,7 +9,7 @@ import {
   CURRENT_PORTABLE_LIBRARY_SCHEMA,
   LibraryNotFoundResponse,
   RevisionConflictResponse,
-  type LibraryManifest,
+  LibraryManifest,
   type SnapshotArchive,
 } from "@smolai/skit-core/api";
 import { Effect, Option, Predicate, Schema } from "effect";
@@ -55,7 +55,7 @@ export const librarySyncApi = Effect.fn("Library.librarySyncApi")(function* (opt
             Effect.flatMap(
               Schema.decodeUnknownEffect(
                 Schema.Struct({
-                  library: Schema.Struct({ manifest: Schema.Struct({ schema: Schema.String }) }),
+                  library: Schema.Struct({ manifest: Schema.JsonObject }),
                 }),
               ),
             ),
@@ -64,6 +64,7 @@ export const librarySyncApi = Effect.fn("Library.librarySyncApi")(function* (opt
           // A missing, foreign or older schema is left to the full decode, which rejects it.
           if (Option.isNone(head)) return;
           const { schema } = head.value.library.manifest;
+          if (typeof schema !== "string") return;
           const version = /^skit\.library\.v(\d+)$/.exec(schema)?.[1];
           if (
             version !== undefined &&
@@ -73,6 +74,20 @@ export const librarySyncApi = Effect.fn("Library.librarySyncApi")(function* (opt
               observed: schema,
               supported: CURRENT_PORTABLE_LIBRARY_SCHEMA,
             });
+          yield* Schema.decodeUnknownEffect(LibraryManifest, { onExcessProperty: "error" })(
+            head.value.library.manifest,
+          ).pipe(
+            Effect.mapError(
+              (failure) =>
+                new LibraryApiInvalidResponse({
+                  operation:
+                    response.request.method === "GET"
+                      ? "read portable Library"
+                      : "write portable Library",
+                  failure,
+                }),
+            ),
+          );
         }),
       ),
     ),
@@ -106,7 +121,8 @@ export const librarySyncApi = Effect.fn("Library.librarySyncApi")(function* (opt
         return Schema.is(LibraryNotFoundResponse)(error)
           ? Effect.succeed(null)
           : Effect.fail(
-              Predicate.isTagged(error, "Library.LibraryManifestTooNew")
+              Predicate.isTagged(error, "Library.LibraryManifestTooNew") ||
+                Predicate.isTagged(error, "Library.LibraryApiInvalidResponse")
                 ? error
                 : mapGeneratedFailure("read portable Library", error),
             );
@@ -134,7 +150,11 @@ export const librarySyncApi = Effect.fn("Library.librarySyncApi")(function* (opt
     return yield* client.librarySync.write({ payload: request }).pipe(
       Effect.map((response) => response.library),
       Effect.mapError((error) => {
-        if (Predicate.isTagged(error, "Library.LibraryManifestTooNew")) return error;
+        if (
+          Predicate.isTagged(error, "Library.LibraryManifestTooNew") ||
+          Predicate.isTagged(error, "Library.LibraryApiInvalidResponse")
+        )
+          return error;
         return Schema.is(RevisionConflictResponse)(error)
           ? new LibraryChangedOnServer()
           : mapGeneratedFailure("write portable Library", error);

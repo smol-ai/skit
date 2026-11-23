@@ -77,7 +77,7 @@ it.effect("core setup reviews, applies and undoes a local copy without frontend 
       if (after._tag !== "Present") return;
       assert.strictEqual(after.state.skills.length, 1);
       assert.strictEqual(after.state.enabled.length, 1);
-      const undo = yield* prepareSetupUndo(home, applied.operationId);
+      const undo = yield* prepareSetupUndo(applied.operationId);
       assert.strictEqual(undo.summary.status, "ready");
       assert.strictEqual((yield* undo.apply()).status, "undone");
       const undone = yield* library.read;
@@ -89,7 +89,7 @@ it.effect("core setup reviews, applies and undoes a local copy without frontend 
       }
       assert.strictEqual(yield* fs.readFileString(join(folder, "SKILL.md")), bytes);
       assert.strictEqual(
-        (yield* prepareSetupUndo(home, applied.operationId)).summary.status,
+        (yield* prepareSetupUndo(applied.operationId)).summary.status,
         "already-undone",
       );
     }).pipe(Effect.provide(libraryLayer(home)), inLibrary(home));

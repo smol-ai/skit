@@ -25,6 +25,7 @@ export function resultExitCode(result: CommandResult, previous = 0): ProcessExit
       break;
     case "librarySync":
       failed =
+        result.data.status === "local_bytes_changed" ||
         result.data.status === "conflicted" ||
         result.data.status === "resolution_invalid" ||
         result.data.status === "enablement_incomplete";

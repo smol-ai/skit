@@ -25,7 +25,7 @@ export function journeyFrames(
   const environment = { ...base, home: journey.home };
   const shown = (text: string) =>
     environment.format === "human" ? compactHome(text, environment.home) : text;
-  const frames: ReplayFrame[] = [{ label: "Ready", output: "" }];
+  const frames: ReplayFrame[] = [];
   let output = "";
   let status: string | undefined;
   let prompt: Extract<Event, { _tag: "PromptShown" }> | undefined;
@@ -35,15 +35,12 @@ export function journeyFrames(
       : renderPromptSnapshot(prompt.message, prompt.choices, environment.color);
   for (const [index, event] of journey.events.entries()) {
     let label = "";
-    let rule: string | undefined;
+    let command: string | undefined;
     let outcome: ReplayFrame["outcome"];
     let answer: ReplayFrame["answer"];
     InteractionEvent.$match(event, {
-      RuleProven: (event) => {
-        rule = event.rule;
-        label = event.rule;
-      },
       Command: ({ line }) => {
+        command = line;
         if (environment.format === "human")
           output += `${output === "" ? "" : "\n"}${renderBlocks([Block.Note({ text: [{ dim: "$ " }, { code: line }] })], environment)}\n`;
         label = `$ ${line}`;
@@ -131,8 +128,9 @@ export function journeyFrames(
     if (!environment.color) output = stripVTControlCharacters(output);
     const promptShown = promptText();
     frames.push({
+      event: event._tag,
+      ...(command === undefined ? {} : { command }),
       label: shown(label),
-      ...(rule === undefined ? {} : { rule }),
       // Each terminal frame already handles home paths according to its Inline roles. Applying
       // a blanket substitution here would also rewrite quoted, copyable command arguments.
       output,

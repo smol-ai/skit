@@ -13,8 +13,10 @@ interface ScopeList {
  * Each scope's list, keyed as history has always named it (`global`, `repository:<root>`). The
  * global list counts as present while it enables something or carries invocation overrides.
  */
-const scopeLists = (state: LibraryState): ScopeList[] => [
-  ...(state.enabled.length > 0 || state.invocation_policies !== undefined
+const scopeLists = (
+  state: Pick<LibraryState, "enabled" | "invocation_policies" | "repositories">,
+): ScopeList[] => [
+  ...(state.enabled.length > 0 || Object.keys(state.invocation_policies ?? {}).length > 0
     ? [
         {
           scopeId: "global",
@@ -99,13 +101,127 @@ export const diffLibraryState = (
 ): readonly LibraryAuditChange[] => {
   const changes: LibraryAuditChange[] = [];
 
+  changes.push(...diffCatalogue(before, after));
+
+  changes.push(
+    ...diffEnabled(
+      before,
+      after,
+      (list) => enabledSkillIds(before, list),
+      (list) => enabledSkillIds(after, list),
+    ),
+  );
+
+  changes.push(...diffInstalledSkills(before.installed_skills, after.installed_skills));
+
+  return changes;
+};
+
+/** The same audit rules apply to direct Installed Skill writes and document imports. */
+export const diffInstalledSkills = (
+  before: Readonly<LibraryState["installed_skills"]>,
+  after: Readonly<LibraryState["installed_skills"]>,
+): readonly LibraryAuditChange[] => {
+  const changes: LibraryAuditChange[] = [];
+  const installedSkills = compare(before, after, (item) => item.installed_skill_id);
+  for (const item of installedSkills.added)
+    changes.push({
+      entity: "projection",
+      id: item.installed_skill_id,
+      action: "projected",
+      after: item.status,
+      path: item.path,
+      digest: item.expected_hash,
+    });
+  for (const item of installedSkills.removed)
+    changes.push({
+      entity: "projection",
+      id: item.installed_skill_id,
+      action: "retired",
+      before: item.status,
+      path: item.path,
+    });
+  for (const { previous, current } of installedSkills.kept) {
+    if (
+      previous.status === current.status &&
+      previous.skill_version_id === current.skill_version_id
+    )
+      continue;
+    changes.push({
+      entity: "projection",
+      id: current.installed_skill_id,
+      action: previous.status === current.status ? "reprojected" : current.status,
+      before: previous.status,
+      after: current.status,
+      path: current.path,
+      ...(current.status === "conflicted" ? { digest: current.current_hash } : {}),
+    });
+  }
+
+  return changes;
+};
+
+/** Selection writes and document imports use exactly the same audit contract. */
+export const diffEnabled = (
+  before: Pick<LibraryState, "enabled" | "invocation_policies" | "repositories">,
+  after: Pick<LibraryState, "enabled" | "invocation_policies" | "repositories">,
+  beforeSkills: (list: readonly Enabled[]) => readonly string[],
+  afterSkills: (list: readonly Enabled[]) => readonly string[],
+): readonly LibraryAuditChange[] => {
+  const changes: LibraryAuditChange[] = [];
+  const lists = compare(scopeLists(before), scopeLists(after), (list) => list.scopeId);
+  for (const item of lists.added)
+    changes.push({
+      entity: "binding",
+      id: item.scopeId,
+      action: "enabled",
+      after: afterSkills(item.enabled).join(","),
+    });
+  for (const item of lists.removed)
+    changes.push({
+      entity: "binding",
+      id: item.scopeId,
+      action: "disabled",
+      before: beforeSkills(item.enabled).join(","),
+    });
+  for (const { previous, current } of lists.kept) {
+    const was = [...beforeSkills(previous.enabled)].sort().join(",");
+    const now = [...afterSkills(current.enabled)].sort().join(",");
+    const previousPolicies = Object.entries(previous.invocation_policies ?? {});
+    const currentPolicies = new Map(Object.entries(current.invocation_policies ?? {}));
+    const policyChanged =
+      previousPolicies.length !== currentPolicies.size ||
+      previousPolicies.some(([skillId, value]) => currentPolicies.get(skillId) !== value);
+    if (was !== now)
+      changes.push({
+        entity: "binding",
+        id: current.scopeId,
+        action: "skills-changed",
+        before: was,
+        after: now,
+      });
+    else if (policyChanged)
+      changes.push({ entity: "binding", id: current.scopeId, action: "invocation-changed" });
+  }
+
+  return changes;
+};
+
+type Catalogue = Pick<LibraryState, "collections" | "skills" | "collection_versions" | "imports">;
+
+/** The catalogue owner and document imports share the released audit vocabulary. */
+export const diffCatalogue = (
+  before: Catalogue,
+  after: Catalogue,
+): readonly LibraryAuditChange[] => {
+  const changes: LibraryAuditChange[] = [];
   const collections = compare(before.collections, after.collections, (item) => item.collection_id);
   for (const item of collections.added)
     changes.push({ entity: "collection", id: item.collection_id, action: "added" });
   for (const item of collections.removed)
     changes.push({ entity: "collection", id: item.collection_id, action: "removed" });
 
-  const selected = (state: LibraryState, skill: LibraryState["skills"][number]) =>
+  const selected = (state: Catalogue, skill: LibraryState["skills"][number]) =>
     currentSkillVersion(state, skill)?.skill_version_id;
   const skills = compare(before.skills, after.skills, (item) => item.skill_id);
   for (const item of skills.added) {
@@ -141,92 +257,6 @@ export const diffLibraryState = (
         ...(now === undefined ? {} : { after: now }),
       });
   }
-
-  const lists = compare(scopeLists(before), scopeLists(after), (list) => list.scopeId);
-  for (const item of lists.added)
-    changes.push({
-      entity: "binding",
-      id: item.scopeId,
-      action: "enabled",
-      after: enabledSkillIds(after, item.enabled).join(","),
-    });
-  for (const item of lists.removed)
-    changes.push({
-      entity: "binding",
-      id: item.scopeId,
-      action: "disabled",
-      before: enabledSkillIds(before, item.enabled).join(","),
-    });
-  for (const { previous, current } of lists.kept) {
-    const was = enabledSkillIds(before, previous.enabled).sort().join(",");
-    const now = enabledSkillIds(after, current.enabled).sort().join(",");
-    const policyChanged =
-      JSON.stringify(previous.invocation_policies ?? {}) !==
-      JSON.stringify(current.invocation_policies ?? {});
-    if (was !== now)
-      changes.push({
-        entity: "binding",
-        id: current.scopeId,
-        action: "skills-changed",
-        before: was,
-        after: now,
-      });
-    else if (policyChanged)
-      changes.push({ entity: "binding", id: current.scopeId, action: "invocation-changed" });
-  }
-
-  const installedSkills = compare(
-    before.installed_skills,
-    after.installed_skills,
-    (item) => item.installed_skill_id,
-  );
-  for (const item of installedSkills.added)
-    changes.push({
-      entity: "projection",
-      id: item.installed_skill_id,
-      action: "projected",
-      after: item.status,
-      path: item.path,
-      digest: item.expected_hash,
-    });
-  for (const item of installedSkills.removed)
-    changes.push({
-      entity: "projection",
-      id: item.installed_skill_id,
-      action: "retired",
-      before: item.status,
-      path: item.path,
-    });
-  for (const { previous, current } of installedSkills.kept) {
-    if (
-      previous.status === current.status &&
-      previous.skill_version_id === current.skill_version_id
-    )
-      continue;
-    changes.push({
-      entity: "projection",
-      id: current.installed_skill_id,
-      action: previous.status === current.status ? "reprojected" : current.status,
-      before: previous.status,
-      after: current.status,
-      path: current.path,
-      ...(current.status === "conflicted" ? { digest: current.current_hash } : {}),
-    });
-  }
-
-  // Setup's records: each operation recorded, settled, or replaced by a later setup.
-  const operations = compare(before.operations, after.operations, (item) => item.operationId);
-  for (const item of operations.added)
-    changes.push({ entity: "library", id: item.operationId, action: `operation-${item._tag}` });
-  for (const item of operations.removed)
-    changes.push({ entity: "library", id: item.operationId, action: "operation-replaced" });
-  for (const { previous, current } of operations.kept)
-    if (previous._tag !== current._tag)
-      changes.push({
-        entity: "library",
-        id: current.operationId,
-        action: `operation-${current._tag}`,
-      });
 
   return changes;
 };

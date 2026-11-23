@@ -6,12 +6,14 @@ import {
   backupAuthorWorkspace,
   watchAuthorWorkspace,
   type AuthorWatchEvent,
+  type AuthorVisibility,
   initializeAuthorWorkspace,
 } from "@smolai/skit-core/author";
 import { authorRegistry, authorSyncApi } from "../../registry/author-sync.js";
 import type { PlatformError } from "effect/PlatformError";
 import { syncAuthorWorkspace } from "../../author/sync/workflow.js";
 import { authorLayer, storedTreesAt } from "./history.js";
+import { checkpointStore } from "./checkpoints.js";
 import { registryHttpLayer } from "../../registry/registry-http.js";
 import { testHttpClientLayer } from "./transport.js";
 import { registryCredentialLayer } from "./transport.js";
@@ -96,7 +98,7 @@ export const makeAuthorSyncWorld = Effect.fn("Fixture.makeAuthorSyncWorld")(func
       Ref.get(runtime).pipe(Effect.flatMap((scope) => Scope.close(scope, Exit.void))),
     );
     const startSync = Effect.fn("Fixture.startAuthorSync")(function* (
-      first = false,
+      first: boolean | { readonly to: string; readonly visibility: AuthorVisibility } = false,
       apply = true,
       allowLargeDeletion = false,
       confirmRemovals = false,
@@ -108,7 +110,11 @@ export const makeAuthorSyncWorld = Effect.fn("Fixture.makeAuthorSyncWorld")(func
             confirmRemovals,
             allowLargeDeletion,
             home,
-            ...(first ? { to: "swyx/tools", visibility: "private" as const } : {}),
+            ...(typeof first === "object"
+              ? first
+              : first
+                ? { to: "swyx/tools", visibility: "private" as const }
+                : {}),
           }).pipe(
             // This is the command's Registry environment; the Library's home layer must not replace it.
             Effect.provide(
@@ -168,6 +174,7 @@ export const makeAuthorSyncWorld = Effect.fn("Fixture.makeAuthorSyncWorld")(func
                 ),
               ),
               Effect.provide(library),
+              Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem),
             ),
             yield* Ref.get(runtime),
           );
@@ -199,9 +206,9 @@ export const makeAuthorSyncWorld = Effect.fn("Fixture.makeAuthorSyncWorld")(func
       }),
       remove: (path: string) => fs.remove(join(workspace, path), { recursive: true }),
       exists: (path: string) => fs.exists(join(workspace, path)),
-      readCheckpoint: () => fs.readFileString(join(home, "author-sync.json")),
-      writeCheckpoint: (content: string) =>
-        fs.writeFileString(join(home, "author-sync.json"), content),
+      corruptCheckpoint: () => checkpointStore(home).corrupt,
+      readCheckpoint: () => checkpointStore(home).read,
+      writeCheckpoint: (content: string) => checkpointStore(home).write(content),
       saveAtomically: Effect.fn("Fixture.saveAtomically")(function* (
         path: string,
         content: string,

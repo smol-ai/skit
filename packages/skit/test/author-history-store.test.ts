@@ -6,6 +6,9 @@ import * as History from "../src/history/history.js";
 import { AuthorHistory } from "../src/author/history.js";
 import { AuthorWorkspace } from "../src/author/workspace.js";
 import { skitLayer } from "../src/platform/layer.js";
+import { lockFile } from "../src/platform/file-lock.js";
+import { SqlClient } from "effect/sql";
+import { prepareLibraryDatabase, withLibraryDatabase } from "../src/library/store/database.js";
 
 const openStore = (directory: string) =>
   Effect.map(AuthorHistory, (history) => history.engineStore).pipe(
@@ -17,7 +20,13 @@ const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-author-store-" });
   const directory = join(root, "history");
-  return { fs, directory, blobs: join(directory, "blobs"), trees: join(directory, "trees") };
+  return {
+    fs,
+    directory,
+    database: join(root, "library.sqlite"),
+    blobs: join(root, "file-bytes"),
+    trees: join(directory, "trees"),
+  };
 });
 const file = (path: string, text: string): History.Tree[number] => ({
   path,
@@ -25,6 +34,28 @@ const file = (path: string, text: string): History.Tree[number] => ({
   mode: 0o644,
   bytes: new TextEncoder().encode(text),
 });
+
+it.effect("byte-store writer contention remains HomeBusy at the Author owner boundary", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    yield* lockFile(join(dirname(f.directory), "lock.sqlite"));
+    const error = yield* Effect.gen(function* () {
+      const history = yield* AuthorHistory;
+      return yield* Effect.flip(history.saveTree([file("notes.txt", "new bytes")]));
+    }).pipe(
+      Effect.provide(
+        AuthorHistory.layer({ home: dirname(f.directory) }).pipe(
+          Layer.provide(AuthorWorkspace.layer),
+        ),
+      ),
+    );
+    expect(error).toMatchObject({
+      _tag: "HomeBusy",
+      path: join(dirname(f.directory), "lock.sqlite"),
+      code: "CONFLICT",
+    });
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
 
 it.effect(
   "one small edit stores one new blob while preserving metadata and canonical identities",
@@ -55,12 +86,19 @@ it.effect(
         0,
       );
       expect(total).toBe(large.length + 3 + 4);
-      for (const id of [before, after]) {
-        const text = yield* f.fs.readFileString(join(f.trees, `${id.slice(7)}.json`));
-        expect(text).toContain('"schema":"skit.author-tree.v1"');
-        expect(text).not.toContain('"bytes"');
-        expect(text.length).toBeLessThan(1200);
-      }
+      for (const id of [before, after])
+        expect(yield* f.fs.exists(join(f.trees, `${id.slice(7)}.json`))).toBe(false);
+      yield* withLibraryDatabase(
+        f.database,
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          expect((yield* sql`SELECT hash FROM author_trees`).length).toBe(2);
+          expect((yield* sql`SELECT path FROM author_tree_entries`).length).toBe(10);
+          const columns = yield* sql<{ name: string }>`PRAGMA table_info(author_tree_entries)`;
+          expect(columns.some((row) => row.name === "bytes")).toBe(false);
+        }),
+        true,
+      );
       expect(yield* store.tree(before)).toEqual(History.sortTree(first));
       expect(yield* store.tree(after)).toEqual(History.sortTree(second));
       const read = yield* store.tree(before);
@@ -71,23 +109,6 @@ it.effect(
       for (const name of names)
         expect((yield* f.fs.stat(join(f.blobs, name))).mode & 0o777).toBe(0o600);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("reads and reuses an independent legacy byte-bearing tree without rewriting it", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    const tree = [file("notes.txt", "hello")];
-    const id = yield* History.treeHash(tree);
-    const legacy = ' [{"path":"notes.txt","kind":"file","mode":420,"bytes":"aGVsbG8="}]\n';
-    const path = join(f.trees, `${id.slice(7)}.json`);
-    yield* f.fs.makeDirectory(f.trees, { recursive: true });
-    yield* f.fs.writeFileString(path, legacy);
-    const store = yield* openStore(f.directory);
-    expect(yield* store.tree(id)).toEqual(tree);
-    expect(yield* store.putTree(tree)).toBe(id);
-    expect(yield* f.fs.readFileString(path)).toBe(legacy);
-    expect(yield* f.fs.exists(f.blobs)).toBe(false);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect.each(["missing", "corrupt"] as const)(
@@ -101,7 +122,14 @@ it.effect.each(["missing", "corrupt"] as const)(
       const [name] = yield* f.fs.readDirectory(f.blobs);
       if (name === undefined) return yield* Effect.die("Missing fixture blob");
       const blob = join(f.blobs, name);
-      const manifest = yield* f.fs.readFileString(join(f.trees, `${id.slice(7)}.json`));
+      const metadata = yield* withLibraryDatabase(
+        f.database,
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          return yield* sql`SELECT * FROM author_tree_entries WHERE tree_hash=${id}`;
+        }),
+        true,
+      );
       if (damage === "missing") yield* f.fs.remove(blob);
       else yield* f.fs.writeFileString(blob, "damaged");
       const cold = yield* openStore(f.directory);
@@ -114,13 +142,22 @@ it.effect.each(["missing", "corrupt"] as const)(
           kind: "tree",
           hash: id,
         });
-      expect(yield* f.fs.readFileString(join(f.trees, `${id.slice(7)}.json`))).toBe(manifest);
+      yield* withLibraryDatabase(
+        f.database,
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          expect(yield* sql`SELECT * FROM author_tree_entries WHERE tree_hash=${id}`).toEqual(
+            metadata,
+          );
+        }),
+        true,
+      );
       if (damage === "missing") expect(yield* f.fs.exists(blob)).toBe(false);
       else expect(yield* f.fs.readFileString(blob)).toBe("damaged");
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-for (const boundary of ["blob", "manifest"] as const)
+for (const boundary of ["blob"] as const)
   it.effect(`cold retry completes an interruption before ${boundary} publication`, () =>
     Effect.gen(function* () {
       const f = yield* fixture;
@@ -134,28 +171,29 @@ for (const boundary of ["blob", "manifest"] as const)
         open: (path, options) =>
           f.fs.open(path, options).pipe(
             Effect.map((handle) =>
-              path === f.blobs
-                ? {
-                    ...handle,
-                    sync: handle.sync.pipe(
-                      Effect.tap(() =>
-                        Effect.sync(() => {
-                          flushedBlobs = true;
-                        }),
-                      ),
-                    ),
-                  }
+              path.startsWith(`${f.blobs}/`)
+                ? new Proxy(handle, {
+                    get(target, key) {
+                      if (key === "sync")
+                        return target.sync.pipe(
+                          Effect.tap(() =>
+                            Effect.sync(() => {
+                              flushedBlobs = true;
+                            }),
+                          ),
+                        );
+                      const value = Reflect.get(target, key, target);
+                      return typeof value === "function" ? value.bind(target) : value;
+                    },
+                  })
                 : handle,
             ),
           ),
         link: (from, to) =>
           Effect.gen(function* () {
-            if (
-              (boundary === "blob" && to.startsWith(`${f.blobs}/`)) ||
-              (boundary === "manifest" && to === manifest)
-            ) {
+            if (to.startsWith(`${f.blobs}/`)) {
               stopped = true;
-              if (boundary === "manifest") expect(flushedBlobs).toBe(true);
+              expect(flushedBlobs).toBe(true);
               return yield* systemError({
                 _tag: "PermissionDenied",
                 module: "FileSystem",
@@ -196,5 +234,42 @@ it.effect(
       expect(yield* f.fs.readDirectory(f.blobs)).toHaveLength(1);
       const cold = yield* openStore(f.directory);
       for (const [index, id] of ids.entries()) expect(yield* cold.tree(id)).toEqual(trees[index]);
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect(
+  "a failed metadata transaction leaves durable bytes and retries without a partial tree",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      yield* prepareLibraryDatabase(dirname(f.directory), true);
+      yield* withLibraryDatabase(
+        f.database,
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          yield* sql`CREATE TRIGGER refuse_tree BEFORE INSERT ON author_tree_entries BEGIN SELECT RAISE(ABORT,'refused'); END`;
+        }),
+      );
+      const tree = [file("notes.txt", "durable before metadata")];
+      const id = yield* History.treeHash(tree);
+      const store = yield* openStore(f.directory);
+      expect(yield* Effect.flip(store.putTree(tree))).toMatchObject({
+        _tag: "History.StoreFailed",
+      });
+      expect(yield* f.fs.readDirectory(f.blobs)).toHaveLength(1);
+      yield* withLibraryDatabase(
+        f.database,
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          expect(yield* sql`SELECT * FROM author_trees`).toEqual([]);
+          expect(yield* sql`SELECT * FROM author_tree_entries`).toEqual([]);
+          expect(yield* sql`SELECT * FROM file_bytes`).toEqual([]);
+          yield* sql`DROP TRIGGER refuse_tree`;
+        }),
+      );
+      const cold = yield* openStore(f.directory);
+      expect(yield* cold.hasTree(id)).toBe(false);
+      expect(yield* cold.putTree(tree)).toBe(id);
+      expect(yield* cold.tree(id)).toEqual(tree);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

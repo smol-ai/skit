@@ -73,7 +73,6 @@ export const LibraryStateFromV11 = Schema.Unknown.pipe(
     decode: SchemaGetter.transform((state: LibraryStateV11): LibraryState => ({
       ...state,
       schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
-      operations: [],
       // Historical prose cannot establish a more precise marker diagnosis.
       ...(state.ownershipIssues === undefined
         ? {}

@@ -17,9 +17,9 @@ This document is the test oracle for `skit sync`. It lists every path through `s
 
 The outcome matrix checks stopped operations against the row's permitted durable state and retries against the next legal outcome. It covers `local_bytes_changed`, legacy remote rejection, empty-base first connections and changed-Library previews, first-push CAS loss, first-push lost responses (including a subsequent competing write), both `SyncLocalChanged` guards (including a merge and a `--keep-enabled` pull that would otherwise upload or write), merge CAS loss, failures before local publication, repeated `--take-remote`, and projection failures after publication. A lost response on a later push is covered by the existing crash suite rather than duplicated in the matrix.
 
-**Known bug characterization:** `local_bytes_changed` reports that sync stopped but the CLI exits `0`. `packages/cli/test/library-sync-local-bytes.e2e.test.ts` belongs to the subprocess suite and asserts that current status and structured outcome with a BUG comment requiring a nonzero exit when fixed. The ordinary in-process matrix row separately checks unchanged state/projection bytes and remote storage. There is no expected-failure mask.
+A `local_bytes_changed` stop exits `1`, with the structured outcome unchanged. `packages/cli/test/library-sync-local-bytes.e2e.test.ts` checks the real CLI process status and unchanged disk state; the in-process matrix separately checks unchanged state/projection bytes and remote storage.
 
-An applied `clean` sync of a home whose ancestry already names the head publishes nothing and sends no Registry write request. `packages/cli/test/library-sync-absence.test.ts` measures writes directly: the test devices count every atomic replacement of `state.json` and the fake Registry counts every write request it receives, separately from the revisions it commits, so an identical rewrite in place or an idempotent write answered with the head is still counted. Anchoring is not a no-op: an applied `clean` of an empty Library without ancestry over an empty remote is pinned at one publication and no write requests, and every other no-op row (each preview, absent R with absent L, and an anchored clean) at zero of both. Lossless snapshots with file identity (`captureDisk(roots, { identity: true })`) are complementary durable-state evidence. They cannot prove or disprove a rewrite, because a filesystem may hand the replaced inode number to the next temporary file.
+An applied `clean` sync of a home whose ancestry already names the head publishes nothing and sends no Registry write request. `packages/cli/test/library-sync-absence.test.ts` measures writes directly: the test devices count every change of the Library's state revision, observed at writable opens and when each device operation completes, and the fake Registry counts every write request it receives, separately from the revisions it commits, so an idempotent write answered with the head is still counted. A transaction that saves identical state does not change the revision and is not counted. Anchoring is not a no-op: an applied `clean` of an empty Library without ancestry over an empty remote is pinned at one publication and no write requests, and every other no-op row (each preview, absent R with absent L, and an anchored clean) at zero of both. Lossless snapshots with file identity (`captureDisk(roots, { identity: true })`) are complementary durable-state evidence. They cannot prove or disprove a rewrite, because a filesystem may hand the replaced inode number to the next temporary file.
 
 The client fake (`packages/cli/test/helpers/library-sync-server.ts`) encodes every response with the core Library sync contract schemas the Worker uses, so status codes and bodies cannot drift; its compare-and-swap rules are asserted separately against the Worker. Faults are one typed union injected per test and consumed once at the boundary they target. Lost write responses are injected as transport failures after the fake commits, yielding `LibraryApiUnreachable`. An explicit HTTP `500` after commit yields the different `LibraryApiRejected` path; both are characterized. The existing crash and adoption-custody lost-response tests now use the transport fault. The concurrent-local-write hook fires when the fake serves the head GET, between the client's local inspection and publication, rather than counting internal inspections. Projection failure rows assert a failed first sync and recover the Skill bytes at the same interrupted root. The fake also records, in order, each snapshot upload, each Library write with the revision it names as its base, and each local publication, so the commit order is asserted as a sequence.
 
@@ -35,34 +35,35 @@ If a committed write's response is lost, immediately retrying with its original 
 
 The client reads a successful head response's `manifest.schema` from the raw body before decoding the manifest, and only that field. A schema of the form `skit.library.v<N>` with N newer than the manifest schema this CLI supports fails with `LibraryManifestTooNew` (`VALIDATION_FAILED`), naming the observed and supported schemas and asking for an upgrade. A missing, foreign or malformed schema is `LibraryApiInvalidResponse`, as is a supported or older one the full decode rejects. The server's build and discovery document are not compatibility signals. The same check applies to the receipt of a successful write, where it diagnoses the response but cannot undo the write.
 
-The refusal comes from the head read, so it happens before sync plans, uploads, writes or publishes anything: zero local publications, zero Registry write requests (uploads included) and no remote change, for a preview or an apply, whether the home is current, legacy or absent. Loader maintenance that precedes the read is permitted and is the only durable change: taking the writer lock creates an absent home, and opening a legacy `state.json` migrates it in place and keeps the pre-migration file as `state.json.v<N>.backup-<time>`. A retained copy whose bytes changed is still reported first as `local_bytes_changed`, because local verification precedes the head read. `packages/cli/test/library-sync-outcomes.test.ts` pins this with a literal `skit.library.v8` head for each home and mode.
+The refusal comes from the head read, so it happens before sync plans, uploads, writes or publishes anything: zero local publications, zero Registry write requests (uploads included) and no remote change, for a preview or an apply, whether the home is current, legacy or absent. Loader maintenance that precedes the read is permitted and is the only durable change: taking the writer lock creates an absent home, and opening a home that still holds a released `state.json` imports it once into `library.sqlite`, keeps the original as `state.json.v<N>.backup-database` and leaves `state.json` as a newer-version stub. A retained copy whose bytes changed is still reported first as `local_bytes_changed`, because local verification precedes the head read. `packages/cli/test/library-sync-outcomes.test.ts` pins this with a literal `skit.library.v8` head for each home and mode.
 
 ## One pipeline
 
 Every path is the same three-way merge of L with R from B. A push merges L with an absent R against an empty base, a pull an absent L with R, and a clean sync is a merge whose result is both sides. Absent and empty stay distinct facts: only two existing Libraries can be clean, and only an absent R is created by the write, so an empty L still pushes. Library aligns Collection, Skill and Version handles in the review and revalidates the prepared local program against the reviewed snapshot. A `--take-remote` key must name a conflict the merge can take remotely; it is checked before projection collisions on every path, so a push or a pull, which has no merge conflicts, refuses any key with `resolution_invalid`. A pull plans no device Projections, because an empty device has none and planning it would only report remote Bindings without a selected Version.
 
-`openSyncSession` in Library owns ancestry/base choice, portable merge, identity alignment, device selection, destination checks and change summaries. Its reviewed target and facts are copies. It captures the base and remote head, rejects staged content that differs from its target, and constructs the local Sync plan and receipt internally. The CLI owns remote reads, transfer orchestration, remote compare-and-swap, progress and formatting; it no longer imports merge/device helpers or constructs receipts.
+`openSyncSession` in Library owns ancestry/base choice, portable merge, identity alignment, device selection, destination checks and change summaries. Its reviewed target and facts are copies. Library's `syncLibrary` owns transfer ordering and bounded contention retries; the CLI supplies the Registry transport, progress and formatting.
 
 ```text
-CLI read + verify -> remote head -> Library.openSyncSession
-  -> reviewed target and changes -> stage content -> session.prepare
-  -> session freshness check -> upload -> remote CAS
-  -> prepared.apply(receipt) -> Library recorded local Sync -> reconciliation
+Library read + verify -> transport head -> openSyncSession
+  -> reviewed target -> stage content -> session.prepareLocal
+  -> freshness check -> recorded local Sync + reconciliation
+  -> upload -> remote CAS or verified read-back -> accept ancestry
 ```
 
-Every applying path commits in this order:
+Every non-clean applying path commits in this order:
 
-1. Retain every copy the result references in originals (downloading and reacquiring what is missing).
-2. Upload every snapshot the new head references that R lacks.
-3. Write the head by compare-and-swap on the revision this sync read, skipped when the result equals an existing R.
-4. Retire the Projections the plan removes or reidentifies.
-5. Publish local state, with ancestry naming exactly the written revision, onto exactly the state this sync planned from.
-6. Reconcile Projections.
+1. Retain every copy the result references, downloading or reacquiring what is missing.
+2. Recheck the reviewed local snapshot. Run the recorded local Sync, including retirement, state publication and reconciliation. Atomically publish the merged target with the actual remote head incorporated by that merge as its next merge base. When no remote head exists, do not invent one.
+3. Upload snapshots the target references that the remote lacks.
+4. Write the target by compare-and-swap on the remote revision read, unless the target already equals that head.
+5. Verify the receipt, or read back the exact sent manifest after a failed response, before accepting its ancestry. Refuse acceptance if the local target or expected incorporated base changed.
+
+A crash or CAS loss can therefore leave the target saved locally before it exists remotely. The next merge starts from the remote head already incorporated by that save, preserving later remote removals and enablement changes. A sent target is never itself proof of remote acceptance.
 
 The device may instead persist a local global Binding selection. In that mode the
 portable merge, account Bindings, and accepted base still use the account's
 manifest; destination planning and projection use the device's selection. The
-selection is stored in the same versioned state document as device custody and
+selection is stored in native Library rows alongside device custody and
 is aligned when Skill or Collection identities are aligned. Individual Skill
 entries remain individual, while Collection entries expand against the current
 Collection membership. Existing state migrates to follow-account behavior.
@@ -73,9 +74,9 @@ projection conflict, or a reconciliation failure after publication returns
 ancestry remain committed, conflicting files are preserved, and a retry can use
 the retained snapshots. The normal account-following behavior is unchanged.
 
-Remote commits before local, so an interruption leaves R ahead of B and the next sync re-derives the same result from the old base; local state never names a revision R does not hold. A merge or pull re-inspects L after step 1 and stops with `SyncLocalChanged` if it moved; a push relies on the check in step 5. A clean sync has nothing to commit: it skips steps 1–4, publishes only when its state's ancestry does not already name R, and then reconciles.
+Local publication precedes upload and remote CAS. A changed local snapshot stops publication with `SyncLocalChanged`; a failed transfer or write leaves the complete local result and its incorporated remote base available for retry. An already anchored clean sync skips remote writes and publishes only actual reconciliation changes.
 
-Sync rebuilds the device state it publishes through the Library schema, so it carries only fields this CLI declares. Loading and publishing `state.json` keep undeclared fields at every depth, and a preview or a clean sync with nothing to anchor writes nothing, but an applied push, pull, merge or anchoring clean drops them. Any persisted field whose meaning matters must therefore come with a state or manifest version bump, never as an undeclared extension.
+Sync preserves undeclared local fields at every depth. Unknown top-level state fields, device facts and retained entity extensions survive push, pull, merge and clean anchoring. Such fields do not acquire a portable wire meaning merely by being retained: shared contracts still declare the fields the Registry understands. Released format and contract changes follow the coding standards' compatibility policy.
 
 ### Differences from the four earlier paths
 
@@ -83,8 +84,8 @@ The unification is not behaviour-identical. These differences are intended, and 
 
 | Difference | Before | Now |
 | --- | --- | --- |
-| Undeclared state fields | A push and a clean anchor kept them; a merge dropped them | Every applied publication drops them |
-| An edited copy whose Version a push changes | Published as `installed` with its old digest until reconciliation | Published `conflicted` with its observed digest at step 5, as a merge does |
+| Undeclared local fields | Earlier schema rebuilding could drop them | Native publications preserve them, including clean anchoring |
+| An edited copy whose Version a push changes | Published as `installed` with its old digest until reconciliation | Recorded locally as `conflicted` with its observed digest before upload/CAS |
 | An applied clean of an anchored home | Published identical state twice | Publishes nothing and does not enter sync's retirement step |
 | Reconciliation that changes nothing | Published identical state | Publishes nothing ([projection batches](#durable-state)) |
 | A head in a newer manifest schema | `LibraryApiInvalidResponse` | `LibraryManifestTooNew` before any write ([Remote manifest version](#remote-manifest-version)) |
@@ -97,14 +98,14 @@ The unification is not behaviour-identical. These differences are intended, and 
 | **Remote head** | D1 `libraries.current_revision_id` + `library_revisions` | `api.write` | Compare-and-swap batch on the expected revision |
 | **Remote snapshots** | R2 + D1 `library_snapshots` | `api.upload` | Content-addressed; idempotent |
 | **Originals** | `<home>/originals/<digest>` | `Library.content.stage` | Content-addressed; unreferenced trees are inert |
-| **Local state** | `<home>/state.json`, including `sync_ancestry` | Library recorded Sync | Atomic rename, no fsync |
+| **Local state** | Domain rows in `<home>/library.sqlite`, including the incorporated/accepted remote base | Library recorded Sync | One SQLite transaction, `synchronous = FULL` |
 | **Projections** | Harness roots | Library recorded execution | Per-projection; derived from local state |
 
 A projection batch whose state is unchanged, which wrote nothing and has no pending backup to settle, publishes nothing. A batch with backups to settle publishes onto the state it loaded first, so a backup is never judged against a state the Library has moved on from.
 
-Local state and the accepted base it was reconciled with are one document ([ADR 0023](adr/0023-keep-sync-ancestry-in-library-state.md)), so no interruption can pair state with a newer base.
+Local state and its incorporated remote base commit in one SQLite transaction. The later accepted receipt changes ancestry only after checking the expected local target and incorporated base. Restoring a complete Library database restores both sides together.
 
-Notation: **L** is the local portable manifest, **R** the remote head, **B** the ancestry in `state.json`. "Orphan" means a content-addressed object that nothing references; orphans are always legal.
+Notation: **L** is the local portable manifest, **R** the remote head, **B** the incorporated remote base stored with the local state. "Orphan" means a content-addressed object that nothing references; orphans are always legal.
 
 ## Preflight
 
@@ -127,41 +128,19 @@ Independent imports of the same upstream and tracking configuration adopt the pu
 
 ## Push — R absent, L present
 
-| Step | Effect | Commit point |
-| --- | --- | --- |
-| P0 | `Library.content.inspect` re-verifies L's retained copies | Originals (already present) |
-| P1 | Upload each snapshot | Remote snapshots |
-| P2 | `api.write(null, L)` | **Remote head** |
-| P3 | Retire intact copies the Binding choice removes | Projections, local state (B unchanged) |
-| P4 | Publish state with B = R', recording edited copies as `conflicted` with their observed digest | Local state |
-| P5 | Reconcile global and existing repository projections | Projections |
+The recorded local Sync publishes the reviewed target and reconciles copies before upload and `api.write(null, target)`. It retains an existing base if applicable; an absent remote is never recorded as a fabricated revision.
 
-| Interruption | State left | Legal next outcome |
+| Interruption | State left | Retry |
 | --- | --- | --- |
-| Before P2 | Orphan uploads | Push again; or, if another home pushed first, An ordinary empty-base merge preview |
-| P2 loses the CAS | Orphan uploads; `LibraryChangedOnServer` | An ordinary empty-base merge preview |
-| After P2, before P4, or P2's response lost | R = desired, no B | `clean` if L = R; otherwise an ordinary merge with the same Binding choice |
-| As above, and another home writes R before the retry | R ≠ L, no B | An ordinary merge preview against an empty base, then `--apply` |
-| P3 or P4 is refused because L changed since the plan | R = desired, no B; `SyncLocalChanged`; L as the other writer left it | As after P2, before P4, against the new L |
-| After P4, before P5 | Projections stale | `clean`, which reconciles |
+| Before local publication | Prior local state; possibly unreferenced retained copies | Review again from the current local and remote state |
+| After local publication, before upload/CAS | Complete local target; remote unchanged | Upload and push again, or merge if another home created the head |
+| CAS loses | Local target retained | Read and merge the competing head; at most two automatic contention retries |
+| Response lost | Local target retained; remote acceptance unknown | Exact read-back can prove acceptance; otherwise return the failure and retain retryable local state |
+| After verified acceptance | Local target and accepted remote base | Unchanged retry is clean |
 
 ## Pull — R present, L absent
 
-| Step | Effect | Commit point |
-| --- | --- | --- |
-| U1 | Download snapshots; reacquire source-restorable copies | — |
-| U2 | `Library.content.stage` stores verified trees before owner planning | Originals |
-| U3 | Re-inspect; fail `SyncLocalChanged` if L now exists | — |
-| U4 | Publish restored state with B = R | **Local state** |
-| U5 | Reconcile global projections | Projections |
-
-| Interruption | State left | Legal next outcome |
-| --- | --- | --- |
-| Before U4 | Orphan originals | Pull again |
-| U3 finds a concurrent local write, or U4 is refused because L now exists | Orphan originals; `SyncLocalChanged` | Whatever the new L dictates |
-| After U4, before U5 | Projections stale | `clean`, which reconciles |
-
-When `--keep-enabled` changes the pulled Binding, a CAS write of that choice occurs after U3 and before U4, and U4 anchors the resulting revision. A lost response leaves no local state; the next pull reads the already-resolved head. A CAS loser publishes no state and touches no projections.
+Retain the required copies, refuse a newly created local Library, then publish and reconcile the pulled target with B equal to the actual R read. If `--keep-enabled` changes the target, upload/CAS follows this local publication. A write failure retains that local result and B; a competing remote head is merged from B on retry. A plain pull whose target already equals R needs no remote write.
 
 ## Clean — L and R are equal after normalization
 
@@ -171,7 +150,7 @@ Preview writes nothing. Apply transfers, writes and retires nothing. It publishe
 
 This is the normal merge path below, with an empty base. An empty base keeps records either side holds alone and reports records both sides hold with different contents as conflicts. It never infers a deletion.
 
-If a first push was accepted remotely but its local publication was refused, a changed local manifest follows this same path on retry. Sync does not write an accepted base alone: state and ancestry still publish together. Compatible local enablement changes survive the retry; genuine content conflicts remain explicit. A successful retry anchors the resulting state, and subsequent unchanged syncs are clean.
+A first push saves locally before attempting remote creation. If another home creates the Library first, retry uses the normal empty-base merge until an actual remote head has been incorporated. Compatible additions survive; genuine content conflicts remain explicit.
 
 ## Merge — L and R differ, matching B or an empty base
 
@@ -187,38 +166,27 @@ Resolution and conflict outcomes write nothing:
 | Record, custody, or manifest-invariant conflicts remain | `conflicted` |
 | Preview | `merge_ready` |
 
-Apply:
+Apply retains required copies, checks freshness, and runs recorded retirement, local publication and reconciliation before upload/CAS. That local transaction stores the remote head R1 actually merged, rather than leaving the earlier base R0. Final ancestry acceptance requires a matching receipt or exact read-back of the sent target.
 
-| Step | Effect | Commit point |
+| Interruption | State left | Retry |
 | --- | --- | --- |
-| M1 | Download missing snapshots; reacquire source-restorable copies | — |
-| M2 | `Library.content.stage` stores verified trees before owner planning | Originals |
-| M3 | Re-inspect; fail `SyncLocalChanged` if L changed | — |
-| M4 | Upload snapshots the merge introduced | Remote snapshots |
-| M5 | `api.write(R.revision, merged)`, skipped when merged = R | **Remote head** |
-| M6 | Retire preflighted removed or reidentified projections; persist pending intent before reidentification retirement | Projections, local state (B unchanged) |
-| M7 | Blend restored portable state into the aliased device state; publish with B = merged | **Local state** |
-| M8 | Reconcile global and existing repository projections | Projections |
+| Before local publication | Old L and B, possibly retained unreferenced copies | Replan against the current head |
+| During recorded local execution | Pending/stopped operation and durable progress | Existing owner recovery resumes or reports the recorded stop |
+| After local publication, before CAS | Merged target with B = R1 | Upload/CAS against the head read, or merge a changed head from R1 |
+| CAS loses to R2 | Local target with B = R1; R2 remains remote | Merge(R1, local target, R2), retaining R2's later removals and re-enablement |
+| Lost response | Same local target/base; remote may have accepted | Exact read-back accepts it; unusable read-back leaves a failure and retryable state |
+| After acceptance | Target with B equal to the proven receipt | Clean retry unless another edit occurred |
 
-| Interruption | State left | Legal next outcome |
-| --- | --- | --- |
-| Before M5 | Orphan originals and uploads | The same merge, or a new merge if R advanced |
-| The process is killed after M5 commits | As the row below; the OS releases the writer lock with the process | As below |
-| M5 loses the CAS | Orphan originals and uploads; `LibraryChangedOnServer`; L, B, projections unchanged | A merge against the new R |
-| After M5 (or M5's response lost), before M7 | R = merged; L and B old; some projections possibly retired | Re-merge of (B, L, merged). If merged equals L this is `clean`; otherwise it yields merged and M5 is skipped. A `--take-remote` resolution must be repeated. If another home advanced R, a genuine `conflicted` is legal. |
-| M6 or M7 is refused because L changed since the plan | R = merged; L as the other writer left it, B old; `SyncLocalChanged` | As after M5, before M7, against the new L |
-| After M7, before M8 | Projections stale | `clean`, which reconciles |
-
-An intact projection whose previous Version is dropped by a remote Skill choice is carried into M7 with the merged selected Version, preserving its projection ID, expected digest and repository root. M8 then rewrites it under ordinary marker/hash custody checks. A reidentified Skill instead retires its old on-disk identity at M6; its old state references remain valid until M7. Pending missing copies remain pending during inventory scans and are recreated on retry. Native-deletion suppression is carried through identity alignment.
+An intact installed copy whose selected Version changes retains custody evidence through local publication, then reconciliation updates it under marker/hash checks. Reidentified copies retire their old identities before that local publication. Pending missing copies remain pending during inventory scans and are recreated on retry; native-deletion suppression survives identity alignment.
 
 ## Safety invariants and their coverage
 
 These are obligations of sync, not a claim that every existing test asserts all seven. The fault matrix captures each home, its projection root and their backups with the lossless `captureDisk` snapshot (`packages/cli/test/helpers/disk-snapshot.ts`) and asserts an empty diff where the row forbids local writes, or only orphan originals where the row permits them. Taking the writer lock creates a home that did not exist yet; the rows permit that directory itself, and the absent/empty matrix requires it to stay empty. The absence matrix also counts local publications and Registry write requests, which must stay unchanged on every no-op row, and captures file identity as complementary evidence; the counters, not identity, prove a write did or did not happen. The concurrent-local-write rows instead compare the new writer's exact state bytes and preserve existing projection bytes. Publication and recovery rows assert ancestry and retained records. The crash, custody, version-alignment, and merge-property suites cover the additional cases listed above; generated manifest merge properties do not constitute an exhaustive model of device synchronization.
 
-1. **The loser of a CAS race changes no portable state.** `state.json` and owned projections are byte-identical to before; only orphans may appear.
-2. **Only `pushed`, `pulled`, `merged`, and `clean` replace B, and each replaces it in the same publish as the state it reconciled.**
+1. **A CAS loser retains a retryable local result.** It cannot overwrite the winning remote head. Its persisted incorporated base distinguishes prior remote changes from new local intent.
+2. **Only proven remote states become B.** Local publication may advance B to a head actually read even if a later transfer fails. A target sent to CAS becomes accepted ancestry only after a matching receipt or exact read-back.
 3. **Conflicts are non-destructive.** A `conflicted` outcome leaves every store as it was.
-4. **B always describes the state that carries it.** Restoring any whole `state.json` restores its own B. A deletion is inferred only for a record B holds and L does not, which is a removal made on this home since its last reconciliation.
+4. **B records the remote contribution already incorporated into L.** Restoring a complete Library database restores its own B. Retrying from R1 after a local-first merge must not reinterpret R1 additions or disabled bindings as new local edits against R0.
 5. **Ordinary mutations carry B unchanged.** A local removal after sync still syncs as a removal.
 6. **Quiescent convergence.** When no home edits and every home syncs until `clean`, all homes hold the same normalized portable manifest, provided every snapshot or source is available, every schema is supported, and every conflict has been resolved.
 7. **Device state stays local.** Invocation policies, harness roots, and custody records survive every merge (`blendRestoredState`).

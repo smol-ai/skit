@@ -53,89 +53,101 @@ async function unreadableCredentials() {
   return directory;
 }
 
-describe("declared exit codes match the binary", () => {
-  test("auth status reports CONFLICT when credentials cannot be read", async () => {
-    const result = run(["auth", "status", "--json"], { home: await unreadableCredentials() });
+// Rejected source arguments use invalid usage, while JSON retains the domain code.
+test.each([
+  { label: "unsafe characters", source: "https://example.com/a b.zip" },
+  { label: "embedded credentials", source: "https://user:pw@example.com/a.zip" },
+])("add rejects a source with $label as INVALID_ARGUMENT", async ({ source }) => {
+  const result = run(["add", source], { home: await home() });
+  expect(result.status).toBe(2);
+  expect(declaredCodes).toContain(2);
+});
 
-    expect(result.status).toBe(1);
-    expect(failure(result).code).toBe("CONFLICT");
-    expect(declaredCodes).toContain(1);
-  });
+// A non-current schemaVersion is invalid state, not a compatibility case. It is reported as
+// a validation failure on the shared failure status, with its precise JSON code.
+test.each([
+  { handler: "check", args: ["check"] },
+  { handler: "enable", args: ["enable", "nope"] },
+])("$handler reports VALIDATION_FAILED for a non-current ledger", async ({ args }) => {
+  const directory = await home();
+  await writeFile(
+    join(directory, "state.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      entries: [],
+      bindings: [],
+      installations: [],
+      tombstones: [],
+      unmanaged: [],
+    }),
+  );
 
-  test("auth logout reports CONFLICT when credentials cannot be read", async () => {
-    const result = run(["auth", "logout", "https://example.test"], {
-      home: await unreadableCredentials(),
+  const result = run([...args, "--json"], { home: directory });
+
+  expect(result.status).toBe(1);
+  expect(failure(result).code).toBe("VALIDATION_FAILED");
+  expect(declaredCodes).toContain(1);
+});
+
+test("an unclassified failure uses the shared failure status", async () => {
+  const directory = await home();
+  await mkdir(join(directory, "state.json"));
+
+  const result = run(["list"], { home: directory });
+
+  // Unexpected failures use the same shared failure status as named domain failures.
+  expect(result.status).toBe(1);
+  expect(declaredCodes).toContain(1);
+});
+
+describe("skit auth logout", () => {
+  describe("Logout revokes the selected credential before forgetting it.", () => {
+    test("auth logout reports CONFLICT when credentials cannot be read", async () => {
+      const result = run(["auth", "logout", "https://example.test"], {
+        home: await unreadableCredentials(),
+      });
+
+      expect(result.status).toBe(1);
+      expect(declaredCodes).toContain(1);
     });
-
-    expect(result.status).toBe(1);
-    expect(declaredCodes).toContain(1);
   });
+});
 
-  test("update reports VALIDATION_FAILED for a malformed Library state", async () => {
-    const directory = await home();
-    await writeFile(
-      join(directory, "state.json"),
-      JSON.stringify({
-        schemaVersion: 2,
-        entries: "not-an-array",
-        bindings: [],
-        installations: [],
-        tombstones: [],
-        unmanaged: [],
-      }),
-    );
+describe("skit auth status", () => {
+  describe("Status reports unreadable credentials rather than showing an empty account.", () => {
+    test("auth status reports CONFLICT when credentials cannot be read", async () => {
+      const result = run(["auth", "status", "--json"], { home: await unreadableCredentials() });
 
-    const result = run(["update", "nope", "--json"], { home: directory });
-
-    expect(result.status).toBe(1);
-    expect(failure(result).code).toBe("VALIDATION_FAILED");
-    expect(declaredCodes).toContain(1);
+      expect(result.status).toBe(1);
+      expect(failure(result).code).toBe("CONFLICT");
+      expect(declaredCodes).toContain(1);
+    });
   });
+});
 
-  // Rejected source arguments use invalid usage, while JSON retains the domain code.
-  test.each([
-    { label: "unsafe characters", source: "https://example.com/a b.zip" },
-    { label: "embedded credentials", source: "https://user:pw@example.com/a.zip" },
-  ])("add rejects a source with $label as INVALID_ARGUMENT", async ({ source }) => {
-    const result = run(["add", source], { home: await home() });
-    expect(result.status).toBe(2);
-    expect(declaredCodes).toContain(2);
-  });
+describe("skit update", () => {
+  describe("Updating imported Collections", () => {
+    describe("Update stops when shared Library data cannot be trusted.", () => {
+      test("update reports VALIDATION_FAILED for a malformed Library state", async () => {
+        const directory = await home();
+        await writeFile(
+          join(directory, "state.json"),
+          JSON.stringify({
+            schemaVersion: 2,
+            entries: "not-an-array",
+            bindings: [],
+            installations: [],
+            tombstones: [],
+            unmanaged: [],
+          }),
+        );
 
-  // A non-current schemaVersion is invalid state, not a compatibility case. It is reported as
-  // a validation failure on the shared failure status, with its precise JSON code.
-  test.each([
-    { handler: "check", args: ["check"] },
-    { handler: "enable", args: ["enable", "nope"] },
-  ])("$handler reports VALIDATION_FAILED for a non-current ledger", async ({ args }) => {
-    const directory = await home();
-    await writeFile(
-      join(directory, "state.json"),
-      JSON.stringify({
-        schemaVersion: 1,
-        entries: [],
-        bindings: [],
-        installations: [],
-        tombstones: [],
-        unmanaged: [],
-      }),
-    );
+        const result = run(["update", "nope", "--json"], { home: directory });
 
-    const result = run([...args, "--json"], { home: directory });
-
-    expect(result.status).toBe(1);
-    expect(failure(result).code).toBe("VALIDATION_FAILED");
-    expect(declaredCodes).toContain(1);
-  });
-
-  test("an unclassified failure uses the shared failure status", async () => {
-    const directory = await home();
-    await mkdir(join(directory, "state.json"));
-
-    const result = run(["list"], { home: directory });
-
-    // Unexpected failures use the same shared failure status as named domain failures.
-    expect(result.status).toBe(1);
-    expect(declaredCodes).toContain(1);
+        expect(result.status).toBe(1);
+        expect(failure(result).code).toBe("VALIDATION_FAILED");
+        expect(declaredCodes).toContain(1);
+      });
+    });
   });
 });

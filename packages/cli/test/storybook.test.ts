@@ -149,9 +149,7 @@ describe("CLI storybook catalogs", () => {
           const interaction = yield* makeScriptedInteraction(story.answers);
           const home = yield* makeJourneyHome;
           const result = yield* Effect.result(
-            story
-              .run(home, interaction.typed, interaction.checkRule)
-              .pipe(Effect.provide(interaction.layer)),
+            story.run(home, interaction.typed).pipe(Effect.provide(interaction.layer)),
           );
           expect(Result.isSuccess(result), story.name).toBe(story.expectedOutcome !== "failure");
           expect(yield* interaction.remaining, story.name).toBe(0);

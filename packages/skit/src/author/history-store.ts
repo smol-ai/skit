@@ -1,11 +1,30 @@
-/** AuthorHistory's private file store. Trees use small manifests over immutable file blobs;
- * earlier byte-bearing tree documents remain readable without rewriting them. */
-import { Array, Effect, FileSystem, Option, Order, Path, Schema } from "effect";
+/** AuthorHistory owns relational metadata, immutable file bytes and recovery evidence. */
+import { Effect, FileSystem, Option, Path, Schema } from "effect";
+import { SqlClient } from "effect/sql";
+import { JsonObject } from "../shared/json.js";
+import {
+  libraryDatabasePath,
+  prepareLibraryDatabase,
+  withLibraryDatabase,
+  withDatabaseTransaction,
+} from "../library/store/database.js";
+import {
+  hasHistoryRows,
+  knownHistoryRows,
+  listHistoryRows,
+  loadTreeRows,
+  loadRevisionRows,
+  saveTreeRows,
+  saveRevisionRows,
+  type StoredEntry,
+  type StoredRevision,
+} from "./history-rows.js";
 import { Digest } from "effect/crypto";
-import { Hash, hashHex, sha256Hash } from "../shared/hash.js";
+import { Hash, hashHex } from "../shared/hash.js";
 import * as History from "../history/history.js";
 import { TreeDirectory, TreeFile, TreeSymlink } from "../artifact/tree-entry.js";
 import { syncPaths } from "../platform/atomic-write.js";
+import { makeFileBytes, FileBytesInvalid } from "../artifact/file-bytes.js";
 
 const StoredFile = Schema.Struct({
   path: TreeFile.fields.path,
@@ -20,22 +39,15 @@ const TreeManifest = Schema.Struct({
 const ManifestDocument = Schema.fromJsonString(TreeManifest);
 const TreeDocument = Schema.fromJsonString(Schema.toCodecJson(History.Tree));
 
-const storedFolder = (path: Path.Path, directory: string, kind: History.Kind) =>
-  path.join(directory, kind === "tree" ? "trees" : "revisions");
-
-export const storedPath = (path: Path.Path, directory: string, kind: History.Kind, hash: Hash) =>
-  path.join(storedFolder(path, directory, kind), `${hashHex(hash)}.json`);
-
-/** Publish blobs before their manifest. Neither immutable files nor existing legacy trees are
- * replaced; generic History.Store verifies the reconstructed canonical tree on every read. */
 export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (directory: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const digests = yield* Digest.Digest;
-  const blobDirectory = path.join(directory, "blobs");
-  const blobPath = (hash: Hash) => path.join(blobDirectory, hashHex(hash));
-  const hashBytes = (bytes: Uint8Array) =>
-    sha256Hash(bytes).pipe(Effect.provideService(Digest.Digest, digests));
+  const home = path.dirname(directory);
+  const database = libraryDatabasePath(home);
+  const bytes = yield* makeFileBytes(home);
+  const recoveryDirectory = path.join(directory, "recovery", "trees");
+  let prepared = false;
   const failed = (cause: unknown) => new History.StoreFailed({ cause });
   const isCorrupt = Schema.is(History.StoreCorrupt);
   const storageError = (cause: unknown) => (isCorrupt(cause) ? cause : failed(cause));
@@ -44,6 +56,7 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
   const flush = (parent: string) =>
     syncPaths([
       parent,
+      path.dirname(parent),
       directory,
       path.dirname(directory),
       path.dirname(path.dirname(directory)),
@@ -75,95 +88,241 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
       }),
     );
   });
-  const readBlob = Effect.fn("AuthorHistory.readBlob")(function* (tree: Hash, blob: Hash) {
-    const bytes = yield* fs
-      .readFile(blobPath(blob))
-      .pipe(
-        Effect.catchReason("PlatformError", "NotFound", () =>
-          Effect.fail(corrupt(tree, { _tag: "BlobMissing", blob })),
+  const byteFailure = (tree: Hash, error: FileBytesInvalid) => {
+    const blob = error.hash;
+    const reasons = History.StoreCorruptReason.cases;
+    return corrupt(
+      tree,
+      FileBytesInvalid.fields.reason.match(error.reason, {
+        Missing: () => reasons.BlobMissing.make({ blob }),
+        HashMismatch: ({ actual }) => reasons.BlobHashMismatch.make({ blob, actual }),
+        NotFile: () => reasons.BlobNotFile.make({ blob }),
+        SizeMismatch: ({ expected, actual }) =>
+          reasons.BlobSizeMismatch.make({ blob, expected, actual }),
+      }),
+    );
+  };
+  const provideStorage = <A, E>(
+    effect: Effect.Effect<A, E, FileSystem.FileSystem | Digest.Digest>,
+  ) =>
+    effect.pipe(
+      Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(Digest.Digest, digests),
+    );
+  const readRows = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) =>
+    provideStorage(
+      withLibraryDatabase(
+        database,
+        Effect.gen(function* () {
+          return yield* (yield* SqlClient.SqlClient).withTransaction(effect);
+        }),
+        true,
+      ),
+    );
+  const writeRows = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) =>
+    provideStorage(withDatabaseTransaction(home, effect));
+  const keepFiles = Effect.fn("AuthorHistory.keepFiles")(function* (
+    hash: Hash,
+    tree: History.Tree,
+  ) {
+    const files = tree.flatMap((entry, position) =>
+      entry.kind === "file" ? [{ entry, position }] : [],
+    );
+    const batch = yield* bytes
+      .keepMany(files, ({ entry }) => entry.bytes)
+      .pipe(Effect.catchTag("FileBytesInvalid", (error) => Effect.fail(byteFailure(hash, error))));
+    const entries: { position: number; entry: StoredEntry }[] = tree.flatMap((entry, position) =>
+      entry.kind === "file" ? [] : [{ entry, position }],
+    );
+    for (const {
+      entry: { entry, position },
+      hash: blob,
+    } of batch.files)
+      entries.push({ position, entry: { kind: "file", path: entry.path, mode: entry.mode, blob } });
+    entries.sort((left, right) => left.position - right.position);
+    return {
+      entries: entries.map(({ entry }) => entry),
+      register: batch.register.pipe(
+        Effect.mapError((error) =>
+          error._tag === "FileBytesInvalid" ? byteFailure(hash, error) : error,
+        ),
+      ),
+    };
+  });
+  const prepareRevision = Effect.fn("AuthorHistory.prepareRevisionRows")(function* (text: string) {
+    const value = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(JsonObject))(text);
+    const revision = yield* Schema.decodeUnknownEffect(History.Revision, {
+      onExcessProperty: "error",
+    })(value);
+    return { revision } satisfies StoredRevision;
+  });
+  const ensureMetadata = Effect.fn("AuthorHistory.prepareMetadata")(function* (create = false) {
+    if (prepared) return true;
+    const names = yield* fs
+      .readDirectory(recoveryDirectory)
+      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed([])));
+    const recoveries = names
+      .filter((name) => /^[a-f0-9]{64}\.json$/u.test(name))
+      .sort()
+      .map((name) => ({ name, hash: Hash.make(`sha256:${name.slice(0, 64)}`) }));
+    const exists = yield* provideStorage(
+      prepareLibraryDatabase(home, create || recoveries.length > 0),
+    );
+    if (!exists) return false;
+    if (recoveries.length > 0) {
+      const known = yield* readRows(
+        knownHistoryRows(
+          "tree",
+          recoveries.map(({ hash }) => hash),
         ),
       );
-    const actual = yield* hashBytes(bytes);
-    if (actual !== blob) return yield* corrupt(tree, { _tag: "BlobHashMismatch", blob, actual });
-    return bytes;
-  });
-
-  return yield* History.makeStore({
-    read: (kind, hash) =>
-      Effect.gen(function* () {
-        const text = yield* fs.readFileString(storedPath(path, directory, kind, hash)).pipe(
-          Effect.asSome,
-          Effect.catchReason("PlatformError", "NotFound", () => Effect.succeedNone),
-        );
-        if (Option.isNone(text) || kind === "revision") return text;
-        // An array is the original canonical document format. Its decoder and identity checks
-        // remain History.Store's responsibility, including malformed legacy arrays.
-        if (text.value.trimStart().startsWith("[")) return text;
-        const manifest = yield* Schema.decodeEffect(ManifestDocument)(text.value).pipe(
-          Effect.mapError((error) => corrupt(hash, { _tag: "InvalidData", failure: error })),
-        );
-        const tree = yield* Effect.forEach(manifest.entries, (entry) =>
+      const trees = yield* Effect.forEach(
+        recoveries.filter(({ hash }) => !known.has(hash)),
+        ({ name, hash }) =>
           Effect.gen(function* () {
-            if (entry.kind !== "file") return entry;
-            return {
-              path: entry.path,
-              kind: entry.kind,
-              mode: entry.mode,
-              bytes: yield* readBlob(hash, entry.blob),
-            };
+            const text = yield* fs.readFileString(path.join(recoveryDirectory, name));
+            const { entries } = yield* Schema.decodeUnknownEffect(ManifestDocument, {
+              onExcessProperty: "error",
+            })(text);
+            const files = entries.filter((entry) => entry.kind === "file");
+            const staged = yield* bytes.readMany(files, (entry) => entry.blob, true);
+            const batch = yield* bytes.keepMany(staged, ({ bytes }) => bytes);
+            return { hash, entries, register: batch.register };
+          }).pipe(
+            Effect.catchTag("FileBytesInvalid", (error) => Effect.fail(byteFailure(hash, error))),
+          ),
+      );
+      if (trees.length > 0)
+        yield* writeRows(
+          Effect.gen(function* () {
+            for (const tree of trees) {
+              yield* tree.register.pipe(
+                Effect.catchTag("FileBytesInvalid", (error) =>
+                  Effect.fail(byteFailure(tree.hash, error)),
+                ),
+              );
+              yield* saveTreeRows(tree.hash, { entries: tree.entries });
+            }
           }),
         );
-        return Option.some(yield* Schema.encodeEffect(TreeDocument)(tree));
-      }).pipe(Effect.mapError(storageError)),
-    write: (kind, hash, text) =>
+    }
+    prepared = true;
+    return true;
+  });
+  const keepTree = Effect.fn("AuthorHistory.keepTree")(function* (tree: History.Tree) {
+    const hash = yield* History.treeHash(tree).pipe(Effect.provideService(Digest.Digest, digests));
+    const { entries } = yield* keepFiles(hash, History.sortTree(tree));
+    const text = yield* Schema.encodeEffect(ManifestDocument)({
+      schema: "skit.author-tree.v1",
+      entries,
+    });
+    yield* writeImmutable(
+      path.join(recoveryDirectory, `${hashHex(hash)}.json`),
+      new TextEncoder().encode(text),
+    );
+    yield* flush(recoveryDirectory);
+    prepared = false;
+  });
+  const store = yield* History.makeStore({
+    read: (kind, hash) =>
       Effect.gen(function* () {
-        const stored = storedPath(path, directory, kind, hash);
-        if (!(yield* fs.exists(stored))) {
-          let document = text;
-          if (kind === "tree") {
-            const tree = yield* Schema.decodeEffect(TreeDocument)(text).pipe(
-              Effect.mapError((error) => corrupt(hash, { _tag: "InvalidData", failure: error })),
-            );
-            const blobs = new Set<Hash>();
-            const entries = yield* Effect.forEach(tree, (entry) =>
-              Effect.gen(function* () {
-                if (entry.kind !== "file") return entry;
-                const blob = yield* hashBytes(entry.bytes);
-                if (!blobs.has(blob)) {
-                  yield* writeImmutable(blobPath(blob), entry.bytes);
-                  // Refuse an existing corrupt blob before giving a new manifest authority over it.
-                  yield* readBlob(hash, blob);
-                  blobs.add(blob);
-                }
-                return { path: entry.path, kind: entry.kind, mode: entry.mode, blob };
-              }),
-            );
-            if (blobs.size > 0) yield* flush(blobDirectory);
-            document = yield* Schema.encodeEffect(ManifestDocument)({
-              schema: "skit.author-tree.v1",
-              entries,
-            });
-          }
-          yield* writeImmutable(stored, new TextEncoder().encode(document));
+        if (!(yield* ensureMetadata())) return Option.none<string>();
+        if (kind === "revision") {
+          const value = yield* readRows(loadRevisionRows(hash));
+          if (!value) return Option.none<string>();
+          return Option.some(
+            JSON.stringify({
+              ...value.revision,
+              author: value.revision.author,
+            }),
+          );
         }
-        // A concurrent writer may have linked the document before flushing its directory. Its
-        // referenced blobs were already flushed before that link, so flushing here completes it.
-        yield* flush(path.dirname(stored));
-      }).pipe(Effect.mapError(storageError)),
-    has: (kind, hash) =>
-      fs.exists(storedPath(path, directory, kind, hash)).pipe(Effect.mapError(failed)),
-    list: (kind) =>
-      fs.readDirectory(storedFolder(path, directory, kind)).pipe(
-        Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed([])),
-        Effect.map((names) =>
-          Array.sort(
-            names
-              .filter((name) => /^[a-f0-9]{64}\.json$/u.test(name))
-              .map((name): Hash => `sha256:${name.slice(0, 64)}`),
-            Order.String,
+        const value = yield* readRows(loadTreeRows(hash));
+        if (!value) return Option.none<string>();
+        const files = value.entries.flatMap((entry, position) =>
+          entry.kind === "file" ? [{ entry, position }] : [],
+        );
+        const loaded = yield* bytes
+          .readMany(files, ({ entry }) => entry.blob)
+          .pipe(
+            Effect.catchTag("FileBytesInvalid", (error) => Effect.fail(byteFailure(hash, error))),
+          );
+        const tree: { position: number; entry: History.Tree[number] }[] = value.entries.flatMap(
+          (entry, position) => (entry.kind === "file" ? [] : [{ entry, position }]),
+        );
+        for (const {
+          entry: { entry, position },
+          bytes,
+        } of loaded)
+          tree.push({
+            position,
+            entry: { kind: "file", path: entry.path, mode: entry.mode, bytes },
+          });
+        tree.sort((left, right) => left.position - right.position);
+        return Option.some(
+          yield* Schema.encodeEffect(TreeDocument)(tree.map(({ entry }) => entry)),
+        );
+      }).pipe(
+        Effect.catchTag("SchemaError", (error) =>
+          Effect.fail(
+            new History.StoreCorrupt({
+              kind,
+              hash,
+              reason: { _tag: "InvalidData", failure: error },
+            }),
           ),
         ),
-        Effect.mapError(failed),
+        Effect.mapError(storageError),
       ),
+    write: (kind, hash, text) =>
+      Effect.gen(function* () {
+        // Readback must see existing corruption; a repeated save never repairs an immutable value.
+        if ((yield* ensureMetadata()) && (yield* readRows(hasHistoryRows(kind, hash)))) return;
+        if (kind === "tree") {
+          const tree = yield* Schema.decodeUnknownEffect(TreeDocument, {
+            onExcessProperty: "error",
+          })(text);
+          const batch = yield* keepFiles(hash, tree);
+          yield* ensureMetadata(true);
+          yield* writeRows(
+            Effect.gen(function* () {
+              yield* batch.register;
+              yield* saveTreeRows(hash, { entries: batch.entries });
+            }),
+          );
+        } else {
+          const revision = yield* prepareRevision(text);
+          yield* ensureMetadata(true);
+          yield* writeRows(saveRevisionRows(hash, revision));
+        }
+      }).pipe(Effect.mapError(storageError)),
+    has: (kind, hash) =>
+      Effect.gen(function* () {
+        return (yield* ensureMetadata()) ? yield* readRows(hasHistoryRows(kind, hash)) : false;
+      }).pipe(Effect.mapError(failed)),
+    list: (kind) =>
+      Effect.gen(function* () {
+        return (yield* ensureMetadata()) ? yield* readRows(listHistoryRows(kind)) : [];
+      }).pipe(Effect.mapError(failed)),
   });
+  // Validate before the shared content-addressed encoder can discard an excess property.
+  // This is the client store boundary; the shared History/wire contract stays unchanged.
+  const checkTree = (tree: History.Tree) =>
+    Schema.decodeUnknownEffect(History.Tree, { onExcessProperty: "error" })(tree).pipe(
+      Effect.mapError(failed),
+    );
+  const checked: History.Store = {
+    ...store,
+    putTree: (tree) => checkTree(tree).pipe(Effect.flatMap(store.putTree)),
+    commit: (revision) =>
+      Schema.decodeUnknownEffect(History.Revision, { onExcessProperty: "error" })(revision).pipe(
+        Effect.mapError(failed),
+        Effect.flatMap(store.commit),
+      ),
+  };
+  return {
+    store: checked,
+    keepTree: (tree: History.Tree) =>
+      checkTree(tree).pipe(Effect.flatMap(keepTree), Effect.mapError(storageError)),
+  };
 });

@@ -16,9 +16,9 @@ The acceptance tests drive `setupCommand` itself with `interactive: true`, a scr
 
 | Store | Where | Written by | Atomicity |
 | --- | --- | --- | --- |
-| **Machine config** | `<home>/machine.json` | `MachineSettings.ensureIdentity` before the steps, when imports or managed copies need an identity; `MachineSettings.updateDiscovery` after them, under the setup's operation ID, which records the discovery folders before and after for undo | Atomic rename, under the home lock |
-| **Library state** | `<home>/state.json` | `Library.setup`: the operation record with every step first, then each step's own saves, then each step marked Done | Atomic rename under the Library writer, held for the whole setup |
-| **Migration backup** | `<home>/state.json.v<N>.backup-<time>` | Library layer construction over a legacy state | Atomic rename and file/directory flush before replacing and flushing the migrated state |
+| **Machine config** | `<home>/library.sqlite` | `MachineSettings.ensureIdentity` before the steps, when imports or managed copies need an identity; `MachineSettings.updateDiscovery` after them, under the setup's operation ID, which records the discovery folders before and after for undo | One SQLite transaction per mutation under the home lock |
+| **Library state** | `<home>/library.sqlite` | `Library.setup`: the operation record with every step first, then each step's own saves, then each step marked Done | One SQLite transaction per save under the Library writer, held for the whole setup |
+| **Import backup** | `<home>/state.json.v<N>.backup-database`, `<home>/audit.jsonl.backup-database` | Library layer construction over a home holding released files | Written and flushed before `library.sqlite` is published; `state.json` then becomes a newer-version stub |
 | **Originals** | `<home>/originals/<digest>` | Retention, before the state that references it | Content-addressed; unreferenced trees are inert |
 | **Recovery folder** | `<home>/removed/<operationId>/step-<n>[-<m>]/` with immutable `receipt.json` | The Remove step, and Manage steps moving approved duplicates aside | Exclusive receipt publication before the first rename; progress is derived from actual paths |
 | **Agent roots** | Harness skills roots and their `.skit-backups` | Removals (move out), binds (managed projection replaces the copy) | Per entry |
@@ -40,15 +40,15 @@ Preview runs without the Library writer lock. On approval, `applySetupPlan` read
 | S6 | If the plan saves roots, or created the machine identity: `MachineSettings.updateDiscovery` under the setup's operation ID | core `library/setup/apply.ts`; core `library/setup/discovery.ts` |
 | S7 | Outside the writer: offer a skills.sh update check, which loads the Library and may prompt | handler `offerSkillsShUpdateCheck` |
 
-A setup interrupted during S5 stays Pending in `state.json`; the next command's Library finishes it at startup when every remaining step is still as recorded, and otherwise marks it Stopped.
+A setup interrupted during S5 stays Pending in the Library database; the next command's Library finishes it at startup when every remaining step is still as recorded, and otherwise marks it Stopped.
 
 ### Rows
 
 | Condition | State left | Test |
 | --- | --- | --- |
 | Guided preview declined, or a dry run | Nothing written; one scan | `declining or previewing the plan applies nothing after one scan` |
-| Library construction over a legacy `state.json`, including a preview | Loader maintenance only: `state.json` migrated and its pre-migration bytes kept beside it as a backup | `a foreign record setup would forget changes only the loader's backed-up migration until confirmed` |
-| Non-interactive setup with `--work-dir` | A settings-only setup: an operation record with no steps, then `machine.json` saved under its ID | `non-interactive setup with a work dir records a guarded settings-only operation` |
+| Library construction over a released `state.json`, including a preview | Loader maintenance only: the original kept beside it as a backup, `library.sqlite` created and `state.json` replaced by a stub | `a foreign record setup would forget changes only the loader's backed-up migration until confirmed` |
+| Non-interactive setup with `--work-dir` | A settings-only setup: an operation record with no steps, then the discovery update saved under its ID | `non-interactive setup with a work dir records a guarded settings-only operation` |
 | Any approved apply | One scan after approval, however many steps run | `an approved apply scans once after approval, whatever stages it runs` |
 | Root preparation cannot write to a skills directory | `SetupStopped`; the operation, audit evidence and any machine identity remain durable. No selected skills retained, installed or removed. A retry requires a fresh review; retain-only does not prepare skills directories | `setup-apply-reviewed-plan.test.ts`: denied enabling / fresh retain-only review |
 | A reviewed source or alias changes after recording but before root preparation | `SetupStopped` before retaining anything or installing/moving copies; the changed entry stays untouched | `duplicates.test.ts`: source/alias changed after recording |
@@ -56,8 +56,8 @@ A setup interrupted during S5 stays Pending in `state.json`; the next command's 
 | A replacement is edited after the recorded apply is durably Done but before duplicate cleanup | Apply reports a preservation warning; both copies and the new edits remain; no duplicate moved to recovery | `setup-duplicate-backup.test.ts`: cleanup boundary |
 | A selected file changes after approval, before S2 | `SetupPlanStale`; only the outside change is on disk | `a selected file changed after approval fails stale before any effect` |
 | Another writer commits a Library revision after approval, before S5 | `SetupPlanStale` (before S2) or `StalePlan` (after); only the outside change is in the Library | `a Library change committed after approval fails stale before any effect` |
-| A selected copy changes after S2, before its step is recorded | `StalePlan`; `machine.json` may be written; nothing reaches the Library | `bytes changed between the apply-time scan and a later stage fail stale` |
-| The operation record cannot be saved | That failure; `machine.json` may be written; nothing reaches the Library | `a setup whose record is refused writes nothing to the Library` |
+| A selected copy changes after S2, before its step is recorded | `StalePlan`; the machine identity may already be saved; no Library operation is recorded | `bytes changed between the apply-time scan and a later stage fail stale` |
+| The operation record cannot be saved | That failure; the machine identity may already be saved; no Library operation is recorded | `a setup whose record is refused writes nothing to the Library` |
 | A selected copy changes after the steps are recorded | `SetupStopped`; earlier selections stay managed; the changed copy is not retained; nothing removed | `a selected copy changed after the steps are recorded stops the setup` |
 | A removal selection is edited in place after the steps are recorded | `SetupStopped`; earlier steps stay; the edited copy stays where it is, nothing removed | `a removal selection edited after the steps are recorded stays in place` |
 | An additive step fails | `SetupStopped`; orphan originals may be written; no removal applied | `a failed additive step leaves every selected removal in place` |
@@ -84,8 +84,8 @@ Guided apply lives in one workflow. Every requirement holds today:
 
 In every row, current and desired, bytes that cannot be reproduced are kept: a removed copy is moved, never deleted, and the tests compare its recovered bytes and mode with the original.
 
-A setup's operation record, with every step's evidence, stays in `state.json` whether
-it finished or stopped. A step's recovery directory exists only once that step has
+A summary of a setup's operation record, with every step's file evidence, stays in the
+Library database whether it finished or stopped. A step's recovery directory exists only once that step has
 written its receipt, which it does before its first move, so a recovery directory's
 presence still does not mean files moved; inspection must derive file state from
 immutable batch receipts and actual paths.

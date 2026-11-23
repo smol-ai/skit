@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 // Cancelling an acquisition, in a real process.
 //
 // `add-cli-lifetime.test.ts` covers the mutating add either side of its durable commit, over a
@@ -77,67 +78,6 @@ const listen = (server: Server) =>
     server.listen(0, "127.0.0.1", () => resolve((server.address() as AddressInfo).port)),
   );
 
-test.each([
-  ["add", "SIGINT"],
-  ["add", "SIGTERM"],
-  ["preview", "SIGINT"],
-  ["preview", "SIGTERM"],
-] as const)(
-  "%s interrupted mid-download on %s cancels the body and leaves nothing",
-  async (mode, signal) => {
-    const root = await mkdtemp(join(tmpdir(), "skit-acq-lifetime-"));
-    const temporary = join(root, "tmp");
-    await mkdir(temporary, { recursive: true });
-    const roots = isolatedRoots(root);
-    const state = { reading: false, aborted: false };
-    const server = createServer((request, response) => {
-      response.writeHead(200, {
-        "content-type": "application/zip",
-        "skit-release-version": "1.0.0",
-      });
-      // Headers and a first chunk, then the body never ends: there is live work to cancel.
-      response.write(Buffer.alloc(64));
-      state.reading = true;
-      request.on("aborted", () => (state.aborted = true));
-      response.on("close", () => (state.aborted = true));
-    });
-    const port = await listen(server);
-    try {
-      const run = runCli(
-        mode === "preview" ? ["add", "skit:alice/tools", "--list"] : ["add", "skit:alice/tools"],
-        {
-          ...process.env,
-          SKIT_SERVER_URL: `http://127.0.0.1:${port}`,
-          SKIT_HOME: roots.home,
-          TMPDIR: temporary,
-        },
-        roots,
-      );
-
-      await until(() => state.reading, "the download body to start");
-      // The response never ends, so the command cannot finish on its own. Reaching exit 130 at
-      // all is therefore the evidence that the signal cancelled the body read rather than the
-      // read completing: an uncancelled one would block here forever.
-      expect(run.child.exitCode).toBe(null);
-      run.child.kill(signal);
-      expect(await run.exited).toEqual({ code: 130, signal: null });
-      // The server also saw the connection end.
-      expect(state.aborted).toBe(true);
-
-      // The acquisition workspace finalized, and no abandoned work recreated it.
-      expect(await readdir(temporary)).toEqual([]);
-      await settle();
-      expect(await readdir(temporary)).toEqual([]);
-      // Neither shape saves anything; preview must not even create the Library.
-      expect(existsSync(join(roots.home, "state.json"))).toBe(false);
-      expect(existsSync(join(roots.home, "originals"))).toBe(false);
-    } finally {
-      server.close();
-      await rm(root, { recursive: true, force: true });
-    }
-  },
-);
-
 /** A `git` whose checkout records its pid and then never finishes. */
 async function stallingGit(root: string, marker: string) {
   const directory = join(root, "bin");
@@ -162,50 +102,6 @@ if (process.argv[2] === "clone") {
   return directory;
 }
 
-test.each(["SIGINT", "SIGTERM"] as const)(
-  "add interrupted during a child process on %s terminates it and cleans up",
-  async (signal) => {
-    const root = await mkdtemp(join(tmpdir(), "skit-acq-child-"));
-    const temporary = join(root, "tmp");
-    await mkdir(temporary, { recursive: true });
-    const roots = isolatedRoots(root);
-    const marker = join(root, "checkout.pid");
-    const shimDirectory = await stallingGit(root, marker);
-    try {
-      const run = runCli(
-        ["add", REPO],
-        {
-          ...process.env,
-          PATH: `${shimDirectory}:${process.env.PATH}`,
-          SKIT_HOME: roots.home,
-          TMPDIR: temporary,
-        },
-        roots,
-      );
-
-      await until(() => existsSync(marker), "the checkout child to start");
-      const pid = Number(await readFile(marker, "utf8"));
-      expect(Number.isInteger(pid)).toBe(true);
-      // The checkout never returns, so the command cannot finish on its own either.
-      expect(run.child.exitCode).toBe(null);
-      expect(alive(pid)).toBe(true);
-      run.child.kill(signal);
-      expect(await run.exited).toEqual({ code: 130, signal: null });
-
-      // The child is gone, not orphaned: acquisition's Scope owns the process, and cleanup waited
-      // for it before releasing the workspace it was writing into.
-      await until(() => !alive(pid), "the checkout child to terminate");
-      expect(alive(pid)).toBe(false);
-      expect(await readdir(temporary)).toEqual([]);
-      await settle();
-      expect(await readdir(temporary)).toEqual([]);
-      expect(existsSync(join(roots.home, "state.json"))).toBe(false);
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  },
-);
-
 function alive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -214,3 +110,114 @@ function alive(pid: number): boolean {
     return false;
   }
 }
+
+describe("skit add", () => {
+  describe("Cancelling an add leaves no unfinished download behind.", () => {
+    test.each([
+      ["add", "SIGINT"],
+      ["add", "SIGTERM"],
+      ["preview", "SIGINT"],
+      ["preview", "SIGTERM"],
+    ] as const)(
+      "%s interrupted mid-download on %s cancels the body and leaves nothing",
+      async (mode, signal) => {
+        const root = await mkdtemp(join(tmpdir(), "skit-acq-lifetime-"));
+        const temporary = join(root, "tmp");
+        await mkdir(temporary, { recursive: true });
+        const roots = isolatedRoots(root);
+        const state = { reading: false, aborted: false };
+        const server = createServer((request, response) => {
+          response.writeHead(200, {
+            "content-type": "application/zip",
+            "skit-release-version": "1.0.0",
+          });
+          // Headers and a first chunk, then the body never ends: there is live work to cancel.
+          response.write(Buffer.alloc(64));
+          state.reading = true;
+          request.on("aborted", () => (state.aborted = true));
+          response.on("close", () => (state.aborted = true));
+        });
+        const port = await listen(server);
+        try {
+          const run = runCli(
+            mode === "preview"
+              ? ["add", "skit:alice/tools", "--list"]
+              : ["add", "skit:alice/tools"],
+            {
+              ...process.env,
+              SKIT_SERVER_URL: `http://127.0.0.1:${port}`,
+              SKIT_HOME: roots.home,
+              TMPDIR: temporary,
+            },
+            roots,
+          );
+
+          await until(() => state.reading, "the download body to start");
+          // The response never ends, so the command cannot finish on its own. Reaching exit 130 at
+          // all is therefore the evidence that the signal cancelled the body read rather than the
+          // read completing: an uncancelled one would block here forever.
+          expect(run.child.exitCode).toBe(null);
+          run.child.kill(signal);
+          expect(await run.exited).toEqual({ code: 130, signal: null });
+          // The server also saw the connection end.
+          expect(state.aborted).toBe(true);
+
+          // The acquisition workspace finalized, and no abandoned work recreated it.
+          expect(await readdir(temporary)).toEqual([]);
+          await settle();
+          expect(await readdir(temporary)).toEqual([]);
+          // Neither shape saves anything; preview must not even create the Library.
+          expect(existsSync(join(roots.home, "state.json"))).toBe(false);
+          expect(existsSync(join(roots.home, "originals"))).toBe(false);
+        } finally {
+          server.close();
+          await rm(root, { recursive: true, force: true });
+        }
+      },
+    );
+
+    test.each(["SIGINT", "SIGTERM"] as const)(
+      "add interrupted during a child process on %s terminates it and cleans up",
+      async (signal) => {
+        const root = await mkdtemp(join(tmpdir(), "skit-acq-child-"));
+        const temporary = join(root, "tmp");
+        await mkdir(temporary, { recursive: true });
+        const roots = isolatedRoots(root);
+        const marker = join(root, "checkout.pid");
+        const shimDirectory = await stallingGit(root, marker);
+        try {
+          const run = runCli(
+            ["add", REPO],
+            {
+              ...process.env,
+              PATH: `${shimDirectory}:${process.env.PATH}`,
+              SKIT_HOME: roots.home,
+              TMPDIR: temporary,
+            },
+            roots,
+          );
+
+          await until(() => existsSync(marker), "the checkout child to start");
+          const pid = Number(await readFile(marker, "utf8"));
+          expect(Number.isInteger(pid)).toBe(true);
+          // The checkout never returns, so the command cannot finish on its own either.
+          expect(run.child.exitCode).toBe(null);
+          expect(alive(pid)).toBe(true);
+          run.child.kill(signal);
+          expect(await run.exited).toEqual({ code: 130, signal: null });
+
+          // The child is gone, not orphaned: acquisition's Scope owns the process, and cleanup waited
+          // for it before releasing the workspace it was writing into.
+          await until(() => !alive(pid), "the checkout child to terminate");
+          expect(alive(pid)).toBe(false);
+          expect(await readdir(temporary)).toEqual([]);
+          await settle();
+          expect(await readdir(temporary)).toEqual([]);
+          expect(existsSync(join(roots.home, "state.json"))).toBe(false);
+        } finally {
+          await rm(root, { recursive: true, force: true });
+        }
+      },
+    );
+  });
+});

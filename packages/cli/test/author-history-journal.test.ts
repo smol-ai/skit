@@ -1,5 +1,6 @@
-import { expect, it } from "@effect/vitest";
-import { Cause, Deferred, Effect, Exit, Fiber, FileSystem } from "effect";
+import { describe, expect, it } from "@effect/vitest";
+import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Schema } from "effect";
+import { DatabaseSync } from "node:sqlite";
 import { TestClock } from "effect/testing";
 import { dirname, join } from "node:path";
 import * as History from "@smolai/skit-core/history";
@@ -19,6 +20,26 @@ import { testPlatformLayer } from "./helpers/platform.js";
 /** Capture `workspace` through its own owners over `home`. */
 const capture = (workspace: string, home: string) =>
   refreshWorkspace(workspace).pipe(Effect.provide(authorLayer(home)));
+
+const nativeTreeCount = Effect.fn("Test.nativeTreeCount")(function* (home: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = join(home, "library.sqlite");
+  if (!(yield* fs.exists(path))) return 0;
+  const row = yield* Effect.try({
+    try: () => {
+      const sql = new DatabaseSync(path, { readOnly: true });
+      try {
+        return sql.prepare("SELECT name FROM sqlite_master WHERE name='author_trees'").get()
+          ? sql.prepare("SELECT COUNT(*) AS count FROM author_trees").get()
+          : { count: 0 };
+      } finally {
+        sql.close();
+      }
+    },
+    catch: (cause) => new History.StoreFailed({ cause }),
+  });
+  return (yield* Schema.decodeUnknownEffect(Schema.Struct({ count: Schema.Int }))(row)).count;
+});
 
 /** The ids reachable from `id` in `home`'s history, newest first. */
 const lineage = (id: History.RevisionId, home: string) =>
@@ -86,56 +107,20 @@ it.effect("unchanged concurrent observations add no duplicate events", () =>
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect(
-  "sync records its own remote applications so A → B → A retains all three observations",
-  () =>
-    Effect.gen(function* () {
-      const world = yield* makeAuthorSyncWorld();
-      yield* world.connect();
-      const before = yield* capture(world.a.workspace, world.a.home);
-      yield* world.a.edit("notes/a.txt", "A");
-      yield* world.a.sync();
-      yield* world.b.sync();
-      yield* world.b.edit("notes/a.txt", "B");
-      yield* world.b.sync();
-      yield* world.a.sync();
-      yield* world.b.edit("notes/a.txt", "A");
-      yield* world.b.sync();
-      yield* world.a.sync();
-      const after = yield* capture(world.a.workspace, world.a.home);
-      const ids = yield* lineage(after.id, world.a.home);
-      const since = ids.slice(0, ids.indexOf(before.id)).reverse();
-      expect(since).toHaveLength(3);
-      yield* Effect.gen(function* () {
-        const revisions = yield* Effect.forEach(since, (id) =>
-          readAuthorRevision(world.a.home, id),
-        );
-        expect(revisions[0]?.tree).toBe(revisions[2]?.tree);
-        const contents: Array<string | undefined> = [];
-        for (const revision of revisions)
-          contents.push(
-            fileText(
-              yield* readAuthorTree({ treeHash: revision.tree }, world.a.home),
-              "notes/a.txt",
-            ),
-          );
-        expect(contents).toEqual(["A", "B", "A"]);
-      }).pipe(Effect.provide(authorLayer(world.a.home)));
-    }).pipe(Effect.provide(testPlatformLayer)),
-);
-
 it.effect("a pending B observation cannot be overtaken by an unchanged A scan", () =>
   Effect.gen(function* () {
     const { a } = yield* makeAuthorSyncWorld();
     const fs = yield* FileSystem.FileSystem;
-    const directory = join(a.home, "history", "trees");
+    const directory = join(a.home, "file-bytes");
     const entered = yield* Deferred.make<void>();
     const released = yield* Deferred.make<void>();
     // Only the B capture pauses; both captures share this one layer's journal permit.
     let pausing = false;
+    let beforeB = 0;
     yield* Effect.gen(function* () {
       yield* a.edit("notes/a.txt", "A");
       const first = yield* refreshWorkspace(a.workspace);
+      beforeB = yield* nativeTreeCount(a.home);
       yield* a.edit("notes/a.txt", "B");
       pausing = true;
       const pendingB = yield* refreshWorkspace(a.workspace).pipe(Effect.forkScoped);
@@ -154,9 +139,16 @@ it.effect("a pending B observation cannot be overtaken by an unchanged A scan", 
       Effect.provide(authorLayer(a.home)),
       Effect.provideService(FileSystem.FileSystem, {
         ...fs,
-        readFileString: Effect.fn("Test.pauseBeforeObservationCommit")(function* (path) {
-          const content = yield* fs.readFileString(path);
-          if (pausing && dirname(path) === directory && path.endsWith(".json")) {
+        readFile: Effect.fn("Test.pauseBeforeObservationCommit")(function* (path) {
+          const content = yield* fs.readFile(path);
+          if (
+            pausing &&
+            dirname(path) === directory &&
+            (yield* nativeTreeCount(a.home).pipe(
+              Effect.provideService(FileSystem.FileSystem, fs),
+              Effect.orDie,
+            )) > beforeB
+          ) {
             pausing = false;
             yield* Deferred.succeed(entered, undefined);
             yield* Deferred.await(released);
@@ -176,15 +168,21 @@ it.effect(
       const fs = yield* FileSystem.FileSystem;
       yield* a.edit("notes/a.txt", "record me");
       const entered = yield* Deferred.make<void>();
-      const directory = join(a.home, "history", "trees");
+      const directory = join(a.home, "file-bytes");
       yield* TestClock.setTime(1000);
       const pending = yield* refreshWorkspace(a.workspace).pipe(
         Effect.provide(authorLayer(a.home)),
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
-          readFileString: Effect.fn("Test.pauseRecordedTreeBeforeCommit")(function* (path) {
-            const content = yield* fs.readFileString(path);
-            if (dirname(path) === directory && path.endsWith(".json")) {
+          readFile: Effect.fn("Test.pauseRecordedTreeBeforeCommit")(function* (path) {
+            const content = yield* fs.readFile(path);
+            if (
+              dirname(path) === directory &&
+              (yield* nativeTreeCount(a.home).pipe(
+                Effect.provideService(FileSystem.FileSystem, fs),
+                Effect.orDie,
+              )) > 0
+            ) {
               yield* Deferred.succeed(entered, undefined);
               return yield* Effect.never;
             }
@@ -215,7 +213,22 @@ it.effect(
       const { a } = yield* makeAuthorSyncWorld();
       const fs = yield* FileSystem.FileSystem;
       const directory = join(a.home, "history");
-      const journal = join(directory, "journal.sqlite");
+      const database = join(a.home, "library.sqlite");
+      const eventCount = () => {
+        const sql = new DatabaseSync(database, { readOnly: true });
+        try {
+          if (
+            !sql.prepare("SELECT name FROM sqlite_master WHERE name='author_history_events'").get()
+          )
+            return 0;
+          return Schema.decodeUnknownSync(Schema.Struct({ count: Schema.Number }))(
+            sql.prepare("SELECT COUNT(*) AS count FROM author_history_events").get(),
+          ).count;
+        } finally {
+          sql.close();
+        }
+      };
+      const beforeCount = (yield* fs.exists(database)) ? eventCount() : 0;
       yield* a.edit("notes/a.txt", "accepted observation");
       yield* TestClock.setTime(1000);
       let interrupted = false;
@@ -225,12 +238,12 @@ it.effect(
           Effect.provideService(FileSystem.FileSystem, {
             ...fs,
             open: Effect.fn("Test.failObservationAcknowledgement")(function* (path, options) {
-              // The journal connection has closed (its WAL is gone): the event is committed.
+              // An independent connection proves the new event committed before acknowledgement.
               if (
                 path === directory &&
                 !interrupted &&
-                (yield* fs.exists(journal)) &&
-                !(yield* fs.exists(`${journal}-wal`))
+                (yield* fs.exists(database)) &&
+                eventCount() > beforeCount
               ) {
                 interrupted = true;
                 return yield* fs.open(join(a.home, "missing"), options);
@@ -331,21 +344,46 @@ it.effect("copied live workspace identity cannot merge two folders' histories", 
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("existing stored trees stay available without inventing a pre-journal timeline", () =>
-  Effect.gen(function* () {
-    const { a } = yield* makeAuthorSyncWorld();
-    const fs = yield* FileSystem.FileSystem;
-    yield* a.edit("notes/a.txt", "existing tree");
-    const saved = yield* capture(a.workspace, a.home);
-    yield* fs.remove(join(a.home, "history", "journal.sqlite"));
-    yield* Effect.gen(function* () {
-      expect(fileText(yield* readAuthorTree(saved, a.home), "notes/a.txt")).toBe("existing tree");
-      yield* TestClock.setTime(1000);
-      const recorded = yield* refreshWorkspace(a.workspace);
-      expect(recorded.treeHash).toBe(saved.treeHash);
-      expect(recorded.revision.parents).toEqual([]);
-      expect(recorded.revision.author.at).toBe(1000);
-      expect(yield* storedTreesAt(a.home)).toHaveLength(1);
-    }).pipe(Effect.provide(authorLayer(a.home)));
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
+describe("skit author sync", () => {
+  describe("Keeping saved work", () => {
+    describe("Versions recorded by SKIT remain recoverable after sync.", () => {
+      it.effect(
+        "sync records its own remote applications so A → B → A retains all three observations",
+        () =>
+          Effect.gen(function* () {
+            const world = yield* makeAuthorSyncWorld();
+            yield* world.connect();
+            const before = yield* capture(world.a.workspace, world.a.home);
+            yield* world.a.edit("notes/a.txt", "A");
+            yield* world.a.sync();
+            yield* world.b.sync();
+            yield* world.b.edit("notes/a.txt", "B");
+            yield* world.b.sync();
+            yield* world.a.sync();
+            yield* world.b.edit("notes/a.txt", "A");
+            yield* world.b.sync();
+            yield* world.a.sync();
+            const after = yield* capture(world.a.workspace, world.a.home);
+            const ids = yield* lineage(after.id, world.a.home);
+            const since = ids.slice(0, ids.indexOf(before.id)).reverse();
+            expect(since).toHaveLength(3);
+            yield* Effect.gen(function* () {
+              const revisions = yield* Effect.forEach(since, (id) =>
+                readAuthorRevision(world.a.home, id),
+              );
+              expect(revisions[0]?.tree).toBe(revisions[2]?.tree);
+              const contents: Array<string | undefined> = [];
+              for (const revision of revisions)
+                contents.push(
+                  fileText(
+                    yield* readAuthorTree({ treeHash: revision.tree }, world.a.home),
+                    "notes/a.txt",
+                  ),
+                );
+              expect(contents).toEqual(["A", "B", "A"]);
+            }).pipe(Effect.provide(authorLayer(world.a.home)));
+          }).pipe(Effect.provide(testPlatformLayer)),
+      );
+    });
+  });
+});

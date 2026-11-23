@@ -23,7 +23,9 @@ export type LibrarySubject =
       readonly skills: readonly [Skill];
     };
 
-const collectionSubjects = (state: LibraryState): readonly LibrarySubject[] =>
+const collectionSubjects = (
+  state: Pick<LibraryState, "collections" | "skills">,
+): readonly LibrarySubject[] =>
   state.collections.map((collection): LibrarySubject => ({
     kind: "collection",
     subjectId: collection.collection_id,
@@ -42,8 +44,9 @@ const skillSubjects = (state: LibraryState): readonly LibrarySubject[] =>
   }));
 
 /** Default commands operate on Collections; contained Skills remain directly addressable. */
-export const librarySubjects = (state: LibraryState): readonly LibrarySubject[] =>
-  collectionSubjects(state);
+export const librarySubjects = (
+  state: Pick<LibraryState, "collections" | "skills">,
+): readonly LibrarySubject[] => collectionSubjects(state);
 
 export const matchingLibrarySubjects = (
   state: LibraryState,

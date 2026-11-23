@@ -1,8 +1,9 @@
 import { Effect, FileSystem, Schema } from "effect";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { TreeDirectory, TreeFile } from "../../../artifact/tree-entry.js";
 import { isCollectionControlRootEntry } from "../../../artifact/control-files.js";
-import { Hash, hashHex, sha256Hash } from "../../../shared/hash.js";
+import { Hash, hashHex } from "../../../shared/hash.js";
+import { makeFileBytes } from "../../../artifact/file-bytes.js";
 import { isCanonicalRelativePath, parentDirectories } from "../../../shared/relative-path.js";
 import { collectionVersionPath, originalTreeHash } from "../../collection-version.js";
 import { InvalidLibraryState, type InvalidLibraryStateReason } from "../../failures.js";
@@ -20,6 +21,21 @@ const Composition = Schema.fromJsonString(
   }),
 );
 
+const compositionPath = (originalsPath: string, hash: Hash) =>
+  join(originalsPath, "compositions", "trees", `${hashHex(hash)}.json`);
+
+/** Availability only. The reader verifies bytes before a caller relies on them. */
+export const hasCollectionVersion = Effect.fn("Library.hasCollectionVersion")(function* (
+  originalsPath: string,
+  hash: Hash,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  return (
+    (yield* fs.exists(collectionVersionPath(originalsPath, hash))) ||
+    (yield* fs.exists(compositionPath(originalsPath, hash)))
+  );
+});
+
 /** A borrowed read tree. Whole-tree versions keep their existing path; compositions become
  * private copies in the caller's scope. Never persist this result as recovery evidence. */
 export const readCollectionVersion = Effect.fn("Library.readCollectionVersion")(function* (
@@ -29,7 +45,7 @@ export const readCollectionVersion = Effect.fn("Library.readCollectionVersion")(
   const fs = yield* FileSystem.FileSystem;
   const legacy = collectionVersionPath(originalsPath, hash);
   if (yield* fs.exists(legacy)) return legacy;
-  const manifestPath = join(originalsPath, "compositions", "trees", `${hashHex(hash)}.json`);
+  const manifestPath = compositionPath(originalsPath, hash);
   const invalid = (reason: InvalidLibraryStateReason) =>
     new InvalidLibraryState({ path: manifestPath, reason });
   const text = yield* fs
@@ -40,6 +56,7 @@ export const readCollectionVersion = Effect.fn("Library.readCollectionVersion")(
   const manifest = yield* Schema.decodeEffect(Composition)(text).pipe(
     Effect.mapError((error) => invalid({ _tag: "SchemaInvalid", failure: error })),
   );
+  const bytesOwner = yield* makeFileBytes(dirname(originalsPath));
   const byPath = new Map<string, (typeof manifest.entries)[number]>();
   for (const entry of manifest.entries) {
     const first = entry.path.split("/")[0] ?? "";
@@ -65,15 +82,19 @@ export const readCollectionVersion = Effect.fn("Library.readCollectionVersion")(
     let bytes = files.get(entry.blob);
     if (bytes === undefined) {
       const blob = join(originalsPath, "compositions", "blobs", hashHex(entry.blob));
-      bytes = yield* fs
-        .readFile(blob)
-        .pipe(
-          Effect.catchReason("PlatformError", "NotFound", () =>
-            Effect.fail(invalid({ _tag: "ContentMissing", entry: entry.blob })),
+      bytes = yield* bytesOwner.loadLegacy(blob, entry.blob).pipe(
+        Effect.catchTag("FileBytesInvalid", (error) =>
+          Effect.fail(
+            invalid({
+              _tag: error.reason._tag === "Missing" ? "ContentMissing" : "ContentChanged",
+              entry: entry.blob,
+            }),
           ),
-        );
-      if ((yield* sha256Hash(bytes)) !== entry.blob)
-        return yield* invalid({ _tag: "ContentChanged", entry: entry.blob });
+        ),
+        Effect.catchTag("SchemaError", (failure) =>
+          Effect.fail(invalid({ _tag: "SchemaInvalid", failure })),
+        ),
+      );
       files.set(entry.blob, bytes);
     }
     entries.push({ path: entry.path, kind: "file", mode: entry.mode, bytes });

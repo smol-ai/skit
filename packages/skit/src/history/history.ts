@@ -6,8 +6,8 @@ import { SchemaFailure } from "../shared/schema-issue.js";
  *
  * - A {@link Tree} is a workspace's files, directories and symlinks. Its hash is its identity.
  * - A {@link Revision} is a tree, its parents and who made it. An edit has one parent, a merge
- *   has two, and the first revision has none. Its identity is the hash of all three, so recording
- *   the same revision twice yields the same identity; because the author includes the time,
+ *   has two, and the first revision has none. Its identity hashes the tree, parents, author and
+ *   per-path edit times. Recording the same revision twice yields the same identity; because the author includes the time,
  *   returning to earlier content is still a new revision.
  *
  * A store may hold a shallow history: a device keeps the revisions it pulled without their
@@ -62,10 +62,29 @@ export const treePathIssue = (tree: Tree): TreePathIssue | undefined => {
 export const Author = Schema.Struct({ device: MachineId, at: Schema.Int });
 export type Author = typeof Author.Type;
 
+/** Observed edit time in milliseconds at each NFC path, independent of changes elsewhere. */
+export const EditTimes = Schema.Record(Schema.String, Schema.Int);
+export type EditTimes = typeof EditTimes.Type;
+
+/** Edit-time keys use the same NFC spelling for native and transported trees. */
+export const editTimePath = (path: string) => path.normalize("NFC");
+
+/** Missing or unrelated clock keys cannot participate in a path-based decision. */
+export const editTimePaths = (tree: Tree, edits: EditTimes): ReadonlyArray<string> => {
+  const paths = new Set(tree.map((entry) => editTimePath(entry.path)));
+  return [
+    ...new Set([
+      ...[...paths].filter((path) => !Object.hasOwn(edits, path)),
+      ...Object.keys(edits).filter((path) => !paths.has(path)),
+    ]),
+  ].sort();
+};
+
 export const Revision = Schema.Struct({
   tree: TreeHash,
   parents: Schema.Array(RevisionId),
   author: Author,
+  edits: EditTimes,
 });
 export type Revision = typeof Revision.Type;
 
@@ -106,6 +125,9 @@ export const StoreCorruptReason = Schema.TaggedUnion({
   ContentHashMismatch: { actual: Hash },
   BlobMissing: { blob: Hash },
   BlobHashMismatch: { blob: Hash, actual: Hash },
+  BlobNotFile: { blob: Hash },
+  BlobSizeMismatch: { blob: Hash, expected: Schema.Int, actual: Schema.Int },
+  EditTimesMismatch: { paths: Schema.Array(Schema.String) },
 });
 export type StoreCorruptReason = typeof StoreCorruptReason.Type;
 
@@ -127,7 +149,14 @@ export class StoreFailed extends Schema.TaggedError<
   cause: Schema.Defect(),
 }) {}
 
-export const StoreError = Schema.Union([StoreMissing, StoreCorrupt, StoreFailed]);
+class RecordInvalid extends Schema.TaggedError<RecordInvalid, { readonly brand: unique symbol }>()(
+  "History.RecordInvalid",
+  { paths: Schema.Array(Schema.String) },
+) {}
+
+export type { RecordInvalid };
+
+export const StoreError = Schema.Union([StoreMissing, StoreCorrupt, StoreFailed, RecordInvalid]);
 export type StoreError = typeof StoreError.Type;
 
 /**
@@ -236,17 +265,101 @@ export const makeStore = Effect.fn("History.makeStore")(function* (
   };
 });
 
+/** Per-path times for a newly authored tree or a merge of existing trees. */
+export const editTimes = (
+  tree: Tree,
+  previous: ReadonlyArray<{ readonly tree: Tree; readonly edits: EditTimes }>,
+  at: number,
+): EditTimes => {
+  const same = Schema.toEquivalence(TreeEntry);
+  const find = (tree: Tree, path: string) =>
+    tree.find((entry) => editTimePath(entry.path) === path);
+  const matches = (entry: TreeEntry, tree: Tree) => {
+    const found = find(tree, editTimePath(entry.path));
+    return found !== undefined && same({ ...entry, path: found.path }, found);
+  };
+  const timesByPath = new Map<string, number>();
+  for (const entry of tree) {
+    const path = editTimePath(entry.path);
+    const unchanged = previous.filter((parent) => matches(entry, parent.tree));
+    const times = unchanged.flatMap((parent) =>
+      Object.hasOwn(parent.edits, path) ? [parent.edits[path]!] : [],
+    );
+    // A synthesized merge is as recent as its contributing edits, never the merge clock.
+    if (times.length === 0 && previous.length > 1)
+      for (const parent of previous) {
+        const time = editTime(parent.edits, path);
+        if (time !== undefined) times.push(time);
+      }
+    timesByPath.set(path, times.length === 0 ? at : Math.max(...times));
+  }
+  return Object.fromEntries(timesByPath);
+};
+
 /** Record `tree` in `store` as a new revision on top of `parents`. */
 export const record = Effect.fn("History.record")(function* (
   store: Store,
   tree: Tree,
   parents: ReadonlyArray<RevisionId>,
   author: Author,
+  options: { readonly source?: RevisionId; readonly edits?: EditTimes } = {},
 ) {
+  const load = (id: RevisionId) =>
+    Effect.gen(function* () {
+      const revision = yield* store.revision(id);
+      const tree = yield* store.tree(revision.tree);
+      const paths = editTimePaths(tree, revision.edits);
+      if (paths.length)
+        return yield* new StoreCorrupt({
+          kind: "revision",
+          hash: id,
+          reason: { _tag: "EditTimesMismatch", paths },
+        });
+      return { revision, tree };
+    });
+  const previous = yield* Effect.forEach(parents, load);
+  const copied = options.source === undefined ? undefined : yield* load(options.source);
+  const edits = {
+    ...(options.edits ??
+      editTimes(
+        tree,
+        previous.map(({ tree, revision }) => ({ tree, edits: revision.edits })),
+        author.at,
+      )),
+  };
+  if (copied !== undefined) {
+    const same = Schema.toEquivalence(TreeEntry);
+    for (const entry of tree) {
+      const path = editTimePath(entry.path);
+      const original = copied.tree.find((file) => editTimePath(file.path) === path);
+      if (original !== undefined && same({ ...entry, path: original.path }, original))
+        edits[path] = copied.revision.edits[path]!;
+    }
+  }
+  const paths = editTimePaths(tree, edits);
+  if (paths.length > 0) return yield* new RecordInvalid({ paths });
   const hash = yield* store.putTree(tree);
-  const revision: Revision = { tree: hash, parents, author };
+  // A post-sync scan can already have been saved by the background observer. Correct
+  // copied-path provenance when needed, but do not add another identical observation.
+  if (
+    options.source !== undefined &&
+    parents.length === 1 &&
+    previous[0]!.revision.tree === hash &&
+    Schema.toEquivalence(EditTimes)(previous[0]!.revision.edits, edits)
+  )
+    return { id: parents[0]!, revision: previous[0]!.revision };
+  const revision: Revision = { tree: hash, parents, author, edits };
   return { id: yield* store.commit(revision), revision };
 });
+
+/** A structural overlap uses the latest edit within the whole conflicting subtree. */
+export const editTime = (edits: EditTimes, path: string): number | undefined => {
+  const key = editTimePath(path);
+  const times = Object.entries(edits)
+    .filter(([candidate]) => key === "" || candidate === key || candidate.startsWith(`${key}/`))
+    .map(([, time]) => time);
+  return times.length === 0 ? undefined : Math.max(...times);
+};
 
 /**
  * Every revision reachable from `id`, starting there, each once. Parents are visited breadth

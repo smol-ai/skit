@@ -26,6 +26,17 @@ jobs:
           node-version: 24.22.1
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Keep existing D1 migrations unchanged
+        run: |
+          if [[ -n "$MIGRATION_BASE" && ! "$MIGRATION_BASE" =~ ^0+$ ]] &&
+             ! git cat-file -e "${MIGRATION_BASE}^{commit}"; then
+            git fetch --no-tags origin "$MIGRATION_BASE"
+          fi
+          node packages/skit-server-effect/scripts/check-frozen-migrations.ts "$MIGRATION_BASE" "$MIGRATION_HEAD"
+        env:
+          MIGRATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          MIGRATION_HEAD: ${{ github.sha }}
+      - run: pnpm --filter @smolai/skit-server-effect exec vitest run --config vitest.scripts.config.ts
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
@@ -58,7 +69,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        include:
+          - { lane: unit, shard: 1, shards: 4 }
+          - { lane: unit, shard: 2, shards: 4 }
+          - { lane: unit, shard: 3, shards: 4 }
+          - { lane: unit, shard: 4, shards: 4 }
+          - { lane: subprocess, shard: 1, shards: 2 }
+          - { lane: subprocess, shard: 2, shards: 2 }
+          - { lane: author-sync, shard: 1, shards: 1 }
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -69,7 +87,7 @@ jobs:
           node-version: 24.22.1
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @smolai/skit exec vitest run --shard=${{ matrix.shard }}/4
+      - run: pnpm --filter @smolai/skit exec vitest run --config vitest.${{ matrix.lane }}.config.ts --shard=${{ matrix.shard }}/${{ matrix.shards }}
 
   package:
     runs-on: ubuntu-latest

@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import { expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem } from "effect";
 import { NodeServices } from "@effect/platform-node";
@@ -37,72 +38,241 @@ it.effect(
     ),
 );
 
-it.effect(
-  "executes author init, validation and invocation through the public grammar in an isolated home",
-  () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-author-commands-" });
-      const home = join(root, "selected-home");
-      const source = join(root, "source");
-      yield* copySkitFixtureEffect("authored", source);
-      const failures: CommandFailure[] = [];
-      const results: CommandResult[] = [];
-      const run = (args: readonly string[]) =>
-        runCommandTree(skitCommand, [...args, "--json"], "test").pipe(
-          Effect.provide(
-            rendererTestLayer({
-              result: (value) =>
-                Effect.sync(() => {
-                  results.push(value);
-                }),
-              failure: (value) =>
-                Effect.sync(() => {
-                  failures.push(value);
-                }),
-            }),
-          ),
-        );
-      yield* run(["author", "--home", home, "init", source]);
-      expect(failures).toEqual([]);
-      expect(results[0]).toMatchObject({
-        contract: "init",
-        data: { path: source, library_registration: "registered" },
-      });
-      expect(yield* fs.exists(join(home, "state.json"))).toBe(true);
-      expect(yield* fs.exists(join(source, ".skit", "workspace.json"))).toBe(true);
-      yield* run(["author", "validate", source, "--home", home]);
-      expect(results[1]).toMatchObject({ contract: "validate", data: { valid: true } });
-      const metadata = join(source, "skills", "review", "agents", "openai.yaml");
-      const before = yield* fs.readFileString(metadata);
-      yield* run(["author", "invocation", source, "--dry-run", "--home", home]);
-      expect(results[2]).toMatchObject({
-        contract: "authorInvocation",
-        data: { path: source, dryRun: true },
-      });
-      expect(yield* fs.readFileString(metadata)).toBe(before);
-      // Publication needs only workspace metadata, not a readable Library.
-      yield* fs.writeFileString(join(home, "state.json"), "invalid Library must not be opened");
-      yield* run(["author", "publish", source, "--version", "1.0.0", "--home", home]);
-      expect(failures).toHaveLength(1);
-      yield* run(["author", "list", "--registry", "https://registry.example.test", "--home", home]);
-      expect(failures[1]).toMatchObject({ code: "AUTHENTICATION_REQUIRED" });
-      yield* run([
-        "author",
-        "delete",
-        "https://registry.example.test/me/tools",
-        "--dry-run",
-        "--home",
-        home,
-      ]);
-      expect(failures[2]).toMatchObject({ code: "AUTHENTICATION_REQUIRED" });
-      expect(failures[0].message).toMatch(/remote|sync/i);
-      yield* run(["author", "validate", source, "--home", home]);
-      expect(results[3]).toMatchObject({ contract: "validate", data: { valid: true } });
-      expect(failures).toHaveLength(3);
-    }).pipe(
-      Effect.scoped,
-      Effect.provide(NodeServices.layer),
-      Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
-    ),
+it.effect("author operations report only the expected connection and authentication failures", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-author-commands-" });
+
+    const home = join(root, "selected-home");
+
+    const source = join(root, "source");
+
+    yield* copySkitFixtureEffect("authored", source);
+
+    const failures: CommandFailure[] = [];
+
+    const results: CommandResult[] = [];
+
+    const run = (args: readonly string[]) =>
+      runCommandTree(skitCommand, [...args, "--json"], "test").pipe(
+        Effect.provide(
+          rendererTestLayer({
+            result: (value) =>
+              Effect.sync(() => {
+                results.push(value);
+              }),
+            failure: (value) =>
+              Effect.sync(() => {
+                failures.push(value);
+              }),
+          }),
+        ),
+      );
+
+    yield* run(["author", "--home", home, "init", source]);
+
+    yield* run(["author", "validate", source, "--home", home]);
+
+    yield* run(["author", "invocation", source, "--dry-run", "--home", home]);
+
+    // Publication needs only workspace metadata, not a readable Library.
+    yield* fs.writeFileString(join(home, "state.json"), "invalid Library must not be opened");
+
+    yield* run(["author", "publish", source, "--version", "1.0.0", "--home", home]);
+
+    expect(failures).toHaveLength(1);
+
+    yield* run(["author", "list", "--registry", "https://registry.example.test", "--home", home]);
+
+    expect(failures[1]).toMatchObject({ code: "AUTHENTICATION_REQUIRED" });
+
+    yield* run([
+      "author",
+      "delete",
+      "https://registry.example.test/me/tools",
+      "--dry-run",
+      "--home",
+      home,
+    ]);
+
+    expect(failures[2]).toMatchObject({ code: "AUTHENTICATION_REQUIRED" });
+
+    expect(failures[0].message).toMatch(/remote|sync/i);
+
+    yield* run(["author", "validate", source, "--home", home]);
+
+    expect(failures).toHaveLength(3);
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(NodeServices.layer),
+    Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
+  ),
 );
+
+describe("skit author init", () => {
+  describe("Init registers an Author Workspace in the Library.", () => {
+    it.effect("author init registers its workspace through the public grammar", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-author-commands-" });
+
+        const home = join(root, "selected-home");
+
+        const source = join(root, "source");
+
+        yield* copySkitFixtureEffect("authored", source);
+
+        const failures: CommandFailure[] = [];
+
+        const results: CommandResult[] = [];
+
+        const run = (args: readonly string[]) =>
+          runCommandTree(skitCommand, [...args, "--json"], "test").pipe(
+            Effect.provide(
+              rendererTestLayer({
+                result: (value) =>
+                  Effect.sync(() => {
+                    results.push(value);
+                  }),
+                failure: (value) =>
+                  Effect.sync(() => {
+                    failures.push(value);
+                  }),
+              }),
+            ),
+          );
+
+        yield* run(["author", "--home", home, "init", source]);
+
+        expect(failures).toEqual([]);
+
+        expect(results[0]).toMatchObject({
+          contract: "init",
+          data: { path: source, library_registration: "registered" },
+        });
+
+        expect(yield* fs.exists(join(home, "state.json"))).toBe(true);
+
+        expect(yield* fs.exists(join(source, ".skit", "workspace.json"))).toBe(true);
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(NodeServices.layer),
+        Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
+      ),
+    );
+  });
+});
+
+describe("skit author validate", () => {
+  describe("Validate does not need a readable Library to check an Author Workspace.", () => {
+    it.effect("author validation remains available after Library metadata becomes unreadable", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-author-commands-" });
+
+        const home = join(root, "selected-home");
+
+        const source = join(root, "source");
+
+        yield* copySkitFixtureEffect("authored", source);
+
+        const failures: CommandFailure[] = [];
+
+        const results: CommandResult[] = [];
+
+        const run = (args: readonly string[]) =>
+          runCommandTree(skitCommand, [...args, "--json"], "test").pipe(
+            Effect.provide(
+              rendererTestLayer({
+                result: (value) =>
+                  Effect.sync(() => {
+                    results.push(value);
+                  }),
+                failure: (value) =>
+                  Effect.sync(() => {
+                    failures.push(value);
+                  }),
+              }),
+            ),
+          );
+
+        yield* run(["author", "--home", home, "init", source]);
+
+        yield* run(["author", "validate", source, "--home", home]);
+
+        expect(results[1]).toMatchObject({ contract: "validate", data: { valid: true } });
+
+        // Publication needs only workspace metadata, not a readable Library.
+        yield* fs.writeFileString(join(home, "state.json"), "invalid Library must not be opened");
+
+        yield* run(["author", "validate", source, "--home", home]);
+
+        expect(results[2]).toMatchObject({ contract: "validate", data: { valid: true } });
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(NodeServices.layer),
+        Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
+      ),
+    );
+  });
+});
+
+describe("skit author invocation", () => {
+  describe("Invocation preview leaves authored Harness metadata unchanged.", () => {
+    it.effect("author invocation preview leaves native metadata unchanged", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-author-commands-" });
+
+        const home = join(root, "selected-home");
+
+        const source = join(root, "source");
+
+        yield* copySkitFixtureEffect("authored", source);
+
+        const failures: CommandFailure[] = [];
+
+        const results: CommandResult[] = [];
+
+        const run = (args: readonly string[]) =>
+          runCommandTree(skitCommand, [...args, "--json"], "test").pipe(
+            Effect.provide(
+              rendererTestLayer({
+                result: (value) =>
+                  Effect.sync(() => {
+                    results.push(value);
+                  }),
+                failure: (value) =>
+                  Effect.sync(() => {
+                    failures.push(value);
+                  }),
+              }),
+            ),
+          );
+
+        yield* run(["author", "--home", home, "init", source]);
+
+        const metadata = join(source, "skills", "review", "agents", "openai.yaml");
+
+        const before = yield* fs.readFileString(metadata);
+
+        yield* run(["author", "invocation", source, "--dry-run", "--home", home]);
+
+        expect(results[1]).toMatchObject({
+          contract: "authorInvocation",
+          data: { path: source, dryRun: true },
+        });
+
+        expect(yield* fs.readFileString(metadata)).toBe(before);
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(NodeServices.layer),
+        Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
+      ),
+    );
+  });
+});

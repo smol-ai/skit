@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import { Layer, Cause, Deferred, Effect, Fiber, FileSystem, Sink } from "effect";
 import { systemError } from "effect/PlatformError";
 import { skitLayer } from "@smolai/skit-core/platform";
@@ -40,130 +41,6 @@ const success = () =>
     },
     { status: 201 },
   );
-
-// Every case waits for the actual stage and then awaits interruption and scope finalization.
-it.effect.each([
-  "archive-read",
-  "archive-sink",
-  "discovery",
-  "legacy-discovery",
-  "discovery-body",
-  "upload",
-  "success-body",
-  "forbidden-body",
-] as const)("publication interruption at %s finalizes without subsequent work", (stage) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const root = yield* fixture();
-    const ready = yield* Deferred.make<void>();
-    let finalized = false;
-    let temporary = "";
-    const requests: string[] = [];
-    const signals: AbortSignal[] = [];
-    const pause = Deferred.succeed(ready, undefined).pipe(
-      Effect.andThen(Effect.never),
-      Effect.ensuring(
-        Effect.sync(() => {
-          finalized = true;
-        }),
-      ),
-    );
-    // A response body is read by the web Response outside the runtime, so it observes
-    // cancellation through the request's signal and signals readiness by an unsafe completion.
-    const body = (signal: AbortSignal, status: number) =>
-      new Response(
-        new ReadableStream(
-          {
-            start(controller) {
-              signal.addEventListener(
-                "abort",
-                () => {
-                  finalized = true;
-                  controller.error(signal.reason);
-                },
-                { once: true },
-              );
-              // Pull marks actual body consumption, not merely receipt of headers.
-            },
-            pull() {
-              Deferred.doneUnsafe(ready, Effect.void);
-              return new Promise<void>(() => {});
-            },
-          },
-          { highWaterMark: 0 },
-        ),
-        { status, headers: { "content-type": "application/json" } },
-      );
-    const fetcher: TestHttpHandler = (input, _url, signal) => {
-      signals.push(signal);
-      requests.push(input.url);
-      const discovery = input.url.includes(".well-known");
-      if (
-        stage === "discovery" ||
-        (stage === "legacy-discovery" && input.url.endsWith("/skit")) ||
-        (stage === "upload" && !discovery)
-      )
-        return pause;
-      if (discovery)
-        return Effect.succeed(
-          stage === "discovery-body" ? body(signal, 200) : new Response(null, { status: 404 }),
-        );
-      return Effect.succeed(body(signal, stage === "forbidden-body" ? 403 : 201));
-    };
-    const operation = Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      return yield* publish(root, "1.0.0", undefined).pipe(
-        Effect.provide(
-          registryHttpLayer(testHttpClientLayer(fetcher)).pipe(
-            Layer.provideMerge(authorWorkspaceLayer),
-            Layer.provideMerge(registryCredentialLayer("https://registry.test")),
-          ),
-        ),
-        Effect.provideService(FileSystem.FileSystem, {
-          ...fs,
-          makeTempDirectory: (options) =>
-            fs.makeTempDirectory(options).pipe(
-              Effect.tap((path) =>
-                Effect.sync(() => {
-                  temporary = path;
-                }),
-              ),
-            ),
-          readFile: (path) =>
-            temporary && !path.startsWith(temporary) && stage === "archive-read"
-              ? pause
-              : fs.readFile(path),
-          sink: (path, options) =>
-            stage === "archive-sink" ? Sink.fromEffect(pause) : fs.sink(path, options),
-        }),
-      );
-    }).pipe(Effect.provide(skitLayer));
-    const fiber = yield* Effect.forkChild(operation);
-    yield* Effect.ensuring(
-      Effect.gen(function* () {
-        yield* Deferred.await(ready);
-        yield* Fiber.interrupt(fiber);
-        const exit = yield* Fiber.await(fiber);
-        expect(exit._tag).toBe("Failure");
-        if (exit._tag === "Failure") expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true);
-        expect(finalized).toBe(true);
-        expect(temporary).not.toBe("");
-        expect(yield* fs.exists(temporary)).toBe(false);
-        expect(requests).toHaveLength(
-          stage.startsWith("archive")
-            ? 0
-            : stage === "discovery" || stage === "discovery-body"
-              ? 1
-              : stage === "legacy-discovery"
-                ? 2
-                : 3,
-        );
-        expect(signals.every((signal) => signal.aborted)).toBe(true);
-      }),
-      Fiber.interrupt(fiber),
-    );
-  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-);
 
 it.effect.each([
   "success",
@@ -285,3 +162,131 @@ it.effect.each([
     );
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
+
+describe("skit author publish", () => {
+  describe("Cancelling Publish cleans up its temporary files.", () => {
+    // Every case waits for the actual stage and then awaits interruption and scope finalization.
+    it.effect.each([
+      "archive-read",
+      "archive-sink",
+      "discovery",
+      "legacy-discovery",
+      "discovery-body",
+      "upload",
+      "success-body",
+      "forbidden-body",
+    ] as const)("publication interruption at %s finalizes without subsequent work", (stage) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const root = yield* fixture();
+        const ready = yield* Deferred.make<void>();
+        let finalized = false;
+        let temporary = "";
+        const requests: string[] = [];
+        const signals: AbortSignal[] = [];
+        const pause = Deferred.succeed(ready, undefined).pipe(
+          Effect.andThen(Effect.never),
+          Effect.ensuring(
+            Effect.sync(() => {
+              finalized = true;
+            }),
+          ),
+        );
+        // A response body is read by the web Response outside the runtime, so it observes
+        // cancellation through the request's signal and signals readiness by an unsafe completion.
+        const body = (signal: AbortSignal, status: number) =>
+          new Response(
+            new ReadableStream(
+              {
+                start(controller) {
+                  signal.addEventListener(
+                    "abort",
+                    () => {
+                      finalized = true;
+                      controller.error(signal.reason);
+                    },
+                    { once: true },
+                  );
+                  // Pull marks actual body consumption, not merely receipt of headers.
+                },
+                pull() {
+                  Deferred.doneUnsafe(ready, Effect.void);
+                  return new Promise<void>(() => {});
+                },
+              },
+              { highWaterMark: 0 },
+            ),
+            { status, headers: { "content-type": "application/json" } },
+          );
+        const fetcher: TestHttpHandler = (input, _url, signal) => {
+          signals.push(signal);
+          requests.push(input.url);
+          const discovery = input.url.includes(".well-known");
+          if (
+            stage === "discovery" ||
+            (stage === "legacy-discovery" && input.url.endsWith("/skit")) ||
+            (stage === "upload" && !discovery)
+          )
+            return pause;
+          if (discovery)
+            return Effect.succeed(
+              stage === "discovery-body" ? body(signal, 200) : new Response(null, { status: 404 }),
+            );
+          return Effect.succeed(body(signal, stage === "forbidden-body" ? 403 : 201));
+        };
+        const operation = Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          return yield* publish(root, "1.0.0", undefined).pipe(
+            Effect.provide(
+              registryHttpLayer(testHttpClientLayer(fetcher)).pipe(
+                Layer.provideMerge(authorWorkspaceLayer),
+                Layer.provideMerge(registryCredentialLayer("https://registry.test")),
+              ),
+            ),
+            Effect.provideService(FileSystem.FileSystem, {
+              ...fs,
+              makeTempDirectory: (options) =>
+                fs.makeTempDirectory(options).pipe(
+                  Effect.tap((path) =>
+                    Effect.sync(() => {
+                      temporary = path;
+                    }),
+                  ),
+                ),
+              readFile: (path) =>
+                temporary && !path.startsWith(temporary) && stage === "archive-read"
+                  ? pause
+                  : fs.readFile(path),
+              sink: (path, options) =>
+                stage === "archive-sink" ? Sink.fromEffect(pause) : fs.sink(path, options),
+            }),
+          );
+        }).pipe(Effect.provide(skitLayer));
+        const fiber = yield* Effect.forkChild(operation);
+        yield* Effect.ensuring(
+          Effect.gen(function* () {
+            yield* Deferred.await(ready);
+            yield* Fiber.interrupt(fiber);
+            const exit = yield* Fiber.await(fiber);
+            expect(exit._tag).toBe("Failure");
+            if (exit._tag === "Failure") expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true);
+            expect(finalized).toBe(true);
+            expect(temporary).not.toBe("");
+            expect(yield* fs.exists(temporary)).toBe(false);
+            expect(requests).toHaveLength(
+              stage.startsWith("archive")
+                ? 0
+                : stage === "discovery" || stage === "discovery-body"
+                  ? 1
+                  : stage === "legacy-discovery"
+                    ? 2
+                    : 3,
+            );
+            expect(signals.every((signal) => signal.aborted)).toBe(true);
+          }),
+          Fiber.interrupt(fiber),
+        );
+      }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+    );
+  });
+});

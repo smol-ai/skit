@@ -3,12 +3,14 @@ import { SetupManageSelectionInvalid } from "@smolai/skit-core/library/setup/fai
 import { EditImportMissing } from "@smolai/skit-core/library/edit";
 import { SyncLocalChanged } from "@smolai/skit-core/library/sync";
 import { InvalidUsageOptions } from "@smolai/skit-core/library/usage/contracts";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { AuthorHistoryInvalid } from "@smolai/skit-core/author/history-failures";
 import { SkitContractError } from "@smolai/skit-core/api";
 import { StoreCorrupt } from "@smolai/skit-core/history";
 import { Hash } from "@smolai/skit-core/shared";
-import { libraryFailure } from "../src/library/failures";
+import { authorHistoryFailure } from "../src/library/author-history-failures";
+import { InvalidLibraryState } from "@smolai/skit-core/library";
+import { libraryFailure, libraryReadFailure } from "../src/library/failures";
 
 test("a response read failure is distinct from invalid contract data", () => {
   const failure = new Error("body read failed");
@@ -76,4 +78,27 @@ test("formats settings, setup and edit failures through the TUI boundary", () =>
   expect(messages[3]).toContain("1 and 3650");
   expect(messages[4]).toContain("Sync again");
   expect(messages.join("\n")).not.toContain("skit ");
+});
+
+test("passes structured history import conflicts to the Library presenter", () => {
+  const path = "/state/library.sqlite";
+  const conflict = new InvalidLibraryState({
+    path,
+    reason: {
+      _tag: "ImportBackupChanged",
+      sourcePath: "/state/machine.json",
+      backupPath: "/state/machine.json.backup-database",
+      databasePath: path,
+    },
+  });
+  const present = vi.fn(libraryReadFailure);
+  const result = authorHistoryFailure(
+    new AuthorHistoryInvalid({
+      path,
+      reason: { _tag: "JournalFailure", cause: conflict },
+    }),
+    present,
+  );
+  expect(present).toHaveBeenCalledWith(conflict);
+  expect(result.remediation).toEqual(libraryReadFailure(conflict)?.remediation);
 });

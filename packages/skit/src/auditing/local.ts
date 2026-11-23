@@ -56,10 +56,12 @@ const inspectLibraryLedger = Effect.fn("Audit.ledger")(function* (
         : { kind: "absent" },
     ),
     Effect.provide(Library.layer({ home: library.skitHome, roots: inventoryRootOptions(library) })),
-    Effect.orElseSucceed((): LedgerInspection => ({
-      kind: "unreadable",
-      path: join(resolve(library.skitHome), "state.json"),
-    })),
+    Effect.catch((failure) =>
+      Effect.succeed<LedgerInspection>({
+        kind: "unreadable",
+        path: failure._tag === "PlatformError" ? library.skitHome : failure.path,
+      }),
+    ),
   );
 });
 

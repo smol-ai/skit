@@ -1,3 +1,5 @@
+import { asV9 } from "./helpers/released-library.js";
+import { describe } from "@effect/vitest";
 import { TreeError } from "@smolai/skit-core/shared";
 import * as Library from "@smolai/skit-core/library";
 import { withLibraryOwner } from "./helpers/library-owner.js";
@@ -157,201 +159,6 @@ const fixture = Effect.fn("Test.setupFixture")(function* () {
   return { fs, root, libraryHome, work, repository, codex, claude, options };
 });
 
-it.effect(
-  "setup refuses an unreadable ownership marker instead of offering unmanaged actions",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const copy = join(f.codex, "review");
-      yield* f.fs.makeDirectory(copy);
-      yield* f.fs.writeFileString(
-        join(copy, "SKILL.md"),
-        "---\nname: review\ndescription: Review fixture\n---\n\nReview bytes\n",
-      );
-      const missing = yield* scanForSetup(f.options);
-      expect(missing.instances.find((instance) => instance.aliases.includes(copy))?.owner).toEqual({
-        kind: "unknown",
-      });
-      expect(yield* ownershipAt(copy)).toEqual({ ownership: "unmanaged" });
-      yield* f.fs.makeDirectory(join(copy, ".skit-ownership.json"));
-      expect(yield* Effect.result(ownershipAt(copy))).toMatchObject({
-        _tag: "Failure",
-        failure: { _tag: "PlatformError" },
-      });
-      const unreadable = yield* Effect.result(scanForSetup(f.options));
-      expect(unreadable).toMatchObject({
-        _tag: "Failure",
-        failure: { _tag: "PlatformError" },
-      });
-    }).pipe(Effect.provide(testPlatformLayer)),
-);
-
-it.effect("scans passively and saves repository roots only through an approved setup", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    const before = yield* f.fs.exists(join(f.libraryHome, "machine.json"));
-    const passive = yield* scanForSetup({ ...f.options, persistRoots: true });
-    expect(passive.machineConfig.persisted).toBe(false);
-    expect(yield* f.fs.exists(join(f.libraryHome, "machine.json"))).toBe(before);
-    const first = yield* saveSettingsForSetup({ ...f.options, persistRoots: true });
-    expect(first.machineConfig).toEqual({
-      path: join(f.libraryHome, "machine.json"),
-      machineId: expect.any(String),
-      displayName: "Test machine",
-      repositoryRoots: [f.work],
-      repositoryDecisions: [],
-      persisted: true,
-    });
-    const persisted = yield* MachineSettings.read(f.libraryHome);
-    expect(persisted).toMatchObject({
-      machineId: first.machineConfig.machineId,
-      displayName: "Test machine",
-      discoveryRoots: [f.work],
-      repositories: [],
-    });
-    const second = yield* scanForSetup({
-      ...f.options,
-      repositoryRoots: undefined,
-      persistRoots: false,
-    });
-    expect(second.machineConfig.repositoryRoots).toEqual([f.work]);
-    expect(second.machineConfig.machineId).toBe(first.machineConfig.machineId);
-    expect(second.machineConfig.displayName).toBe("Test machine");
-    expect(second.machineConfig.persisted).toBe(false);
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
-
-it.effect("migrates the version-one machine config only when setup persists", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    yield* f.fs.makeDirectory(f.libraryHome, { recursive: true });
-    yield* f.fs.writeFileString(
-      join(f.libraryHome, "machine.json"),
-      `${JSON.stringify({ schemaVersion: 1, repositoryRoots: [f.work] }, null, 2)}\n`,
-    );
-
-    const scan = yield* scanForSetup({
-      ...f.options,
-      repositoryRoots: undefined,
-      persistRoots: false,
-    });
-    expect(scan.machineConfig).toEqual({
-      path: join(f.libraryHome, "machine.json"),
-      repositoryRoots: [f.work],
-      repositoryDecisions: [],
-      persisted: false,
-    });
-    expect(JSON.parse(yield* f.fs.readFileString(join(f.libraryHome, "machine.json")))).toEqual({
-      schemaVersion: 1,
-      repositoryRoots: [f.work],
-    });
-
-    const migrated = yield* saveSettingsForSetup({
-      ...f.options,
-      repositoryRoots: undefined,
-      persistRoots: true,
-    });
-    expect(migrated.machineConfig).toMatchObject({
-      machineId: expect.any(String),
-      displayName: "Test machine",
-      repositoryRoots: [f.work],
-      persisted: true,
-    });
-    // Saving roots decides nothing about repositories, so later scans still discover them.
-    expect(JSON.parse(yield* f.fs.readFileString(join(f.libraryHome, "machine.json")))).toEqual({
-      schemaVersion: 6,
-      undoneSetups: [],
-      repositoryDecisionsInitialized: false,
-      machineId: migrated.machineConfig.machineId,
-      displayName: "Test machine",
-      discoveryRoots: [f.work],
-      repositories: [],
-      setups: [expect.objectContaining({ operationId: expect.any(String) })],
-    });
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
-
-it.effect("scans only repositories watched by machine configuration", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    const ignored = join(f.work, "ignored");
-    const watchedSkill = join(f.repository, ".agents", "skills", "visible");
-    yield* f.fs.makeDirectory(watchedSkill, { recursive: true });
-    yield* f.fs.writeFileString(join(watchedSkill, "SKILL.md"), skillDocument("visible"));
-    yield* f.fs.makeDirectory(ignored, { recursive: true });
-    yield* git(ignored, "init", "-q");
-    yield* f.fs.makeDirectory(join(ignored, ".agents", "skills", "hidden"), { recursive: true });
-    yield* f.fs.writeFileString(
-      join(ignored, ".agents", "skills", "hidden", "SKILL.md"),
-      skillDocument("hidden"),
-    );
-    yield* saveSettingsForSetup({
-      ...f.options,
-      persistRoots: true,
-      repositoryDecisions: [
-        { path: f.repository, status: "watched" },
-        { path: ignored, status: "ignored" },
-      ],
-    });
-
-    const inventory = yield* scanForSetup({
-      ...f.options,
-      repositoryRoots: undefined,
-      persistRoots: false,
-      scanDecidedRepositories: true,
-    });
-    expect(inventory.repositories.map((repository) => repository.path)).toEqual([f.repository]);
-    expect(inventory.instances.some((instance) => instance.name === "hidden")).toBe(false);
-    expect(inventory.machineConfig.repositoryDecisions).toEqual([
-      { path: ignored, status: "ignored" },
-      { path: f.repository, status: "watched" },
-    ]);
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
-
-it.effect("watches, ignores, and forgets a repository decision", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    yield* MachineSettings.setRepositoryDecision(f.libraryHome, f.repository, "watched");
-    expect(yield* MachineSettings.read(f.libraryHome)).toMatchObject({
-      repositories: [{ path: f.repository, status: "watched" }],
-    });
-    yield* MachineSettings.setRepositoryDecision(f.libraryHome, f.repository, "ignored");
-    expect(yield* MachineSettings.read(f.libraryHome)).toMatchObject({
-      repositories: [{ path: f.repository, status: "ignored" }],
-    });
-    yield* MachineSettings.setRepositoryDecision(f.libraryHome, f.repository, undefined);
-    expect(yield* MachineSettings.read(f.libraryHome)).toMatchObject({ repositories: [] });
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
-
-it.effect("binds setup consent to current discovery evidence", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    const skill = join(f.codex, "review");
-    yield* f.fs.makeDirectory(skill, { recursive: true });
-    yield* f.fs.writeFileString(join(skill, "SKILL.md"), skillDocument("review"));
-    const preview = yield* scanForSetup(f.options);
-
-    const unchanged = yield* revalidateSetup(f.options, preview.onboarding.planId);
-    expect(unchanged.scan.onboarding.planId).toBe(preview.onboarding.planId);
-
-    yield* f.fs.writeFileString(
-      join(skill, "SKILL.md"),
-      `${skillDocument("review")}\nChanged after preview.\n`,
-    );
-    const stale = yield* Effect.result(revalidateSetup(f.options, preview.onboarding.planId));
-    expect(Result.isFailure(stale)).toBe(true);
-    if (Result.isFailure(stale)) {
-      expect(stale.failure._tag).toBe("SetupPlanStale");
-      if (stale.failure._tag === "SetupPlanStale") {
-        expect(stale.failure.approvedPlanId).toBe(preview.onboarding.planId);
-        expect(stale.failure.currentPlanId).not.toBe(preview.onboarding.planId);
-      }
-    }
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
-
 it.effect("reports Git preservation and verifies a project skills.sh lock", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
@@ -472,152 +279,6 @@ it.effect("reports Git preservation and verifies a project skills.sh lock", () =
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("applies repository discovery exclusions and declared collection roots", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    const fixtureSkill = join(f.repository, "test", "fixtures", "review");
-    const declaredSkill = join(f.repository, "custom", "skills", "private");
-    yield* f.fs.makeDirectory(fixtureSkill, { recursive: true });
-    yield* f.fs.makeDirectory(declaredSkill, { recursive: true });
-    yield* f.fs.writeFileString(join(fixtureSkill, "SKILL.md"), skillDocument("fixture-review"));
-    yield* f.fs.writeFileString(join(declaredSkill, "SKILL.md"), skillDocument("private"));
-    yield* f.fs.writeFileString(join(f.repository, ".gitignore"), "custom/skills/\n");
-    yield* f.fs.writeFileString(
-      join(f.repository, "skit.config.json"),
-      JSON.stringify({
-        schema: "skit.config.v1",
-        discovery: {
-          exclude: ["test/fixtures/**"],
-          collections: [{ path: "custom/skills" }],
-        },
-      }),
-    );
-    yield* git(
-      f.repository,
-      "add",
-      ".gitignore",
-      "skit.config.json",
-      "test/fixtures/review/SKILL.md",
-    );
-    yield* git(f.repository, "commit", "-qm", "configure discovery");
-
-    const scan = yield* scanForSetup(f.options);
-    expect(scan.scan.complete).toBe(true);
-    expect(scan.instances.map((instance) => instance.name)).toEqual(["private"]);
-    expect(scan.instances[0]?.git.status).toBe("ignored");
-    expect(scan.repositoryConfigs).toEqual([
-      {
-        repository: f.repository,
-        path: join(f.repository, "skit.config.json"),
-        status: "valid",
-        schema: "skit.config.v1",
-        exclude: ["test/fixtures/**"],
-        collections: [{ path: "custom/skills" }],
-      },
-    ]);
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
-
-for (const failure of ["ls-files", "status"] as const) {
-  it.effect(`keeps discovered repository copies visible when git ${failure} fails`, () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      for (const [directory, name] of [
-        [".agents/skills/local", "local"],
-        ["deep/tracked", "tracked"],
-      ]) {
-        const path = join(f.repository, directory);
-        yield* f.fs.makeDirectory(path, { recursive: true });
-        yield* f.fs.writeFileString(join(path, "SKILL.md"), skillDocument(name));
-      }
-      yield* git(f.repository, "add", ".");
-      yield* git(f.repository, "commit", "-qm", "repository copies");
-      const evidence = yield* Effect.flatMap(Library.Service, (library) =>
-        collectSetupEvidence(library, f.options),
-      ).pipe(
-        withLibraryOwner(f.options.inventory),
-        Effect.provide(skitConfigurationLayer(f.libraryHome)),
-      );
-      expect(evidence.hits.filter((hit) => hit.name === "local")).toHaveLength(1);
-      const process = yield* SourceProcess;
-      const scan = yield* runSetup(f.options).pipe(
-        Effect.provideService(SourceProcess, {
-          ...process,
-          output: (command, args, options) =>
-            command === "git" && args.includes(failure)
-              ? Effect.succeed({ exitCode: 1, stdout: new Uint8Array(), stderr: "fixture failure" })
-              : process.output(command, args, options),
-        }),
-        withLibraryOwner(f.options.inventory),
-        Effect.provide(skitConfigurationLayer(f.libraryHome)),
-      );
-      expect(scan.scan.complete).toBe(false);
-      expect(scan.instances.map((item) => item.name).sort()).toEqual(
-        failure === "ls-files" ? ["local"] : ["local", "tracked"],
-      );
-      expect(
-        scan.instances.every(
-          (item) => item.git.status === "unavailable" && item.git.repository === f.repository,
-        ),
-      ).toBe(true);
-      expect(yield* f.fs.exists(join(f.libraryHome, "state.json"))).toBe(false);
-      expect(yield* f.fs.exists(join(f.libraryHome, "machine.json"))).toBe(false);
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
-}
-
-it.effect("routes configured copies to the nearest selected repository and its exclusions", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    const nested = join(f.repository, "nested", "project");
-    yield* f.fs.makeDirectory(nested, { recursive: true });
-    yield* git(nested, "init", "-q");
-    for (const name of ["review", "blocked"]) {
-      const path = join(nested, "custom", name);
-      yield* f.fs.makeDirectory(path, { recursive: true });
-      yield* f.fs.writeFileString(join(path, "SKILL.md"), skillDocument(name));
-    }
-    yield* f.fs.writeFileString(
-      join(f.repository, "skit.config.json"),
-      JSON.stringify({
-        schema: "skit.config.v1",
-        discovery: { exclude: ["nested/**"], collections: [{ path: "nested/project/custom" }] },
-      }),
-    );
-    yield* f.fs.writeFileString(
-      join(nested, "skit.config.json"),
-      JSON.stringify({
-        schema: "skit.config.v1",
-        discovery: { exclude: ["custom/blocked"], collections: [] },
-      }),
-    );
-    const scan = yield* scanForSetup({ ...f.options, repositoryRoots: [f.repository, nested] });
-    expect(scan.scan.complete).toBe(true);
-    expect(scan.instances.map((item) => [item.name, item.git])).toEqual([
-      ["review", { status: "untracked", repository: nested }],
-    ]);
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
-
-it.effect("reports unsafe repository discovery config instead of applying it", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    yield* f.fs.writeFileString(
-      join(f.repository, "skit.config.json"),
-      JSON.stringify({
-        schema: "skit.config.v1",
-        discovery: { exclude: ["../outside/**"], collections: [] },
-      }),
-    );
-
-    const scan = yield* scanForSetup(f.options);
-    expect(scan.scan.complete).toBe(false);
-    expect(scan.repositoryConfigs).toEqual([
-      expect.objectContaining({ repository: f.repository, status: "malformed" }),
-    ]);
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
-
 it.effect("plans equivalent loose installed skills and blocks divergent copies", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
@@ -659,420 +320,6 @@ it.effect("plans equivalent loose installed skills and blocks divergent copies",
       },
     ]);
   }).pipe(Effect.provide(testPlatformLayer)),
-);
-
-it.effect("offers equivalent Codex native and shared-root installations for ownership", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    const source = join(f.root, ".codex", "skills", "shared");
-    const target = join(f.root, ".agents", "skills", "shared");
-    yield* f.fs.makeDirectory(source, { recursive: true });
-    yield* f.fs.makeDirectory(target, { recursive: true });
-    yield* f.fs.writeFileString(join(source, "SKILL.md"), skillDocument("shared"));
-    yield* f.fs.writeFileString(join(target, "SKILL.md"), skillDocument("shared"));
-    const physicalSource = yield* f.fs.realPath(source);
-    const physicalTarget = yield* f.fs.realPath(target);
-
-    const scan = yield* scanForSetup({
-      ...f.options,
-      inventory: {
-        home: f.root,
-        configHome: join(f.root, ".config"),
-        overrides: {},
-      },
-    });
-
-    expect(
-      scan.instances
-        .filter((instance) => instance.name === "shared")
-        .map((instance) => instance.path),
-    ).toEqual([physicalTarget, physicalSource]);
-    expect(
-      scan.onboarding.candidates.find(
-        (candidate) => candidate.name === "shared" && candidate.action === "manage-locally",
-      ),
-    ).toMatchObject({ paths: [physicalTarget, physicalSource], sourceSelection: "required" });
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
-
-it.effect("keeps onboarding classifications conservative across conflicting evidence", () =>
-  Effect.sync(() => {
-    const hash = projectHash("shared");
-    const collectionOne = makeCollectionId();
-    const collectionTwo = makeCollectionId();
-    const exactSkill = makeSkillId();
-    const renamedSkill = makeSkillId();
-    const sharedSkill = makeSkillId();
-    const exactVersion = makeSkillVersionId();
-    const renamedVersion = makeSkillVersionId();
-    const sharedVersion = makeSkillVersionId();
-    const candidates = classifySetupOnboarding([
-      setupInstance("lock-mismatch", "/global/lock-mismatch-a", {
-        contentIdentity: { status: "hashed", currentHash: hash, libraryMatches: [] },
-        locks: [setupLock("acme/a", "agrees", "lock-ambiguous")],
-      }),
-      setupInstance("lock-mismatch", "/global/lock-mismatch-b", {
-        contentIdentity: { status: "hashed", currentHash: hash, libraryMatches: [] },
-        locks: [setupLock("acme/b", "mismatch", "lock-mismatch")],
-      }),
-      setupInstance("lock-ambiguous", "/global/lock-ambiguous-a", {
-        contentIdentity: { status: "hashed", currentHash: hash, libraryMatches: [] },
-        locks: [setupLock("acme/a", "agrees", "lock-ambiguous")],
-      }),
-      setupInstance("lock-ambiguous", "/global/lock-ambiguous-b", {
-        contentIdentity: { status: "hashed", currentHash: hash, libraryMatches: [] },
-        locks: [setupLock("acme/b", "agrees", "lock-mismatch")],
-      }),
-      setupInstance("lock-local-only", "/global/lock-local-only", {
-        contentIdentity: { status: "hashed", currentHash: hash, libraryMatches: [] },
-        locks: [
-          {
-            ...setupLock("../local-source", "agrees", "lock-local-only"),
-            entry: {
-              name: "lock-local-only",
-              source: "../local-source",
-              sourceType: "local",
-              originalEntry: { source: "../local-source", sourceType: "local" },
-            },
-          },
-        ],
-      }),
-      setupInstance("library-exact", "/global/library-exact", {
-        contentIdentity: {
-          status: "hashed",
-          currentHash: hash,
-          libraryMatches: [
-            {
-              subjectId: collectionOne,
-              skillId: exactSkill,
-              skillVersionId: exactVersion,
-              name: "library-exact",
-            },
-          ],
-        },
-      }),
-      setupInstance("library-renamed", "/global/library-renamed", {
-        contentIdentity: {
-          status: "hashed",
-          currentHash: hash,
-          libraryMatches: [
-            {
-              subjectId: collectionOne,
-              skillId: renamedSkill,
-              skillVersionId: renamedVersion,
-              name: "original",
-            },
-          ],
-        },
-      }),
-      setupInstance("library-ambiguous", "/global/library-ambiguous", {
-        contentIdentity: {
-          status: "hashed",
-          currentHash: hash,
-          libraryMatches: [
-            {
-              subjectId: collectionOne,
-              skillId: sharedSkill,
-              skillVersionId: sharedVersion,
-              name: "skill",
-            },
-            {
-              subjectId: collectionTwo,
-              skillId: sharedSkill,
-              skillVersionId: sharedVersion,
-              name: "skill",
-            },
-          ],
-        },
-      }),
-      setupInstance("invalid", "/global/invalid", { owner: { kind: "invalid-marker" } }),
-      setupInstance("unhashable", "/global/unhashable", {
-        contentIdentity: {
-          status: "failed",
-          failure: new TreeError({ reason: { _tag: "IgnoredRoot" } }),
-        },
-      }),
-      setupInstance("standalone", "/loose/standalone", {
-        scope: "standalone",
-        harnesses: [],
-      }),
-      setupInstance("same-name", "/global/same-name"),
-      setupInstance("same-name", "/repo/.agents/skills/same-name", {
-        scope: "project",
-        git: { status: "committed", repository: "/repo" },
-      }),
-    ]);
-
-    expect(candidates).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          name: "lock-mismatch",
-          action: "blocked",
-          reason: "contested-lock-claim",
-        }),
-        expect.objectContaining({
-          name: "lock-ambiguous",
-          action: "blocked",
-          reason: "contested-lock-claim",
-        }),
-        expect.objectContaining({
-          name: "lock-local-only",
-          action: "manage-locally",
-        }),
-        expect.objectContaining({ name: "library-exact", action: "bind-existing-entry" }),
-        expect.objectContaining({
-          name: "library-renamed",
-          action: "blocked",
-          reason: "library-skill-name-mismatch",
-        }),
-        expect.objectContaining({ name: "library-ambiguous", reason: "ambiguous-library-match" }),
-        expect.objectContaining({ name: "invalid", reason: "invalid-ownership-marker" }),
-        expect.objectContaining({ name: "unhashable", reason: "content-unhashable" }),
-        expect.objectContaining({ name: "standalone", action: "leave-alone" }),
-        expect.objectContaining({
-          name: "same-name",
-          action: "manage-locally",
-          paths: ["/global/same-name"],
-        }),
-        expect.objectContaining({
-          name: "same-name",
-          action: "repository-owned",
-          paths: ["/repo/.agents/skills/same-name"],
-        }),
-      ]),
-    );
-  }),
-);
-
-it.effect("offers an eligible lock member when another member is blocked", () =>
-  Effect.sync(() => {
-    const candidates = classifySetupOnboarding([
-      setupInstance("review", "/global/review", {
-        locks: [setupLock("acme/a", "agrees", "review")],
-      }),
-      setupInstance("tdd", "/global/tdd", {
-        owner: { kind: "invalid-marker" },
-        locks: [setupLock("acme/a", "agrees", "tdd")],
-      }),
-    ]);
-    expect(candidates).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          name: "review",
-          action: "import-observed-collection",
-        }),
-        expect.objectContaining({
-          name: "tdd",
-          action: "blocked",
-          reason: "invalid-ownership-marker",
-        }),
-      ]),
-    );
-  }),
-);
-
-it.effect(
-  "offers lock-evidence import even when the observed Skill already matches the Library",
-  () =>
-    Effect.sync(() => {
-      const hash = projectHash("upstream");
-      const upstreamCollectionId = makeCollectionId();
-      const upstreamSkillId = makeSkillId();
-      const upstreamSkillVersionId = makeSkillVersionId();
-      const upstream = setupInstance("upstream", "/repo/upstream", {
-        git: { status: "ignored", repository: "/repo" },
-        contentIdentity: {
-          status: "hashed",
-          currentHash: hash,
-          libraryMatches: [
-            {
-              subjectId: upstreamCollectionId,
-              skillId: upstreamSkillId,
-              skillVersionId: upstreamSkillVersionId,
-              name: "upstream",
-            },
-          ],
-        },
-        locks: [setupLock("asmartbear/asb-skills", "agrees", "upstream")],
-      });
-      const localCollectionId = makeCollectionId();
-      const localSkillId = makeSkillId();
-      const localSkillVersionId = makeSkillVersionId();
-      const local = setupInstance("local", "/repo/local", {
-        git: { status: "ignored", repository: "/repo" },
-        owner: { kind: "repository", repository: "/repo" },
-        contentIdentity: {
-          status: "hashed",
-          currentHash: hash,
-          libraryMatches: [
-            {
-              subjectId: localCollectionId,
-              skillId: localSkillId,
-              skillVersionId: localSkillVersionId,
-              name: "local",
-            },
-          ],
-        },
-      });
-
-      expect(classifySetupOnboarding([upstream])).toEqual([
-        expect.objectContaining({
-          name: "upstream",
-          action: "import-observed-collection",
-        }),
-      ]);
-      expect(classifySetupOnboarding([local])).toEqual([
-        {
-          name: "local",
-          paths: ["/repo/local"],
-          owner: { kind: "repository", repository: "/repo" },
-          action: "repository-owned",
-        },
-      ]);
-    }),
-);
-
-it.effect("matches an unresolvable lock to a retained Collection by canonical reference", () =>
-  Effect.gen(function* () {
-    const collectionId = makeCollectionId();
-    const skillId = makeSkillId();
-    const skillVersionId = makeSkillVersionId();
-    const machineId = makeMachineId();
-    const locator = "https://skills.example.test";
-    const imported = yield* Schema.decodeUnknownEffect(LibraryState)({
-      schemaVersion: emptyLibraryFixture().schemaVersion,
-      collections: [
-        {
-          collection_id: collectionId,
-          label: "Example skills",
-          upstream: {
-            source_identity: { kind: "well-known", locator: { value: locator } },
-            tracking: { kind: "default" },
-          },
-        },
-      ],
-      skills: [
-        {
-          skill_id: skillId,
-          collection_id: collectionId,
-          path: ".",
-          name: "Bad_Name",
-          versions: [],
-        },
-      ],
-      collection_versions: [],
-      imports: [],
-      enabled: [],
-      repositories: [],
-      installed_skills: [],
-      tombstones: [],
-      unmanaged: [],
-      operations: [],
-      adoption_receipts: [],
-    }).pipe(Effect.orDie);
-    const instance = setupInstance("Bad_Name", "/repo/Bad_Name", {
-      git: { status: "ignored", repository: "/repo" },
-      contentIdentity: {
-        status: "hashed",
-        currentHash: projectHash("Bad_Name"),
-        libraryMatches: [{ subjectId: collectionId, skillId, skillVersionId, name: "Bad_Name" }],
-      },
-      locks: [
-        {
-          scope: "global",
-          lockPath: "/locks/well-known",
-          lockVersion: 3,
-          lockContentHash: `sha256:${"0".repeat(64)}`,
-          content: "agrees",
-          entry: {
-            name: "Bad_Name",
-            source: locator,
-            sourceType: "well-known",
-            sourceBaseUrl: locator,
-            originalEntry: { source: locator, sourceType: "well-known" },
-          },
-        },
-      ],
-    });
-
-    expect(classifySetupOnboarding([instance], { library: imported, machineId })).toEqual([]);
-    expect(classifySetupOnboarding([instance], { library: imported })).toEqual([]);
-  }),
-);
-
-it.effect(
-  "classifies Codex-owned installations from canonical paths without guessing authorship",
-  () =>
-    Effect.sync(() => {
-      const home = "/home/test";
-      expect(
-        classifyOwner({
-          canonicalPath: "/home/test/.codex/skills/.system/chronicle",
-          home,
-          harnesses: ["codex"],
-        }),
-      ).toEqual({ kind: "harness", harness: "codex", origin: "system" });
-      expect(
-        classifyOwner({
-          canonicalPath:
-            "/home/test/.codex/plugins/cache/openai-bundled/example/1.0.0/skills/review",
-          home,
-          harnesses: ["codex"],
-        }),
-      ).toEqual({ kind: "harness", harness: "codex", origin: "bundled-plugin" });
-      expect(
-        classifyOwner({
-          canonicalPath:
-            "/home/test/.codex/plugins/cache/openai-primary-runtime/example/1.0.0/skills/review",
-          home,
-          harnesses: ["codex"],
-        }),
-      ).toEqual({ kind: "harness", harness: "codex", origin: "runtime-plugin" });
-      expect(
-        classifyOwner({
-          canonicalPath:
-            "/home/test/.codex/plugins/cache/openai-curated-remote/example/1.0.0/skills/review",
-          home,
-          harnesses: ["codex"],
-        }),
-      ).toEqual({ kind: "harness", harness: "codex", origin: "curated-plugin" });
-      expect(
-        classifyOwner({
-          canonicalPath: "/home/test/.codex/skills/user-installed",
-          home,
-          harnesses: ["codex"],
-        }),
-      ).toEqual({ kind: "unknown" });
-    }),
-);
-
-it.effect(
-  "offers harness-owned candidates deselected and keeps unmanaged candidates selected",
-  () =>
-    Effect.sync(() => {
-      const managed = setupInstance("managed", "/cache/managed", {
-        owner: {
-          kind: "harness",
-          harness: "codex",
-          origin: "curated-plugin",
-        },
-      });
-      const unmanaged = setupInstance("local", "/global/local");
-      expect(classifySetupOnboarding([managed, unmanaged])).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            name: "managed",
-            action: "harness-owned",
-            owner: expect.objectContaining({ kind: "harness" }),
-          }),
-          expect.objectContaining({
-            name: "local",
-            action: "manage-locally",
-            owner: { kind: "unknown" },
-          }),
-        ]),
-      );
-    }),
 );
 
 it.effect("identifies a bound authored SKIT and joins it to its installed skills", () =>
@@ -1233,7 +480,7 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
       adoption_receipts: [],
     }).pipe(Effect.orDie);
     yield* f.fs.makeDirectory(f.libraryHome, { recursive: true });
-    yield* f.fs.writeFileString(join(f.libraryHome, "state.json"), JSON.stringify(state));
+    yield* f.fs.writeFileString(join(f.libraryHome, "state.json"), JSON.stringify(asV9(state)));
     const scan = yield* scanForSetup(f.options);
     const authoredSkillRealPath = yield* f.fs.realPath(authoredSkill);
 
@@ -1297,60 +544,6 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
         }),
       ]),
     );
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
-
-it.effect("coalesces harness aliases and retains broken-link and malformed-lock evidence", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    const skill = join(f.repository, "skills", "review");
-    yield* f.fs.makeDirectory(skill, { recursive: true });
-    yield* f.fs.writeFileString(join(skill, "SKILL.md"), skillDocument("review"));
-    yield* f.fs.symlink(skill, join(f.codex, "review"));
-    yield* f.fs.symlink("../missing", join(f.codex, "broken"));
-    const globalLock = join(f.root, "state", "skills", ".skill-lock.json");
-    yield* f.fs.makeDirectory(join(f.root, "state", "skills"), { recursive: true });
-    yield* f.fs.writeFileString(globalLock, "not json");
-    const scan = yield* scanForSetup(f.options);
-    const review = scan.instances.find((instance) => instance.name === "review");
-    expect([...(review?.aliases ?? [])].sort()).toEqual([skill, join(f.codex, "review")].sort());
-    expect(review?.scope).toBe("global");
-    expect(review?.harnesses).toEqual(["codex"]);
-    expect(scan.brokenLinks).toEqual([
-      { path: join(f.codex, "broken"), target: "../missing", harnesses: ["codex"] },
-    ]);
-    expect(scan.locks).toEqual([
-      { scope: "global", path: globalLock, status: "malformed", entries: [] },
-    ]);
-    expect(yield* f.fs.exists(join(f.libraryHome, "machine.json"))).toBe(false);
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
-
-it.effect("examines only immediate children until a nested container is configured", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    const container = join(f.work, "cloned");
-    const nestedRepository = join(container, "nested-tools");
-    const skill = join(nestedRepository, "skills", "nested-review");
-    yield* f.fs.makeDirectory(skill, { recursive: true });
-    yield* f.fs.writeFileString(join(skill, "SKILL.md"), skillDocument("nested-review"));
-    yield* git(nestedRepository, "init", "-q", "--initial-branch=main");
-
-    const shallow = yield* scanForSetup(f.options);
-    expect(shallow.instances.some((instance) => instance.name === "nested-review")).toBe(false);
-    expect(shallow.repositories).toEqual([]);
-
-    const configured = yield* scanForSetup({
-      ...f.options,
-      repositoryRoots: [f.work, container],
-    });
-    expect(configured.instances).toEqual(
-      expect.arrayContaining([expect.objectContaining({ name: "nested-review" })]),
-    );
-    expect(configured.repositories.map((repository) => repository.path)).toEqual([
-      nestedRepository,
-    ]);
-    expect(configured.scan.repositorySearchDepth).toBe(1);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
@@ -1516,7 +709,7 @@ it.effect(
         adoption_receipts: [],
       }).pipe(Effect.orDie);
       yield* f.fs.makeDirectory(f.libraryHome, { recursive: true });
-      yield* f.fs.writeFileString(join(f.libraryHome, "state.json"), JSON.stringify(state));
+      yield* f.fs.writeFileString(join(f.libraryHome, "state.json"), JSON.stringify(asV9(state)));
       const scan = yield* scanForSetup(f.options);
 
       expect(scan.installedSkills).toEqual(
@@ -1535,179 +728,1111 @@ it.effect(
     }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-for (const kind of ["source", "edit"] as const) {
-  it.effect(`requires matching retained lock evidence for a ${kind} acquisition`, () =>
-    Effect.gen(function* () {
-      const machineId = makeMachineId();
-      const collectionId = makeCollectionId();
-      const copyId = makeCollectionVersionId();
-      const hash = `sha256:${"a".repeat(64)}`;
-      const lock = setupLock("acme/reviews", "agrees", "review");
-      const instance = setupInstance("review", "/global/review", {
-        locks: [lock],
-        contentIdentity: { status: "hashed", currentHash: hash, libraryMatches: [] },
-      });
-      const library = yield* Schema.decodeUnknownEffect(LibraryState)({
-        schemaVersion: emptyLibraryFixture().schemaVersion,
-        collections: [{ collection_id: collectionId, label: "Reviews" }],
-        skills: [
-          {
-            skill_id: makeSkillId(),
-            collection_id: collectionId,
-            path: "skills/review",
-            name: "review",
-            versions: [
-              {
-                skill_version_id: makeSkillVersionId(),
-                source_hash: hash,
-                artifact_hash: hash,
-                validation_identity_hash: hash,
-                materialization_profile: "plain-skill/v1",
-              },
-            ],
-          },
-        ],
-        collection_versions: [
-          {
-            collection_version_id: copyId,
-            hash: hash,
-            copy_profile: "verbatim/v1",
-            members: [
-              {
-                source_path: kind === "source" ? "skills/review" : ".",
-                source_hash: hash,
-                artifact_hash: hash,
-                materialization_profile: "plain-skill/v1",
-              },
-            ],
-          },
-        ],
-        imports: [
-          {
-            import_id: makeImportId(),
-            collection_id: collectionId,
-            kind,
-            collection_version_id: copyId,
-            input: { value: "https://github.com/acme/reviews" },
-            source_identity: {
-              kind: "github",
-              owner: "acme",
-              repository: "reviews",
-              collection_root: ".",
-            },
-            imported_at: "2026-01-01T00:00:00.000Z",
-            machine_id: machineId,
-            lock_file_entries: [
-              {
-                type: "skills.sh-lock",
-                machine_id: machineId,
-                read_at: "2026-01-01T00:00:00.000Z",
-                lock_path: { value: lock.lockPath },
-                lock_version: 3,
-                lock_scope: "global",
-                lock_content_hash: lock.lockContentHash,
-                source: lock.entry.source,
-                source_type: "github",
-                skill_name: "review",
-                skill_path: lock.entry.skillPath,
-                content_agreement: "agrees",
-                original_entry_hash: hash,
-                original_entry: lock.entry.originalEntry,
-              },
-            ],
-          },
-        ],
-        enabled: [],
-        repositories: [],
-        installed_skills: [],
-        tombstones: [],
-        unmanaged: [],
-        operations: [],
-        adoption_receipts: [],
-      }).pipe(Effect.orDie);
-      expect(classifySetupOnboarding([instance], { library, machineId })).toEqual([]);
-      const offered: readonly SetupSkillInstance[] = [instance];
-      const expectImport = (
-        state: LibraryState,
-        observed: readonly SetupSkillInstance[] = offered,
-        selectedMachine = machineId,
-      ) =>
-        expect(
-          classifySetupOnboarding(observed, { library: state, machineId: selectedMachine }),
-        ).toMatchObject([{ action: "import-observed-collection", name: "review" }]);
-      expectImport(library, offered, makeMachineId());
-      expectImport({ ...library, collection_versions: [] });
-      expectImport({
-        ...library,
-        imports: library.imports.map((sourceImport) => ({
-          ...sourceImport,
-          collection_id: makeCollectionId(),
-        })),
-      });
-      expectImport({
-        ...library,
-        collection_versions: library.collection_versions.map((copy) => ({
-          ...copy,
-          members: copy.members.map((member) => ({ ...member, source_path: "other" })),
-        })),
-      });
-      expectImport(library, [
-        {
-          ...instance,
-          contentIdentity: {
-            status: "hashed",
-            libraryMatches: [],
-            currentHash: `sha256:${"b".repeat(64)}`,
-          },
-        },
-      ]);
-      expectImport({
-        ...library,
-        imports: library.imports.map((sourceImport) => ({
-          ...sourceImport,
-          lock_file_entries: sourceImport.lock_file_entries.map((lockFileEntry) => ({
-            ...lockFileEntry,
-            lock_content_hash: `sha256:${"b".repeat(64)}`,
-          })),
-        })),
-      });
-      // Retention outranks another contested claim, but a separate eligible import still wins.
-      const contested = setupLock("acme/contested", "agrees", "review");
-      const collision = setupInstance("other", "/global/other", { locks: [contested] });
-      const importedAndContested = { ...instance, locks: [contested, lock] };
-      expect(
-        classifySetupOnboarding([importedAndContested, collision], { library, machineId }).filter(
-          (candidate) => candidate.name === "review",
-        ),
-      ).toEqual([]);
-      const fresh = setupLock("acme/fresh", "agrees", "review");
-      expect(
-        classifySetupOnboarding([{ ...instance, locks: [contested, lock, fresh] }, collision], {
-          library,
-          machineId,
-        }).filter((candidate) => candidate.name === "review"),
-      ).toMatchObject([{ action: "import-observed-collection", source: "acme/fresh" }]);
-    }),
-  );
-}
+describe("skit repository watch", () => {
+  describe("Watching a repository saves this machine’s inclusion decision.", () => {
+    it.effect("watching a repository saves the watched decision", () =>
+      Effect.gen(function* () {
+        const f = yield* fixture();
 
-it.effect("includes unreported missing repository config in the approved plan identity", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    const missing = yield* scanForSetup(f.options);
-    expect(missing.repositoryConfigs).toEqual([]);
-    yield* f.fs.writeFileString(
-      join(f.repository, "skit.config.json"),
-      JSON.stringify({
-        schema: "skit.config.v1",
-        discovery: { exclude: [], collections: [] },
-      }),
+        yield* MachineSettings.setRepositoryDecision(f.libraryHome, f.repository, "watched");
+
+        expect(yield* MachineSettings.read(f.libraryHome)).toMatchObject({
+          repositories: [{ path: f.repository, status: "watched" }],
+        });
+      }).pipe(Effect.provide(testPlatformLayer)),
     );
-    const configured = yield* scanForSetup(f.options);
-    expect(configured.instances).toEqual(missing.instances);
-    expect(configured.onboarding.candidates).toEqual(missing.onboarding.candidates);
-    expect(configured.onboarding.planId).not.toBe(missing.onboarding.planId);
-    yield* f.fs.remove(join(f.repository, "skit.config.json"));
-    expect((yield* scanForSetup(f.options)).onboarding.planId).toBe(missing.onboarding.planId);
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
+  });
+});
+
+describe("skit repository ignore", () => {
+  describe("Ignoring a repository saves this machine’s exclusion decision.", () => {
+    it.effect("ignoring a watched repository saves the ignored decision", () =>
+      Effect.gen(function* () {
+        const f = yield* fixture();
+
+        yield* MachineSettings.setRepositoryDecision(f.libraryHome, f.repository, "watched");
+
+        yield* MachineSettings.setRepositoryDecision(f.libraryHome, f.repository, "ignored");
+
+        expect(yield* MachineSettings.read(f.libraryHome)).toMatchObject({
+          repositories: [{ path: f.repository, status: "ignored" }],
+        });
+      }).pipe(Effect.provide(testPlatformLayer)),
+    );
+  });
+});
+
+describe("skit repository forget", () => {
+  describe("Forgetting a repository clears this machine’s decision.", () => {
+    it.effect("forgetting an ignored repository clears its decision", () =>
+      Effect.gen(function* () {
+        const f = yield* fixture();
+
+        yield* MachineSettings.setRepositoryDecision(f.libraryHome, f.repository, "watched");
+
+        yield* MachineSettings.setRepositoryDecision(f.libraryHome, f.repository, "ignored");
+
+        yield* MachineSettings.setRepositoryDecision(f.libraryHome, f.repository, undefined);
+
+        expect(yield* MachineSettings.read(f.libraryHome)).toMatchObject({ repositories: [] });
+      }).pipe(Effect.provide(testPlatformLayer)),
+    );
+  });
+});
+
+describe("skit setup", () => {
+  describe("Finding and reviewing", () => {
+    describe("Preview leaves the proposed setup unapplied.", () => {
+      it.effect("scans passively and saves repository roots only through an approved setup", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture();
+          const before = yield* f.fs.exists(join(f.libraryHome, "machine.json"));
+          const passive = yield* scanForSetup({ ...f.options, persistRoots: true });
+          expect(passive.machineConfig.persisted).toBe(false);
+          expect(yield* f.fs.exists(join(f.libraryHome, "machine.json"))).toBe(before);
+          const first = yield* saveSettingsForSetup({ ...f.options, persistRoots: true });
+          expect(first.machineConfig).toEqual({
+            path: join(f.libraryHome, "library.sqlite"),
+            machineId: expect.any(String),
+            displayName: "Test machine",
+            repositoryRoots: [f.work],
+            repositoryDecisions: [],
+            persisted: true,
+          });
+          const persisted = yield* MachineSettings.read(f.libraryHome);
+          expect(persisted).toMatchObject({
+            machineId: first.machineConfig.machineId,
+            displayName: "Test machine",
+            discoveryRoots: [f.work],
+            repositories: [],
+          });
+          const second = yield* scanForSetup({
+            ...f.options,
+            repositoryRoots: undefined,
+            persistRoots: false,
+          });
+          expect(second.machineConfig.repositoryRoots).toEqual([f.work]);
+          expect(second.machineConfig.machineId).toBe(first.machineConfig.machineId);
+          expect(second.machineConfig.displayName).toBe("Test machine");
+          expect(second.machineConfig.persisted).toBe(false);
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+    });
+  });
+});
+
+describe("skit setup", () => {
+  describe("Finding and reviewing", () => {
+    describe("A changed setup must be reviewed again before it can change files.", () => {
+      it.effect("binds setup consent to current discovery evidence", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture();
+          const skill = join(f.codex, "review");
+          yield* f.fs.makeDirectory(skill, { recursive: true });
+          yield* f.fs.writeFileString(join(skill, "SKILL.md"), skillDocument("review"));
+          const preview = yield* scanForSetup(f.options);
+
+          const unchanged = yield* revalidateSetup(f.options, preview.onboarding.planId);
+          expect(unchanged.scan.onboarding.planId).toBe(preview.onboarding.planId);
+
+          yield* f.fs.writeFileString(
+            join(skill, "SKILL.md"),
+            `${skillDocument("review")}\nChanged after preview.\n`,
+          );
+          const stale = yield* Effect.result(revalidateSetup(f.options, preview.onboarding.planId));
+          expect(Result.isFailure(stale)).toBe(true);
+          if (Result.isFailure(stale)) {
+            expect(stale.failure._tag).toBe("SetupPlanStale");
+            if (stale.failure._tag === "SetupPlanStale") {
+              expect(stale.failure.approvedPlanId).toBe(preview.onboarding.planId);
+              expect(stale.failure.currentPlanId).not.toBe(preview.onboarding.planId);
+            }
+          }
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+
+      it.effect("includes unreported missing repository config in the approved plan identity", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture();
+          const missing = yield* scanForSetup(f.options);
+          expect(missing.repositoryConfigs).toEqual([]);
+          yield* f.fs.writeFileString(
+            join(f.repository, "skit.config.json"),
+            JSON.stringify({
+              schema: "skit.config.v1",
+              discovery: { exclude: [], collections: [] },
+            }),
+          );
+          const configured = yield* scanForSetup(f.options);
+          expect(configured.instances).toEqual(missing.instances);
+          expect(configured.onboarding.candidates).toEqual(missing.onboarding.candidates);
+          expect(configured.onboarding.planId).not.toBe(missing.onboarding.planId);
+          yield* f.fs.remove(join(f.repository, "skit.config.json"));
+          expect((yield* scanForSetup(f.options)).onboarding.planId).toBe(
+            missing.onboarding.planId,
+          );
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+    });
+  });
+});
+
+describe("skit setup", () => {
+  describe("Finding and reviewing", () => {
+    describe("Setup keeps unreadable discoveries visible in its review.", () => {
+      for (const failure of ["ls-files", "status"] as const) {
+        it.effect(`keeps discovered repository copies visible when git ${failure} fails`, () =>
+          Effect.gen(function* () {
+            const f = yield* fixture();
+            for (const [directory, name] of [
+              [".agents/skills/local", "local"],
+              ["deep/tracked", "tracked"],
+            ]) {
+              const path = join(f.repository, directory);
+              yield* f.fs.makeDirectory(path, { recursive: true });
+              yield* f.fs.writeFileString(join(path, "SKILL.md"), skillDocument(name));
+            }
+            yield* git(f.repository, "add", ".");
+            yield* git(f.repository, "commit", "-qm", "repository copies");
+            const evidence = yield* Effect.flatMap(Library.Service, (library) =>
+              collectSetupEvidence(library, f.options),
+            ).pipe(
+              withLibraryOwner(f.options.inventory),
+              Effect.provide(skitConfigurationLayer(f.libraryHome)),
+            );
+            expect(evidence.hits.filter((hit) => hit.name === "local")).toHaveLength(1);
+            const process = yield* SourceProcess;
+            const scan = yield* runSetup(f.options).pipe(
+              Effect.provideService(SourceProcess, {
+                ...process,
+                output: (command, args, options) =>
+                  command === "git" && args.includes(failure)
+                    ? Effect.succeed({
+                        exitCode: 1,
+                        stdout: new Uint8Array(),
+                        stderr: "fixture failure",
+                      })
+                    : process.output(command, args, options),
+              }),
+              withLibraryOwner(f.options.inventory),
+              Effect.provide(skitConfigurationLayer(f.libraryHome)),
+            );
+            expect(scan.scan.complete).toBe(false);
+            expect(scan.instances.map((item) => item.name).sort()).toEqual(
+              failure === "ls-files" ? ["local"] : ["local", "tracked"],
+            );
+            expect(
+              scan.instances.every(
+                (item) => item.git.status === "unavailable" && item.git.repository === f.repository,
+              ),
+            ).toBe(true);
+            expect(yield* f.fs.exists(join(f.libraryHome, "state.json"))).toBe(false);
+            expect(yield* f.fs.exists(join(f.libraryHome, "machine.json"))).toBe(false);
+          }).pipe(Effect.provide(testPlatformLayer)),
+        );
+      }
+
+      it.effect(
+        "coalesces harness aliases and retains broken-link and malformed-lock evidence",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* fixture();
+            const skill = join(f.repository, "skills", "review");
+            yield* f.fs.makeDirectory(skill, { recursive: true });
+            yield* f.fs.writeFileString(join(skill, "SKILL.md"), skillDocument("review"));
+            yield* f.fs.symlink(skill, join(f.codex, "review"));
+            yield* f.fs.symlink("../missing", join(f.codex, "broken"));
+            const globalLock = join(f.root, "state", "skills", ".skill-lock.json");
+            yield* f.fs.makeDirectory(join(f.root, "state", "skills"), { recursive: true });
+            yield* f.fs.writeFileString(globalLock, "not json");
+            const scan = yield* scanForSetup(f.options);
+            const review = scan.instances.find((instance) => instance.name === "review");
+            expect([...(review?.aliases ?? [])].sort()).toEqual(
+              [skill, join(f.codex, "review")].sort(),
+            );
+            expect(review?.scope).toBe("global");
+            expect(review?.harnesses).toEqual(["codex"]);
+            expect(scan.brokenLinks).toEqual([
+              { path: join(f.codex, "broken"), target: "../missing", harnesses: ["codex"] },
+            ]);
+            expect(scan.locks).toEqual([
+              { scope: "global", path: globalLock, status: "malformed", entries: [] },
+            ]);
+            expect(yield* f.fs.exists(join(f.libraryHome, "machine.json"))).toBe(false);
+          }).pipe(Effect.provide(testPlatformLayer)),
+      );
+    });
+  });
+});
+
+describe("skit setup", () => {
+  describe("Finding and reviewing", () => {
+    describe("Setup searches only the configured discovery folders.", () => {
+      it.effect("imports version-one machine config when setup first reads it", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture();
+          yield* f.fs.makeDirectory(f.libraryHome, { recursive: true });
+          yield* f.fs.writeFileString(
+            join(f.libraryHome, "machine.json"),
+            `${JSON.stringify({ schemaVersion: 1, repositoryRoots: [f.work] }, null, 2)}\n`,
+          );
+
+          const scan = yield* scanForSetup({
+            ...f.options,
+            repositoryRoots: undefined,
+            persistRoots: false,
+          });
+          expect(scan.machineConfig).toEqual({
+            path: join(f.libraryHome, "library.sqlite"),
+            repositoryRoots: [f.work],
+            repositoryDecisions: [],
+            persisted: false,
+          });
+          expect(
+            JSON.parse(
+              yield* f.fs.readFileString(join(f.libraryHome, "machine.json.backup-database")),
+            ),
+          ).toEqual({
+            schemaVersion: 1,
+            repositoryRoots: [f.work],
+          });
+
+          const migrated = yield* saveSettingsForSetup({
+            ...f.options,
+            repositoryRoots: undefined,
+            persistRoots: true,
+          });
+          expect(migrated.machineConfig).toMatchObject({
+            machineId: expect.any(String),
+            displayName: "Test machine",
+            repositoryRoots: [f.work],
+            persisted: true,
+          });
+          // Saving roots decides nothing about repositories, so later scans still discover them.
+          expect(
+            JSON.parse(
+              yield* f.fs.readFileString(join(f.libraryHome, "machine.json.backup-database")),
+            ),
+          ).toEqual({ schemaVersion: 1, repositoryRoots: [f.work] });
+          const stored = yield* MachineSettings.read(f.libraryHome);
+          expect(stored.discoveryRoots).toEqual([f.work]);
+          expect(stored.repositories).toEqual([]);
+          expect(stored.repositoryDecisionsInitialized).toBe(false);
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+
+      it.effect("scans only repositories watched by machine configuration", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture();
+          const ignored = join(f.work, "ignored");
+          const watchedSkill = join(f.repository, ".agents", "skills", "visible");
+          yield* f.fs.makeDirectory(watchedSkill, { recursive: true });
+          yield* f.fs.writeFileString(join(watchedSkill, "SKILL.md"), skillDocument("visible"));
+          yield* f.fs.makeDirectory(ignored, { recursive: true });
+          yield* git(ignored, "init", "-q");
+          yield* f.fs.makeDirectory(join(ignored, ".agents", "skills", "hidden"), {
+            recursive: true,
+          });
+          yield* f.fs.writeFileString(
+            join(ignored, ".agents", "skills", "hidden", "SKILL.md"),
+            skillDocument("hidden"),
+          );
+          yield* saveSettingsForSetup({
+            ...f.options,
+            persistRoots: true,
+            repositoryDecisions: [
+              { path: f.repository, status: "watched" },
+              { path: ignored, status: "ignored" },
+            ],
+          });
+
+          const inventory = yield* scanForSetup({
+            ...f.options,
+            repositoryRoots: undefined,
+            persistRoots: false,
+            scanDecidedRepositories: true,
+          });
+          expect(inventory.repositories.map((repository) => repository.path)).toEqual([
+            f.repository,
+          ]);
+          expect(inventory.instances.some((instance) => instance.name === "hidden")).toBe(false);
+          expect(inventory.machineConfig.repositoryDecisions).toEqual([
+            { path: ignored, status: "ignored" },
+            { path: f.repository, status: "watched" },
+          ]);
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+
+      it.effect("applies repository discovery exclusions and declared collection roots", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture();
+          const fixtureSkill = join(f.repository, "test", "fixtures", "review");
+          const declaredSkill = join(f.repository, "custom", "skills", "private");
+          yield* f.fs.makeDirectory(fixtureSkill, { recursive: true });
+          yield* f.fs.makeDirectory(declaredSkill, { recursive: true });
+          yield* f.fs.writeFileString(
+            join(fixtureSkill, "SKILL.md"),
+            skillDocument("fixture-review"),
+          );
+          yield* f.fs.writeFileString(join(declaredSkill, "SKILL.md"), skillDocument("private"));
+          yield* f.fs.writeFileString(join(f.repository, ".gitignore"), "custom/skills/\n");
+          yield* f.fs.writeFileString(
+            join(f.repository, "skit.config.json"),
+            JSON.stringify({
+              schema: "skit.config.v1",
+              discovery: {
+                exclude: ["test/fixtures/**"],
+                collections: [{ path: "custom/skills" }],
+              },
+            }),
+          );
+          yield* git(
+            f.repository,
+            "add",
+            ".gitignore",
+            "skit.config.json",
+            "test/fixtures/review/SKILL.md",
+          );
+          yield* git(f.repository, "commit", "-qm", "configure discovery");
+
+          const scan = yield* scanForSetup(f.options);
+          expect(scan.scan.complete).toBe(true);
+          expect(scan.instances.map((instance) => instance.name)).toEqual(["private"]);
+          expect(scan.instances[0]?.git.status).toBe("ignored");
+          expect(scan.repositoryConfigs).toEqual([
+            {
+              repository: f.repository,
+              path: join(f.repository, "skit.config.json"),
+              status: "valid",
+              schema: "skit.config.v1",
+              exclude: ["test/fixtures/**"],
+              collections: [{ path: "custom/skills" }],
+            },
+          ]);
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+
+      it.effect(
+        "routes configured copies to the nearest selected repository and its exclusions",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* fixture();
+            const nested = join(f.repository, "nested", "project");
+            yield* f.fs.makeDirectory(nested, { recursive: true });
+            yield* git(nested, "init", "-q");
+            for (const name of ["review", "blocked"]) {
+              const path = join(nested, "custom", name);
+              yield* f.fs.makeDirectory(path, { recursive: true });
+              yield* f.fs.writeFileString(join(path, "SKILL.md"), skillDocument(name));
+            }
+            yield* f.fs.writeFileString(
+              join(f.repository, "skit.config.json"),
+              JSON.stringify({
+                schema: "skit.config.v1",
+                discovery: {
+                  exclude: ["nested/**"],
+                  collections: [{ path: "nested/project/custom" }],
+                },
+              }),
+            );
+            yield* f.fs.writeFileString(
+              join(nested, "skit.config.json"),
+              JSON.stringify({
+                schema: "skit.config.v1",
+                discovery: { exclude: ["custom/blocked"], collections: [] },
+              }),
+            );
+            const scan = yield* scanForSetup({
+              ...f.options,
+              repositoryRoots: [f.repository, nested],
+            });
+            expect(scan.scan.complete).toBe(true);
+            expect(scan.instances.map((item) => [item.name, item.git])).toEqual([
+              ["review", { status: "untracked", repository: nested }],
+            ]);
+          }).pipe(Effect.provide(testPlatformLayer)),
+      );
+
+      it.effect("reports unsafe repository discovery config instead of applying it", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture();
+          yield* f.fs.writeFileString(
+            join(f.repository, "skit.config.json"),
+            JSON.stringify({
+              schema: "skit.config.v1",
+              discovery: { exclude: ["../outside/**"], collections: [] },
+            }),
+          );
+
+          const scan = yield* scanForSetup(f.options);
+          expect(scan.scan.complete).toBe(false);
+          expect(scan.repositoryConfigs).toEqual([
+            expect.objectContaining({ repository: f.repository, status: "malformed" }),
+          ]);
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+
+      it.effect("examines only immediate children until a nested container is configured", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture();
+          const container = join(f.work, "cloned");
+          const nestedRepository = join(container, "nested-tools");
+          const skill = join(nestedRepository, "skills", "nested-review");
+          yield* f.fs.makeDirectory(skill, { recursive: true });
+          yield* f.fs.writeFileString(join(skill, "SKILL.md"), skillDocument("nested-review"));
+          yield* git(nestedRepository, "init", "-q", "--initial-branch=main");
+
+          const shallow = yield* scanForSetup(f.options);
+          expect(shallow.instances.some((instance) => instance.name === "nested-review")).toBe(
+            false,
+          );
+          expect(shallow.repositories).toEqual([]);
+
+          const configured = yield* scanForSetup({
+            ...f.options,
+            repositoryRoots: [f.work, container],
+          });
+          expect(configured.instances).toEqual(
+            expect.arrayContaining([expect.objectContaining({ name: "nested-review" })]),
+          );
+          expect(configured.repositories.map((repository) => repository.path)).toEqual([
+            nestedRepository,
+          ]);
+          expect(configured.scan.repositorySearchDepth).toBe(1);
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+    });
+  });
+});
+
+describe("skit setup", () => {
+  describe("Managing selected copies", () => {
+    describe("Setup leaves protected copies under their existing owner.", () => {
+      it.effect(
+        "setup refuses an unreadable ownership marker instead of offering unmanaged actions",
+        () =>
+          Effect.gen(function* () {
+            const f = yield* fixture();
+            const copy = join(f.codex, "review");
+            yield* f.fs.makeDirectory(copy);
+            yield* f.fs.writeFileString(
+              join(copy, "SKILL.md"),
+              "---\nname: review\ndescription: Review fixture\n---\n\nReview bytes\n",
+            );
+            const missing = yield* scanForSetup(f.options);
+            expect(
+              missing.instances.find((instance) => instance.aliases.includes(copy))?.owner,
+            ).toEqual({
+              kind: "unknown",
+            });
+            expect(yield* ownershipAt(copy)).toEqual({ ownership: "unmanaged" });
+            yield* f.fs.makeDirectory(join(copy, ".skit-ownership.json"));
+            expect(yield* Effect.result(ownershipAt(copy))).toMatchObject({
+              _tag: "Failure",
+              failure: { _tag: "PlatformError" },
+            });
+            const unreadable = yield* Effect.result(scanForSetup(f.options));
+            expect(unreadable).toMatchObject({
+              _tag: "Failure",
+              failure: { _tag: "PlatformError" },
+            });
+          }).pipe(Effect.provide(testPlatformLayer)),
+      );
+
+      it.effect("keeps onboarding classifications conservative across conflicting evidence", () =>
+        Effect.sync(() => {
+          const hash = projectHash("shared");
+          const collectionOne = makeCollectionId();
+          const collectionTwo = makeCollectionId();
+          const exactSkill = makeSkillId();
+          const renamedSkill = makeSkillId();
+          const sharedSkill = makeSkillId();
+          const exactVersion = makeSkillVersionId();
+          const renamedVersion = makeSkillVersionId();
+          const sharedVersion = makeSkillVersionId();
+          const candidates = classifySetupOnboarding([
+            setupInstance("lock-mismatch", "/global/lock-mismatch-a", {
+              contentIdentity: { status: "hashed", currentHash: hash, libraryMatches: [] },
+              locks: [setupLock("acme/a", "agrees", "lock-ambiguous")],
+            }),
+            setupInstance("lock-mismatch", "/global/lock-mismatch-b", {
+              contentIdentity: { status: "hashed", currentHash: hash, libraryMatches: [] },
+              locks: [setupLock("acme/b", "mismatch", "lock-mismatch")],
+            }),
+            setupInstance("lock-ambiguous", "/global/lock-ambiguous-a", {
+              contentIdentity: { status: "hashed", currentHash: hash, libraryMatches: [] },
+              locks: [setupLock("acme/a", "agrees", "lock-ambiguous")],
+            }),
+            setupInstance("lock-ambiguous", "/global/lock-ambiguous-b", {
+              contentIdentity: { status: "hashed", currentHash: hash, libraryMatches: [] },
+              locks: [setupLock("acme/b", "agrees", "lock-mismatch")],
+            }),
+            setupInstance("lock-local-only", "/global/lock-local-only", {
+              contentIdentity: { status: "hashed", currentHash: hash, libraryMatches: [] },
+              locks: [
+                {
+                  ...setupLock("../local-source", "agrees", "lock-local-only"),
+                  entry: {
+                    name: "lock-local-only",
+                    source: "../local-source",
+                    sourceType: "local",
+                    originalEntry: { source: "../local-source", sourceType: "local" },
+                  },
+                },
+              ],
+            }),
+            setupInstance("library-exact", "/global/library-exact", {
+              contentIdentity: {
+                status: "hashed",
+                currentHash: hash,
+                libraryMatches: [
+                  {
+                    subjectId: collectionOne,
+                    skillId: exactSkill,
+                    skillVersionId: exactVersion,
+                    name: "library-exact",
+                  },
+                ],
+              },
+            }),
+            setupInstance("library-renamed", "/global/library-renamed", {
+              contentIdentity: {
+                status: "hashed",
+                currentHash: hash,
+                libraryMatches: [
+                  {
+                    subjectId: collectionOne,
+                    skillId: renamedSkill,
+                    skillVersionId: renamedVersion,
+                    name: "original",
+                  },
+                ],
+              },
+            }),
+            setupInstance("library-ambiguous", "/global/library-ambiguous", {
+              contentIdentity: {
+                status: "hashed",
+                currentHash: hash,
+                libraryMatches: [
+                  {
+                    subjectId: collectionOne,
+                    skillId: sharedSkill,
+                    skillVersionId: sharedVersion,
+                    name: "skill",
+                  },
+                  {
+                    subjectId: collectionTwo,
+                    skillId: sharedSkill,
+                    skillVersionId: sharedVersion,
+                    name: "skill",
+                  },
+                ],
+              },
+            }),
+            setupInstance("invalid", "/global/invalid", { owner: { kind: "invalid-marker" } }),
+            setupInstance("unhashable", "/global/unhashable", {
+              contentIdentity: {
+                status: "failed",
+                failure: new TreeError({ reason: { _tag: "IgnoredRoot" } }),
+              },
+            }),
+            setupInstance("standalone", "/loose/standalone", {
+              scope: "standalone",
+              harnesses: [],
+            }),
+            setupInstance("same-name", "/global/same-name"),
+            setupInstance("same-name", "/repo/.agents/skills/same-name", {
+              scope: "project",
+              git: { status: "committed", repository: "/repo" },
+            }),
+          ]);
+
+          expect(candidates).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                name: "lock-mismatch",
+                action: "blocked",
+                reason: "contested-lock-claim",
+              }),
+              expect.objectContaining({
+                name: "lock-ambiguous",
+                action: "blocked",
+                reason: "contested-lock-claim",
+              }),
+              expect.objectContaining({
+                name: "lock-local-only",
+                action: "manage-locally",
+              }),
+              expect.objectContaining({ name: "library-exact", action: "bind-existing-entry" }),
+              expect.objectContaining({
+                name: "library-renamed",
+                action: "blocked",
+                reason: "library-skill-name-mismatch",
+              }),
+              expect.objectContaining({
+                name: "library-ambiguous",
+                reason: "ambiguous-library-match",
+              }),
+              expect.objectContaining({ name: "invalid", reason: "invalid-ownership-marker" }),
+              expect.objectContaining({ name: "unhashable", reason: "content-unhashable" }),
+              expect.objectContaining({ name: "standalone", action: "leave-alone" }),
+              expect.objectContaining({
+                name: "same-name",
+                action: "manage-locally",
+                paths: ["/global/same-name"],
+              }),
+              expect.objectContaining({
+                name: "same-name",
+                action: "repository-owned",
+                paths: ["/repo/.agents/skills/same-name"],
+              }),
+            ]),
+          );
+        }),
+      );
+
+      it.effect(
+        "classifies Codex-owned installations from canonical paths without guessing authorship",
+        () =>
+          Effect.sync(() => {
+            const home = "/home/test";
+            expect(
+              classifyOwner({
+                canonicalPath: "/home/test/.codex/skills/.system/chronicle",
+                home,
+                harnesses: ["codex"],
+              }),
+            ).toEqual({ kind: "harness", harness: "codex", origin: "system" });
+            expect(
+              classifyOwner({
+                canonicalPath:
+                  "/home/test/.codex/plugins/cache/openai-bundled/example/1.0.0/skills/review",
+                home,
+                harnesses: ["codex"],
+              }),
+            ).toEqual({ kind: "harness", harness: "codex", origin: "bundled-plugin" });
+            expect(
+              classifyOwner({
+                canonicalPath:
+                  "/home/test/.codex/plugins/cache/openai-primary-runtime/example/1.0.0/skills/review",
+                home,
+                harnesses: ["codex"],
+              }),
+            ).toEqual({ kind: "harness", harness: "codex", origin: "runtime-plugin" });
+            expect(
+              classifyOwner({
+                canonicalPath:
+                  "/home/test/.codex/plugins/cache/openai-curated-remote/example/1.0.0/skills/review",
+                home,
+                harnesses: ["codex"],
+              }),
+            ).toEqual({ kind: "harness", harness: "codex", origin: "curated-plugin" });
+            expect(
+              classifyOwner({
+                canonicalPath: "/home/test/.codex/skills/user-installed",
+                home,
+                harnesses: ["codex"],
+              }),
+            ).toEqual({ kind: "unknown" });
+          }),
+      );
+
+      it.effect(
+        "offers harness-owned candidates deselected and keeps unmanaged candidates selected",
+        () =>
+          Effect.sync(() => {
+            const managed = setupInstance("managed", "/cache/managed", {
+              owner: {
+                kind: "harness",
+                harness: "codex",
+                origin: "curated-plugin",
+              },
+            });
+            const unmanaged = setupInstance("local", "/global/local");
+            expect(classifySetupOnboarding([managed, unmanaged])).toEqual(
+              expect.arrayContaining([
+                expect.objectContaining({
+                  name: "managed",
+                  action: "harness-owned",
+                  owner: expect.objectContaining({ kind: "harness" }),
+                }),
+                expect.objectContaining({
+                  name: "local",
+                  action: "manage-locally",
+                  owner: { kind: "unknown" },
+                }),
+              ]),
+            );
+          }),
+      );
+    });
+  });
+});
+
+describe("skit setup", () => {
+  describe("Managing selected copies", () => {
+    describe("Setup manages only the copies selected for it.", () => {
+      it.effect("offers equivalent Codex native and shared-root installations for ownership", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture();
+          const source = join(f.root, ".codex", "skills", "shared");
+          const target = join(f.root, ".agents", "skills", "shared");
+          yield* f.fs.makeDirectory(source, { recursive: true });
+          yield* f.fs.makeDirectory(target, { recursive: true });
+          yield* f.fs.writeFileString(join(source, "SKILL.md"), skillDocument("shared"));
+          yield* f.fs.writeFileString(join(target, "SKILL.md"), skillDocument("shared"));
+          const physicalSource = yield* f.fs.realPath(source);
+          const physicalTarget = yield* f.fs.realPath(target);
+
+          const scan = yield* scanForSetup({
+            ...f.options,
+            inventory: {
+              home: f.root,
+              configHome: join(f.root, ".config"),
+              overrides: {},
+            },
+          });
+
+          expect(
+            scan.instances
+              .filter((instance) => instance.name === "shared")
+              .map((instance) => instance.path),
+          ).toEqual([physicalTarget, physicalSource]);
+          expect(
+            scan.onboarding.candidates.find(
+              (candidate) => candidate.name === "shared" && candidate.action === "manage-locally",
+            ),
+          ).toMatchObject({ paths: [physicalTarget, physicalSource], sourceSelection: "required" });
+        }).pipe(Effect.provide(testPlatformLayer)),
+      );
+    });
+  });
+});
+
+describe("skit setup", () => {
+  describe("Managing selected copies", () => {
+    describe("Setup imports only the approved skills.sh Collection members.", () => {
+      it.effect("offers an eligible lock member when another member is blocked", () =>
+        Effect.sync(() => {
+          const candidates = classifySetupOnboarding([
+            setupInstance("review", "/global/review", {
+              locks: [setupLock("acme/a", "agrees", "review")],
+            }),
+            setupInstance("tdd", "/global/tdd", {
+              owner: { kind: "invalid-marker" },
+              locks: [setupLock("acme/a", "agrees", "tdd")],
+            }),
+          ]);
+          expect(candidates).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                name: "review",
+                action: "import-observed-collection",
+              }),
+              expect.objectContaining({
+                name: "tdd",
+                action: "blocked",
+                reason: "invalid-ownership-marker",
+              }),
+            ]),
+          );
+        }),
+      );
+
+      it.effect(
+        "offers lock-evidence import even when the observed Skill already matches the Library",
+        () =>
+          Effect.sync(() => {
+            const hash = projectHash("upstream");
+            const upstreamCollectionId = makeCollectionId();
+            const upstreamSkillId = makeSkillId();
+            const upstreamSkillVersionId = makeSkillVersionId();
+            const upstream = setupInstance("upstream", "/repo/upstream", {
+              git: { status: "ignored", repository: "/repo" },
+              contentIdentity: {
+                status: "hashed",
+                currentHash: hash,
+                libraryMatches: [
+                  {
+                    subjectId: upstreamCollectionId,
+                    skillId: upstreamSkillId,
+                    skillVersionId: upstreamSkillVersionId,
+                    name: "upstream",
+                  },
+                ],
+              },
+              locks: [setupLock("asmartbear/asb-skills", "agrees", "upstream")],
+            });
+            const localCollectionId = makeCollectionId();
+            const localSkillId = makeSkillId();
+            const localSkillVersionId = makeSkillVersionId();
+            const local = setupInstance("local", "/repo/local", {
+              git: { status: "ignored", repository: "/repo" },
+              owner: { kind: "repository", repository: "/repo" },
+              contentIdentity: {
+                status: "hashed",
+                currentHash: hash,
+                libraryMatches: [
+                  {
+                    subjectId: localCollectionId,
+                    skillId: localSkillId,
+                    skillVersionId: localSkillVersionId,
+                    name: "local",
+                  },
+                ],
+              },
+            });
+
+            expect(classifySetupOnboarding([upstream])).toEqual([
+              expect.objectContaining({
+                name: "upstream",
+                action: "import-observed-collection",
+              }),
+            ]);
+            expect(classifySetupOnboarding([local])).toEqual([
+              {
+                name: "local",
+                paths: ["/repo/local"],
+                owner: { kind: "repository", repository: "/repo" },
+                action: "repository-owned",
+              },
+            ]);
+          }),
+      );
+
+      it.effect(
+        "matches an unresolvable lock to a retained Collection by canonical reference",
+        () =>
+          Effect.gen(function* () {
+            const collectionId = makeCollectionId();
+            const skillId = makeSkillId();
+            const skillVersionId = makeSkillVersionId();
+            const machineId = makeMachineId();
+            const locator = "https://skills.example.test";
+            const imported = yield* Schema.decodeUnknownEffect(LibraryState)({
+              schemaVersion: emptyLibraryFixture().schemaVersion,
+              collections: [
+                {
+                  collection_id: collectionId,
+                  label: "Example skills",
+                  upstream: {
+                    source_identity: { kind: "well-known", locator: { value: locator } },
+                    tracking: { kind: "default" },
+                  },
+                },
+              ],
+              skills: [
+                {
+                  skill_id: skillId,
+                  collection_id: collectionId,
+                  path: ".",
+                  name: "Bad_Name",
+                  versions: [],
+                },
+              ],
+              collection_versions: [],
+              imports: [],
+              enabled: [],
+              repositories: [],
+              installed_skills: [],
+              tombstones: [],
+              unmanaged: [],
+              operations: [],
+              adoption_receipts: [],
+            }).pipe(Effect.orDie);
+            const instance = setupInstance("Bad_Name", "/repo/Bad_Name", {
+              git: { status: "ignored", repository: "/repo" },
+              contentIdentity: {
+                status: "hashed",
+                currentHash: projectHash("Bad_Name"),
+                libraryMatches: [
+                  { subjectId: collectionId, skillId, skillVersionId, name: "Bad_Name" },
+                ],
+              },
+              locks: [
+                {
+                  scope: "global",
+                  lockPath: "/locks/well-known",
+                  lockVersion: 3,
+                  lockContentHash: `sha256:${"0".repeat(64)}`,
+                  content: "agrees",
+                  entry: {
+                    name: "Bad_Name",
+                    source: locator,
+                    sourceType: "well-known",
+                    sourceBaseUrl: locator,
+                    originalEntry: { source: locator, sourceType: "well-known" },
+                  },
+                },
+              ],
+            });
+
+            expect(classifySetupOnboarding([instance], { library: imported, machineId })).toEqual(
+              [],
+            );
+            expect(classifySetupOnboarding([instance], { library: imported })).toEqual([]);
+          }),
+      );
+
+      for (const kind of ["source", "edit"] as const) {
+        it.effect(`requires matching retained lock evidence for a ${kind} acquisition`, () =>
+          Effect.gen(function* () {
+            const machineId = makeMachineId();
+            const collectionId = makeCollectionId();
+            const copyId = makeCollectionVersionId();
+            const hash = `sha256:${"a".repeat(64)}`;
+            const lock = setupLock("acme/reviews", "agrees", "review");
+            const instance = setupInstance("review", "/global/review", {
+              locks: [lock],
+              contentIdentity: { status: "hashed", currentHash: hash, libraryMatches: [] },
+            });
+            const library = yield* Schema.decodeUnknownEffect(LibraryState)({
+              schemaVersion: emptyLibraryFixture().schemaVersion,
+              collections: [{ collection_id: collectionId, label: "Reviews" }],
+              skills: [
+                {
+                  skill_id: makeSkillId(),
+                  collection_id: collectionId,
+                  path: "skills/review",
+                  name: "review",
+                  versions: [
+                    {
+                      skill_version_id: makeSkillVersionId(),
+                      source_hash: hash,
+                      artifact_hash: hash,
+                      validation_identity_hash: hash,
+                      materialization_profile: "plain-skill/v1",
+                    },
+                  ],
+                },
+              ],
+              collection_versions: [
+                {
+                  collection_version_id: copyId,
+                  hash: hash,
+                  copy_profile: "verbatim/v1",
+                  members: [
+                    {
+                      source_path: kind === "source" ? "skills/review" : ".",
+                      source_hash: hash,
+                      artifact_hash: hash,
+                      materialization_profile: "plain-skill/v1",
+                    },
+                  ],
+                },
+              ],
+              imports: [
+                {
+                  import_id: makeImportId(),
+                  collection_id: collectionId,
+                  kind,
+                  collection_version_id: copyId,
+                  input: { value: "https://github.com/acme/reviews" },
+                  source_identity: {
+                    kind: "github",
+                    owner: "acme",
+                    repository: "reviews",
+                    collection_root: ".",
+                  },
+                  imported_at: "2026-01-01T00:00:00.000Z",
+                  machine_id: machineId,
+                  lock_file_entries: [
+                    {
+                      type: "skills.sh-lock",
+                      machine_id: machineId,
+                      read_at: "2026-01-01T00:00:00.000Z",
+                      lock_path: { value: lock.lockPath },
+                      lock_version: 3,
+                      lock_scope: "global",
+                      lock_content_hash: lock.lockContentHash,
+                      source: lock.entry.source,
+                      source_type: "github",
+                      skill_name: "review",
+                      skill_path: lock.entry.skillPath,
+                      content_agreement: "agrees",
+                      original_entry_hash: hash,
+                      original_entry: lock.entry.originalEntry,
+                    },
+                  ],
+                },
+              ],
+              enabled: [],
+              repositories: [],
+              installed_skills: [],
+              tombstones: [],
+              unmanaged: [],
+              operations: [],
+              adoption_receipts: [],
+            }).pipe(Effect.orDie);
+            expect(classifySetupOnboarding([instance], { library, machineId })).toEqual([]);
+            const offered: readonly SetupSkillInstance[] = [instance];
+            const expectImport = (
+              state: LibraryState,
+              observed: readonly SetupSkillInstance[] = offered,
+              selectedMachine = machineId,
+            ) =>
+              expect(
+                classifySetupOnboarding(observed, { library: state, machineId: selectedMachine }),
+              ).toMatchObject([{ action: "import-observed-collection", name: "review" }]);
+            expectImport(library, offered, makeMachineId());
+            expectImport({ ...library, collection_versions: [] });
+            expectImport({
+              ...library,
+              imports: library.imports.map((sourceImport) => ({
+                ...sourceImport,
+                collection_id: makeCollectionId(),
+              })),
+            });
+            expectImport({
+              ...library,
+              collection_versions: library.collection_versions.map((copy) => ({
+                ...copy,
+                members: copy.members.map((member) => ({ ...member, source_path: "other" })),
+              })),
+            });
+            expectImport(library, [
+              {
+                ...instance,
+                contentIdentity: {
+                  status: "hashed",
+                  libraryMatches: [],
+                  currentHash: `sha256:${"b".repeat(64)}`,
+                },
+              },
+            ]);
+            expectImport({
+              ...library,
+              imports: library.imports.map((sourceImport) => ({
+                ...sourceImport,
+                lock_file_entries: sourceImport.lock_file_entries.map((lockFileEntry) => ({
+                  ...lockFileEntry,
+                  lock_content_hash: `sha256:${"b".repeat(64)}`,
+                })),
+              })),
+            });
+            // Retention outranks another contested claim, but a separate eligible import still wins.
+            const contested = setupLock("acme/contested", "agrees", "review");
+            const collision = setupInstance("other", "/global/other", { locks: [contested] });
+            const importedAndContested = { ...instance, locks: [contested, lock] };
+            expect(
+              classifySetupOnboarding([importedAndContested, collision], {
+                library,
+                machineId,
+              }).filter((candidate) => candidate.name === "review"),
+            ).toEqual([]);
+            const fresh = setupLock("acme/fresh", "agrees", "review");
+            expect(
+              classifySetupOnboarding(
+                [{ ...instance, locks: [contested, lock, fresh] }, collision],
+                {
+                  library,
+                  machineId,
+                },
+              ).filter((candidate) => candidate.name === "review"),
+            ).toMatchObject([{ action: "import-observed-collection", source: "acme/fresh" }]);
+          }),
+        );
+      }
+    });
+  });
+});

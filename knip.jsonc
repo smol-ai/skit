@@ -14,6 +14,12 @@
       "entry": ["src/{index,main}.{ts,tsx}"],
       "project": ["src/**/*.{ts,tsx}", "test/**/*.{ts,tsx}"],
     },
+    "packages/skit": {
+      "includeEntryExports": true,
+      // Crash-recovery tests spawn these executable roots by filesystem path.
+      "entry": ["src/{index,main}.{ts,tsx}", "test/fixtures/*-process.ts"],
+      "project": ["src/**/*.{ts,tsx}", "test/**/*.{ts,tsx}"],
+    },
     "packages/cli": {
       // The published Storybook API has external consumers; retain its entry exports.
       "includeEntryExports": false,
@@ -33,8 +39,14 @@
       // HTML module entry and tests directly, without running either tool's config.
       "vite": false,
       "vitest": false,
-      "entry": ["src/index.ts", "web/src/entry.ts", "test/**/*.test.ts", "scripts/**/*.mjs"],
-      "project": ["src/**/*.ts", "web/src/**/*.{ts,css}", "test/**/*.ts", "scripts/**/*.mjs"],
+      "entry": [
+        "src/index.ts",
+        "web/src/entry.ts",
+        "test/**/*.test.ts",
+        "scripts/**/*.mjs",
+        "scripts/check-frozen-migrations.ts",
+      ],
+      "project": ["src/**/*.ts", "web/src/**/*.{ts,css}", "test/**/*.ts", "scripts/**/*.{mjs,ts}"],
     },
   },
 }

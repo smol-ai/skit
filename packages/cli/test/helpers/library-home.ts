@@ -1,3 +1,4 @@
+import { captureDisk, assertDiskUnchanged } from "./disk-snapshot.js";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { makeMachineId } from "@smolai/skit-core/universal/consumer";
 import {
@@ -8,7 +9,7 @@ import {
   validateSkitDirectory,
 } from "@smolai/skit-core/author";
 import { type HarnessName, type SkillsDirectoryOverrides } from "@smolai/skit-core/harnesses";
-import { Effect, FileSystem, Layer } from "effect";
+import { Effect, FileSystem, Layer, Option } from "effect";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { FetchHttpClient, type HttpClient } from "effect/http";
@@ -21,7 +22,7 @@ import * as Library from "@smolai/skit-core/library";
 import { testRoots } from "./roots.js";
 
 export type LibraryFixtureState = Extract<Library.Snapshot, { readonly _tag: "Present" }>["state"];
-/** Independent current-format empty-file fixture; absence is still asserted through Snapshot. */
+/** Independent empty domain fixture; absence is asserted through Snapshot. */
 export const emptyLibraryFixture = (): LibraryFixtureState => ({
   collections: [],
   skills: [],
@@ -31,7 +32,6 @@ export const emptyLibraryFixture = (): LibraryFixtureState => ({
   repositories: [],
   installed_skills: [],
   unmanaged: [],
-  operations: [],
   schemaVersion: 12,
 });
 
@@ -137,8 +137,6 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
       ? Effect.succeed(current.state)
       : Effect.die("Expected persisted Library state; use snapshot to assert absence"),
   );
-  const writeDurable = (state: LibraryFixtureState) =>
-    fs.writeFileString(statePath, `${JSON.stringify(state, null, 2)}\n`);
   return {
     home,
     harnessRoot,
@@ -152,7 +150,80 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
     owned,
     snapshot,
     durable,
-    writeDurable,
+    /** Restore portable records using the same reviewed content plan as a Registry restore. */
+    restore: (
+      change: (manifest: Library.LibraryManifest) => Library.LibraryManifest,
+      deviceSelection?: LibraryFixtureState["device_skill_selection"],
+    ) =>
+      writingTo(
+        home,
+        Effect.gen(function* () {
+          const library = yield* Library.Service;
+          const base = yield* library.read;
+          const manifest = change(yield* library.manifest);
+          const staged = yield* library.content.stage(manifest, {
+            localArchives: base._tag === "Present" ? yield* library.content.pack(base) : [],
+            registry: { origin: "https://registry.test", token: Option.none() },
+          });
+          const plan = yield* library.plan(
+            {
+              _tag: "Sync",
+              staged,
+              acceptedBase: Option.fromUndefinedOr(
+                base._tag === "Present" ? base.state.sync_ancestry : undefined,
+              ),
+              deviceSelection: Option.fromUndefinedOr(
+                deviceSelection ??
+                  (base._tag === "Present" ? base.state.device_skill_selection : undefined),
+              ),
+              pendingOrigin: Option.fromUndefinedOr(
+                base._tag === "Present" ? base.state.pending_device_selection_origin : undefined,
+              ),
+              remote: Option.none(),
+            },
+            { base },
+          );
+          if (Library.isRemoteSyncPlan(plan))
+            return yield* Effect.die("Expected a local content plan");
+          yield* library.apply({ _tag: "Apply", plan });
+        }),
+      ),
+    /** Preserve exact disk bytes and identities, excluding only SQLite's coordination sidecars. */
+    unchanged: (extra: readonly string[] = []) =>
+      Effect.map(captureDisk([home, harnessRoot, ...extra], { identity: true }), (disk) => ({
+        check: assertDiskUnchanged(disk),
+      })),
+    /** Establish bindings through reviewed owner intents, without routing installations. */
+    enable: (
+      bindings: LibraryFixtureState["enabled"],
+      where: readonly Library.InstallScope[] = [{ kind: "global" }],
+    ) =>
+      writingTo(
+        home,
+        Effect.gen(function* () {
+          const library = yield* Library.Service;
+          for (const binding of bindings) {
+            const plan = yield* library.plan(
+              {
+                _tag: "Enabled",
+                changes: [
+                  {
+                    _tag: "Enable",
+                    subject:
+                      "skill" in binding
+                        ? { _tag: "Skill", id: binding.skill }
+                        : { _tag: "Collection", id: binding.collection },
+                    ...("collection" in binding ? { members: "whole" } : {}),
+                    where,
+                  },
+                ],
+              },
+              { base: yield* library.read },
+            );
+            yield* library.apply({ _tag: "Apply", plan });
+          }
+        }),
+      ),
     installedSkill: (harness: HarnessName, ...segments: string[]) =>
       harness === "devin"
         ? join(inventory.configHome, "devin", "skills", ...segments)

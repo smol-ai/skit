@@ -15,6 +15,117 @@ const file = (path: string, text: string): TreeEntry => ({
 });
 
 describe("identity", () => {
+  it.effect("missing path times refuse a later observation instead of inventing a time", () =>
+    Effect.gen(function* () {
+      const store = yield* memoryStore;
+      const tree = [file("x", "original")];
+      const bad = yield* store.commit({
+        tree: yield* store.putTree(tree),
+        parents: [],
+        author: { device, at: 1 },
+        edits: {},
+      });
+      expect(
+        yield* Effect.flip(History.record(store, tree, [bad], { device, at: 2 })),
+      ).toMatchObject({
+        _tag: "History.StoreCorrupt",
+        reason: { _tag: "EditTimesMismatch", paths: ["x"] },
+      });
+    }).pipe(Effect.provide(NodeCrypto.layerDigest)),
+  );
+
+  it.effect("refuses incomplete caller edit times before storing a new revision", () =>
+    Effect.gen(function* () {
+      const store = yield* memoryStore;
+      const tree = [file("x", "original")];
+      const author = { device, at: 1 };
+      const hash = yield* History.treeHash(tree);
+      const id = yield* History.revisionId({ tree: hash, parents: [], author, edits: {} });
+      expect(
+        yield* Effect.flip(History.record(store, tree, [], author, { edits: {} })),
+      ).toMatchObject({
+        _tag: "History.RecordInvalid",
+        paths: ["x"],
+      });
+      expect(yield* store.trees).toEqual([]);
+      expect(yield* Effect.flip(store.revision(id))).toMatchObject({
+        _tag: "History.StoreMissing",
+      });
+    }).pipe(Effect.provide(NodeCrypto.layerDigest)),
+  );
+
+  it.effect("unrelated observations keep each path's original edit time", () =>
+    Effect.gen(function* () {
+      const store = yield* memoryStore;
+      const root = yield* History.record(store, [file("x", "0"), file("y", "0")], [], {
+        device,
+        at: 1,
+      });
+      const x = yield* History.record(store, [file("x", "1"), file("y", "0")], [root.id], {
+        device,
+        at: 2,
+      });
+      const y = yield* History.record(store, [file("x", "1"), file("y", "1")], [x.id], {
+        device,
+        at: 3,
+      });
+      expect(y.revision.edits).toEqual({ x: 2, y: 3 });
+      const back = yield* History.record(store, [file("x", "0"), file("y", "1")], [y.id], {
+        device,
+        at: 4,
+      });
+      expect(back.revision.edits).toEqual({ x: 4, y: 3 });
+    }).pipe(Effect.provide(NodeCrypto.layerDigest)),
+  );
+
+  it.effect("merges and copied observations inherit their inputs' per-path times", () =>
+    Effect.gen(function* () {
+      const store = yield* memoryStore;
+      const root = yield* History.record(store, [file("x", "0"), file("y", "0")], [], {
+        device,
+        at: 1,
+      });
+      const ours = yield* History.record(store, [file("x", "1"), file("y", "0")], [root.id], {
+        device,
+        at: 2,
+      });
+      const theirs = yield* History.record(store, [file("x", "0"), file("y", "1")], [root.id], {
+        device,
+        at: 3,
+      });
+      const tree = [file("x", "1"), file("y", "1")];
+      const merged = yield* History.record(store, tree, [ours.id, theirs.id], { device, at: 100 });
+      expect(merged.revision.edits).toEqual({ x: 2, y: 3 });
+      // The observer can scan downloaded bytes before sync completes its final scan.
+      const observed = yield* History.record(store, tree, [ours.id], { device, at: 200 });
+      expect(observed.revision.edits).toEqual({ x: 2, y: 200 });
+      const copied = yield* History.record(
+        store,
+        tree,
+        [observed.id],
+        { device, at: 201 },
+        { source: merged.id },
+      );
+      expect(copied.revision.edits).toEqual({ x: 2, y: 3 });
+      const unchanged = yield* History.record(
+        store,
+        tree,
+        [copied.id],
+        { device, at: 202 },
+        { source: merged.id },
+      );
+      expect(unchanged.id).toBe(copied.id);
+      const normalized = yield* History.record(
+        store,
+        tree,
+        [],
+        { device, at: 500 },
+        { source: copied.id },
+      );
+      expect(normalized.revision.edits).toEqual({ x: 2, y: 3 });
+    }).pipe(Effect.provide(NodeCrypto.layerDigest)),
+  );
+
   it.effect("a tree's hash ignores entry order", () =>
     Effect.gen(function* () {
       const [a, b] = [file("a.md", "a"), file("b.md", "b")];
@@ -69,7 +180,7 @@ describe("store", () => {
       const store = yield* memoryStore;
       const tree = yield* History.treeHash([file("a.md", "a")]);
       const failure = yield* Effect.flip(
-        store.commit({ tree, parents: [], author: { device, at: 1 } }),
+        store.commit({ tree, edits: { "a.md": 1 }, parents: [], author: { device, at: 1 } }),
       );
       expect(failure).toMatchObject({ _tag: "History.StoreMissing", kind: "tree", hash: tree });
     }).pipe(Effect.provide(NodeCrypto.layerDigest)),
@@ -79,8 +190,18 @@ describe("store", () => {
     Effect.gen(function* () {
       const store = yield* memoryStore;
       const tree = yield* store.putTree([file("a.md", "a")]);
-      const unknown = yield* History.revisionId({ tree, parents: [], author: { device, at: 9 } });
-      const pulled = yield* store.commit({ tree, parents: [unknown], author: { device, at: 10 } });
+      const unknown = yield* History.revisionId({
+        tree,
+        edits: { "a.md": 9 },
+        parents: [],
+        author: { device, at: 9 },
+      });
+      const pulled = yield* store.commit({
+        tree,
+        edits: { "a.md": 10 },
+        parents: [unknown],
+        author: { device, at: 10 },
+      });
       const failure = yield* Effect.flip(Stream.runCollect(History.ancestors(store, pulled)));
       expect(failure).toMatchObject({
         _tag: "History.StoreMissing",

@@ -7,7 +7,7 @@ import { sha256Hash } from "../shared/hash.js";
 import { canonicalJson } from "../shared/json.js";
 import { emptyLibraryState, LibraryState } from "./library-state.js";
 import { StalePlan } from "./library-plan.js";
-import { Revision, snapshotOf, type Snapshot } from "./snapshot.js";
+import { Revision, snapshotOf, snapshotDatabaseRevision, type Snapshot } from "./snapshot.js";
 import {
   libraryStatePath,
   writeLibrary,
@@ -34,7 +34,9 @@ export const planningState = Effect.fn("Library.planningState")(function* (
     ),
   );
   const actual = snapshotOf(
-    base._tag === "Present" ? { present: true, state } : { present: false },
+    base._tag === "Present"
+      ? { present: true, state, revision: snapshotDatabaseRevision(base.revision) }
+      : { present: false },
   ).revision;
   if (base.revision !== actual)
     return yield* new StalePlan({

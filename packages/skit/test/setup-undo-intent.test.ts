@@ -1,4 +1,6 @@
-import { setupIntent } from "../src/library/internal/setup/intent.js";
+import { prepareSetupChanges } from "../src/library/store/setup-intent.js";
+import { describe } from "@effect/vitest";
+import { setupIntent } from "../src/library/store/intent.js";
 import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { it } from "@effect/vitest";
@@ -75,234 +77,321 @@ const fixture = Effect.fn("Test.undoIntentFixture")(function* () {
   };
 });
 
-it.effect(
-  "an import changing a followed Collection's members cannot be mistaken for a complete intent inverse",
-  () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const root = yield* fs.realPath(yield* scratch("skit-undo-membership-"));
-      const home = yield* libraryHome({ home: join(root, "library") });
-      const skills: {
-        name: string;
-        sourcePath: string;
-        relativePath: string;
-        currentHash: Hash;
-      }[] = [];
-      for (const name of ["existing", "introduced"]) {
-        const path = join(root, name);
-        yield* fs.makeDirectory(path);
-        yield* fs.writeFileString(
-          join(path, "SKILL.md"),
-          `---\nname: ${name}\ndescription: ${name}\n---\n\nBytes\n`,
+describe("skit library undo", () => {
+  describe("Undo does not reverse later independent choices.", () => {
+    it.effect(
+      "restores binding membership and policy per key, preserving pre-existing enablement and unrelated later choices",
+      () =>
+        Effect.gen(function* () {
+          const f = yield* fixture();
+          const before: LibraryState = {
+            ...f.state,
+            enabled: [{ skill: f.existing.skill_id }],
+            invocation_policies: { [f.existing.skill_id]: "explicit" },
+          };
+          const after: LibraryState = {
+            ...before,
+            enabled: [...before.enabled, { skill: f.chosen.skill_id }],
+            invocation_policies: {
+              [f.existing.skill_id]: "implicit",
+              [f.chosen.skill_id]: "explicit",
+            },
+          };
+          const current: LibraryState = {
+            ...after,
+            enabled: [...after.enabled, { skill: f.later.skill_id }],
+            invocation_policies: {
+              ...after.invocation_policies,
+              [f.later.skill_id]: "host-policy",
+            },
+          };
+          const inverse = reverseSetupIntent(
+            current,
+            yield* prepareSetupChanges(setupIntent(before), setupIntent(after), "fixture"),
+          );
+          expect(inverse.conflicts).toEqual([]);
+          expect(inverse.state.enabled).toEqual([
+            { skill: f.existing.skill_id },
+            { skill: f.later.skill_id },
+          ]);
+          expect(inverse.state.invocation_policies).toEqual({
+            [f.existing.skill_id]: "explicit",
+            [f.later.skill_id]: "host-policy",
+          });
+          expect(inverse.state.imports).toEqual(current.imports);
+          expect(inverse.state.collection_versions).toEqual(current.collection_versions);
+          expect(
+            reverseSetupIntent(
+              inverse.state,
+              yield* prepareSetupChanges(setupIntent(before), setupIntent(after), "fixture"),
+            ).changed,
+          ).toBe(false);
+          const edited = {
+            ...current,
+            invocation_policies: {
+              ...current.invocation_policies,
+              [f.existing.skill_id]: "host-policy" as const,
+            },
+          };
+          const conflict = reverseSetupIntent(
+            edited,
+            yield* prepareSetupChanges(setupIntent(before), setupIntent(after), "fixture"),
+          );
+          expect(conflict.conflicts).toContainEqual({
+            _tag: "SelectionChanged",
+            scope: { _tag: "Account" },
+            key: f.existing.skill_id,
+            kind: "invocation",
+          });
+          expect(conflict.state.invocation_policies?.[f.existing.skill_id]).toBe("host-policy");
+        }).pipe(Effect.provide(skitLayer)),
+    );
+
+    it.effect(
+      "independent device choices are undone without changing account or later device choices",
+      () =>
+        Effect.gen(function* () {
+          const f = yield* fixture();
+          const before: LibraryState = {
+            ...f.state,
+            enabled: [{ skill: f.later.skill_id }],
+            device_skill_selection: {
+              mode: "choose",
+              enabled: [{ skill: f.existing.skill_id }],
+            },
+          };
+          const after: LibraryState = {
+            ...before,
+            device_skill_selection: {
+              mode: "choose",
+              enabled: [{ skill: f.existing.skill_id }, { skill: f.chosen.skill_id }],
+            },
+          };
+          const inverse = reverseSetupIntent(
+            after,
+            yield* prepareSetupChanges(setupIntent(before), setupIntent(after), "fixture"),
+          );
+          expect(inverse.conflicts).toEqual([]);
+          expect(inverse.state.enabled).toEqual(before.enabled);
+          expect(inverse.state.device_skill_selection).toEqual(before.device_skill_selection);
+          const changedMode = reverseSetupIntent(
+            { ...after, device_skill_selection: { mode: "follow-account" } },
+            yield* prepareSetupChanges(setupIntent(before), setupIntent(after), "fixture"),
+          );
+          expect(changedMode.conflicts).toContainEqual({ _tag: "DeviceModeChanged" });
+          expect(changedMode.state.device_skill_selection).toEqual({ mode: "follow-account" });
+        }).pipe(Effect.provide(skitLayer)),
+    );
+
+    it.effect(
+      "undoing the only setup enable preserves later fields the current schema does not own",
+      () =>
+        Effect.gen(function* () {
+          const f = yield* fixture();
+          const before = f.state;
+          const after: LibraryState = {
+            ...before,
+            enabled: [{ skill: f.chosen.skill_id }],
+          };
+          const later = Object.assign({}, after, { futureSetting: "keep" });
+          const inverse = reverseSetupIntent(
+            later,
+            yield* prepareSetupChanges(setupIntent(before), setupIntent(after), "fixture"),
+          );
+          expect(inverse.conflicts).toEqual([]);
+          expect(inverse.state.enabled).toEqual([]);
+          expect(inverse.state).toHaveProperty("futureSetting", "keep");
+          expect(
+            reverseSetupIntent(
+              inverse.state,
+              yield* prepareSetupChanges(setupIntent(before), setupIntent(after), "fixture"),
+            ).changed,
+          ).toBe(false);
+        }).pipe(Effect.provide(skitLayer)),
+    );
+
+    it.effect("undo refuses a newer independent Version selection", () =>
+      Effect.gen(function* () {
+        const f = yield* fixture();
+
+        const before = yield* f.home.durable;
+
+        const source = join(f.root, "chosen");
+
+        yield* f.fs.writeFileString(
+          join(source, "SKILL.md"),
+          "---\nname: chosen\ndescription: chosen\n---\n\nVersion 2\n",
         );
-        skills.push({
-          name,
-          sourcePath: path,
-          relativePath: name,
-          currentHash: yield* deterministicTreeHash(path),
-        });
-      }
-      const importSource = (selected: typeof skills, date: string) =>
-        importCollectionIn(home.home)({
-          input: "https://github.com/test/membership",
-          source: { type: "github", owner: "test", repository: "membership" },
-          importedAt: date,
-          skills: selected,
+
+        yield* importCollectionIn(f.home.home)({
+          source: { type: "local", path: source },
+          input: source,
+          importedAt: "2026-10-02T00:00:00.000Z",
+          skills: [
+            {
+              name: "chosen",
+              sourcePath: source,
+              relativePath: ".",
+              currentHash: yield* deterministicTreeHash(source),
+            },
+          ],
           lockFileEntries: [],
         });
-      yield* importSource(skills.slice(0, 1), "2026-10-01T00:00:00.000Z");
-      const imported = yield* home.durable;
-      const enabled = [{ collection: imported.collections[0].collection_id }];
-      const before = { ...imported, enabled };
-      yield* importSource(skills, "2026-10-02T00:00:00.000Z");
-      const after = { ...(yield* home.durable), enabled };
-      expect(enabledSkillIds(before, enabled)).toHaveLength(1);
-      expect(enabledSkillIds(after, enabled)).toHaveLength(2);
-      const inverse = reverseSetupIntent(after, setupIntent(before), setupIntent(after));
-      expect(inverse.conflicts).toContainEqual({
-        _tag: "CollectionMembershipChanged",
-        collectionId: imported.collections[0].collection_id,
-      });
-      expect(inverse.state.skills).toEqual(after.skills);
-      expect(inverse.state.collection_versions).toEqual(after.collection_versions);
-    }).pipe(Effect.provide(skitLayer)),
-);
 
-it.effect(
-  "restores binding membership and policy per key, preserving pre-existing enablement and unrelated later choices",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const before: LibraryState = {
-        ...f.state,
-        enabled: [{ skill: f.existing.skill_id }],
-        invocation_policies: { [f.existing.skill_id]: "explicit" },
-      };
-      const after: LibraryState = {
-        ...before,
-        enabled: [...before.enabled, { skill: f.chosen.skill_id }],
-        invocation_policies: {
-          [f.existing.skill_id]: "implicit",
-          [f.chosen.skill_id]: "explicit",
-        },
-      };
-      const current: LibraryState = {
-        ...after,
-        enabled: [...after.enabled, { skill: f.later.skill_id }],
-        invocation_policies: {
-          ...after.invocation_policies,
-          [f.later.skill_id]: "host-policy",
-        },
-      };
-      const inverse = reverseSetupIntent(current, setupIntent(before), setupIntent(after));
-      expect(inverse.conflicts).toEqual([]);
-      expect(inverse.state.enabled).toEqual([
-        { skill: f.existing.skill_id },
-        { skill: f.later.skill_id },
-      ]);
-      expect(inverse.state.invocation_policies).toEqual({
-        [f.existing.skill_id]: "explicit",
-        [f.later.skill_id]: "host-policy",
-      });
-      expect(inverse.state.imports).toEqual(current.imports);
-      expect(inverse.state.collection_versions).toEqual(current.collection_versions);
-      expect(
-        reverseSetupIntent(inverse.state, setupIntent(before), setupIntent(after)).changed,
-      ).toBe(false);
-      const edited = {
-        ...current,
-        invocation_policies: {
-          ...current.invocation_policies,
-          [f.existing.skill_id]: "host-policy" as const,
-        },
-      };
-      const conflict = reverseSetupIntent(edited, setupIntent(before), setupIntent(after));
-      expect(conflict.conflicts).toContainEqual({
-        _tag: "SelectionChanged",
-        scope: { _tag: "Account" },
-        key: f.existing.skill_id,
-        kind: "invocation",
-      });
-      expect(conflict.state.invocation_policies?.[f.existing.skill_id]).toBe("host-policy");
-    }).pipe(Effect.provide(skitLayer)),
-);
+        const after = yield* f.home.durable;
 
-it.effect(
-  "restores a previous effective source Version without deleting retained Versions, and refuses a newer selection",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const before = yield* f.home.durable;
-      const source = join(f.root, "chosen");
-      yield* f.fs.writeFileString(
-        join(source, "SKILL.md"),
-        "---\nname: chosen\ndescription: chosen\n---\n\nVersion 2\n",
-      );
-      yield* importCollectionIn(f.home.home)({
-        source: { type: "local", path: source },
-        input: source,
-        importedAt: "2026-10-02T00:00:00.000Z",
-        skills: [
-          {
-            name: "chosen",
-            sourcePath: source,
-            relativePath: ".",
-            currentHash: yield* deterministicTreeHash(source),
-          },
-        ],
-        lockFileEntries: [],
-      });
-      const after = yield* f.home.durable;
-      const initialVersion = currentSkillVersion(before, f.chosen)?.skill_version_id;
-      const inverse = reverseSetupIntent(after, setupIntent(before), setupIntent(after));
-      expect(inverse.conflicts).toEqual([]);
-      const restored = inverse.state.skills.find((skill) => skill.skill_id === f.chosen.skill_id);
-      if (!restored) return yield* Effect.die(new Error("Retained Skill disappeared"));
-      expect(currentSkillVersion(inverse.state, restored)?.skill_version_id).toBe(initialVersion);
-      expect(restored.versions).toHaveLength(2);
-      expect(inverse.state.imports).toEqual(after.imports);
-      expect(
-        reverseSetupIntent(inverse.state, setupIntent(before), setupIntent(after)).changed,
-      ).toBe(false);
-      yield* f.fs.writeFileString(
-        join(source, "SKILL.md"),
-        "---\nname: chosen\ndescription: chosen\n---\n\nVersion 3\n",
-      );
-      yield* importCollectionIn(f.home.home)({
-        source: { type: "local", path: source },
-        input: source,
-        importedAt: "2026-10-03T00:00:00.000Z",
-        skills: [
-          {
-            name: "chosen",
-            sourcePath: source,
-            relativePath: ".",
-            currentHash: yield* deterministicTreeHash(source),
-          },
-        ],
-        lockFileEntries: [],
-      });
-      const current = yield* f.home.durable;
-      const conflict = reverseSetupIntent(current, setupIntent(before), setupIntent(after));
-      expect(conflict.conflicts).toContainEqual({
-        _tag: "SkillVersionChanged",
-        skillId: f.chosen.skill_id,
-      });
-      expect(conflict.state.skills).toEqual(current.skills);
-    }).pipe(Effect.provide(skitLayer)),
-);
+        yield* f.fs.writeFileString(
+          join(source, "SKILL.md"),
+          "---\nname: chosen\ndescription: chosen\n---\n\nVersion 3\n",
+        );
 
-it.effect(
-  "independent device choices are undone without changing account or later device choices",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const before: LibraryState = {
-        ...f.state,
-        enabled: [{ skill: f.later.skill_id }],
-        device_skill_selection: {
-          mode: "choose",
-          enabled: [{ skill: f.existing.skill_id }],
-        },
-      };
-      const after: LibraryState = {
-        ...before,
-        device_skill_selection: {
-          mode: "choose",
-          enabled: [{ skill: f.existing.skill_id }, { skill: f.chosen.skill_id }],
-        },
-      };
-      const inverse = reverseSetupIntent(after, setupIntent(before), setupIntent(after));
-      expect(inverse.conflicts).toEqual([]);
-      expect(inverse.state.enabled).toEqual(before.enabled);
-      expect(inverse.state.device_skill_selection).toEqual(before.device_skill_selection);
-      const changedMode = reverseSetupIntent(
-        { ...after, device_skill_selection: { mode: "follow-account" } },
-        setupIntent(before),
-        setupIntent(after),
-      );
-      expect(changedMode.conflicts).toContainEqual({ _tag: "DeviceModeChanged" });
-      expect(changedMode.state.device_skill_selection).toEqual({ mode: "follow-account" });
-    }).pipe(Effect.provide(skitLayer)),
-);
+        yield* importCollectionIn(f.home.home)({
+          source: { type: "local", path: source },
+          input: source,
+          importedAt: "2026-10-03T00:00:00.000Z",
+          skills: [
+            {
+              name: "chosen",
+              sourcePath: source,
+              relativePath: ".",
+              currentHash: yield* deterministicTreeHash(source),
+            },
+          ],
+          lockFileEntries: [],
+        });
 
-it.effect(
-  "undoing the only setup enable preserves later fields the current schema does not own",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const before = f.state;
-      const after: LibraryState = {
-        ...before,
-        enabled: [{ skill: f.chosen.skill_id }],
-      };
-      const later = Object.assign({}, after, { futureSetting: "keep" });
-      const inverse = reverseSetupIntent(later, setupIntent(before), setupIntent(after));
-      expect(inverse.conflicts).toEqual([]);
-      expect(inverse.state.enabled).toEqual([]);
-      expect(inverse.state).toHaveProperty("futureSetting", "keep");
-      expect(
-        reverseSetupIntent(inverse.state, setupIntent(before), setupIntent(after)).changed,
-      ).toBe(false);
-    }).pipe(Effect.provide(skitLayer)),
-);
+        const current = yield* f.home.durable;
+
+        const conflict = reverseSetupIntent(
+          current,
+          yield* prepareSetupChanges(setupIntent(before), setupIntent(after), "fixture"),
+        );
+
+        expect(conflict.conflicts).toContainEqual({
+          _tag: "SkillVersionChanged",
+          skillId: f.chosen.skill_id,
+        });
+
+        expect(conflict.state.skills).toEqual(current.skills);
+      }).pipe(Effect.provide(skitLayer)),
+    );
+  });
+});
+
+describe("skit library undo", () => {
+  describe("Undo keeps previously imported Versions available.", () => {
+    it.effect(
+      "an import changing a followed Collection's members cannot be mistaken for a complete intent inverse",
+      () =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const root = yield* fs.realPath(yield* scratch("skit-undo-membership-"));
+          const home = yield* libraryHome({ home: join(root, "library") });
+          const skills: {
+            name: string;
+            sourcePath: string;
+            relativePath: string;
+            currentHash: Hash;
+          }[] = [];
+          for (const name of ["existing", "introduced"]) {
+            const path = join(root, name);
+            yield* fs.makeDirectory(path);
+            yield* fs.writeFileString(
+              join(path, "SKILL.md"),
+              `---\nname: ${name}\ndescription: ${name}\n---\n\nBytes\n`,
+            );
+            skills.push({
+              name,
+              sourcePath: path,
+              relativePath: name,
+              currentHash: yield* deterministicTreeHash(path),
+            });
+          }
+          const importSource = (selected: typeof skills, date: string) =>
+            importCollectionIn(home.home)({
+              input: "https://github.com/test/membership",
+              source: { type: "github", owner: "test", repository: "membership" },
+              importedAt: date,
+              skills: selected,
+              lockFileEntries: [],
+            });
+          yield* importSource(skills.slice(0, 1), "2026-10-01T00:00:00.000Z");
+          const imported = yield* home.durable;
+          const enabled = [{ collection: imported.collections[0].collection_id }];
+          const before = { ...imported, enabled };
+          yield* importSource(skills, "2026-10-02T00:00:00.000Z");
+          const after = { ...(yield* home.durable), enabled };
+          expect(enabledSkillIds(before, enabled)).toHaveLength(1);
+          expect(enabledSkillIds(after, enabled)).toHaveLength(2);
+          const inverse = reverseSetupIntent(
+            after,
+            yield* prepareSetupChanges(setupIntent(before), setupIntent(after), "fixture"),
+          );
+          expect(inverse.conflicts).toContainEqual({
+            _tag: "CollectionMembershipChanged",
+            collectionId: imported.collections[0].collection_id,
+          });
+          expect(inverse.state.skills).toEqual(after.skills);
+          expect(inverse.state.collection_versions).toEqual(after.collection_versions);
+        }).pipe(Effect.provide(skitLayer)),
+    );
+
+    it.effect("undo restores the previous selected Version while keeping imports", () =>
+      Effect.gen(function* () {
+        const f = yield* fixture();
+
+        const before = yield* f.home.durable;
+
+        const source = join(f.root, "chosen");
+
+        yield* f.fs.writeFileString(
+          join(source, "SKILL.md"),
+          "---\nname: chosen\ndescription: chosen\n---\n\nVersion 2\n",
+        );
+
+        yield* importCollectionIn(f.home.home)({
+          source: { type: "local", path: source },
+          input: source,
+          importedAt: "2026-10-02T00:00:00.000Z",
+          skills: [
+            {
+              name: "chosen",
+              sourcePath: source,
+              relativePath: ".",
+              currentHash: yield* deterministicTreeHash(source),
+            },
+          ],
+          lockFileEntries: [],
+        });
+
+        const after = yield* f.home.durable;
+
+        const initialVersion = currentSkillVersion(before, f.chosen)?.skill_version_id;
+
+        const inverse = reverseSetupIntent(
+          after,
+          yield* prepareSetupChanges(setupIntent(before), setupIntent(after), "fixture"),
+        );
+
+        expect(inverse.conflicts).toEqual([]);
+
+        const restored = inverse.state.skills.find((skill) => skill.skill_id === f.chosen.skill_id);
+
+        if (!restored) return yield* Effect.die(new Error("Retained Skill disappeared"));
+
+        expect(currentSkillVersion(inverse.state, restored)?.skill_version_id).toBe(initialVersion);
+
+        expect(restored.versions).toHaveLength(2);
+
+        expect(inverse.state.imports).toEqual(after.imports);
+
+        expect(
+          reverseSetupIntent(
+            inverse.state,
+            yield* prepareSetupChanges(setupIntent(before), setupIntent(after), "fixture"),
+          ).changed,
+        ).toBe(false);
+      }).pipe(Effect.provide(skitLayer)),
+    );
+  });
+});

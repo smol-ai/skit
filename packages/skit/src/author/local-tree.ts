@@ -12,6 +12,7 @@ import {
   type NativeTreeIdentity,
 } from "../artifact/tree.js";
 import { SkitContractError } from "../api/contracts.js";
+import { changeFile } from "./file-replacement.js";
 import {
   AuthorLocalPathUnchecked,
   AuthorNonNfcPathUnsupported,
@@ -42,7 +43,7 @@ export const scanWorkspaceWrite = Effect.fn("AuthorWorkspace.scanWriteTree")(fun
   const tree = (yield* normalizeAuthorTreeEntries(snapshot.entries)).flatMap((entry) =>
     entry.kind === "file" ? [entry] : [],
   );
-  const contents = new Map(tree.map((entry) => [entry.path, entry.bytes]));
+  const contents = new Map(tree.map((entry) => [entry.path, entry]));
   const targets = new Map(
     [...snapshot.identities].map(
       ([nativePath, identity]) =>
@@ -180,7 +181,7 @@ export const scanWorkspaceWrite = Effect.fn("AuthorWorkspace.scanWriteTree")(fun
                     seen.same &&
                     Equal.equals(
                       chunk.value,
-                      expected.subarray(seen.length, seen.length + chunk.value.length),
+                      expected.bytes.subarray(seen.length, seen.length + chunk.value.length),
                     ),
                 }),
               ),
@@ -188,7 +189,7 @@ export const scanWorkspaceWrite = Effect.fn("AuthorWorkspace.scanWriteTree")(fun
             const after = yield* stat(absolute);
             if (
               !read.same ||
-              read.length !== expected.length ||
+              read.length !== expected.bytes.length ||
               after === undefined ||
               !identityMatches(after, observed)
             )
@@ -206,8 +207,10 @@ export const scanWorkspaceWrite = Effect.fn("AuthorWorkspace.scanWriteTree")(fun
   // Only these mutations advance native authority. Never rescan an externally replaced inode
   // and treat it as the entry the original scan authorized.
   const removeFile = Effect.fn("AuthorWorkspace.removeFile")(function* (target: string) {
+    const before = contents.get(target);
+    if (before === undefined) return yield* new AuthorLocalPathUnchecked({ path: target });
     const absolute = yield* checkTarget(target);
-    yield* fs.remove(absolute);
+    yield* changeFile(root, absolute, before);
     targets.delete(target);
     contents.delete(target);
     return absolute;

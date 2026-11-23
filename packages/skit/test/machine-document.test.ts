@@ -1,13 +1,8 @@
-import { Effect, FileSystem, Schema } from "effect";
+import { Effect, FileSystem } from "effect";
 import { assert, it } from "@effect/vitest";
 import * as MachineSettings from "../src/library/machine-settings.js";
-import {
-  LegacyMachineId,
-  makeMachineId,
-  makeOperationId,
-  migratedMachineId,
-} from "../src/library/entity-ids.js";
-import { MachineDocumentJson } from "../src/library/machine-document.js";
+import { LegacyMachineId, makeMachineId, migratedMachineId } from "../src/library/entity-ids.js";
+import { loadMachineFile } from "../src/library/store/machine-file.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 import { join } from "node:path";
@@ -15,17 +10,21 @@ import { join } from "node:path";
 const legacyMachineId = LegacyMachineId.make("018f47de-6c9a-7b21-8000-000000000001");
 
 const decode = (document: unknown) =>
-  Schema.decodeEffect(MachineDocumentJson)(JSON.stringify(document));
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-machine-document-" });
+    const path = join(home, "machine.json");
+    yield* fs.writeFileString(path, JSON.stringify(document));
+    return yield* loadMachineFile(path);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped);
 
 it.effect("normalizes every persisted machine document version to one current shape", () =>
   Effect.gen(function* () {
     assert.deepStrictEqual(yield* decode({ schemaVersion: 1, repositoryRoots: ["/v1"] }), {
-      schemaVersion: 6,
+      schemaVersion: 5,
       discoveryRoots: ["/v1"],
       repositories: [],
       repositoryDecisionsInitialized: false,
-      setups: [],
-      undoneSetups: [],
     });
 
     assert.deepStrictEqual(
@@ -36,15 +35,13 @@ it.effect("normalizes every persisted machine document version to one current sh
         repositoryRoots: ["/v2"],
       }),
       {
-        schemaVersion: 6,
+        schemaVersion: 5,
         machineId: migratedMachineId(legacyMachineId, legacyMachineId),
         legacyMachineId,
         displayName: "legacy",
         discoveryRoots: ["/v2"],
         repositories: [],
         repositoryDecisionsInitialized: false,
-        setups: [],
-        undoneSetups: [],
       },
     );
 
@@ -57,14 +54,12 @@ it.effect("normalizes every persisted machine document version to one current sh
         repositoryRoots: ["/v3"],
       }),
       {
-        schemaVersion: 6,
+        schemaVersion: 5,
         machineId,
         displayName: "prior",
         discoveryRoots: ["/v3"],
         repositories: [],
         repositoryDecisionsInitialized: false,
-        setups: [],
-        undoneSetups: [],
       },
     );
 
@@ -77,10 +72,8 @@ it.effect("normalizes every persisted machine document version to one current sh
     } as const;
     assert.deepStrictEqual(yield* decode(current), {
       ...current,
-      schemaVersion: 6,
+      schemaVersion: 5,
       repositoryDecisionsInitialized: true,
-      setups: [],
-      undoneSetups: [],
     });
   }),
 );
@@ -98,48 +91,36 @@ for (const initialized of [false, true]) {
       } as const;
       assert.deepStrictEqual(yield* decode(document), {
         ...document,
-        schemaVersion: 6,
-        setups: [],
-        undoneSetups: [],
+        schemaVersion: 5,
       });
     }),
   );
 }
 
-it.effect("current setup evidence reads without rewriting and records its inverse", () =>
+it.effect("refuses unreleased v6 settings without rewriting them", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-machine-v6-" });
-    const operationId = makeOperationId();
-    const machineId = makeMachineId();
-    const document = {
-      schemaVersion: 6,
-      undoneSetups: [],
-      machineId,
-      displayName: "Current machine",
-      discoveryRoots: ["/after"],
-      repositories: [],
-      repositoryDecisionsInitialized: true,
-      setups: [
-        {
-          operationId,
-          before: { discoveryRoots: ["/before"], machineId },
-          expectedAfter: { discoveryRoots: ["/after"], machineId },
-        },
-      ],
-    };
     const path = join(home, "machine.json");
-    const bytes = JSON.stringify(document);
+    const bytes = JSON.stringify({
+      schemaVersion: 6,
+      machineId: makeMachineId(),
+      displayName: "Unreleased",
+      discoveryRoots: [],
+      repositories: [],
+      repositoryDecisionsInitialized: false,
+      setups: [],
+      undoneSetups: [],
+    });
     yield* fs.writeFileString(path, bytes);
-    const settings = yield* MachineSettings.read(home);
-    assert.deepStrictEqual(settings.setups, document.setups);
-    assert.deepStrictEqual(settings.undoneSetups, []);
+    const failure = yield* Effect.flip(MachineSettings.read(home));
+    assert.strictEqual(failure._tag, "MachineSettingsUnusable");
+    if (failure._tag === "MachineSettingsUnusable")
+      assert.deepStrictEqual(failure.reason, {
+        _tag: "UnsupportedVersion",
+        version: 6,
+        supported: [1, 2, 3, 4, 5],
+      });
     assert.strictEqual(yield* fs.readFileString(path), bytes);
-    const plan = yield* MachineSettings.planRestoreDiscovery(home, operationId);
-    yield* MachineSettings.applyRestoreDiscovery(home, plan);
-    const saved = JSON.parse(yield* fs.readFileString(path));
-    assert.strictEqual(saved.schemaVersion, 6);
-    assert.deepStrictEqual(saved.discoveryRoots, ["/before"]);
-    assert.deepStrictEqual(saved.undoneSetups, [operationId]);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

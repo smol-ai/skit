@@ -1,3 +1,5 @@
+import { saveLibrary } from "./helpers/library-store.js";
+import { loadLibrary, inspectLocalLibraryState } from "../src/library/store/library-store.js";
 import { assert, it } from "@effect/vitest";
 import { expectTypeOf } from "vitest";
 import { Effect, FileSystem, Schema } from "effect";
@@ -59,12 +61,7 @@ for (const initiallyPresent of [false, true])
         const fs = yield* FileSystem.FileSystem;
         const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-snapshot-plan-" });
         const home = join(root, "library");
-        const statePath = join(home, "state.json");
-        const bytes = JSON.stringify(emptyLibraryState());
-        if (initiallyPresent) {
-          yield* fs.makeDirectory(home);
-          yield* fs.writeFileString(statePath, bytes);
-        }
+        if (initiallyPresent) yield* saveLibrary(home, emptyLibraryState());
         yield* Effect.gen(function* () {
           const library = yield* Library.Service;
           const snapshot = yield* library.read;
@@ -72,11 +69,8 @@ for (const initiallyPresent of [false, true])
           const plan = yield* library.plan({ _tag: "Update" }, { base: snapshot });
           assert.strictEqual(plan.baseRevision, snapshot.revision);
           if (!initiallyPresent) assert.isFalse(yield* fs.exists(home));
-          if (initiallyPresent) yield* fs.remove(statePath);
-          else {
-            yield* fs.makeDirectory(home);
-            yield* fs.writeFileString(statePath, bytes);
-          }
+          if (initiallyPresent) yield* fs.remove(home, { recursive: true });
+          else yield* saveLibrary(home, emptyLibraryState());
           const result = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
           assert.strictEqual(result._tag, "Failure");
           if (result._tag === "Failure") {
@@ -86,8 +80,8 @@ for (const initiallyPresent of [false, true])
               assert.strictEqual(result.failure.actual, (yield* library.read).revision);
             }
           }
-          assert.strictEqual(yield* fs.exists(statePath), !initiallyPresent);
-          if (!initiallyPresent) assert.strictEqual(yield* fs.readFileString(statePath), bytes);
+          assert.strictEqual((yield* inspectLocalLibraryState(home)).present, !initiallyPresent);
+          assert.deepStrictEqual(yield* loadLibrary(home), emptyLibraryState());
         }).pipe(
           Effect.provide(
             Library.layer({
@@ -146,9 +140,7 @@ it.effect("all planning validates captured state, and a delayed plan owns its Sn
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-snapshot-capture-" });
-    const statePath = join(home, "state.json");
-    yield* fs.writeFileString(statePath, JSON.stringify(emptyLibraryState()));
-    const bytes = yield* fs.readFileString(statePath);
+    yield* saveLibrary(home, emptyLibraryState());
     yield* Effect.gen(function* () {
       const library = yield* Library.Service;
       const snapshot = yield* library.read;
@@ -167,7 +159,7 @@ it.effect("all planning validates captured state, and a delayed plan owns its Sn
         (yield* library.apply({ _tag: "Apply", plan: captured })).result._tag,
         "Applied",
       );
-      assert.strictEqual(yield* fs.readFileString(statePath), bytes);
+      assert.deepStrictEqual(yield* loadLibrary(home), emptyLibraryState());
     }).pipe(
       Effect.provide(
         Library.layer({
@@ -179,6 +171,37 @@ it.effect("all planning validates captured state, and a delayed plan owns its Sn
           },
         }),
       ),
+    );
+  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+);
+
+it.effect("an edit followed by its inverse does not revive a reviewed plan", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-snapshot-counter-" });
+    const state = emptyLibraryState();
+    yield* saveLibrary(home, state);
+    yield* Effect.gen(function* () {
+      const library = yield* Library.Service;
+      const before = yield* library.read;
+      const plan = yield* library.plan({ _tag: "Update" }, { base: before });
+      yield* saveLibrary(home, {
+        ...state,
+        repositories: [{ root: join(home, "project"), enabled: [] }],
+      });
+      yield* saveLibrary(home, state);
+      const after = yield* library.read;
+      assert.deepStrictEqual(yield* loadLibrary(home), state);
+      assert.notStrictEqual(after.revision, before.revision);
+      const failure = yield* Effect.flip(library.apply({ _tag: "Apply", plan }));
+      assert.strictEqual(failure._tag, "Library.StalePlan");
+      const fresh = yield* library.plan({ _tag: "Update" }, { base: after });
+      assert.strictEqual(
+        (yield* library.apply({ _tag: "Apply", plan: fresh })).result._tag,
+        "Applied",
+      );
+    }).pipe(
+      Effect.provide(Library.layer({ home, roots: { home, configHome: home, overrides: {} } })),
     );
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );

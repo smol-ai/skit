@@ -17,7 +17,7 @@ import {
 import { scanAuthorSyncTree } from "./local-tree.js";
 import type { AuthorVisibility, AuthorRemoteHome } from "./remote.js";
 import type { AuthorSyncResult } from "./sync-result.js";
-import { authorDecider, authorTree } from "./sync-policy.js";
+import { mergeAuthorRevisions } from "./sync-policy.js";
 import { workspaceIdFromClaims } from "./library-claims.js";
 import * as Library from "../library/library.js";
 import { conflictKind } from "./merge/files.js";
@@ -416,10 +416,10 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
       remote: registry,
       state,
       local: localHash,
+      observation: applying.observation.id,
       author: applying.observation.revision.author,
       // This device applies every path it syncs.
-      merger: authorTree({ excluded: new Set(), previouslyExcluded: new Set() }),
-      decide: authorDecider,
+      merge: mergeAuthorRevisions,
       // Approval covers exactly the removal this sync found; any other removal still blocks.
       ...(approvedRemoval && planned._tag === "Blocked" ? { approved: planned.removal } : {}),
       // History owns checkpoint comparison, write completion and lease advancement.
@@ -430,8 +430,20 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
     }).pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure));
     if (outcome.status === "blocked")
       return { status: "blocked", changed: false, ...outcome.removal } satisfies AuthorSyncResult;
+    // This completion is best-effort: a crash before it still uses the ordinary backup path.
+    // Never skip an authored input, a merge, or recovery from Sending/Writing.
+    if (
+      savedState._tag === "Idle" &&
+      planned._tag === "Pull" &&
+      outcome.status === "pulled" &&
+      outcome.revision === planned.current.id
+    )
+      yield* history.saveReceived(applying.lease, key, {
+        before: applying.observation.id,
+        received: outcome.revision,
+      });
     // Record what sync wrote as this workspace's latest observation.
-    const completed = yield* history.refresh(root);
+    const completed = yield* history.refresh(root, outcome.revision);
     yield* backupAuthorHistory(applying.lease, key, completed, registry).pipe(
       Effect.catchIf(Schema.is(History.StoreError), storeFailure),
     );

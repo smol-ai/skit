@@ -604,7 +604,7 @@ export { prepareSetupUndo } from "./setup/undo.js";
 export { computeSkillsShCompatibleHash } from "./setup/skills-sh/compatible-hash.js";
 // Inferred consumer declarations need public names for these nested choices and typed failures.
 // Legacy undo evidence still uses this read-only projection; recordedLibrary remains private.
-export { setupIntent } from "./internal/setup/intent.js";
+export { setupIntent } from "./store/intent.js";
 
 // Inferred consumer declarations require these failure names.
 export type { SetupDuplicateDecisionRequired };

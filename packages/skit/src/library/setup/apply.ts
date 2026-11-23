@@ -140,7 +140,24 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(function* (
   }
   const outcome = yield* options.withStage(
     { _tag: "ApplyPlan", stages },
-    library.setup(steps, { base }),
+    library.setup(steps, {
+      base,
+      ...(approval.persistRoots || (needsIdentity && !revalidated.scan.machineConfig.machineId)
+        ? {
+            machineChoices: {
+              ...(approval.setup.repositoryRoots?.length
+                ? { discoveryRoots: approval.setup.repositoryRoots }
+                : {}),
+              ...(approval.setup.repositoryDecisions === undefined
+                ? {}
+                : { repositories: approval.setup.repositoryDecisions }),
+              ...(approval.setup.machineDisplayName === undefined
+                ? {}
+                : { displayName: approval.setup.machineDisplayName }),
+            },
+          }
+        : {}),
+    }),
   );
   if (outcome._tag === "Stopped")
     return yield* new SetupStopped({
@@ -152,21 +169,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(function* (
   if (approval.persistRoots || (needsIdentity && !revalidated.scan.machineConfig.machineId)) {
     const saved = yield* options.withStage(
       { _tag: "SaveDiscoveryRoots" },
-      MachineSettings.updateDiscovery(
-        approval.setup.libraryHome,
-        {
-          // An empty scan selection never clears saved discovery roots.
-          ...(approval.setup.repositoryRoots?.length
-            ? { discoveryRoots: approval.setup.repositoryRoots }
-            : {}),
-          repositories: approval.setup.repositoryDecisions,
-          ...(approval.setup.machineDisplayName === undefined
-            ? {}
-            : { displayName: approval.setup.machineDisplayName }),
-        },
-        undefined,
-        outcome.operationId,
-      ),
+      MachineSettings.read(approval.setup.libraryHome),
     );
     current = {
       ...current,

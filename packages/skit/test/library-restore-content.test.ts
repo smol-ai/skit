@@ -1,3 +1,4 @@
+import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
 import { SourceNotFound } from "../src/sources/failures.js";
 import { openLibrary, inspectLibrary } from "./helpers/library-store.js";
 
@@ -198,7 +199,7 @@ it.effect("prepares downloaded private content and exact source content without 
       ),
       "Private notes\n",
     );
-    assert.strictEqual(yield* f.fs.exists(join(f.root, "restored", "state.json")), false);
+    assert.strictEqual((yield* inspectLocalLibraryState(join(f.root, "restored"))).present, false);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 

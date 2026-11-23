@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import type * as Library from "../src/library/library.js";
 import { openLibrary } from "./helpers/library-store.js";
 import { assert, it } from "@effect/vitest";
@@ -80,39 +81,6 @@ const upstream = Effect.gen(function* () {
   return { refresh, load, enable, project, installed, home };
 });
 
-it.effect("a whole-Collection entry installs Skills added upstream and retires deleted ones", () =>
-  Effect.gen(function* () {
-    const { refresh, enable, project, installed } = yield* upstream;
-    const first = yield* refresh(["alpha", "beta"]);
-    assert.ok(first.collection);
-    yield* enable([{ collection: first.collection.collection_id }]);
-    yield* project;
-    assert.deepStrictEqual(yield* installed, ["alpha", "beta"]);
-
-    yield* refresh(["alpha", "gamma"]);
-    yield* project;
-    assert.deepStrictEqual(yield* installed, ["alpha", "gamma"]);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("an individually enabled Skill deleted upstream stays installed", () =>
-  Effect.gen(function* () {
-    const { refresh, load, enable, project, installed } = yield* upstream;
-    const first = yield* refresh(["alpha", "beta"]);
-    const beta = first.skills.find((skill) => skill.name === "beta");
-    assert.ok(beta);
-    yield* enable([{ skill: beta.skill_id }]);
-    yield* project;
-    assert.deepStrictEqual(yield* installed, ["beta"]);
-
-    yield* refresh(["alpha"]);
-    const state = yield* load;
-    assert.ok(state.skills.some((skill) => skill.skill_id === beta.skill_id));
-    yield* project;
-    assert.deepStrictEqual(yield* installed, ["beta"]);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
 it.effect("refuses to remove a Collection that gained a member after removal was planned", () =>
   Effect.gen(function* () {
     const { refresh, load, enable, project, installed, home } = yield* upstream;
@@ -134,3 +102,44 @@ it.effect("refuses to remove a Collection that gained a member after removal was
     assert.deepStrictEqual(yield* installed, ["alpha", "beta"]);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+describe("skit update", () => {
+  describe("Updating imported Collections", () => {
+    describe("Update keeps existing Skill identities when a source’s members change.", () => {
+      it.effect(
+        "a whole-Collection entry installs Skills added upstream and retires deleted ones",
+        () =>
+          Effect.gen(function* () {
+            const { refresh, enable, project, installed } = yield* upstream;
+            const first = yield* refresh(["alpha", "beta"]);
+            assert.ok(first.collection);
+            yield* enable([{ collection: first.collection.collection_id }]);
+            yield* project;
+            assert.deepStrictEqual(yield* installed, ["alpha", "beta"]);
+
+            yield* refresh(["alpha", "gamma"]);
+            yield* project;
+            assert.deepStrictEqual(yield* installed, ["alpha", "gamma"]);
+          }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      );
+
+      it.effect("an individually enabled Skill deleted upstream stays installed", () =>
+        Effect.gen(function* () {
+          const { refresh, load, enable, project, installed } = yield* upstream;
+          const first = yield* refresh(["alpha", "beta"]);
+          const beta = first.skills.find((skill) => skill.name === "beta");
+          assert.ok(beta);
+          yield* enable([{ skill: beta.skill_id }]);
+          yield* project;
+          assert.deepStrictEqual(yield* installed, ["beta"]);
+
+          yield* refresh(["alpha"]);
+          const state = yield* load;
+          assert.ok(state.skills.some((skill) => skill.skill_id === beta.skill_id));
+          yield* project;
+          assert.deepStrictEqual(yield* installed, ["beta"]);
+        }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      );
+    });
+  });
+});

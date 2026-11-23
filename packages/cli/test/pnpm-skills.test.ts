@@ -1,3 +1,4 @@
+import { describe } from "@effect/vitest";
 import { saveRecoveryFiles } from "./helpers/recovery-files.js";
 import { dirname, join } from "node:path";
 import { it } from "@effect/vitest";
@@ -43,32 +44,6 @@ const fixture = Effect.fn("Test.pnpmFixture")(function* (yaml = false) {
   );
   return { fs, root, pkg, skill, alias, ledgerPath };
 });
-
-it.effect("refuses parent-directory acquisition before retaining any pnpm member", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    const home = yield* libraryHome({ home: join(f.root, "library") });
-    for (const declared of [false, true]) {
-      if (declared)
-        yield* f.fs.writeFileString(
-          join(f.pkg, "skit.json"),
-          JSON.stringify({ slug: "demo", skills: [{ name: "demo-guide", path: "skills/guide" }] }),
-        );
-      for (const input of [f.pkg, join(f.pkg, "skills")]) {
-        const results = yield* Effect.all([
-          Effect.result(home.owned(inspectLibrarySource(input))),
-          Effect.result(home.owned(writingTo(home.home, importSource(input)))),
-        ]);
-        for (const result of results) {
-          expect(result._tag).toBe("Failure");
-          if (result._tag === "Failure") expect(result.failure._tag).toBe("PnpmSkillManaged");
-        }
-      }
-      expect((yield* home.snapshot)._tag).toBe("Absent");
-    }
-    expect(yield* f.fs.readLink(f.alias)).toBe(f.skill);
-  }).pipe(Effect.provide(skitLayer)),
-);
 
 it.effect("keeps an authored workspace source distinct from pnpm's recorded aliases", () =>
   Effect.gen(function* () {
@@ -166,56 +141,95 @@ it.effect("does not attribute an unrecorded user alias to pnpm", () =>
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("reports pnpm copies but excludes acquisition, setup selection and removal", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    expect(
-      yield* (yield* ChildProcessSpawner.ChildProcessSpawner).exitCode(
-        ChildProcess.make("git", ["init", "-q"], { cwd: f.root }),
-      ),
-    ).toBe(0);
-    const home = yield* libraryHome({
-      home: join(f.root, "library"),
-      inventoryHome: join(f.root, "home"),
-    });
-    const options = {
-      libraryHome: home.home,
-      inventory: home.inventory,
-      repositoryRoots: [f.root],
-      persistRoots: false,
-      probePath: "",
-    };
-    const scan = yield* home.owned(runSetup(options));
-    expect(Schema.is(SetupResult)(scan)).toBe(true);
-    const instance = scan.instances.find((item) => item.name === "demo-guide");
-    expect(instance?.owner.kind).toBe("pnpm");
-    expect(instance?.aliases).toContain(f.alias);
-    expect(scan.onboarding.candidates.some((item) => item.name === "demo-guide")).toBe(false);
-    const row = setupDiscoveredSkillChoices(scan.instances, scan.onboarding.candidates).find(
-      (item) => item.instance.name === "demo-guide",
-    );
-    expect(row?.choice.disabled).toBe(true);
-    expect(row?.details).toContain("Managed by pnpm | left in place");
-    expect((yield* setupRemovablePaths(options, scan)).has(f.skill)).toBe(false);
-    const add = yield* Effect.result(home.owned(importSource(f.alias)));
-    expect(add._tag).toBe("Failure");
-    if (add._tag === "Failure") expect(add.failure._tag).toBe("PnpmSkillManaged");
-    const takeover = yield* Effect.result(
-      home.owned(
-        applySetupSelections(options, scan, home.installOptions, {
-          ownership: [{ name: "demo-guide", sourcePath: f.skill }],
-        }),
-      ),
-    );
-    expect(takeover._tag).toBe("Failure");
-    const removal = (yield* saveRecoveryFiles(home.home, [f.alias])).result;
-    expect(removal._tag).toBe("Stopped");
-    if (removal._tag === "Stopped" && removal.reason._tag === "StepFailed")
-      expect(Schema.is(Schema.TaggedStruct("PnpmSkillManaged", {}))(removal.reason.error)).toBe(
-        true,
+describe("skit setup", () => {
+  describe("Managing selected copies", () => {
+    describe("Setup leaves protected copies under their existing owner.", () => {
+      it.effect("reports pnpm copies but excludes acquisition, setup selection and removal", () =>
+        Effect.gen(function* () {
+          const f = yield* fixture();
+          expect(
+            yield* (yield* ChildProcessSpawner.ChildProcessSpawner).exitCode(
+              ChildProcess.make("git", ["init", "-q"], { cwd: f.root }),
+            ),
+          ).toBe(0);
+          const home = yield* libraryHome({
+            home: join(f.root, "library"),
+            inventoryHome: join(f.root, "home"),
+          });
+          const options = {
+            libraryHome: home.home,
+            inventory: home.inventory,
+            repositoryRoots: [f.root],
+            persistRoots: false,
+            probePath: "",
+          };
+          const scan = yield* home.owned(runSetup(options));
+          expect(Schema.is(SetupResult)(scan)).toBe(true);
+          const instance = scan.instances.find((item) => item.name === "demo-guide");
+          expect(instance?.owner.kind).toBe("pnpm");
+          expect(instance?.aliases).toContain(f.alias);
+          expect(scan.onboarding.candidates.some((item) => item.name === "demo-guide")).toBe(false);
+          const row = setupDiscoveredSkillChoices(scan.instances, scan.onboarding.candidates).find(
+            (item) => item.instance.name === "demo-guide",
+          );
+          expect(row?.choice.disabled).toBe(true);
+          expect(row?.details).toContain("Managed by pnpm | left in place");
+          expect((yield* setupRemovablePaths(options, scan)).has(f.skill)).toBe(false);
+          const add = yield* Effect.result(home.owned(importSource(f.alias)));
+          expect(add._tag).toBe("Failure");
+          if (add._tag === "Failure") expect(add.failure._tag).toBe("PnpmSkillManaged");
+          const takeover = yield* Effect.result(
+            home.owned(
+              applySetupSelections(options, scan, home.installOptions, {
+                ownership: [{ name: "demo-guide", sourcePath: f.skill }],
+              }),
+            ),
+          );
+          expect(takeover._tag).toBe("Failure");
+          const removal = (yield* saveRecoveryFiles(home.home, [f.alias])).result;
+          expect(removal._tag).toBe("Stopped");
+          if (removal._tag === "Stopped" && removal.reason._tag === "StepFailed")
+            expect(
+              Schema.is(Schema.TaggedStruct("PnpmSkillManaged", {}))(removal.reason.error),
+            ).toBe(true);
+          expect(yield* f.fs.readLink(f.alias)).toBe(f.skill);
+          expect((yield* home.durable).skills).toHaveLength(0);
+          expect(yield* f.fs.exists(join(f.root, "removed"))).toBe(false);
+        }).pipe(Effect.provide(skitLayer)),
       );
-    expect(yield* f.fs.readLink(f.alias)).toBe(f.skill);
-    expect((yield* home.durable).skills).toHaveLength(0);
-    expect(yield* f.fs.exists(join(f.root, "removed"))).toBe(false);
-  }).pipe(Effect.provide(skitLayer)),
-);
+    });
+  });
+});
+
+describe("skit add", () => {
+  describe("Add refuses sources managed by a dedicated installer.", () => {
+    it.effect("refuses parent-directory acquisition before retaining any pnpm member", () =>
+      Effect.gen(function* () {
+        const f = yield* fixture();
+        const home = yield* libraryHome({ home: join(f.root, "library") });
+        for (const declared of [false, true]) {
+          if (declared)
+            yield* f.fs.writeFileString(
+              join(f.pkg, "skit.json"),
+              JSON.stringify({
+                slug: "demo",
+                skills: [{ name: "demo-guide", path: "skills/guide" }],
+              }),
+            );
+          for (const input of [f.pkg, join(f.pkg, "skills")]) {
+            const results = yield* Effect.all([
+              Effect.result(home.owned(inspectLibrarySource(input))),
+              Effect.result(home.owned(writingTo(home.home, importSource(input)))),
+            ]);
+            for (const result of results) {
+              expect(result._tag).toBe("Failure");
+              if (result._tag === "Failure") expect(result.failure._tag).toBe("PnpmSkillManaged");
+            }
+          }
+          expect((yield* home.snapshot)._tag).toBe("Absent");
+        }
+        expect(yield* f.fs.readLink(f.alias)).toBe(f.skill);
+      }).pipe(Effect.provide(skitLayer)),
+    );
+  });
+});

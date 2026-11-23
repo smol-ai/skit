@@ -116,8 +116,75 @@ export class ImportContentInvalid
   readonly code = "VALIDATION_FAILED" as const;
 }
 
+export const LibraryInvariantReason = Schema.TaggedUnion({
+  DatabaseWriteInsideRead: {},
+  DatabaseWriterLockMissing: {},
+  ImportInsideTransaction: {},
+});
+export class LibraryInvariantFailed
+  extends Schema.TaggedError<LibraryInvariantFailed, { readonly brand: unique symbol }>()(
+    "LibraryInvariantFailed",
+    { path: Schema.String, reason: LibraryInvariantReason },
+  )
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+}
+
 /** Why something the Library stores cannot be used. Front ends write the words. */
 export const InvalidLibraryStateReason = Schema.TaggedUnion({
+  LegacySourceChanged: {
+    sourcePath: Schema.String,
+    backupPath: Schema.NullOr(Schema.String),
+    databasePath: Schema.String,
+  },
+  LegacyStateBesideDatabase: { statePath: Schema.String, databasePath: Schema.String },
+  ImportBackupChanged: {
+    sourcePath: Schema.String,
+    backupPath: Schema.String,
+    databasePath: Schema.String,
+  },
+  NewerDatabaseMigration: {
+    databasePath: Schema.String,
+    migration: Schema.Int,
+    supported: Schema.Int,
+  },
+  DatabaseEmpty: {},
+  DatabaseMigrationIncomplete: {},
+  DatabaseMigrationsMismatch: {
+    expected: Schema.Array(Schema.String),
+    actual: Schema.Array(Schema.String),
+  },
+  ImportRecordMissing: { sourcePath: Schema.String },
+  DocumentEncodingFailed: { document: Schema.Literals(["library", "inventory"]) },
+  RowIdentityMismatch: {
+    field: Schema.String,
+    expected: Schema.String,
+    actual: Schema.NullOr(Schema.String),
+  },
+  CatalogueRowChanged: {
+    field: Schema.String,
+    id: Schema.NullOr(Schema.String),
+  },
+  DifferenceFieldUnknown: { field: Schema.String },
+  EnabledSubjectMissing: { subject: Schema.Literals(["skill", "collection"]), id: Schema.String },
+  InstalledVersionOwnerMismatch: {
+    installedId: Schema.String,
+    version: Schema.String,
+    expectedSkill: Schema.String,
+    actualSkill: Schema.NullOr(Schema.String),
+  },
+  InventoryRowsInvalid: { table: Schema.String, position: Schema.optionalKey(Schema.Int) },
+  InventoryInstalledIdentityChanged: {
+    expectedCount: Schema.Int,
+    actualCount: Schema.Int,
+    installedId: Schema.optionalKey(Schema.String),
+  },
+  CollectionStillInstalled: { collectionId: Schema.String, installedId: Schema.String },
+  UndoFieldChanged: { field: Schema.String },
+  OperationStateMissing: { databasePath: Schema.String },
+  DatabaseIntegrityInvalid: { databasePath: Schema.String, result: Schema.Array(Schema.String) },
   SchemaInvalid: { failure: SchemaFailure },
   ArchiveInvalid: { failure: CollectionVersionArchiveInvalid },
   /** It does not decode. `issue` is what the decoder or reader reported, where there is one. */
@@ -166,6 +233,18 @@ export class InvalidLibraryState
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "VALIDATION_FAILED" as const;
+}
+
+/** SQLite or its migration failed; keep the original cause at the database boundary. */
+export class LibrarySqlError
+  extends Schema.TaggedError<LibrarySqlError, { readonly brand: unique symbol }>()(
+    "LibrarySqlError",
+    { path: Schema.String, cause: Schema.Defect() },
+  )
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
 }
 
 /** The Library moved on since the state a change was planned from; nothing was saved. */

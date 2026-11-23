@@ -14,6 +14,11 @@ it.effect("replays a real fresh-device sync from a single captured run", () =>
     if (!story) return;
     const recording = yield* recordJourney(story);
     const frames = journeyFrames(recording, defaultTerminalEnvironment);
+    expect(frames[0]).toMatchObject({
+      event: "Command",
+      command: recording.events.find((event) => event._tag === "Command")?.line,
+    });
+    expect(frames.at(-1)?.event).toBe("Result");
     const download = frames.find((frame) => frame.status === "Downloading 3 Skill copies | 0/3");
     expect(download).toBeDefined();
     if (!download) return;
@@ -32,8 +37,8 @@ it.effect("replays a real fresh-device sync from a single captured run", () =>
     expect(coloured.at(-1)?.output).not.toContain("\u001b[32mLibrary synced.");
     expect(journeyFrames(recording, defaultTerminalEnvironment)).toEqual(frames);
     const json = journeyFrames(recording, { ...defaultTerminalEnvironment, format: "json" });
-    expect(json).toHaveLength(2);
-    expect(JSON.parse(json[1]!.output).data.status).toBe("pulled");
+    expect(json).toHaveLength(1);
+    expect(JSON.parse(json[0]!.output).data.status).toBe("pulled");
     expect(json.every((frame) => frame.status === undefined)).toBe(true);
   }).pipe(Effect.provide(skitLayer)),
 );

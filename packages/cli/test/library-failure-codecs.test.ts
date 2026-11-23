@@ -1,6 +1,6 @@
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Cause, Effect, Option, Schema } from "effect";
 import { systemError } from "effect/PlatformError";
 import {
   EditImportFailure,
@@ -13,6 +13,7 @@ import {
   Unusable,
   SetupNotRecorded,
 } from "@smolai/skit-core/machine-settings/failures";
+import { InvalidLibraryState } from "@smolai/skit-core/library";
 import { classifyFailure } from "../src/commands/failure-classification.js";
 
 it("preserves all local edit refusal facts across JSON and formats them in the frontend", () => {
@@ -92,3 +93,17 @@ it.effect("preserves settings read and schema failure details until the output b
     }
   }),
 );
+
+it("keeps database migration facts through JSON and into command classification", () => {
+  const original = new InvalidLibraryState({
+    path: "/state/library.sqlite",
+    reason: { _tag: "DatabaseMigrationsMismatch", expected: ["1_library"], actual: ["1_unknown"] },
+  });
+  const codec = Schema.toCodecJson(InvalidLibraryState);
+  const wire = Schema.encodeSync(codec)(original);
+  expect(wire).toMatchObject({ reason: original.reason });
+  const saved = Schema.decodeUnknownSync(codec)(JSON.parse(JSON.stringify(wire)));
+  const classified = classifyFailure(saved);
+  expect(classified.code).toBe("VALIDATION_FAILED");
+  expect(Cause.findErrorOption(classified.cause)).toEqual(Option.some(saved));
+});

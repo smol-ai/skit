@@ -1,4 +1,4 @@
-import type { UndoConflict, UndoScope } from "../../recovery-facts.js";
+import type { UndoConflict } from "../../recovery-facts.js";
 import { canonicalJson } from "../../../shared/json.js";
 import {
   currentCollectionSkills,
@@ -6,10 +6,13 @@ import {
   type Import,
 } from "../../library-contracts.js";
 import { Enabled } from "../../library-contracts.js";
-import { InvocationPolicies, Repository } from "../../device-state.js";
-import { SkillId } from "../../entity-ids.js";
-import { type LibraryState } from "../../library-state.js";
-import { type SetupIntent } from "./intent.js";
+import { InvocationPolicies, Repository, type DeviceSkillSelection } from "../../device-state.js";
+import {
+  prepareLibrarySets,
+  libraryStateRevision,
+  type LibraryState,
+} from "../../library-state.js";
+import { type SetupIntentChanges } from "../../store/setup-intent.js";
 
 const withPolicies = (invocation_policies: InvocationPolicies | undefined) =>
   invocation_policies === undefined ? {} : { invocation_policies };
@@ -29,10 +32,10 @@ const hasAdditionalFields = (repository: Repository) =>
 /** Compute an inverse without saving it. Only the operation's changed keys can be reversed. */
 export const reverseSetupIntent = (
   state: LibraryState,
-  before: SetupIntent,
-  expected: SetupIntent,
+  changes: SetupIntentChanges,
   restoredSources: readonly Import[] = [],
 ) => {
+  state = prepareLibrarySets(state);
   const selectedSourceState = restoredSources.length
     ? { ...state, imports: [...state.imports, ...restoredSources] }
     : state;
@@ -43,105 +46,118 @@ export const reverseSetupIntent = (
     conflicts.push(conflict);
     return current;
   };
-  const reverseList = (
-    scope: UndoScope,
-    prior: EnabledList | undefined,
-    after: EnabledList | undefined,
+  const reverseSelection = (
+    change: SetupIntentChanges["scopes"][number],
     current: EnabledList | undefined,
   ) => {
-    const items = [...(current?.enabled ?? [])];
-    const old = new Map((prior?.enabled ?? []).map((item) => [itemKey(item), item]));
-    const next = new Map((after?.enabled ?? []).map((item) => [itemKey(item), item]));
-    for (const key of new Set([...old.keys(), ...next.keys()])) {
-      const was = old.get(key);
-      const wanted = next.get(key);
-      const enabled = items.some((item) => itemKey(item) === key);
+    const items = new Map((current?.enabled ?? []).map((item) => [itemKey(item), item]));
+    for (const row of change.enabled) {
+      const present = items.has(row.key);
       const reversed = restore(
-        { _tag: "SelectionChanged", scope, key, kind: "enabled" },
-        was !== undefined,
-        wanted !== undefined,
-        enabled,
+        { _tag: "SelectionChanged", scope: change.scope, key: row.key, kind: "enabled" },
+        row.before !== undefined,
+        row.after !== undefined,
+        present,
       );
-      if (!reversed) {
-        const index = items.findIndex((item) => itemKey(item) === key);
-        if (index >= 0) items.splice(index, 1);
-      } else if (!enabled && was) {
+      if (!reversed) items.delete(row.key);
+      else if (!present && row.before) {
+        const item = row.before;
         const imported =
-          "skill" in was
-            ? state.skills.some((skill) => skill.skill_id === was.skill)
-            : state.collections.some((collection) => collection.collection_id === was.collection);
-        if (imported) items.push(was);
-        else conflicts.push({ _tag: "SelectionMissing", scope, key });
+          "skill" in item
+            ? state.skills.some((skill) => skill.skill_id === item.skill)
+            : state.collections.some((collection) => collection.collection_id === item.collection);
+        if (imported) items.set(row.key, item);
+        else conflicts.push({ _tag: "SelectionMissing", scope: change.scope, key: row.key });
       }
     }
-    const policies = { ...current?.invocation_policies };
-    for (const id of new Set([
-      ...Object.keys(prior?.invocation_policies ?? {}),
-      ...Object.keys(after?.invocation_policies ?? {}),
-    ])) {
-      const key = SkillId.make(id);
-      const policy = restore(
-        { _tag: "SelectionChanged", scope, key, kind: "invocation" },
-        prior?.invocation_policies?.[key],
-        after?.invocation_policies?.[key],
-        policies[key],
+    const policies = new Map(Object.entries(current?.invocation_policies ?? {}));
+    for (const row of change.policies) {
+      const value = restore(
+        { _tag: "SelectionChanged", scope: change.scope, key: row.key, kind: "invocation" },
+        row.before,
+        row.after,
+        policies.get(row.key),
       );
-      if (policy === undefined) delete policies[key];
-      else policies[key] = policy;
+      if (value === undefined) policies.delete(row.key);
+      else policies.set(row.key, value);
     }
-    if (!current && !items.length && !Object.keys(policies).length) return undefined;
+    if (current === undefined && items.size === 0 && policies.size === 0) return undefined;
     return {
-      enabled: items,
-      ...(Object.keys(policies).length ? { invocation_policies: policies } : {}),
+      enabled: [...items.values()],
+      ...(policies.size ? { invocation_policies: Object.fromEntries(policies) } : {}),
     };
   };
+  const account = changes.scopes.find((row) => row.scope._tag === "Account");
   const currentGlobal = { enabled: state.enabled, ...withPolicies(state.invocation_policies) };
-  const global = equal(before.global, expected.global)
-    ? currentGlobal
-    : (reverseList({ _tag: "Account" }, before.global, expected.global, currentGlobal) ??
-      currentGlobal);
-  const repositories = [...state.repositories];
-  const roots = new Set(
-    [...before.repositories, ...expected.repositories].map((repository) => repository.root),
-  );
-  for (const root of roots) {
-    const prior = before.repositories.find((repository) => repository.root === root);
-    const after = expected.repositories.find((repository) => repository.root === root);
-    const index = repositories.findIndex((repository) => repository.root === root);
-    const current = repositories[index];
-    const reversed = reverseList({ _tag: "Repository", root }, prior, after, current);
-    if (equal(prior, after)) continue;
+  const global = account
+    ? (reverseSelection(account, currentGlobal) ?? currentGlobal)
+    : currentGlobal;
+  const repositories = new Map(state.repositories.map((row) => [row.root, row]));
+  for (const change of changes.scopes) {
+    if (change.scope._tag !== "Repository") continue;
+    const root = change.scope.root,
+      current = repositories.get(root);
+    const reversed = reverseSelection(change, current);
     if (
       reversed &&
       (reversed.enabled.length ||
-        prior ||
+        change.beforePresent ||
         Object.keys(reversed.invocation_policies ?? {}).length ||
-        hasAdditionalFields(current ?? prior ?? after ?? { root, enabled: [] }))
+        hasAdditionalFields(current ?? { root, enabled: [] }))
     ) {
-      // Keep fields a newer SKIT stored on the record; replace only what undo reverses.
       const {
         enabled: _enabled,
         invocation_policies: _policies,
         ...kept
-      } = current ?? prior ?? after ?? { root, enabled: [] };
-      const repository: Repository = { ...kept, ...reversed, root };
-      if (index >= 0) repositories[index] = repository;
-      else repositories.push(repository);
-    } else if (index >= 0) repositories.splice(index, 1);
+      } = current ?? { root, enabled: [] };
+      repositories.set(root, { ...kept, ...reversed, root });
+    } else repositories.delete(root);
   }
   let device = state.device_skill_selection ?? null;
-  if (before.device?.mode === "choose" && expected.device?.mode === "choose") {
-    if (device?.mode !== "choose") {
-      if (!equal(before.device, expected.device)) conflicts.push({ _tag: "DeviceModeChanged" });
-    } else {
-      const reversed = reverseList({ _tag: "Device" }, before.device, expected.device, device);
-      device = { mode: "choose", ...(reversed ?? device) };
+  const deviceChanges = changes.scopes.find((row) => row.scope._tag === "Device");
+  if (changes.device) {
+    const mode = changes.device;
+    const matches = (side: "before" | "after") => {
+      if ((device?.mode ?? null) !== mode[side]) return false;
+      if (device === null) return true;
+      if (
+        Object.keys(device).some((key) => !["mode", "enabled", "invocation_policies"].includes(key))
+      )
+        return false;
+      if (device.mode !== "choose") return true;
+      const items = new Map(device.enabled.map((item) => [itemKey(item), item]));
+      const policies = new Map(Object.entries(device.invocation_policies ?? {}));
+      return (
+        items.size ===
+          (deviceChanges?.enabled.filter((row) => row[side] !== undefined).length ?? 0) &&
+        policies.size ===
+          (deviceChanges?.policies.filter((row) => row[side] !== undefined).length ?? 0) &&
+        (deviceChanges?.enabled.every((row) => equal(items.get(row.key), row[side])) ?? true) &&
+        (deviceChanges?.policies.every((row) => equal(policies.get(row.key), row[side])) ?? true)
+      );
+    };
+    if (!matches("before") && !matches("after")) conflicts.push({ _tag: "DeviceSelectionChanged" });
+    else if (mode.before === null) device = null;
+    else if (mode.before === "follow-account") device = { mode: "follow-account" };
+    else {
+      const current: Extract<DeviceSkillSelection, { mode: "choose" }> =
+        device?.mode === "choose" ? device : { mode: "choose", enabled: [] };
+      const reversed = deviceChanges ? reverseSelection(deviceChanges, current) : undefined;
+      const { enabled: _enabled, invocation_policies: _policies, ...kept } = current;
+      device = { ...kept, ...(reversed ?? { enabled: [] }) };
     }
-  } else
-    device = restore({ _tag: "DeviceSelectionChanged" }, before.device, expected.device, device);
+  } else if (deviceChanges) {
+    if (device?.mode !== "choose") conflicts.push({ _tag: "DeviceModeChanged" });
+    else {
+      const reversed = reverseSelection(deviceChanges, device);
+      const { enabled: _enabled, invocation_policies: _policies, ...kept } = device;
+      device = { ...kept, ...(reversed ?? { enabled: [] }) };
+    }
+  }
   const skills = state.skills.map((skill) => {
-    const prior = before.versions.find((item) => item.skillId === skill.skill_id);
-    const after = expected.versions.find((item) => item.skillId === skill.skill_id);
+    const row = changes.versions.find((item) => item.key === skill.skill_id);
+    const prior = row?.before,
+      after = row?.after;
     // Retained new Skills remain available; undo reverses their enablement, not their retention.
     if (!prior || !after || equal(prior, after)) return skill;
     const selected = currentSkillVersion(state, skill)?.skill_version_id ?? null;
@@ -168,9 +184,9 @@ export const reverseSetupIntent = (
       ? candidate
       : { ...candidate, local_version_id: prior.selected };
   });
-  for (const prior of before.versions) {
-    const after = expected.versions.find((item) => item.skillId === prior.skillId);
+  for (const { before: prior, after } of changes.versions) {
     if (
+      prior &&
       after &&
       !equal(prior, after) &&
       !state.skills.some((skill) => skill.skill_id === prior.skillId)
@@ -182,35 +198,32 @@ export const reverseSetupIntent = (
     ...rest,
     enabled: [...global.enabled],
     ...withPolicies(global.invocation_policies),
-    repositories,
+    repositories: [...repositories.values()],
     skills,
     imports: selectedSourceState.imports,
     ...(device === null ? {} : { device_skill_selection: device }),
   };
   // Per-Skill inverses alone cannot restore a followed Collection's members. Verify the
   // resulting membership after any separately verified source observations were composed.
-  const priorLists: readonly EnabledList[] = [
-    before.global,
-    ...before.repositories,
-    ...(before.device?.mode === "choose" ? [before.device] : []),
-  ];
   const currentLists: readonly EnabledList[] = [
     { enabled: next.enabled },
     ...next.repositories,
     ...(next.device_skill_selection?.mode === "choose" ? [next.device_skill_selection] : []),
   ];
-  for (const prior of before.memberships ?? []) {
-    const after = expected.memberships?.find((item) => item.collectionId === prior.collectionId);
-    if (!after || equal(prior, after)) continue;
-    const follows = (lists: readonly EnabledList[]) =>
-      lists.some((list) =>
-        list.enabled.some((item) => "collection" in item && item.collection === prior.collectionId),
-      );
+  for (const { before: prior, after, followedBefore } of changes.memberships) {
+    if (!prior || !after || equal(prior, after)) continue;
+    const follows = currentLists.some((list) =>
+      list.enabled.some((item) => "collection" in item && item.collection === prior.collectionId),
+    );
     const currentMembers = currentCollectionSkills(next, prior.collectionId)
       .map((skill) => skill.skill_id)
       .sort();
-    if (follows(priorLists) && follows(currentLists) && !equal(currentMembers, prior.skillIds))
+    if (followedBefore && follows && !equal(currentMembers, [...prior.skillIds].sort()))
       conflicts.push({ _tag: "CollectionMembershipChanged", collectionId: prior.collectionId });
   }
-  return { state: next, conflicts, changed: !equal(state, next) };
+  return {
+    state: prepareLibrarySets(next),
+    conflicts,
+    changed: libraryStateRevision(state) !== libraryStateRevision(next),
+  };
 };

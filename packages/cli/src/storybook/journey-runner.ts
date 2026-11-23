@@ -31,7 +31,6 @@ function renderEvent(
   const shown = (text: string) =>
     terminalText(environment.format === "human" ? compactHome(text, environment.home) : text);
   const body = InteractionEvent.$match(event, {
-    RuleProven: ({ rule }) => `Proven: ${rule}`,
     Command: ({ line }) =>
       renderBlocks([Block.Note({ text: [{ dim: "$ " }, { code: line }] })], environment),
     PromptShown: ({ kind, message, choices }) =>
@@ -78,10 +77,8 @@ export const recordJourney = Effect.fn("Storybook.recordJourney")(
     const home = yield* makeJourneyHome;
     const run =
       story._tag === "Scenario"
-        ? story.run(home, interaction.typed, interaction.checkRule).pipe(Effect.as(undefined))
-        : story
-            .run(home, interaction.typed, interaction.checkRule)
-            .pipe(Effect.map(story.finalState));
+        ? story.run(home, interaction.typed).pipe(Effect.as(undefined))
+        : story.run(home, interaction.typed).pipe(Effect.map(story.finalState));
     const outcome = yield* Effect.exit(run.pipe(Effect.provide(interaction.layer)));
     const common = { home, name: story.name, events: yield* interaction.events };
     if (story._tag === "Scenario") {

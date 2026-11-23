@@ -6,6 +6,7 @@ import { Deferred, Effect, Exit, Fiber, FileSystem, Layer, Option, Scope, Schema
 import { join } from "node:path";
 import * as History from "../src/history/history.js";
 import * as Sync from "../src/sync/sync.js";
+import { makeMachineId } from "../src/library/entity-ids.js";
 import { scanAuthorSyncTree } from "../src/author/index.js";
 
 import { authorLayer } from "./helpers/author-history.js";
@@ -75,6 +76,7 @@ it.effect("acquire refuses a .skit or a lock that is not what it claims to be", 
     expect(yield* Effect.flip(Effect.scoped(f.workspaces.acquire(f.root)))).toMatchObject({
       _tag: "AuthorWorkspaceUnsafe",
       path: join(f.root, ".skit"),
+      reason: { _tag: "ControlNotDirectory" },
     });
     yield* f.fs.remove(join(f.root, ".skit"));
     yield* f.fs.makeDirectory(join(f.root, ".skit"));
@@ -82,6 +84,7 @@ it.effect("acquire refuses a .skit or a lock that is not what it claims to be", 
     expect(yield* Effect.flip(Effect.scoped(f.workspaces.acquire(f.root)))).toMatchObject({
       _tag: "AuthorWorkspaceUnsafe",
       path: join(f.root, ".skit/lock.sqlite"),
+      reason: { _tag: "LockNotFile" },
     });
     expect(yield* f.fs.readDirectory(elsewhere)).toEqual([]);
   }).pipe(Effect.provide(testPlatformLayer)),
@@ -267,11 +270,12 @@ it.effect("preparation returns a write bound to its lease and private saved tree
       yield* history.saveTree(from);
       yield* history.saveTree(to);
       const idle = Sync.Idle.make({ base: null });
+      const pendingRevision = History.RevisionId.make(toHash);
       const writing = Sync.Writing.make({
         base: null,
         from: fromHash,
         to: toHash,
-        next: Sync.Sending.make({ base: null, revision: History.RevisionId.make(toHash) }),
+        next: Sync.Sending.make({ base: null, revision: pendingRevision }),
         merged: false,
       });
       const stale = yield* history.syncState.prepareWrite(lease, key, { from: idle, to: writing });
@@ -292,7 +296,7 @@ it.effect("preparation returns a write bound to its lease and private saved tree
       });
       const other = yield* otherLease;
       const foreignKey = { ...key, workspaceId: (yield* identified(other)).workspaceId };
-      const checkpoint = yield* f.fs.readFileString(join(home, "author-sync.json"));
+      const checkpoint = yield* history.syncState.read(key);
       expect(
         yield* Effect.flip(
           history.syncState.prepareWrite(lease, foreignKey, {
@@ -301,10 +305,42 @@ it.effect("preparation returns a write bound to its lease and private saved tree
           }),
         ),
       ).toMatchObject({ _tag: "AuthorWorkspaceConflict" });
-      expect(yield* f.fs.readFileString(join(home, "author-sync.json"))).toBe(checkpoint);
+      expect(yield* history.syncState.read(key)).toEqual(checkpoint);
+      const unrelated = yield* History.record(history.engineStore, to, [], {
+        device: makeMachineId(),
+        at: 1,
+      });
+      expect(
+        yield* Effect.exit(
+          history.syncState.prepareWrite(lease, key, {
+            from: writing,
+            trees: { from: fromHash, to: toHash },
+            mergedRevision: unrelated.id,
+          }),
+        ),
+      ).toMatchObject({
+        _tag: "Failure",
+        cause: {
+          reasons: [
+            {
+              _tag: "Die",
+              defect: {
+                _tag: "AuthorWorkspaceInvariantFailed",
+                reason: { _tag: "TreesDiffer" },
+              },
+            },
+          ],
+        },
+      });
+      expect(yield* history.syncState.read(key)).toEqual(checkpoint);
+      const mergedRevision = yield* history.engineStore.commit({
+        ...unrelated.revision,
+        parents: [pendingRevision],
+      });
       const current = yield* history.syncState.prepareWrite(lease, key, {
         from: writing,
         trees: { from: fromHash, to: toHash },
+        mergedRevision,
       });
       // Neither caller-owned tree data nor another lease can redirect the bound write.
       for (const tree of [from, to])
@@ -314,7 +350,9 @@ it.effect("preparation returns a write bound to its lease and private saved tree
         { concurrency: "unbounded" },
       );
       expect(attempts.map((exit) => exit._tag).sort()).toEqual(["Failure", "Success"]);
-      expect(yield* history.syncState.read(key)).toEqual(writing.next);
+      expect(yield* history.syncState.read(key)).toEqual(
+        Sync.Sending.make({ base: null, revision: mergedRevision }),
+      );
       expect(yield* f.fs.readFileString(join(f.root, "notes.txt"))).toBe("after\n");
       expect(yield* f.fs.exists(join(other.root, "notes.txt"))).toBe(false);
       expect(
@@ -518,4 +556,106 @@ it.effect("a malformed checkpoint retains schema paths and cannot be changed by 
     expect(wire).not.toHaveProperty("message");
     expect(yield* f.fs.readFileString(file)).toBe(text);
   }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.effect("acquire refuses RootChanged when a resolved root becomes a symlink", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const moved = `${f.root}-moved`;
+    yield* f.fs.rename(f.root, moved);
+    yield* Effect.addFinalizer(() => f.fs.remove(moved, { recursive: true }).pipe(Effect.orDie));
+    yield* f.fs.symlink(moved, f.root);
+    expect(yield* Effect.flip(Effect.scoped(f.workspaces.acquire(f.root)))).toMatchObject({
+      _tag: "AuthorWorkspaceUnsafe",
+      path: f.root,
+      reason: { _tag: "RootChanged" },
+    });
+    expect(yield* f.fs.exists(join(moved, ".skit"))).toBe(false);
+    expect(yield* f.fs.readFileString(join(moved, "notes.txt"))).toBe("before\n");
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect.each([
+  { origin: "http://registry.example", reason: "RemoteInvalid" },
+  { origin: "https://REGISTRY.example/", reason: "NoncanonicalDestination" },
+])("read refuses $reason in a pending connection without changing it", ({ origin, reason }) =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const file = join(f.root, ".skit/connection.json");
+    const text = JSON.stringify({
+      _tag: "Connecting",
+      remote: { ...remote, origin },
+      visibility: "private",
+      requestId: "pending-create",
+    });
+    yield* f.fs.makeDirectory(join(f.root, ".skit"));
+    yield* f.fs.writeFileString(file, text);
+    expect(yield* Effect.flip(f.workspaces.read(f.root))).toMatchObject({
+      _tag: "AuthorSyncStateInvalid",
+      path: file,
+      reason: { _tag: reason },
+    });
+    expect(yield* f.fs.readFileString(file)).toBe(text);
+    expect(yield* f.fs.readFileString(join(f.root, "notes.txt"))).toBe("before\n");
+    expect(yield* f.fs.exists(join(f.root, "skit.remote.json"))).toBe(false);
+  }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.effect.each(["WriteNotOwned", "TreesDiffer"] as const)(
+  "writeTree detects %s at the lease boundary without writing files",
+  (reason) =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      const home = yield* f.fs.makeTempDirectoryScoped({ prefix: "skit-invalid-write-" });
+      yield* Effect.gen(function* () {
+        const history = yield* AuthorHistory;
+        const lease = yield* f.workspaces.acquire(f.root);
+        const other = yield* otherLease;
+        const { workspaceId } = yield* identified(lease);
+        const key = { workspaceId, locator: "skit://registry.example/swyx/tools" };
+        const { from, to, fromHash, toHash } = yield* trees(f.root);
+        yield* history.saveTree(from);
+        yield* history.saveTree(to);
+        // The checkpoint is real. The lease is wrapped so the prepared write reaches
+        // another workspace's lease, or names a different target tree.
+        const prepared = yield* history.syncState.prepareWrite(
+          {
+            ...lease,
+            writeTree: (change) =>
+              reason === "WriteNotOwned"
+                ? other.writeTree(change)
+                : lease.writeTree({ ...change, to: from }),
+          },
+          key,
+          {
+            from: Sync.Idle.make({ base: null }),
+            to: Sync.Writing.make({
+              base: null,
+              from: fromHash,
+              to: toHash,
+              next: Sync.Sending.make({ base: null, revision: History.RevisionId.make(toHash) }),
+              merged: false,
+            }),
+          },
+        );
+        const checkpoint = yield* history.syncState.read(key);
+        expect(yield* Effect.exit(prepared.apply())).toMatchObject({
+          _tag: "Failure",
+          cause: {
+            reasons: [
+              {
+                _tag: "Die",
+                defect: {
+                  _tag: "AuthorWorkspaceInvariantFailed",
+                  reason: { _tag: reason, key },
+                },
+              },
+            ],
+          },
+        });
+        expect(yield* history.syncState.read(key)).toEqual(checkpoint);
+        expect(yield* f.fs.readFileString(join(f.root, "notes.txt"))).toBe("before\n");
+        expect(yield* f.fs.exists(join(other.root, "notes.txt"))).toBe(false);
+      }).pipe(Effect.provide(authorLayer(home)));
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

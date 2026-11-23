@@ -54,6 +54,8 @@ import { AuthorFailure } from "@smolai/skit-core/author/failures";
 import { authorFailure } from "./author-failures";
 import { HomeBusy } from "@smolai/skit-core/platform";
 import {
+  LibrarySqlError,
+  LibraryChanged,
   InvalidLibraryState,
   InvalidLibraryStateReason,
   LibrarySubjectNotFound,
@@ -63,15 +65,64 @@ import { errorMessage } from "@smolai/skit-core/shared";
 import { Match, Schema } from "effect";
 import { invocationFailure, treeFailure } from "./invocation-failure";
 
-const LibraryReadFailure = Schema.Union([HomeBusy, InvalidLibraryState, LibrarySubjectNotFound]);
-const readFailure = Match.type<typeof LibraryReadFailure.Type>().pipe(
+const LibraryReadFailure = Schema.Union([
+  HomeBusy,
+  LibrarySqlError,
+  LibraryChanged,
+  InvalidLibraryState,
+  LibrarySubjectNotFound,
+]);
+const readFailureMessage = Match.type<typeof LibraryReadFailure.Type>().pipe(
   Match.tagsExhaustive({
-    HomeBusy: ({ path }) =>
-      `Another running SKIT process holds the home writer lock at ${path}. Wait for it to finish, then retry.`,
+    HomeBusy: ({ path, owner }) =>
+      owner === undefined
+        ? `Another running SKIT process holds the home writer lock at ${path}. Wait for it to finish, then retry.`
+        : `Legacy Library lock at ${path} is owned by ${owner.trim()}. Confirm that owner has stopped before removing the lock.`,
     "Library.SubjectNotFound": ({ query }) =>
       `No Skill or Collection in the Library matches ${query}`,
+    LibraryChanged: () => "The Library changed while the operation was running",
+    LibrarySqlError: ({ path, cause }) =>
+      `Cannot access Library database at ${path}: ${errorMessage(cause)}`,
     InvalidLibraryState: ({ path, reason }) =>
       `Invalid Library state at ${path}: ${InvalidLibraryStateReason.match(reason, {
+        LegacySourceChanged: ({ sourcePath, backupPath, databasePath }) =>
+          `legacy source ${sourcePath} changed after import into ${databasePath} began. ${backupPath === null ? "The source was absent when import began" : `Original backup is at ${backupPath}`}`,
+        LegacyStateBesideDatabase: ({ statePath, databasePath }) =>
+          `database ${databasePath} is authoritative and conflicts with ${statePath}`,
+        ImportBackupChanged: ({ sourcePath, backupPath, databasePath }) =>
+          `import into ${databasePath} stopped because backup ${backupPath} differs from source ${sourcePath}`,
+        NewerDatabaseMigration: ({ databasePath, migration, supported }) =>
+          `database ${databasePath} has migration ${migration}; this build supports through ${supported}`,
+        DatabaseEmpty: () => "database file is empty",
+        DatabaseMigrationIncomplete: () => "database migration did not finish",
+        DatabaseMigrationsMismatch: ({ expected, actual }) =>
+          `unsupported database migrations (${actual.join(", ") || "none"}). This build expects ${expected.join(", ")}`,
+        ImportRecordMissing: ({ sourcePath }) =>
+          `database already has Library data without an import record for ${sourcePath}`,
+        DocumentEncodingFailed: ({ document }) => `cannot encode the ${document} document as JSON`,
+        RowIdentityMismatch: ({ field, expected, actual }) =>
+          `accepted catalogue row has ${field} ${actual ?? "(missing)"}; expected ${expected}`,
+        CatalogueRowChanged: ({ field, id }) =>
+          `a catalogue operation would remove or rewrite ${field} row ${id ?? "(missing identity)"}`,
+        DifferenceFieldUnknown: ({ field }) =>
+          `unknown field in a recorded Library change: ${field}`,
+        EnabledSubjectMissing: ({ subject, id }) =>
+          `enabled ${subject} ${id} is missing from the Library`,
+        InstalledVersionOwnerMismatch: ({ installedId, version, expectedSkill, actualSkill }) =>
+          `installed copy ${installedId} expects version ${version} of Skill ${expectedSkill}; the version ${actualSkill === null ? "is missing" : `belongs to ${actualSkill}`}`,
+        InventoryRowsInvalid: ({ table, position }) =>
+          `inventory rows in ${table} have inconsistent positions or presence${position === undefined ? "" : ` at position ${position}`}`,
+        InventoryInstalledIdentityChanged: ({ installedId, expectedCount, actualCount }) =>
+          expectedCount !== actualCount
+            ? `the scan would change the number of installed copies from ${expectedCount} to ${actualCount}`
+            : `the scan would change the identity of installed copy ${installedId ?? "(unknown)"}`,
+        CollectionStillInstalled: ({ collectionId, installedId }) =>
+          `Collection ${collectionId} still has installed copy ${installedId}`,
+        UndoFieldChanged: ({ field }) => `Undo would change unrelated Library field ${field}`,
+        OperationStateMissing: ({ databasePath }) =>
+          `operation records in ${databasePath} have no current Library state`,
+        DatabaseIntegrityInvalid: ({ databasePath, result }) =>
+          `database integrity check failed at ${databasePath}: ${result.join(", ")}`,
         SchemaInvalid: ({ failure }) => schemaFailure(failure),
         ArchiveInvalid: ({ failure }) => collectionVersionArchiveFailure(failure).message,
         InvalidData: ({ issue, tree }) =>
@@ -89,6 +140,45 @@ const readFailure = Match.type<typeof LibraryReadFailure.Type>().pipe(
       })}`,
   }),
 );
+
+const readFailureNext = Match.type<typeof LibraryReadFailure.Type>().pipe(
+  Match.tagsExhaustive({
+    HomeBusy: () => undefined,
+    "Library.SubjectNotFound": () => undefined,
+    LibraryChanged: () => "Try the operation again.",
+    LibrarySqlError: () => "Check the reported database failure and retry.",
+    InvalidLibraryState: ({ path, reason }) => {
+      if (reason._tag === "LegacySourceChanged" || reason._tag === "ImportBackupChanged")
+        return "Keep all existing copies of the source, backup, and database.";
+      if (reason._tag === "NewerDatabaseMigration")
+        return "Use a build that supports this migration. Keep the database intact.";
+      if (reason._tag === "LegacyStateBesideDatabase")
+        return `Keep the authoritative database. Move ${reason.statePath} aside as a separate backup, then retry.`;
+      if (reason._tag === "DocumentEncodingFailed")
+        return "Retry the operation. If it fails again, report the failure to SKIT’s maintainers.";
+      if (
+        reason._tag === "CatalogueRowChanged" ||
+        reason._tag === "EnabledSubjectMissing" ||
+        reason._tag === "InventoryInstalledIdentityChanged" ||
+        reason._tag === "CollectionStillInstalled" ||
+        reason._tag === "UndoFieldChanged"
+      )
+        return "Review the operation against the current Library, then retry.";
+      if (
+        path.endsWith("library.sqlite") ||
+        reason._tag === "DatabaseIntegrityInvalid" ||
+        reason._tag === "OperationStateMissing"
+      )
+        return "Preserve the entire Library home, including library.sqlite and any -wal/-shm files. Restore a verified complete backup and keep installed Skill files.";
+      return "Back up the state file and keep installed Skill files before recovery.";
+    },
+  }),
+);
+
+export const libraryReadFailure = (error: unknown) =>
+  Schema.is(LibraryReadFailure)(error)
+    ? { message: readFailureMessage(error), remediation: readFailureNext(error) }
+    : undefined;
 
 /** The host rejects with the original owner failure; only the TUI gives it words. */
 export const libraryFailure = (error: unknown): string => {
@@ -170,7 +260,7 @@ export const libraryFailure = (error: unknown): string => {
     return `${formatted.message}\n${formatted.remediation}`;
   }
   if (Schema.is(AuthorHistoryFailure)(error)) {
-    const formatted = authorHistoryFailure(error);
+    const formatted = authorHistoryFailure(error, libraryReadFailure);
     return `${formatted.message}\n${formatted.remediation}`;
   }
   if (Schema.is(StoreError)(error)) {
@@ -193,7 +283,9 @@ export const libraryFailure = (error: unknown): string => {
     const formatted = authorFailure(error);
     return `${formatted.message}\n${formatted.remediation}`;
   }
-  if (Schema.is(LibraryReadFailure)(error)) return readFailure(error);
+  const read = libraryReadFailure(error);
+  if (read)
+    return read.remediation === undefined ? read.message : `${read.message}\n${read.remediation}`;
   if (Schema.is(AuthorInvocationFailure)(error)) return invocationFailure(error);
   return errorMessage(error);
 };

@@ -5,7 +5,16 @@ import { treePathIssue } from "./history-store-failures";
 export const syncFailure = Match.type<SyncFailure>().pipe(
   Match.tagsExhaustive({
     "Sync.RemoteInvalid": ({ id, reason }) => ({
-      message: `The Registry sent revision ${id} in a form that does not match it: ${reason._tag === "TreeMismatch" ? `its tree has hash ${reason.actual}, expected ${reason.expected}` : `its revision identity is ${reason.actual}`}`,
+      message: `The Registry sent revision ${id} in a form that does not match it: ${Match.valueTags(
+        reason,
+        {
+          TreeMismatch: ({ actual, expected }) =>
+            `its tree has hash ${actual}, expected ${expected}`,
+          RevisionMismatch: ({ actual }) => `its revision identity is ${actual}`,
+          EditTimesMismatch: ({ paths }) =>
+            `edit times do not match tree paths: ${paths.join(", ")}`,
+        },
+      )}`,
       remediation: "Sync again; if it keeps failing, report the Registry's response.",
     }),
     "Sync.InvalidTree": ({ issue }) => ({

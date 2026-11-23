@@ -1,15 +1,16 @@
+import { loadOperations, loadLibrary } from "../src/library/store/library-store.js";
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Option, Schema } from "effect";
+import { Effect, FileSystem, Layer, Option } from "effect";
 import { join } from "node:path";
 import * as Library from "../src/library/library.js";
-import { LibraryState } from "../src/library/library-state.js";
+
+import { libraryDatabasePath } from "../src/library/store/database.js";
 import { readPathEvidence } from "../src/library/folder-evidence.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { makeMachineId } from "../src/library/entity-ids.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { testRoots } from "./helpers/library-store.js";
 
-const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(LibraryState));
 type Boundary = "recorded" | "directory" | "prepared";
 const fixture = Effect.fn("test.rootPreparation.fixture")(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -65,7 +66,6 @@ const fixture = Effect.fn("test.rootPreparation.fixture")(function* () {
     source,
     bytes,
     steps,
-    state: join(home, "state.json"),
     layer: Library.layer({ home, roots: testRoots(home) }),
   };
 });
@@ -81,14 +81,20 @@ const interrupt = Effect.fn("test.rootPreparation.interrupt")(function* (
     makeDirectory: (path, options) =>
       Effect.gen(function* () {
         if (path === f.claude) {
-          const state = yield* decode(yield* f.fs.readFileString(f.state)).pipe(Effect.orDie);
           assert.isTrue(
-            state.operations.some(
+            (yield* loadOperations(f.home).pipe(
+              Effect.provideService(FileSystem.FileSystem, f.fs),
+              Effect.orDie,
+            )).some(
               (operation) =>
                 operation._tag === "Pending" &&
                 operation.preparation?.roots.some((root) => root.path === path),
             ),
           );
+        }
+        if (!stopped && boundary === "recorded" && path === f.claude) {
+          stopped = true;
+          return yield* Effect.die("process exited before recorded root creation");
         }
         yield* f.fs.makeDirectory(path, options);
         if (!stopped && boundary === "directory" && path === f.claude) {
@@ -96,24 +102,20 @@ const interrupt = Effect.fn("test.rootPreparation.interrupt")(function* (
           return yield* Effect.die("process exited after creating a recorded root");
         }
       }),
-    rename: (from, to) =>
+    chmod: (path, mode) =>
       Effect.gen(function* () {
-        const state =
-          to === f.state
-            ? yield* decode(yield* f.fs.readFileString(from)).pipe(Effect.orDie)
-            : undefined;
-        yield* f.fs.rename(from, to);
-        const pending = state?.operations.find((operation) => operation._tag === "Pending");
-        if (
-          !stopped &&
-          pending?._tag === "Pending" &&
-          pending.preparation &&
-          ((boundary === "recorded" && !pending.preparation.done) ||
-            (boundary === "prepared" && pending.preparation.done))
-        ) {
-          stopped = true;
-          return yield* Effect.die("process exited at root preparation publication");
+        if (!stopped && boundary === "prepared" && path === libraryDatabasePath(f.home)) {
+          if (
+            (yield* loadOperations(f.home).pipe(
+              Effect.provideService(FileSystem.FileSystem, f.fs),
+              Effect.orDie,
+            )).some((operation) => operation._tag === "Pending" && operation.preparation?.done)
+          ) {
+            stopped = true;
+            return yield* Effect.die("process exited after root preparation publication");
+          }
         }
+        yield* f.fs.chmod(path, mode);
       }),
   };
   const exit = yield* Effect.exit(
@@ -126,9 +128,12 @@ const interrupt = Effect.fn("test.rootPreparation.interrupt")(function* (
   );
   assert.strictEqual(exit._tag, "Failure");
   assert.isTrue(stopped);
-  const state = yield* decode(yield* f.fs.readFileString(f.state));
+  const state = yield* loadLibrary(f.home);
   assert.deepStrictEqual(state.collections, []);
-  const pending = state.operations.find((operation) => operation._tag === "Pending");
+  const pending = (yield* loadOperations(f.home).pipe(
+    Effect.provideService(FileSystem.FileSystem, f.fs),
+    Effect.orDie,
+  )).find((operation) => operation._tag === "Pending");
   assert.strictEqual(pending?._tag, "Pending");
   if (pending?._tag !== "Pending") return yield* Effect.die("Missing durable attempt");
   return pending.operationId;

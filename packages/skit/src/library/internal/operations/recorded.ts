@@ -1,4 +1,12 @@
-import { DateTime, Effect, Schema } from "effect";
+import {
+  loadOperation,
+  LibraryWriter,
+  loadLibrary,
+  libraryOriginalsPath,
+  libraryStatePath,
+} from "../../store/library-store.js";
+import { Option, DateTime, Effect } from "effect";
+
 import * as InstalledSkills from "../../installed-skills.js";
 import * as Status from "../../installed-skill-status.js";
 import { makeInstalledSkillId, type OperationId } from "../../entity-ids.js";
@@ -8,16 +16,9 @@ import { InvalidLibraryState } from "../../failures.js";
 import { StalePlan, type Plan } from "../../library-plan.js";
 import { libraryStateRevision, type LibraryState } from "../../library-state.js";
 import { type InstalledSkill } from "../../device-state.js";
-import { OperationStatus } from "../../store/state-schema.js";
-import {
-  LibraryWriter,
-  loadLibrary,
-  libraryOriginalsPath,
-  libraryStatePath,
-} from "../../store/library-store.js";
 
 import type { StepRouting } from "../../store/state-schema.js";
-import { compileApply, finalRows, type ApplyStep } from "./program.js";
+import { compileApply, finalRows, prepareApplyState, type ApplyStep } from "./program.js";
 export type { ApplyStep } from "./program.js";
 
 /** Revalidate once, then fix every row and byte expectation before creating skills directories. */
@@ -78,6 +79,7 @@ export const prepareApply = Effect.fn("Library.prepareRecordedApply")(function* 
         reason: { _tag: "InstalledBytesChanged", kind: "reviewed", path: change.path },
       });
     const pending: InstalledSkill = {
+      ...(change.recorded === undefined ? {} : Status.pending(change.recorded)),
       installed_skill_id: change.recorded?.installed_skill_id ?? makeInstalledSkillId(),
       skill_id: change.skillId,
       skill_version_id: change.skillVersionId,
@@ -110,15 +112,20 @@ export const prepareApply = Effect.fn("Library.prepareRecordedApply")(function* 
     routing,
     home,
   );
-  const { installed_skills: _rows, operations: _operations, ...unchanged } = base;
-  const step: ApplyStep = invalidSource
-    ? { ...compiled, next: unchanged, save: "after", changes: [{ _tag: "Fail", ...invalidSource }] }
-    : compiled;
+  let step: ApplyStep = compiled;
+  if (invalidSource) {
+    const { bodyChange: _change, ...unchanged } = compiled;
+    step = {
+      ...unchanged,
+      afterHash: compiled.beforeHash,
+      save: "after",
+      changes: [{ _tag: "Fail", ...invalidSource }],
+    };
+  }
   let noop =
     libraryStateRevision({
-      ...step.next,
+      ...(yield* prepareApplyState(step, base, "after", home)),
       installed_skills: finalRows(step),
-      operations: base.operations,
     }) === libraryStateRevision(base) &&
     step.changes.every((change) => change._tag === "Save" && !change.backUp);
   if (noop)
@@ -130,7 +137,7 @@ export const prepareApply = Effect.fn("Library.prepareRecordedApply")(function* 
   return { step, snapshot, noop };
 });
 
-/** State and progress use the same atomic state-file replacement. */
+/** State and progress commit in the same transaction. */
 export const saveStep = Effect.fn("Library.saveApplyStep")(function* (
   operationId: OperationId,
   index: number,
@@ -138,28 +145,17 @@ export const saveStep = Effect.fn("Library.saveApplyStep")(function* (
   batch?: string,
   next?: LibraryState,
   base?: LibraryState,
+  revision?: number,
 ) {
   const writer = yield* LibraryWriter;
-  const current = base ?? (yield* loadLibrary(writer.home));
-  const state = next ?? current;
-  const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
-    state.operations,
-  ).pipe(
-    Effect.mapError(
-      () =>
-        new InvalidLibraryState({
-          path: libraryStatePath(writer.home),
-          reason: { _tag: "InvalidData" },
-        }),
-    ),
-  );
-  const operation = operations.find((item) => item.operationId === operationId);
+  const found = yield* loadOperation(writer.home, operationId);
+  const operation = Option.getOrUndefined(found);
   if (operation?._tag !== "Pending" || !operation.steps[index])
     return yield* new InvalidLibraryState({
       path: libraryStatePath(writer.home),
       reason: { _tag: "MissingRecord", record: "pending-operation" },
     });
-  const encoded = yield* Schema.encodeEffect(OperationStatus)({
+  const changed = {
     ...operation,
     steps: operation.steps.map((item, at) =>
       at !== index
@@ -174,22 +170,21 @@ export const saveStep = Effect.fn("Library.saveApplyStep")(function* (
               ],
             },
     ),
-  }).pipe(
-    Effect.mapError(
-      () =>
-        new InvalidLibraryState({
-          path: libraryStatePath(writer.home),
-          reason: { _tag: "InvalidData" },
-        }),
-    ),
-  );
-  yield* writer.save(
-    {
-      ...state,
-      operations: state.operations.map((item) =>
-        item.operationId === operationId ? encoded : item,
-      ),
-    },
-    current,
+  };
+  const prior = next === undefined ? undefined : (base ?? (yield* loadLibrary(writer.home)));
+  yield* writer.saveOperation(
+    changed,
+    operation,
+    next === undefined || prior === undefined
+      ? undefined
+      : revision === undefined
+        ? { next, base: prior }
+        : {
+            revision,
+            installedSkills: { next: next.installed_skills, base: prior.installed_skills },
+            ...(step.bodyChange?._tag === "Remove"
+              ? { removeCollection: step.bodyChange.collectionId }
+              : {}),
+          },
   );
 });
