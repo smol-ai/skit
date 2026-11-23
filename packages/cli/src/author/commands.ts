@@ -5,7 +5,11 @@ import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { authorWorkspaceLayer, watchAuthorWorkspace } from "@smolai/skit-core/author";
 import { authorRegistry } from "../registry/author-sync.js";
 import { authorLayer } from "../application.js";
-import { CommandMetadata, credentialStoreReadSubprocesses } from "../commands/metadata.js";
+import {
+  CommandMetadata,
+  credentialStoreReadSubprocesses,
+  workspaceSubprocesses,
+} from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";
 import { jsonFlag, optionalString } from "../commands/parameters.js";
 import { result } from "../commands/result.js";
@@ -16,9 +20,8 @@ import { authorSyncCommand } from "./sync.js";
 import { publishCommand } from "./publish.js";
 import { authorListCommand } from "./list.js";
 import { authorDeleteCommand } from "./delete.js";
+import { authorPullCommand } from "./pull.js";
 import { authorInvocationCommand } from "./invocation.js";
-
-const workspaceSubprocesses = ["git init --bare", "git ls-files", "git check-ignore"] as const;
 
 const directory = Argument.String("directory").pipe(
   Argument.withDescription("Author Workspace directory; defaults to the current directory."),
@@ -233,6 +236,51 @@ const list = defineCommand(
   }),
 );
 
+const pull = defineCommand(
+  "pull",
+  {
+    source: Argument.String("skit").pipe(
+      Argument.withDescription("SKIT to pull: namespace/skit or a Registry URL."),
+    ),
+    directory: Argument.String("directory").pipe(
+      Argument.withDescription(
+        "New or empty directory to pull into; defaults to one named after the SKIT.",
+      ),
+      Argument.optional,
+      Argument.map(Option.getOrUndefined),
+    ),
+    json: jsonFlag,
+  },
+  (input) =>
+    Effect.gen(function* () {
+      const renderer = yield* Renderer;
+      const home = (yield* SkitConfiguration).skitHome;
+      const value = yield* authorPullCommand(input.source, { directory: input.directory, home });
+      yield* renderer.result(result("authorPull", value));
+    }),
+).pipe(
+  Command.withDescription(
+    "Experimental: make an Author Workspace from a SKIT you already author on a Registry.",
+  ),
+  Command.withExamples([{ command: "skit author pull me/my-skills" }]),
+  Command.annotate(CommandMetadata, {
+    stability: "experimental",
+    effects: {
+      capabilities: [
+        "filesystem.read",
+        "filesystem.write",
+        "network.read",
+        "network.write",
+        "process.execute",
+      ],
+      subprocesses: [...credentialStoreReadSubprocesses, ...workspaceSubprocesses],
+    },
+    outputSchemas: [outputContracts.authorPull],
+    interactive: false,
+  }),
+  Command.provide(authorLayer),
+);
+
 const remove = defineCommand(
   "delete",
   {
@@ -296,7 +344,7 @@ const invocation = defineCommand("invocation", { directory, json: jsonFlag, dryR
 
 export const authorCliCommand = Command.make("author").pipe(
   Command.withDescription(
-    "Experimental: initialize, validate, sync and publish authored skills. Commands and output formats may change between releases.",
+    "Experimental: initialize, validate, sync, pull and publish authored skills. Commands and output formats may change between releases.",
   ),
-  Command.withSubcommands([init, validate, sync, watch, publish, list, remove, invocation]),
+  Command.withSubcommands([init, validate, sync, pull, watch, publish, list, remove, invocation]),
 );

@@ -58,6 +58,36 @@ const read = <A, E, R>(
     );
   });
 
+export const readAuthorWorkspaces = (home: string) =>
+  read(
+    home,
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* Schema.decodeUnknownEffect(
+        Schema.Array(Schema.Struct({ workspace_id: WorkspaceId, root: Schema.String })),
+      )(
+        yield* sql`SELECT workspace_id, root FROM author_history_workspaces
+                   WHERE workspace_id IS NOT NULL ORDER BY root`,
+      ).pipe(Effect.mapError((error) => failed(libraryDatabasePath(home), error)));
+    }),
+    [],
+  );
+
+export const readAuthorSyncLocators = (home: string) =>
+  read(
+    home,
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* Schema.decodeUnknownEffect(
+        Schema.Array(Schema.Struct({ locator: Schema.String })),
+      )(yield* sql`SELECT DISTINCT locator FROM author_sync_checkpoints`).pipe(
+        Effect.mapError((error) => failed(libraryDatabasePath(home), error)),
+      );
+      return rows.map((row) => row.locator);
+    }),
+    [],
+  );
+
 /** One workspace/locator checkpoint, never the other workspaces' documents. */
 export const readAuthorSyncState = (home: string, key: SyncKey) =>
   read(

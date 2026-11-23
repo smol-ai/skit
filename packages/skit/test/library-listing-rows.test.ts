@@ -33,6 +33,7 @@ it.effect(
       const expectedLockCollections = libraryListing(
         state,
         join(home, "originals"),
+        home,
       ).skillsShCollectionIds;
       yield* withLibraryDatabase(
         path,

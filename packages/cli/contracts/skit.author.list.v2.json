@@ -22,8 +22,15 @@
             ]
           },
           "current_revision_id": {
-            "type": "string",
-            "pattern": "^sha256:[a-f0-9]{64}$"
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "current_revision_published": {
             "type": "boolean"

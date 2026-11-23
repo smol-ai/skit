@@ -63,6 +63,7 @@ it.effect("derives the public manifest from executable leaves", () =>
       "author init",
       "author validate",
       "author sync",
+      "author pull",
       "author watch",
       "author publish",
       "author list",

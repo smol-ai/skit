@@ -23,6 +23,7 @@ export const libraryListing = (
     | "invocation_policies"
   >,
   originalsPath: string,
+  home: string,
 ) => {
   const state = structuredClone(
     Struct.pick(current, [
@@ -91,7 +92,7 @@ export const libraryListing = (
     const sources = new Map(
       yield* Effect.forEach(state.collections, (collection) =>
         Effect.map(
-          readCollectionSource(state, collection),
+          readCollectionSource(state, collection, home),
           (source) => [collection.collection_id, source] as const,
         ),
       ),
@@ -153,7 +154,7 @@ export const libraryListing = (
           const collectionSource =
             members[0]?.collectionSource ??
             (subject.kind === "collection"
-              ? yield* readCollectionSource(state, subject.collection)
+              ? yield* readCollectionSource(state, subject.collection, home)
               : undefined);
           return {
             id: subject.subjectId,

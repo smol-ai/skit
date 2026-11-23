@@ -161,7 +161,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const documents = yield* commandDocuments(skitCommand);
-      expect(documents).toHaveLength(41);
+      expect(documents).toHaveLength(42);
       for (const document of documents) {
         expect(document.invocation.missing, document.path.join(" ")).toEqual([]);
         expect(

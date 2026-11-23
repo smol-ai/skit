@@ -12,7 +12,7 @@ const SkitRow = Schema.Struct({
   owner_slug: Schema.String,
   skit_slug: Schema.String,
   visibility: Schema.Literals(["public", "unlisted", "private"]),
-  current_revision_id: History.RevisionId,
+  current_revision_id: Schema.NullOr(History.RevisionId),
   current_revision_published: Schema.Literals([0, 1]),
   most_recent_release_version: Schema.NullOr(Schema.String),
 });
@@ -77,7 +77,10 @@ export const makeList = (
              WHERE r.owner_slug = d.owner_slug AND r.skit_slug = d.skit_slug
              ORDER BY r.published_at DESC, r.rowid DESC LIMIT 1) most_recent_release_version
          FROM skits d
-         WHERE d.current_revision_id IS NOT NULL
+         WHERE (d.current_revision_id IS NOT NULL OR EXISTS (
+             SELECT 1 FROM releases r
+             WHERE r.owner_slug = d.owner_slug AND r.skit_slug = d.skit_slug
+           ))
            AND d.owner_slug IN (${namespaces.map(() => "?").join(", ")})
            AND (? IS NULL OR d.owner_slug > ? OR (d.owner_slug = ? AND d.skit_slug > ?))
          ORDER BY d.owner_slug, d.skit_slug LIMIT ?`,

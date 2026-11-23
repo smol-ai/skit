@@ -183,7 +183,13 @@ function presentAuthorList(data: ContractDataForId<"skit.author.list.v2">): Bloc
       rows: data.skits.map((skit) => [
         [authoredSkitLabel(skit.identity)],
         [skit.visibility],
-        [skit.current_revision_published ? "published" : "unpublished"],
+        [
+          skit.current_revision_id === null
+            ? { dim: "—" }
+            : skit.current_revision_published
+              ? "published"
+              : "unpublished",
+        ],
         [skit.most_recent_release_version ?? { dim: "—" }],
       ]),
     }),
@@ -698,6 +704,18 @@ const contractPresenters: ContractPresenters = {
   authorInvocation: presentAuthorInvocation,
   authorWatch: presentAuthorWatch,
   authorDelete: presentAuthorDelete,
+  authorPull: (data) => [
+    Block.Status({
+      tone: "ok",
+      text: [`Pulled ${data.identity} (${metadataRevision(data.revision_id)})`],
+    }),
+    Block.Fields({
+      rows: [
+        { label: "Directory", value: [{ code: data.directory }] },
+        { label: "Files", value: [String(data.paths.length)] },
+      ],
+    }),
+  ],
   publish: (data) => [
     Block.Status({
       tone: "ok",

@@ -195,7 +195,7 @@ describe("skit check", () => {
               ),
             );
           });
-          const checked = yield* libraryView(localState, join(home, "originals"))
+          const checked = yield* libraryView(localState, home)
             .checkSubjects(member.skill_id, {
               inspectSource,
             })
@@ -227,7 +227,7 @@ describe("skit check", () => {
                 },
               ],
             };
-            return libraryView(state, join(home, "originals"))
+            return libraryView(state, home)
               .checkSubjects(member.skill_id, {
                 inspectSource: () => Effect.succeed({ snapshot_digest: collectionVersion.hash }),
               })

@@ -136,6 +136,7 @@ export const syncLibrary = Effect.fn("Library.sync")(function* <
 >(
   library: Pick<Library.Interface, "read" | "plan" | "apply" | "content">,
   roots: InventoryRootOptions,
+  home: string,
   options: {
     readonly origin: string;
     readonly token?: string;
@@ -169,6 +170,7 @@ export const syncLibrary = Effect.fn("Library.sync")(function* <
     const session = yield* openSyncSession(
       library,
       roots,
+      home,
       {
         origin: options.origin,
         remote,

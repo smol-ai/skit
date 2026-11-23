@@ -1116,6 +1116,25 @@
                   "subject_id": {
                     "type": "string"
                   },
+                  "source_kind": {
+                    "type": "string",
+                    "enum": [
+                      "github",
+                      "git",
+                      "registry",
+                      "url",
+                      "archive",
+                      "local",
+                      "authored-workspace",
+                      "well-known"
+                    ]
+                  },
+                  "authority": {
+                    "type": "string"
+                  },
+                  "release_version": {
+                    "type": "string"
+                  },
                   "label": {
                     "type": "string"
                   },
@@ -1190,6 +1209,28 @@
                         },
                         "label": {
                           "type": "string"
+                        },
+                        "collection_label": {
+                          "type": "string"
+                        },
+                        "source_kind": {
+                          "type": "string",
+                          "enum": [
+                            "github",
+                            "git",
+                            "registry",
+                            "url",
+                            "archive",
+                            "local",
+                            "authored-workspace",
+                            "well-known"
+                          ]
+                        },
+                        "authority": {
+                          "type": "string"
+                        },
+                        "release_version": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -1212,6 +1253,28 @@
                           ]
                         },
                         "label": {
+                          "type": "string"
+                        },
+                        "collection_label": {
+                          "type": "string"
+                        },
+                        "source_kind": {
+                          "type": "string",
+                          "enum": [
+                            "github",
+                            "git",
+                            "registry",
+                            "url",
+                            "archive",
+                            "local",
+                            "authored-workspace",
+                            "well-known"
+                          ]
+                        },
+                        "authority": {
+                          "type": "string"
+                        },
+                        "release_version": {
                           "type": "string"
                         }
                       },
@@ -1258,6 +1321,25 @@
                   "subject_id": {
                     "type": "string"
                   },
+                  "source_kind": {
+                    "type": "string",
+                    "enum": [
+                      "github",
+                      "git",
+                      "registry",
+                      "url",
+                      "archive",
+                      "local",
+                      "authored-workspace",
+                      "well-known"
+                    ]
+                  },
+                  "authority": {
+                    "type": "string"
+                  },
+                  "release_version": {
+                    "type": "string"
+                  },
                   "label": {
                     "type": "string"
                   },
@@ -1332,6 +1414,28 @@
                         },
                         "label": {
                           "type": "string"
+                        },
+                        "collection_label": {
+                          "type": "string"
+                        },
+                        "source_kind": {
+                          "type": "string",
+                          "enum": [
+                            "github",
+                            "git",
+                            "registry",
+                            "url",
+                            "archive",
+                            "local",
+                            "authored-workspace",
+                            "well-known"
+                          ]
+                        },
+                        "authority": {
+                          "type": "string"
+                        },
+                        "release_version": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -1354,6 +1458,28 @@
                           ]
                         },
                         "label": {
+                          "type": "string"
+                        },
+                        "collection_label": {
+                          "type": "string"
+                        },
+                        "source_kind": {
+                          "type": "string",
+                          "enum": [
+                            "github",
+                            "git",
+                            "registry",
+                            "url",
+                            "archive",
+                            "local",
+                            "authored-workspace",
+                            "well-known"
+                          ]
+                        },
+                        "authority": {
+                          "type": "string"
+                        },
+                        "release_version": {
                           "type": "string"
                         }
                       },
@@ -1382,6 +1508,445 @@
         "remote"
       ],
       "additionalProperties": true
+    },
+    "author_workspaces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "identity": {
+            "type": "string"
+          },
+          "directory": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "unconnected",
+              "sync",
+              "updated",
+              "failed",
+              "pull_ready",
+              "pulled"
+            ]
+          },
+          "sync": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "first_sync_ready"
+                    ]
+                  },
+                  "changed": {
+                    "type": "boolean"
+                  },
+                  "identity": {
+                    "type": "object",
+                    "properties": {
+                      "authority": {
+                        "type": "string"
+                      },
+                      "namespace": {
+                        "type": "string"
+                      },
+                      "skit": {
+                        "type": "string"
+                      },
+                      "locator": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "authority",
+                      "namespace",
+                      "skit",
+                      "locator"
+                    ],
+                    "additionalProperties": true
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": [
+                      "private",
+                      "unlisted",
+                      "public"
+                    ]
+                  },
+                  "file_count": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "effects": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "create_skit",
+                        "save_revision",
+                        "record_remote_home"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "status",
+                  "changed",
+                  "identity",
+                  "visibility",
+                  "file_count",
+                  "effects"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "created"
+                    ]
+                  },
+                  "changed": {
+                    "type": "boolean"
+                  },
+                  "identity": {
+                    "type": "object",
+                    "properties": {
+                      "authority": {
+                        "type": "string"
+                      },
+                      "namespace": {
+                        "type": "string"
+                      },
+                      "skit": {
+                        "type": "string"
+                      },
+                      "locator": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "authority",
+                      "namespace",
+                      "skit",
+                      "locator"
+                    ],
+                    "additionalProperties": true
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": [
+                      "private",
+                      "unlisted",
+                      "public"
+                    ]
+                  },
+                  "revision_id": {
+                    "type": "string"
+                  },
+                  "paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "remote_home_recorded": {
+                    "type": "boolean"
+                  },
+                  "published": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "status",
+                  "changed",
+                  "identity",
+                  "visibility",
+                  "revision_id",
+                  "paths",
+                  "remote_home_recorded",
+                  "published"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "ready"
+                    ]
+                  },
+                  "changed": {
+                    "type": "boolean"
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "pull",
+                      "push",
+                      "merge"
+                    ]
+                  }
+                },
+                "required": [
+                  "status",
+                  "changed",
+                  "action"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "up_to_date"
+                    ]
+                  },
+                  "changed": {
+                    "type": "boolean"
+                  },
+                  "revision_id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status",
+                  "changed",
+                  "revision_id"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "pulled"
+                    ]
+                  },
+                  "changed": {
+                    "type": "boolean"
+                  },
+                  "revision_id": {
+                    "type": "string"
+                  },
+                  "paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "status",
+                  "changed",
+                  "revision_id",
+                  "paths"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "pushed"
+                    ]
+                  },
+                  "changed": {
+                    "type": "boolean"
+                  },
+                  "revision_id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status",
+                  "changed",
+                  "revision_id"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "merged"
+                    ]
+                  },
+                  "changed": {
+                    "type": "boolean"
+                  },
+                  "revision_id": {
+                    "type": "string"
+                  },
+                  "paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "choices": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "both_modified",
+                            "delete_modify",
+                            "binary",
+                            "descriptor"
+                          ]
+                        },
+                        "kept": {
+                          "type": "string",
+                          "enum": [
+                            "local",
+                            "remote"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "kind",
+                        "kept"
+                      ],
+                      "additionalProperties": true
+                    }
+                  }
+                },
+                "required": [
+                  "status",
+                  "changed",
+                  "revision_id",
+                  "paths",
+                  "choices"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "blocked"
+                    ]
+                  },
+                  "changed": {
+                    "type": "boolean"
+                  },
+                  "deleting": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "of": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "status",
+                  "changed",
+                  "deleting",
+                  "of",
+                  "paths"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "waiting_for_removal"
+                    ]
+                  },
+                  "changed": {
+                    "type": "boolean"
+                  },
+                  "deleting": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "of": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "status",
+                  "changed",
+                  "deleting",
+                  "of",
+                  "paths"
+                ],
+                "additionalProperties": true
+              }
+            ]
+          },
+          "sync_failure": {
+            "$ref": "#/definitions/AuthorWorkspaceSyncFailure"
+          },
+          "installation": {
+            "type": "string"
+          },
+          "installation_failure": {
+            "$ref": "#/definitions/AuthorWorkspaceSyncFailure"
+          },
+          "failure": {
+            "$ref": "#/definitions/AuthorWorkspaceSyncFailure"
+          },
+          "revision_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "identity",
+          "status"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "author_inventory_failure": {
+      "$ref": "#/definitions/AuthorWorkspaceSyncFailure"
     }
   },
   "required": [
@@ -10084,6 +10649,44 @@
       ],
       "additionalProperties": true
     },
+    "PullDirectoryNotEmptyEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "PullDirectoryNotEmpty"
+          ]
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "path"
+      ],
+      "additionalProperties": true
+    },
+    "NoRevisionToPullEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "NoRevisionToPull"
+          ]
+        },
+        "locator": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "locator"
+      ],
+      "additionalProperties": true
+    },
     "PublicationBlockedEncoded": {
       "type": "object",
       "properties": {
@@ -17138,6 +17741,12 @@
           "$ref": "#/definitions/NoRemoteHomeEncoded"
         },
         {
+          "$ref": "#/definitions/PullDirectoryNotEmptyEncoded"
+        },
+        {
+          "$ref": "#/definitions/NoRevisionToPullEncoded"
+        },
+        {
           "$ref": "#/definitions/PublicationBlockedEncoded"
         },
         {
@@ -17418,6 +18027,2035 @@
         },
         {
           "$ref": "#/definitions/Library.StepSchemaFailureEncoded"
+        }
+      ]
+    },
+    "RegistryUnreachableEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "RegistryUnreachable"
+          ]
+        },
+        "origin": {
+          "type": "string"
+        },
+        "cause": {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "stack": {
+              "type": "string"
+            },
+            "cause": {}
+          },
+          "required": [
+            "message"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "_tag",
+        "origin",
+        "cause"
+      ],
+      "additionalProperties": true
+    },
+    "RegistryOriginInvalidEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "RegistryOriginInvalid"
+          ]
+        },
+        "origin": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "origin"
+      ],
+      "additionalProperties": true
+    },
+    "NoStoredCredentialsEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "NoStoredCredentials"
+          ]
+        }
+      },
+      "required": [
+        "_tag"
+      ],
+      "additionalProperties": true
+    },
+    "RegistrySelectionAmbiguousEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "RegistrySelectionAmbiguous"
+          ]
+        },
+        "origins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "command": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "origins",
+        "command"
+      ],
+      "additionalProperties": true
+    },
+    "TooManyAuthAttemptsEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "TooManyAuthAttempts"
+          ]
+        }
+      },
+      "required": [
+        "_tag"
+      ],
+      "additionalProperties": true
+    },
+    "RegistryTransportErrorEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "RegistryTransportError"
+          ]
+        },
+        "cause": {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "stack": {
+              "type": "string"
+            },
+            "cause": {}
+          },
+          "required": [
+            "message"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "_tag",
+        "cause"
+      ],
+      "additionalProperties": true
+    },
+    "SignOutRejectedEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "SignOutRejected"
+          ]
+        },
+        "origin": {
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "RequestInvalid"
+                  ]
+                },
+                "failure": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/RegistryTransportErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/definitions/SchemaFailureEncoded"
+                    },
+                    {}
+                  ]
+                }
+              },
+              "required": [
+                "_tag",
+                "failure"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ResponseRejected"
+                  ]
+                },
+                "status": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "registryCode": {
+                  "type": "string"
+                },
+                "failure": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/RegistryTransportErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/definitions/SchemaFailureEncoded"
+                    },
+                    {}
+                  ]
+                }
+              },
+              "required": [
+                "_tag",
+                "status"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "origin",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "SignInRejectedEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "SignInRejected"
+          ]
+        },
+        "operation": {
+          "type": "string",
+          "enum": [
+            "discovery",
+            "credential-check",
+            "sign-in",
+            "device-authorization",
+            "device-token",
+            "credential-create",
+            "credential-revoke"
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "operation"
+      ],
+      "additionalProperties": true
+    },
+    "CredentialsUnusableEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "CredentialsUnusable"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "unreadable",
+            "invalid"
+          ]
+        },
+        "failure": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "PlatformError"
+                  ]
+                },
+                "reason": {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "AlreadyExists",
+                        "BadResource",
+                        "Busy",
+                        "InvalidData",
+                        "NotFound",
+                        "PermissionDenied",
+                        "TimedOut",
+                        "UnexpectedEof",
+                        "Unknown",
+                        "WouldBlock",
+                        "WriteZero",
+                        "BadArgument"
+                      ]
+                    },
+                    "module": {
+                      "type": "string"
+                    },
+                    "method": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "syscall": {
+                      "type": "string"
+                    },
+                    "pathOrDescriptor": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "module",
+                    "method"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "_tag",
+                "reason"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "$ref": "#/definitions/RegistryTransportErrorEncoded"
+            },
+            {
+              "$ref": "#/definitions/SchemaFailureEncoded"
+            },
+            {}
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "path",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "SignInFailedEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "SignInFailed"
+          ]
+        },
+        "origin": {
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "RequestFailed"
+                  ]
+                },
+                "operation": {
+                  "type": "string",
+                  "enum": [
+                    "discovery",
+                    "credential-check",
+                    "sign-in",
+                    "device-authorization",
+                    "device-token",
+                    "credential-create",
+                    "credential-revoke"
+                  ]
+                },
+                "status": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "registryCode": {
+                  "type": "string"
+                },
+                "failure": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/RegistryTransportErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/definitions/SchemaFailureEncoded"
+                    },
+                    {}
+                  ]
+                }
+              },
+              "required": [
+                "_tag",
+                "operation"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ResponseInvalid"
+                  ]
+                },
+                "operation": {
+                  "type": "string",
+                  "enum": [
+                    "discovery",
+                    "credential-check",
+                    "sign-in",
+                    "device-authorization",
+                    "device-token",
+                    "credential-create",
+                    "credential-revoke"
+                  ]
+                },
+                "status": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "failure": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/RegistryTransportErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/definitions/SchemaFailureEncoded"
+                    },
+                    {}
+                  ]
+                }
+              },
+              "required": [
+                "_tag",
+                "operation",
+                "failure"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "RequestInvalid"
+                  ]
+                },
+                "operation": {
+                  "type": "string",
+                  "enum": [
+                    "discovery",
+                    "credential-check",
+                    "sign-in",
+                    "device-authorization",
+                    "device-token",
+                    "credential-create",
+                    "credential-revoke"
+                  ]
+                },
+                "failure": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/RegistryTransportErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/definitions/SchemaFailureEncoded"
+                    },
+                    {}
+                  ]
+                }
+              },
+              "required": [
+                "_tag",
+                "operation",
+                "failure"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "UnsupportedScopes"
+                  ]
+                },
+                "scopes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "_tag",
+                "scopes"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "SessionMissing"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "MethodMissing"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "CredentialMissing"
+                  ]
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "DeviceExpiryInvalid"
+                  ]
+                },
+                "expiresIn": {
+                  "type": "number"
+                },
+                "receivedAt": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "_tag",
+                "expiresIn",
+                "receivedAt"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "SessionEndFailed"
+                  ]
+                },
+                "cleanup": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "RequestFailed"
+                          ]
+                        },
+                        "failure": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/definitions/RegistryTransportErrorEncoded"
+                            },
+                            {
+                              "$ref": "#/definitions/SchemaFailureEncoded"
+                            },
+                            {}
+                          ]
+                        }
+                      },
+                      "required": [
+                        "_tag",
+                        "failure"
+                      ],
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "ResponseRejected"
+                          ]
+                        },
+                        "status": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "body": {
+                          "type": "string"
+                        },
+                        "failure": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/definitions/RegistryTransportErrorEncoded"
+                            },
+                            {
+                              "$ref": "#/definitions/SchemaFailureEncoded"
+                            },
+                            {}
+                          ]
+                        }
+                      },
+                      "required": [
+                        "_tag",
+                        "status"
+                      ],
+                      "additionalProperties": true
+                    }
+                  ]
+                },
+                "original": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/SignInFailedEncoded"
+                    },
+                    {
+                      "$ref": "#/definitions/SignOutRejectedEncoded"
+                    },
+                    {
+                      "$ref": "#/definitions/SignInRejectedEncoded"
+                    },
+                    {
+                      "$ref": "#/definitions/TooManyAuthAttemptsEncoded"
+                    },
+                    {
+                      "$ref": "#/definitions/CredentialsUnusableEncoded"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "PlatformError"
+                          ]
+                        },
+                        "reason": {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": [
+                                "AlreadyExists",
+                                "BadResource",
+                                "Busy",
+                                "InvalidData",
+                                "NotFound",
+                                "PermissionDenied",
+                                "TimedOut",
+                                "UnexpectedEof",
+                                "Unknown",
+                                "WouldBlock",
+                                "WriteZero",
+                                "BadArgument"
+                              ]
+                            },
+                            "module": {
+                              "type": "string"
+                            },
+                            "method": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "syscall": {
+                              "type": "string"
+                            },
+                            "pathOrDescriptor": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "module",
+                            "method"
+                          ],
+                          "additionalProperties": true
+                        }
+                      },
+                      "required": [
+                        "_tag",
+                        "reason"
+                      ],
+                      "additionalProperties": true
+                    },
+                    {
+                      "$ref": "#/definitions/SchemaFailureEncoded"
+                    },
+                    {}
+                  ]
+                },
+                "credential": {
+                  "type": "object",
+                  "properties": {
+                    "tokenId": {
+                      "type": "string"
+                    },
+                    "tokenPrefix": {
+                      "type": "string"
+                    },
+                    "cleanup": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": [
+                                "RequestFailed"
+                              ]
+                            },
+                            "failure": {
+                              "anyOf": [
+                                {
+                                  "$ref": "#/definitions/RegistryTransportErrorEncoded"
+                                },
+                                {
+                                  "$ref": "#/definitions/SchemaFailureEncoded"
+                                },
+                                {}
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "failure"
+                          ],
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": [
+                                "ResponseRejected"
+                              ]
+                            },
+                            "status": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "body": {
+                              "type": "string"
+                            },
+                            "failure": {
+                              "anyOf": [
+                                {
+                                  "$ref": "#/definitions/RegistryTransportErrorEncoded"
+                                },
+                                {
+                                  "$ref": "#/definitions/SchemaFailureEncoded"
+                                },
+                                {}
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "status"
+                          ],
+                          "additionalProperties": true
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "tokenId",
+                    "tokenPrefix",
+                    "cleanup"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "_tag",
+                "cleanup"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "StorageCleanupFailed"
+                  ]
+                },
+                "tokenId": {
+                  "type": "string"
+                },
+                "tokenPrefix": {
+                  "type": "string"
+                },
+                "cleanup": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "RequestFailed"
+                          ]
+                        },
+                        "failure": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/definitions/RegistryTransportErrorEncoded"
+                            },
+                            {
+                              "$ref": "#/definitions/SchemaFailureEncoded"
+                            },
+                            {}
+                          ]
+                        }
+                      },
+                      "required": [
+                        "_tag",
+                        "failure"
+                      ],
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "ResponseRejected"
+                          ]
+                        },
+                        "status": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "body": {
+                          "type": "string"
+                        },
+                        "failure": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/definitions/RegistryTransportErrorEncoded"
+                            },
+                            {
+                              "$ref": "#/definitions/SchemaFailureEncoded"
+                            },
+                            {}
+                          ]
+                        }
+                      },
+                      "required": [
+                        "_tag",
+                        "status"
+                      ],
+                      "additionalProperties": true
+                    }
+                  ]
+                },
+                "original": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/SignInFailedEncoded"
+                    },
+                    {
+                      "$ref": "#/definitions/SignOutRejectedEncoded"
+                    },
+                    {
+                      "$ref": "#/definitions/SignInRejectedEncoded"
+                    },
+                    {
+                      "$ref": "#/definitions/TooManyAuthAttemptsEncoded"
+                    },
+                    {
+                      "$ref": "#/definitions/CredentialsUnusableEncoded"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "PlatformError"
+                          ]
+                        },
+                        "reason": {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": [
+                                "AlreadyExists",
+                                "BadResource",
+                                "Busy",
+                                "InvalidData",
+                                "NotFound",
+                                "PermissionDenied",
+                                "TimedOut",
+                                "UnexpectedEof",
+                                "Unknown",
+                                "WouldBlock",
+                                "WriteZero",
+                                "BadArgument"
+                              ]
+                            },
+                            "module": {
+                              "type": "string"
+                            },
+                            "method": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "syscall": {
+                              "type": "string"
+                            },
+                            "pathOrDescriptor": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "module",
+                            "method"
+                          ],
+                          "additionalProperties": true
+                        }
+                      },
+                      "required": [
+                        "_tag",
+                        "reason"
+                      ],
+                      "additionalProperties": true
+                    },
+                    {
+                      "$ref": "#/definitions/SchemaFailureEncoded"
+                    },
+                    {}
+                  ]
+                }
+              },
+              "required": [
+                "_tag",
+                "tokenId",
+                "tokenPrefix",
+                "cleanup",
+                "original"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "origin",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "RegistryAliasInvalidEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "RegistryAliasInvalid"
+          ]
+        },
+        "alias": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "alias"
+      ],
+      "additionalProperties": true
+    },
+    "RegistryAliasConflictEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "RegistryAliasConflict"
+          ]
+        },
+        "alias": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "alias"
+      ],
+      "additionalProperties": true
+    },
+    "RegistryAliasNotFoundEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "RegistryAliasNotFound"
+          ]
+        },
+        "alias": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "alias"
+      ],
+      "additionalProperties": true
+    },
+    "RegistrySelectionConflictEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "RegistrySelectionConflict"
+          ]
+        },
+        "locator": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "locator"
+      ],
+      "additionalProperties": true
+    },
+    "RegistrySelectionRequiresRegistrySourceEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "RegistrySelectionRequiresRegistrySource"
+          ]
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "source"
+      ],
+      "additionalProperties": true
+    },
+    "RemoteSkitUnavailableEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "RemoteSkitUnavailable"
+          ]
+        },
+        "identity": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "identity"
+      ],
+      "additionalProperties": true
+    },
+    "LibraryChangedOnServerEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "LibraryChangedOnServer"
+          ]
+        }
+      },
+      "required": [
+        "_tag"
+      ],
+      "additionalProperties": true
+    },
+    "AuthenticationRequiredEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "AuthenticationRequired"
+          ]
+        },
+        "origin": {
+          "type": "string"
+        },
+        "scopes": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag"
+      ],
+      "additionalProperties": true
+    },
+    "CredentialLacksScopeEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "CredentialLacksScope"
+          ]
+        },
+        "scope": {
+          "type": "string"
+        },
+        "origin": {
+          "type": "string"
+        },
+        "scopes": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "scope"
+      ],
+      "additionalProperties": true
+    },
+    "PrincipalNotAuthorizedEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "PrincipalNotAuthorized"
+          ]
+        },
+        "action": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "action"
+      ],
+      "additionalProperties": true
+    },
+    "InteractiveLoginUnavailableEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "InteractiveLoginUnavailable"
+          ]
+        }
+      },
+      "required": [
+        "_tag"
+      ],
+      "additionalProperties": true
+    },
+    "DeviceLoginUnavailableEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "DeviceLoginUnavailable"
+          ]
+        },
+        "origin": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "origin"
+      ],
+      "additionalProperties": true
+    },
+    "DeviceLoginEndedEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "DeviceLoginEnded"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "denied",
+            "expired",
+            "invalid"
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "ScopesInvalidEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "ScopesInvalid"
+          ]
+        },
+        "allowed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "_tag",
+        "allowed"
+      ],
+      "additionalProperties": true
+    },
+    "AuthorSyncRequiredEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "AuthorSyncRequired"
+          ]
+        },
+        "root": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "root"
+      ],
+      "additionalProperties": true
+    },
+    "RegistryRejectedWriteEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "RegistryRejectedWrite"
+          ]
+        },
+        "origin": {
+          "type": "string"
+        },
+        "status": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "registryCode": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "failure": {}
+      },
+      "required": [
+        "_tag",
+        "origin",
+        "failure"
+      ],
+      "additionalProperties": true
+    },
+    "DeleteRequiresPrivateEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "DeleteRequiresPrivate"
+          ]
+        }
+      },
+      "required": [
+        "_tag"
+      ],
+      "additionalProperties": true
+    },
+    "AuthorListResponseErrorEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "AuthorListResponseError"
+          ]
+        },
+        "origin": {
+          "type": "string"
+        },
+        "status": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "registryCode": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "failure": {}
+      },
+      "required": [
+        "_tag",
+        "origin",
+        "failure"
+      ],
+      "additionalProperties": true
+    },
+    "AuthorSkitNotFoundEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "AuthorSkitNotFound"
+          ]
+        }
+      },
+      "required": [
+        "_tag"
+      ],
+      "additionalProperties": true
+    },
+    "AuthorDeleteResponseErrorEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "AuthorDeleteResponseError"
+          ]
+        },
+        "origin": {
+          "type": "string"
+        },
+        "status": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "registryCode": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "failure": {}
+      },
+      "required": [
+        "_tag",
+        "origin",
+        "failure"
+      ],
+      "additionalProperties": true
+    },
+    "AuthorListPaginationErrorEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "AuthorListPaginationError"
+          ]
+        },
+        "origin": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "origin"
+      ],
+      "additionalProperties": true
+    },
+    "AuthorRequestFailedEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "AuthorRequestFailed"
+          ]
+        },
+        "origin": {
+          "type": "string"
+        },
+        "status": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "registryCode": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "failure": {},
+        "operation": {
+          "type": "string",
+          "enum": [
+            "current",
+            "revision",
+            "ancestors",
+            "post",
+            "move",
+            "create"
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "origin",
+        "failure",
+        "operation"
+      ],
+      "additionalProperties": true
+    },
+    "AuthorRequestTimedOutEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "AuthorRequestTimedOut"
+          ]
+        },
+        "origin": {
+          "type": "string"
+        },
+        "operation": {
+          "type": "string",
+          "enum": [
+            "current",
+            "revision",
+            "ancestors",
+            "post",
+            "move",
+            "create"
+          ]
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "_tag",
+        "origin",
+        "operation",
+        "timeoutMs"
+      ],
+      "additionalProperties": true
+    },
+    "PublicationResponseErrorEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "PublicationResponseError"
+          ]
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "OriginInvalid"
+                  ]
+                },
+                "origin": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "_tag"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "AcknowledgementInvalid"
+                  ]
+                },
+                "origin": {
+                  "type": "string"
+                },
+                "failure": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/SchemaFailureEncoded"
+                    },
+                    {}
+                  ]
+                }
+              },
+              "required": [
+                "_tag",
+                "origin",
+                "failure"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "TransportFailed"
+                  ]
+                },
+                "origin": {
+                  "type": "string"
+                },
+                "failure": {}
+              },
+              "required": [
+                "_tag",
+                "origin",
+                "failure"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "DestinationInvalid"
+                  ]
+                },
+                "origin": {
+                  "type": "string"
+                },
+                "issues": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "malformed-url",
+                      "different-origin",
+                      "scheme",
+                      "credentials",
+                      "fragment"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "_tag",
+                "origin",
+                "issues"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": [
+                    "ResponseFailure"
+                  ]
+                },
+                "origin": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "registryCode": {
+                  "type": "string"
+                },
+                "body": {
+                  "type": "string"
+                },
+                "failure": {}
+              },
+              "required": [
+                "_tag",
+                "origin",
+                "failure"
+              ],
+              "additionalProperties": true
+            }
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "Library.LibraryApiRejectedEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "Library.LibraryApiRejected"
+          ]
+        },
+        "status": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "status"
+      ],
+      "additionalProperties": true
+    },
+    "Library.LibraryApiInvalidResponseEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "Library.LibraryApiInvalidResponse"
+          ]
+        },
+        "operation": {
+          "type": "string"
+        },
+        "failure": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SchemaFailureEncoded"
+            },
+            {}
+          ]
+        }
+      },
+      "required": [
+        "_tag",
+        "operation"
+      ],
+      "additionalProperties": true
+    },
+    "Library.LibraryManifestTooNewEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "Library.LibraryManifestTooNew"
+          ]
+        },
+        "observed": {
+          "type": "string"
+        },
+        "supported": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "observed",
+        "supported"
+      ],
+      "additionalProperties": true
+    },
+    "Library.LibraryApiInvalidRequestEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "Library.LibraryApiInvalidRequest"
+          ]
+        },
+        "failure": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SchemaFailureEncoded"
+            },
+            {}
+          ]
+        }
+      },
+      "required": [
+        "_tag"
+      ],
+      "additionalProperties": true
+    },
+    "Library.ManageStoppedEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "Library.ManageStopped"
+          ]
+        },
+        "operationId": {
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/definitions/SetupStopReason"
+        }
+      },
+      "required": [
+        "_tag",
+        "operationId",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "Library.SyncStoppedEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "Library.SyncStopped"
+          ]
+        },
+        "operationId": {
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/definitions/SetupStopReason"
+        }
+      },
+      "required": [
+        "_tag",
+        "operationId",
+        "reason"
+      ],
+      "additionalProperties": true
+    },
+    "AuthorWorkspaceSyncFailure": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/RegistryUnreachableEncoded"
+        },
+        {
+          "$ref": "#/definitions/RegistryOriginInvalidEncoded"
+        },
+        {
+          "$ref": "#/definitions/NoStoredCredentialsEncoded"
+        },
+        {
+          "$ref": "#/definitions/RegistrySelectionAmbiguousEncoded"
+        },
+        {
+          "$ref": "#/definitions/TooManyAuthAttemptsEncoded"
+        },
+        {
+          "$ref": "#/definitions/SignInFailedEncoded"
+        },
+        {
+          "$ref": "#/definitions/SignOutRejectedEncoded"
+        },
+        {
+          "$ref": "#/definitions/RegistryAliasInvalidEncoded"
+        },
+        {
+          "$ref": "#/definitions/RegistryAliasConflictEncoded"
+        },
+        {
+          "$ref": "#/definitions/RegistryAliasNotFoundEncoded"
+        },
+        {
+          "$ref": "#/definitions/RegistrySelectionConflictEncoded"
+        },
+        {
+          "$ref": "#/definitions/RegistrySelectionRequiresRegistrySourceEncoded"
+        },
+        {
+          "$ref": "#/definitions/RemoteSkitUnavailableEncoded"
+        },
+        {
+          "$ref": "#/definitions/LibraryChangedOnServerEncoded"
+        },
+        {
+          "$ref": "#/definitions/AuthenticationRequiredEncoded"
+        },
+        {
+          "$ref": "#/definitions/CredentialLacksScopeEncoded"
+        },
+        {
+          "$ref": "#/definitions/PrincipalNotAuthorizedEncoded"
+        },
+        {
+          "$ref": "#/definitions/CredentialsUnusableEncoded"
+        },
+        {
+          "$ref": "#/definitions/SignInRejectedEncoded"
+        },
+        {
+          "$ref": "#/definitions/InteractiveLoginUnavailableEncoded"
+        },
+        {
+          "$ref": "#/definitions/DeviceLoginUnavailableEncoded"
+        },
+        {
+          "$ref": "#/definitions/DeviceLoginEndedEncoded"
+        },
+        {
+          "$ref": "#/definitions/ScopesInvalidEncoded"
+        },
+        {
+          "$ref": "#/definitions/AuthorSyncRequiredEncoded"
+        },
+        {
+          "$ref": "#/definitions/RegistryRejectedWriteEncoded"
+        },
+        {
+          "$ref": "#/definitions/DeleteRequiresPrivateEncoded"
+        },
+        {
+          "$ref": "#/definitions/AuthorListResponseErrorEncoded"
+        },
+        {
+          "$ref": "#/definitions/AuthorSkitNotFoundEncoded"
+        },
+        {
+          "$ref": "#/definitions/AuthorDeleteResponseErrorEncoded"
+        },
+        {
+          "$ref": "#/definitions/AuthorListPaginationErrorEncoded"
+        },
+        {
+          "$ref": "#/definitions/AuthorRequestFailedEncoded"
+        },
+        {
+          "$ref": "#/definitions/AuthorRequestTimedOutEncoded"
+        },
+        {
+          "$ref": "#/definitions/PublicationResponseErrorEncoded"
+        },
+        {
+          "$ref": "#/definitions/RegistryTransportErrorEncoded"
+        },
+        {
+          "$ref": "#/definitions/Library.LibraryApiRejectedEncoded"
+        },
+        {
+          "$ref": "#/definitions/Library.LibraryApiInvalidResponseEncoded"
+        },
+        {
+          "$ref": "#/definitions/Library.LibraryManifestTooNewEncoded"
+        },
+        {
+          "$ref": "#/definitions/Library.LibraryApiInvalidRequestEncoded"
+        },
+        {
+          "$ref": "#/definitions/StepError"
+        },
+        {
+          "$ref": "#/definitions/Library.ManageStoppedEncoded"
+        },
+        {
+          "$ref": "#/definitions/Library.SyncStoppedEncoded"
+        },
+        {
+          "$ref": "#/definitions/SchemaFailureEncoded"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "ConfigError"
+              ]
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "message"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "TimeoutError"
+              ]
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "message"
+          ],
+          "additionalProperties": true
         }
       ]
     }

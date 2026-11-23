@@ -14604,6 +14604,44 @@
       ],
       "additionalProperties": true
     },
+    "PullDirectoryNotEmptyEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "PullDirectoryNotEmpty"
+          ]
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "path"
+      ],
+      "additionalProperties": true
+    },
+    "NoRevisionToPullEncoded": {
+      "type": "object",
+      "properties": {
+        "_tag": {
+          "type": "string",
+          "enum": [
+            "NoRevisionToPull"
+          ]
+        },
+        "locator": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "_tag",
+        "locator"
+      ],
+      "additionalProperties": true
+    },
     "PublicationBlockedEncoded": {
       "type": "object",
       "properties": {
@@ -21307,6 +21345,12 @@
         },
         {
           "$ref": "#/definitions/NoRemoteHomeEncoded"
+        },
+        {
+          "$ref": "#/definitions/PullDirectoryNotEmptyEncoded"
+        },
+        {
+          "$ref": "#/definitions/NoRevisionToPullEncoded"
         },
         {
           "$ref": "#/definitions/PublicationBlockedEncoded"

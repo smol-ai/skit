@@ -20,6 +20,14 @@ describe("compactHome", () => {
     );
   });
 
+  it("shortens the complete canonical macOS home without changing interior path components", () => {
+    const home = "/var/folders/test/machine-b";
+    expect(compactHome(`Source /private${home}/code/tools`, home)).toBe("Source ~/code/tools");
+    expect(compactHome(`Source /other${home}/code/tools`, home)).toBe(
+      `Source /other${home}/code/tools`,
+    );
+  });
+
   it("leaves text alone when home is empty or the filesystem root", () => {
     expect(compactHome("/etc/skills", "/")).toBe("/etc/skills");
     expect(compactHome("/etc/skills", "")).toBe("/etc/skills");

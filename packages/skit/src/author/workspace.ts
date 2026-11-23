@@ -98,6 +98,11 @@ type ConnectionTransition =
       };
     }
   | {
+      /** `author pull`: this folder takes an existing SKIT as its remote home. */
+      readonly from: Extract<Connection, { _tag: "Unconnected" }>;
+      readonly to: { readonly _tag: "Connected"; readonly remote: AuthorRemoteHome };
+    }
+  | {
       readonly from: Connecting;
       readonly to: { readonly _tag: "Unconnected" };
     }
@@ -448,6 +453,16 @@ const make = Effect.gen(function* () {
       if (change.to._tag === "Unconnected") {
         yield* removeCheckpoint;
         return Connection.make({ _tag: "Unconnected" });
+      }
+      if ("remote" in change.to) {
+        const file = remotePath(root);
+        yield* writeRawAtomic(file, `${JSON.stringify(change.to.remote, null, 2)}\n`, false, 0o644);
+        yield* syncPaths([file, root]);
+        return Connection.make({
+          _tag: "Connected",
+          remote: change.to.remote,
+          leftover: { _tag: "None" },
+        });
       }
       if ("receipt" in change) {
         // Only the request this checkpoint replays may connect it (A4).

@@ -1,3 +1,4 @@
+import { Digest } from "effect/crypto";
 import { Effect, Option, Result, Schema } from "effect";
 import { join } from "node:path";
 import {
@@ -12,6 +13,7 @@ import { AuthorHistory, authorHistoryStoreError } from "./history.js";
 import {
   LocalFilesChangedDuringSync,
   AuthorRemoteAlreadyExists,
+  PullDirectoryNotEmpty,
   VisibilityNotAccepted,
 } from "./failures.js";
 import { scanAuthorSyncTree } from "./local-tree.js";
@@ -46,6 +48,8 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
   rootInput: string,
   options: {
     readonly apply: boolean;
+    /** Top-level sync previews plan without saving observations or fetched revisions. */
+    readonly readOnly?: boolean;
     readonly allowLargeDeletion?: boolean;
     /** Foreground commands confirm small removals; watch keeps its loop nonblocking. */
     readonly confirmRemovals?: boolean;
@@ -53,6 +57,12 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
     readonly home: string;
     readonly to?: string;
     readonly visibility?: AuthorVisibility;
+    /**
+     * `author pull`: this sync may only receive. Its Registry cannot record a revision or move
+     * `current`, so a directory that turns out to hold files fails before anything is sent or
+     * written.
+     */
+    readonly receiveOnly?: boolean;
   },
   registryAccess: Pick<AuthorRegistry<E, R, P>, "origin" | "connect">,
   heldLease?: WorkspaceLease,
@@ -178,7 +188,7 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
     // A preview backs up an identified workspace as applying does. Without an identity it creates
     // nothing: it plans over the scan alone, from no checkpoint.
     const previewed =
-      applying !== undefined || Option.isNone(workspace.identity)
+      applying !== undefined || options.readOnly || Option.isNone(workspace.identity)
         ? undefined
         : { workspaceId: workspace.identity.value.workspaceId, ...(yield* observe) };
     const scan =
@@ -203,10 +213,14 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
     // The engine's store reports what it cannot read back; that is unusable history.
     const storeFailure = (error: History.StoreError) => Effect.fail(authorHistoryStoreError(error));
 
-    const registry = api.remote;
+    const refuse = () => Effect.fail(new PullDirectoryNotEmpty({ path: root }));
+    const registry: Sync.Remote<P | PullDirectoryNotEmpty> = options.receiveOnly
+      ? { ...api.remote, post: refuse, move: refuse }
+      : api.remote;
     // This workspace's checkpoint: none until it has an identity (A5). Decoding the saved
     // checkpoints comes before creating anything or replacing a base.
-    const workspaceId = applying?.workspaceId ?? previewed?.workspaceId;
+    const workspaceId =
+      Option.getOrUndefined(workspace.identity)?.workspaceId ?? applying?.workspaceId;
     const savedState =
       workspaceId === undefined
         ? Sync.Idle.make({ base: null })
@@ -286,7 +300,16 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
     let localHash = scanned.success.localHash;
     const state =
       destination._tag === "ConnectedRemote" ? savedState : Sync.Idle.make({ base: null });
+    const digest = yield* Digest.Digest;
     let input = yield* Sync.loadPlanInput({
+      ...(options.readOnly && applying === undefined
+        ? {
+            verifyFetched: (tree, revision) =>
+              Effect.all([History.treeHash(tree), History.revisionId(revision)]).pipe(
+                Effect.provideService(Digest.Digest, digest),
+              ),
+          }
+        : {}),
       store: history.engineStore,
       remote: registry,
       state,
@@ -408,9 +431,11 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
       planned._tag === "Blocked" && removal !== undefined && removal.allowAllRemovals;
     if (planned._tag === "Blocked" && !approvedRemoval)
       return { status: "blocked", changed: false, ...planned.removal } satisfies AuthorSyncResult;
-    yield* backupAuthorHistory(applying.lease, key, applying.observation, registry).pipe(
-      Effect.catchIf(Schema.is(History.StoreError), storeFailure),
-    );
+    // A receive-only sync sends no backup either; the next ordinary sync backs up what it saved.
+    if (!options.receiveOnly)
+      yield* backupAuthorHistory(applying.lease, key, applying.observation, registry).pipe(
+        Effect.catchIf(Schema.is(History.StoreError), storeFailure),
+      );
     const { outcome } = yield* Sync.run({
       store: history.engineStore,
       remote: registry,
@@ -444,9 +469,10 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
       });
     // Record what sync wrote as this workspace's latest observation.
     const completed = yield* history.refresh(root, outcome.revision);
-    yield* backupAuthorHistory(applying.lease, key, completed, registry).pipe(
-      Effect.catchIf(Schema.is(History.StoreError), storeFailure),
-    );
+    if (!options.receiveOnly)
+      yield* backupAuthorHistory(applying.lease, key, completed, registry).pipe(
+        Effect.catchIf(Schema.is(History.StoreError), storeFailure),
+      );
     if (waitingForRemoval !== undefined)
       return { ...waitingForRemoval, changed: outcome.status !== "up_to_date" };
     if (destination._tag !== "ConnectedRemote")

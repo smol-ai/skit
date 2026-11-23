@@ -142,6 +142,24 @@ export const authorFailure = Match.type<AuthorFailure>().pipe(
         summary: ["This SKIT has no remote home; run `skit author sync --to ...` first"],
         next: ["Run ", { code: "skit author sync --to <namespace/skit>" }, " first."],
       }),
+    PullDirectoryNotEmpty: (error) =>
+      describeFailure({
+        summary: [`${error.path} is not empty`],
+        next: [
+          "Pull into a new or empty directory. To sync a directory that already has files, run ",
+          { code: "skit author sync" },
+          " in it.",
+        ],
+      }),
+    NoRevisionToPull: (error) =>
+      describeFailure({
+        summary: [`${error.locator} has no revision to pull`],
+        next: [
+          "Run ",
+          { code: "skit author sync --apply" },
+          " in a workspace that holds this SKIT's files, then pull again.",
+        ],
+      }),
     PublicationBlocked: (error) =>
       describeFailure({
         summary: [

@@ -20,12 +20,13 @@ import { libraryListing } from "./listing.js";
 /** Internal constructor: derive a read model from the same snapshot used by a prepared action. */
 export const libraryView = (
   current: LibraryState,
-  originalsPath: string,
+  home: string,
   authored?: Parameters<typeof previewSourceUpdates>[3],
 ) => {
+  const originalsPath = join(home, "originals");
   const state = structuredClone(current);
   return {
-    ...libraryListing(state, originalsPath),
+    ...libraryListing(state, originalsPath, home),
     /** Portable data from this captured revision; returned documents cannot change the view. */
     readManifest: Effect.fn("LibraryView.readManifest")(function* () {
       return structuredClone(yield* libraryManifestFromLocalState(state));
@@ -57,7 +58,7 @@ export const libraryView = (
         options.inspectSource,
         options.onCollection,
       ),
-    removalSummary: (query: string) => removalSummary(state, query),
+    removalSummary: (query: string) => removalSummary(state, home, query),
     securityReview: (query: string) => securityReview(state, originalsPath, query),
     descriptionLoad: (
       subject: { readonly collection: string } | { readonly skills: readonly string[] },
@@ -82,8 +83,5 @@ export const libraryView = (
 /** Open once; all queries describe this Library revision without saving or reconciling. */
 export const openLibraryView = Effect.fn("LibraryView.open")(function* (home: string) {
   const snapshot = yield* (yield* Service).read;
-  return libraryView(
-    snapshot._tag === "Present" ? snapshot.state : emptyLibraryState(),
-    join(home, "originals"),
-  );
+  return libraryView(snapshot._tag === "Present" ? snapshot.state : emptyLibraryState(), home);
 });

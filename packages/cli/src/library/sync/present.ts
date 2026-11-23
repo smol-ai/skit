@@ -1,3 +1,4 @@
+import { sourceKinds } from "../presentation/collection-source.js";
 import { Block, type Change, type Inline, type ListItem } from "../../terminal/blocks.js";
 import {
   SyncConflictDetail,
@@ -22,32 +23,68 @@ const skillChange = (action: Change["action"], names: readonly string[]): Change
     ? []
     : [{ action, label: names.length <= 5 ? names.join(", ") : plural(names.length, "Skill") }];
 
-const collectionChange = (change: Extract<PlanChange, { kind: "collection" }>): Change => ({
-  action: change.action,
-  label:
-    change.label_before && change.label_after && change.label_before !== change.label_after
-      ? `${change.label_before} → ${change.label_after}`
-      : change.label,
-  ...(change.action === "add" ? { detail: plural(change.skills_added.length, "Skill") } : {}),
-  ...(change.action === "update"
-    ? {
-        children: [
-          ...skillChange("add", change.skills_added),
-          ...skillChange("update", change.skills_changed),
-          ...skillChange("remove", change.skills_removed),
-        ],
-      }
-    : {}),
-});
+const sourceDetails = ({
+  source_kind,
+  authority,
+  release_version,
+}: {
+  readonly source_kind?: keyof typeof sourceKinds;
+  readonly authority?: string;
+  readonly release_version?: string;
+}): readonly string[] => {
+  if (source_kind === undefined) return [];
+  const host =
+    authority === undefined
+      ? undefined
+      : URL.parse(authority.includes("://") ? authority : `https://${authority}`)?.host ||
+        undefined;
+  if (source_kind === "registry" && (host !== undefined || release_version !== undefined))
+    return [host, release_version].filter((value) => value !== undefined);
+  return source_kind === "authored-workspace" && host !== undefined
+    ? [sourceKinds[source_kind], host]
+    : [sourceKinds[source_kind]];
+};
 
-const enabledChange = (change: Extract<PlanChange, { kind: "enabled" }>): Change => ({
-  action: change.action,
-  label: "Enabled Skills",
-  children: [
-    ...change.items_added.map((item): Change => ({ action: "add", label: item.label })),
-    ...change.items_removed.map((item): Change => ({ action: "remove", label: item.label })),
-  ],
-});
+const collectionChange = (change: Extract<PlanChange, { kind: "collection" }>): Change => {
+  const details = [
+    ...sourceDetails(change),
+    ...(change.action === "add" ? [plural(change.skills_added.length, "Skill")] : []),
+  ];
+  return {
+    action: change.action,
+    label:
+      change.label_before && change.label_after && change.label_before !== change.label_after
+        ? `${change.label_before} → ${change.label_after}`
+        : change.label,
+    ...(details.length > 0 ? { detail: details.join(", ") } : {}),
+    ...(change.action === "update"
+      ? {
+          children: [
+            ...skillChange("add", change.skills_added),
+            ...skillChange("update", change.skills_changed),
+            ...skillChange("remove", change.skills_removed),
+          ],
+        }
+      : {}),
+  };
+};
+
+const enabledChange = (change: Extract<PlanChange, { kind: "enabled" }>): Change => {
+  const entry = (action: Change["action"], item: (typeof change.items_added)[number]): Change => {
+    const detail = [item.collection_label, ...sourceDetails(item)]
+      .filter((part) => part !== undefined)
+      .join(", ");
+    return { action, label: item.label, ...(detail === "" ? {} : { detail }) };
+  };
+  return {
+    action: change.action,
+    label: "Enabled Skills",
+    children: [
+      ...change.items_added.map((item) => entry("add", item)),
+      ...change.items_removed.map((item) => entry("remove", item)),
+    ],
+  };
+};
 
 export const syncIssue = (issue: SyncIssue): ListItem =>
   Schema.is(SyncConflictDetail)(issue)
@@ -162,6 +199,53 @@ export function presentLibrarySyncPlan(plan: SyncPlan): Block[] {
 }
 
 export function presentLibrarySync(data: SyncResult): Block[] {
+  const folders = data.author_workspaces ?? [];
+  return [
+    ...(folders.length
+      ? [
+          Block.Heading({ text: "Author Workspaces" }),
+          Block.List({
+            items: folders.map((folder) => {
+              const failure = folder.failure ?? folder.sync_failure ?? folder.installation_failure;
+              const description = failure === undefined ? undefined : dataFailure(failure);
+              return {
+                text: [
+                  folder.identity,
+                  ...(folder.directory === undefined ? [] : [" at ", { code: folder.directory }]),
+                  " — ",
+                  ...(failure !== undefined
+                    ? [description?.message ?? errorMessage(failure)]
+                    : [
+                        folder.sync?.status === "ready"
+                          ? `ready to ${folder.sync.action}`
+                          : (folder.sync?.status.replaceAll("_", " ") ??
+                            (folder.status === "pull_ready"
+                              ? "ready to pull"
+                              : (folder.installation ?? folder.status))),
+                      ]),
+                ],
+                ...(description?.next.length ? { detail: description.next } : {}),
+              };
+            }),
+          }),
+        ]
+      : []),
+    ...(data.author_inventory_failure === undefined
+      ? []
+      : [
+          Block.Note({
+            text: [
+              "Author inventory unavailable. ",
+              dataFailure(data.author_inventory_failure)?.message ??
+                errorMessage(data.author_inventory_failure),
+            ],
+          }),
+        ]),
+    ...presentLibrarySyncResult(data),
+  ];
+}
+
+function presentLibrarySyncResult(data: SyncResult): Block[] {
   // What syncing did to this device, when it did anything worth knowing.
   const notes = [
     ...(data.merge_base === "empty-first-sync"
@@ -202,7 +286,7 @@ export function presentLibrarySync(data: SyncResult): Block[] {
         return [
           status("error", "Library sync stopped:"),
           ...renderSyncConflicts(data.conflict_details),
-          Block.Note({ text: ["No sync changes applied."] }),
+          Block.Note({ text: ["No Library sync changes applied."] }),
           ...notes,
         ];
       return [
@@ -214,7 +298,7 @@ export function presentLibrarySync(data: SyncResult): Block[] {
           text: [
             "Preview the current conflicts with ",
             { code: "skit sync" },
-            " before choosing a resolution. No sync changes applied.",
+            " before choosing a resolution. No Library sync changes applied.",
           ],
         }),
         ...notes,

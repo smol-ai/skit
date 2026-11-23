@@ -84,7 +84,7 @@ export type RevisionPage = typeof RevisionPage.Type;
 export const AuthorSkitSummary = Schema.Struct({
   skit_id: Schema.NonEmptyString,
   visibility: Schema.Literals(["public", "unlisted", "private"]),
-  current_revision_id: History.RevisionId,
+  current_revision_id: Schema.NullOr(History.RevisionId),
   current_revision_published: Schema.Boolean,
   most_recent_release_version: Schema.NullOr(
     Schema.String.check(Schema.isPattern(apiSemverPattern)),

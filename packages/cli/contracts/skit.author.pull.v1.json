@@ -1,0 +1,29 @@
+{
+  "$id": "skit.author.pull.v1",
+  "type": "object",
+  "properties": {
+    "identity": {
+      "type": "string"
+    },
+    "directory": {
+      "type": "string"
+    },
+    "revision_id": {
+      "type": "string"
+    },
+    "paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "identity",
+    "directory",
+    "revision_id",
+    "paths"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

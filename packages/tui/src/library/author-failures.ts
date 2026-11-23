@@ -38,6 +38,16 @@ export const authorFailure = Match.type<AuthorFailure>().pipe(
       message: `Author remote metadata at ${error.path} is invalid`,
       remediation: `Correct or remove the author remote metadata at ${error.path}, then retry.`,
     }),
+    PullDirectoryNotEmpty: (error) => ({
+      message: `${error.path} is not empty`,
+      remediation:
+        "Pull into a new or empty directory. To sync a directory that already has files, run skit author sync in it.",
+    }),
+    NoRevisionToPull: (error) => ({
+      message: `${error.locator} has no revision to pull`,
+      remediation:
+        "Run skit author sync --apply in a workspace that holds this SKIT's files, then pull again.",
+    }),
     LocalFilesChangedDuringSync: () => ({
       message: "Local files changed while sync was running",
       remediation: "Let local edits finish, then sync again.",

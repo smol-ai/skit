@@ -154,6 +154,32 @@ describe("author inventory", () => {
     }).pipe(Effect.provide(testLayer)),
   );
 
+  it.effect("lists released SKITs without a current revision", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+      const sql = yield* D1Client.D1Client;
+      yield* sql.batch([
+        sql`INSERT INTO namespaces VALUES ('tim', 'principal', 'principal_test')`,
+        sql`INSERT INTO skits VALUES ('tim', 'released', 'public', NULL), ('tim', 'empty', 'private', NULL)`,
+        sql`INSERT INTO releases VALUES ('tim', 'released', '1.0.0', '2026-01-01T00:00:00Z', NULL)`,
+      ]);
+      const skits = yield* Skits;
+      expect(yield* skits.list(principal)).toEqual({
+        outcome: "page",
+        skits: [
+          {
+            skit_id: "tim/released",
+            visibility: "public",
+            current_revision_id: null,
+            current_revision_published: false,
+            most_recent_release_version: "1.0.0",
+          },
+        ],
+        next_cursor: null,
+      });
+    }).pipe(Effect.provide(testLayer)),
+  );
+
   it.effect("returns an empty page when the principal has no author access", () =>
     Effect.gen(function* () {
       yield* prepareDatabase;

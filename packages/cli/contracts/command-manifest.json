@@ -453,6 +453,79 @@
     {
       "path": [
         "author",
+        "pull"
+      ],
+      "stability": "experimental",
+      "summary": "Experimental: make an Author Workspace from a SKIT you already author on a Registry.",
+      "effects": {
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write",
+          "network.read",
+          "network.write",
+          "process.execute"
+        ],
+        "subprocesses": [
+          "/usr/bin/security find-generic-password",
+          "secret-tool lookup",
+          "git init --bare",
+          "git ls-files",
+          "git check-ignore"
+        ]
+      },
+      "outputSchemas": [
+        "skit.author.pull.v1"
+      ],
+      "interactive": false,
+      "examples": [
+        "skit author pull me/my-skills"
+      ],
+      "positionals": [
+        {
+          "name": "skit",
+          "required": true
+        },
+        {
+          "name": "directory",
+          "required": false
+        }
+      ],
+      "flags": {
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "author",
         "watch"
       ],
       "stability": "experimental",
@@ -2823,7 +2896,7 @@
         "sync"
       ],
       "stability": "stable",
-      "summary": "Sync your Library with skit-server.",
+      "summary": "Sync your Author Workspaces and Library with the Registry.",
       "effects": {
         "capabilities": [
           "filesystem.read",
@@ -2840,7 +2913,8 @@
           "git ls-files",
           "git check-ignore",
           "/usr/bin/security find-generic-password",
-          "secret-tool lookup"
+          "secret-tool lookup",
+          "git init --bare"
         ]
       },
       "outputSchemas": [

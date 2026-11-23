@@ -1,5 +1,5 @@
 import { normalizeLibraryManifest } from "../src/library/manifest.js";
-import { assert, it } from "@effect/vitest";
+import { assert, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { SchemaFailure } from "../src/shared/schema-issue.js";
 import { SyncConflicted } from "../src/library/internal/sync/conflict.js";
@@ -423,6 +423,7 @@ it.effect("plans destination-specific Collection and Binding reconciliation", ()
         kind: "collection",
         action: "update",
         subject_id: collectionId,
+        source_kind: "local",
         label: "fixture/skills",
         label_before: "fixture/skills",
         label_after: "fixture/skills",
@@ -434,10 +435,108 @@ it.effect("plans destination-specific Collection and Binding reconciliation", ()
       {
         kind: "enabled",
         action: "add",
-        items_added: [{ kind: "skill", label: "review" }],
+        items_added: [
+          {
+            kind: "skill",
+            label: "review",
+            collection_label: "fixture/skills",
+            source_kind: "local",
+          },
+        ],
         items_removed: [],
       },
     ]);
+  }),
+);
+
+it.effect("distinguishes same-named workspace and release changes on either side", () =>
+  Effect.gen(function* () {
+    const registry = {
+      kind: "registry",
+      authority: "https://registry.example",
+      namespace: "fixture",
+      slug: "skills",
+    };
+    const release = yield* decode({
+      ...manifest([{ skill: skillId }]),
+      imports: manifest().imports.map((entry) =>
+        entry.kind === "source"
+          ? { ...entry, source_identity: registry, revision: "1.2.0+original" }
+          : entry,
+      ),
+      snapshot_digests: [hashB, hashC],
+      collections: [
+        {
+          ...collection,
+          upstream: {
+            tracking: { kind: "default" },
+            source_identity: registry,
+          },
+        },
+      ],
+    });
+    const workspaceId = makeCollectionId();
+    const workspaceSkill = makeSkillId();
+    const workspace = yield* decode({
+      ...manifest([{ skill: workspaceSkill }]),
+      collections: [{ ...collection, label: "skills", collection_id: workspaceId }],
+      skills: [{ ...skill, collection_id: workspaceId, skill_id: workspaceSkill }],
+      imports: manifest().imports.map((entry) => ({
+        ...entry,
+        collection_id: workspaceId,
+        ...(entry.kind === "source"
+          ? { source_identity: { kind: "authored-workspace", workspace_id: "author-workspace" } }
+          : {}),
+      })),
+    });
+    const plan = planLibrarySync(
+      release,
+      release,
+      workspace,
+      new Map([[workspaceId, { label: "fixture/skills", authority: "https://author.example" }]]),
+    );
+    const expected = [
+      expect.objectContaining({
+        kind: "collection",
+        action: "remove",
+        label: "fixture/skills",
+        source_kind: "registry",
+        authority: "https://registry.example",
+        release_version: "1.2.0+original",
+      }),
+      expect.objectContaining({
+        kind: "collection",
+        action: "add",
+        label: "fixture/skills",
+        source_kind: "authored-workspace",
+        authority: "https://author.example",
+      }),
+      {
+        kind: "enabled",
+        action: "update",
+        items_added: [
+          {
+            kind: "skill",
+            label: "review",
+            collection_label: "fixture/skills",
+            source_kind: "authored-workspace",
+            authority: "https://author.example",
+          },
+        ],
+        items_removed: [
+          {
+            kind: "skill",
+            label: "review",
+            collection_label: "fixture/skills",
+            source_kind: "registry",
+            authority: "https://registry.example",
+            release_version: "1.2.0+original",
+          },
+        ],
+      },
+    ];
+    expect(plan.local).toEqual(expect.arrayContaining(expected));
+    expect(plan.remote).toEqual(expect.arrayContaining(expected));
   }),
 );
 
@@ -456,6 +555,7 @@ it.effect("marks a Collection whose only difference is fetch records as evidence
         kind: "collection",
         action: "update",
         subject_id: collectionId,
+        source_kind: "local",
         label: "fixture/skills",
         label_before: "fixture/skills",
         label_after: "fixture/skills",

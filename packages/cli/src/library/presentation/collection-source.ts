@@ -2,7 +2,7 @@ import type { CollectionSource } from "@smolai/skit-core/library/queries";
 import { Block, type Field } from "../../terminal/blocks.js";
 import { metadataSource } from "./skill-metadata.js";
 
-const sourceKinds = {
+export const sourceKinds = {
   "authored-workspace": "Author workspace",
   registry: "Registry release",
   github: "GitHub",

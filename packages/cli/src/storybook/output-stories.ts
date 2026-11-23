@@ -1,3 +1,4 @@
+import { PullDirectoryNotEmpty } from "@smolai/skit-core/author/failures";
 import { RegistryTransportError } from "../registry/request-failures.js";
 import { ArchiveStreamInvalid, SkitValidationFailed } from "@smolai/skit-core/universal/consumer";
 import { TreeError } from "@smolai/skit-core/shared";
@@ -430,7 +431,24 @@ export const outputStories: ReadonlyArray<OutputStory> = [
           current_revision_published: false,
           most_recent_release_version: null,
         },
+        {
+          identity: "https://registry.example/smol-ai/published-tools",
+          visibility: "public",
+          current_revision_id: null,
+          current_revision_published: false,
+          most_recent_release_version: "1.0.0",
+        },
       ],
+    }),
+  ),
+  resultStory(
+    "author-pull",
+    "pulled",
+    result("authorPull", {
+      identity: "skit://registry.example/smol-ai/review-tools",
+      directory: "/Users/ada/review-tools",
+      revision_id: `sha256:${"3".repeat(64)}`,
+      paths: ["README.md", "skills/review/SKILL.md", "skit.json"],
     }),
   ),
   resultStory(
@@ -2118,7 +2136,14 @@ export const outputStories: ReadonlyArray<OutputStory> = [
           {
             kind: "enabled",
             action: "update",
-            items_added: [{ kind: "skill", label: "cli-ux" }],
+            items_added: [
+              {
+                kind: "skill",
+                label: "cli-ux",
+                collection_label: "swyxio/skills",
+                source_kind: "github",
+              },
+            ],
             items_removed: [{ kind: "collection", label: "NVIDIA/skills" }],
           },
         ],
@@ -2129,6 +2154,107 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     "library-sync",
     "pull-ready-no-changes",
     result("librarySync", { status: "pull_ready", plan: { local: [], remote: [] } }),
+  ),
+  resultStory(
+    "library-sync",
+    "author-workspaces",
+    result("librarySync", {
+      status: "push_ready",
+      plan: {
+        local: [],
+        remote: [
+          {
+            kind: "collection",
+            action: "remove",
+            subject_id: "release-tools",
+            label: "tim/tools",
+            source_kind: "registry",
+            authority: "https://registry.example",
+            release_version: "1.2.0",
+            skills_added: [],
+            skills_removed: ["review"],
+            skills_changed: [],
+            evidence_only: false,
+          },
+          {
+            kind: "collection",
+            action: "add",
+            subject_id: "authored-tools",
+            label: "tim/tools",
+            source_kind: "authored-workspace",
+            authority: "https://registry.example",
+            skills_added: ["review"],
+            skills_removed: [],
+            skills_changed: [],
+            evidence_only: false,
+          },
+          {
+            kind: "enabled",
+            action: "update",
+            items_added: [
+              {
+                kind: "skill",
+                label: "review",
+                collection_label: "tim/tools",
+                source_kind: "authored-workspace",
+                authority: "https://registry.example",
+              },
+            ],
+            items_removed: [
+              {
+                kind: "skill",
+                label: "review",
+                collection_label: "tim/tools",
+                source_kind: "registry",
+                authority: "https://registry.example",
+                release_version: "1.2.0",
+              },
+            ],
+          },
+        ],
+      },
+      author_workspaces: [
+        {
+          identity: "skit://registry.example/tim/tools",
+          directory: "/work/tools",
+          status: "sync",
+          sync: { status: "up_to_date", changed: false, revision_id: `sha256:${"a".repeat(64)}` },
+        },
+        {
+          identity: "skit://registry.example/tim/notes",
+          directory: "/work/notes",
+          status: "updated",
+          installation: "updated",
+          sync_failure: new CredentialLacksScope({ scope: "authoring:write" }),
+        },
+        { identity: "local-workspace", directory: "/work/local", status: "unconnected" },
+        {
+          identity: "skit://registry.example/tim/review",
+          directory: "/work/review",
+          status: "failed",
+          failure: new PullDirectoryNotEmpty({ path: "/work/review" }),
+        },
+        {
+          identity: "skit://registry.example/tim/triage",
+          directory: "/work/triage",
+          status: "pull_ready",
+        },
+        {
+          identity: "skit://registry.example/tim/research",
+          directory: "/work/research",
+          status: "pulled",
+          revision_id: `sha256:${"a".repeat(64)}`,
+        },
+      ],
+    }),
+  ),
+  resultStory(
+    "library-sync",
+    "author-inventory-unavailable",
+    result("librarySync", {
+      status: "clean",
+      author_inventory_failure: new CredentialLacksScope({ scope: "authoring:write" }),
+    }),
   ),
   resultStory("library-sync", "clean", result("librarySync", { status: "clean" })),
   resultStory(

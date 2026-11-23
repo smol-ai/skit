@@ -1,3 +1,4 @@
+import { readCollectionSource } from "../../collection-source.js";
 import { Effect, Option } from "effect";
 import type * as Library from "../../library.js";
 import { StalePlan } from "../../library-plan.js";
@@ -65,6 +66,7 @@ const conflict = (details: readonly SyncConflictDetail[], revision_id?: string) 
 export function openSyncSession(
   library: Pick<Library.Interface, "read" | "plan" | "apply" | "content">,
   roots: InventoryRootOptions,
+  home: string,
   request: SyncSessionRequest,
   options: { readonly base: Snapshot },
 ) {
@@ -207,8 +209,18 @@ export function openSyncSession(
         _tag: "Stopped" as const,
         result: { ...note, ...conflict(transition.conflicts, remote?.revision_id) },
       };
+    const workspaces = new Map<string, { label: string; authority?: string }>();
+    for (const collection of merge.alignedLocal.collections) {
+      if (collection.upstream?.source_identity.kind !== "authored-workspace") continue;
+      const source = yield* readCollectionSource(merge.alignedLocal, collection, home);
+      if (source?.workspace_status === "connected")
+        workspaces.set(collection.collection_id, {
+          label: source.name,
+          authority: source.authority,
+        });
+    }
     const facts: SyncChanges = {
-      ...planLibrarySync(merge.alignedLocal, remoteManifest, desired),
+      ...planLibrarySync(merge.alignedLocal, remoteManifest, desired, workspaces),
       ...(merge.enabledResolution ? { enabled_resolution: merge.enabledResolution } : {}),
     };
     const prepare = (content: Library.StagedContent, local = false) => {

@@ -186,6 +186,30 @@ export class NoRemoteHome
   readonly code = "INVALID_ARGUMENT" as const;
 }
 
+/** `author pull` writes only into a directory that holds nothing yet. */
+export class PullDirectoryNotEmpty
+  extends Schema.TaggedError<PullDirectoryNotEmpty, { readonly brand: unique symbol }>()(
+    "PullDirectoryNotEmpty",
+    { path: Schema.String },
+  )
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "CONFLICT" as const;
+}
+
+/** The SKIT exists on its Registry but no revision has been synced to it. */
+export class NoRevisionToPull
+  extends Schema.TaggedError<NoRevisionToPull, { readonly brand: unique symbol }>()(
+    "NoRevisionToPull",
+    { locator: Schema.String },
+  )
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "CONFLICT" as const;
+}
+
 export class PublicationBlocked
   extends Schema.TaggedError<PublicationBlocked, { readonly brand: unique symbol }>()(
     "PublicationBlocked",
@@ -241,6 +265,8 @@ const authorFailures = Schema.Union([
   DestinationExistsWithoutHistory,
   DirectoryAlreadyInLibrary,
   NoRemoteHome,
+  PullDirectoryNotEmpty,
+  NoRevisionToPull,
   PublicationBlocked,
   AuthorListIdentityError,
 ]);

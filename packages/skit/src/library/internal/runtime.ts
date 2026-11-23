@@ -244,7 +244,7 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
       readSkillContent: (skillVersionId) =>
         operation(readLibrarySkillContent(read, home, skillVersionId)),
     },
-    remove: (options) => operation(removeCollection(operations, options)),
+    remove: (options) => operation(removeCollection(operations, options, home)),
     update: (query, adapters) => operation(updateSources(home, library, query, adapters)),
     edit: (query, path) => operation(openEditImport(home, editing, query, path)),
     check: (query, options) => operation(queries.check(query, options)),
@@ -292,7 +292,7 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
     content,
     sync: (options, transport) =>
       operation(
-        syncLibrary(syncing, roots, options, transport, (request) =>
+        syncLibrary(syncing, roots, home, options, transport, (request) =>
           owned(
             Effect.gen(function* () {
               const writer = yield* LibraryWriter;
@@ -301,7 +301,8 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
           ),
         ),
       ),
-    syncSession: (request, options) => operation(openSyncSession(syncing, roots, request, options)),
+    syncSession: (request, options) =>
+      operation(openSyncSession(syncing, roots, home, request, options)),
     setup: (steps, options) =>
       writeLibrary(home, setup(steps, options)).pipe(
         Effect.provide(writer),
