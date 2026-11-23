@@ -37,21 +37,21 @@ export const libraryQueries = (
     Effect.map(
       options === undefined ? read : Effect.succeed(structuredClone(options.base)),
       (snapshot) =>
-        libraryView(
-          snapshot._tag === "Present" ? snapshot.state : emptyLibraryState(),
-          join(home, "originals"),
-          { home, active: files.active },
-        ),
+        libraryView(snapshot._tag === "Present" ? snapshot.state : emptyLibraryState(), home, {
+          home,
+          active: files.active,
+        }),
     );
   const listingFor = (options?: { readonly base: Snapshot }) =>
     options === undefined
       ? Effect.map(readLibraryListing(home), (rows) =>
-          libraryListing(rows, join(home, "originals")),
+          libraryListing(rows, join(home, "originals"), home),
         )
       : Effect.succeed(
           libraryListing(
             options.base._tag === "Present" ? options.base.state : emptyLibraryState(),
             join(home, "originals"),
+            home,
           ),
         );
   return {

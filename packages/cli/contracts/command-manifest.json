@@ -2896,7 +2896,7 @@
         "sync"
       ],
       "stability": "stable",
-      "summary": "Sync your Library with skit-server.",
+      "summary": "Sync your Author Workspaces and Library with the Registry.",
       "effects": {
         "capabilities": [
           "filesystem.read",
@@ -2913,7 +2913,8 @@
           "git ls-files",
           "git check-ignore",
           "/usr/bin/security find-generic-password",
-          "secret-tool lookup"
+          "secret-tool lookup",
+          "git init --bare"
         ]
       },
       "outputSchemas": [

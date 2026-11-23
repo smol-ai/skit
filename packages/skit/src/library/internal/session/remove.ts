@@ -8,6 +8,7 @@ import { readCollectionSource } from "../../collection-source.js";
 
 const describeRemoval = Effect.fn("Library.describeRemoval")(function* (
   state: LibraryState,
+  home: string,
   subject: LibrarySubject,
 ) {
   // A Source is its whole repository: a Skill cannot be removed from a Collection with other
@@ -31,7 +32,7 @@ const describeRemoval = Effect.fn("Library.describeRemoval")(function* (
       ? subject.collection
       : state.collections.find((item) => item.collection_id === subject.skill.collection_id);
   const collectionSource =
-    collection === undefined ? undefined : yield* readCollectionSource(state, collection);
+    collection === undefined ? undefined : yield* readCollectionSource(state, collection, home);
   return {
     subject_id: subject.subjectId,
     subject_kind: subject.kind,
@@ -58,9 +59,10 @@ const describeRemoval = Effect.fn("Library.describeRemoval")(function* (
 /** The read-only Library view also reports a removal summary without planning it. */
 export const removalSummary = Effect.fn("Library.planRemove")(function* (
   state: LibraryState,
+  home: string,
   query: string,
 ) {
-  return yield* describeRemoval(state, yield* resolveLibrarySubject(state, query));
+  return yield* describeRemoval(state, home, yield* resolveLibrarySubject(state, query));
 });
 
 export interface RemoveOptions {
@@ -72,11 +74,12 @@ export interface RemoveOptions {
 export const removeCollection = Effect.fn("Library.removeCollection")(function* (
   library: Pick<Interface, "read" | "plan" | "apply">,
   options: RemoveOptions,
+  home: string,
 ) {
   const snapshot = yield* library.read;
   const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
   const subject = yield* resolveLibrarySubject(state, options.query);
-  const summary = yield* describeRemoval(state, subject);
+  const summary = yield* describeRemoval(state, home, subject);
   if (options.dryRun) return { kind: "plan" as const, value: summary };
   const collectionId =
     subject.kind === "collection" ? subject.collection.collection_id : subject.skill.collection_id;

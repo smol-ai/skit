@@ -3,6 +3,7 @@ import { COLLECTION_CONTROL_DIRECTORY } from "../artifact/control-files.js";
 import { parseAuthorDestination, skitLocator } from "./destination.js";
 import { NoRevisionToPull, PullDirectoryNotEmpty } from "./failures.js";
 import { syncAuthorWorkspace } from "./sync.js";
+import { normalizeRemote, type AuthorRemoteHome } from "./remote.js";
 import type { AuthorRegistry } from "./transport.js";
 import { AuthorWorkspace } from "./workspace.js";
 
@@ -14,7 +15,7 @@ import { AuthorWorkspace } from "./workspace.js";
  * `skit author sync`.
  */
 export const pullAuthorSkit = Effect.fn("Author.pull")(function* <E, R, P>(
-  source: string,
+  source: string | AuthorRemoteHome,
   options: {
     /** Defaults to a directory named after the SKIT, under the current directory. */
     readonly directory?: string;
@@ -27,10 +28,13 @@ export const pullAuthorSkit = Effect.fn("Author.pull")(function* <E, R, P>(
   const path = yield* Path.Path;
   const workspaces = yield* AuthorWorkspace;
   // A bare `namespace/skit` names a SKIT on the ambient Registry.
-  const remote = yield* parseAuthorDestination(
-    source,
-    /^(?:skit:\/\/|https?:\/\/)/.test(source) ? undefined : yield* registry.origin,
-  );
+  const remote =
+    typeof source === "string"
+      ? yield* parseAuthorDestination(
+          source,
+          /^(?:skit:\/\/|https?:\/\/)/.test(source) ? undefined : yield* registry.origin,
+        )
+      : yield* normalizeRemote(source);
   const locator = skitLocator(remote);
   const folder = path.resolve(options.directory ?? remote.skit);
   // The lease creates the control directory; nothing else may be there.

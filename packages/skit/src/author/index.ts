@@ -90,3 +90,5 @@ export type {
   DuplicateSkillPaths,
   ReadmeFrontmatterMissing,
 } from "../artifact/failures.js";
+
+export { syncAuthorWorkspaces } from "./sync-workspaces.js";

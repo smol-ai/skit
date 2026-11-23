@@ -118,6 +118,14 @@ type SyncStateError =
 // ── Surface ────────────────────────────────────────────────────────────────────────────────────
 
 export interface AuthorHistoryShape {
+  readonly workspaces: Effect.Effect<
+    readonly { readonly workspace_id: WorkspaceId; readonly root: string }[],
+    AuthorHistoryInvalid | PlatformError.PlatformError
+  >;
+  readonly syncLocators: Effect.Effect<
+    readonly string[],
+    AuthorHistoryInvalid | PlatformError.PlatformError
+  >;
   readonly inventory: {
     readonly refresh: (
       lease: WorkspaceLease,
@@ -610,6 +618,8 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
       if (workspaceId !== undefined) yield* removalCheck.reset(workspaceId);
     });
   const service: AuthorHistoryShape = {
+    workspaces: AuthorState.readAuthorWorkspaces(home).pipe(Effect.provide(context)),
+    syncLocators: AuthorState.readAuthorSyncLocators(home).pipe(Effect.provide(context)),
     inventory: {
       refresh: (lease, workspaceId, tree, allowLargeDeletion, knownTrees) =>
         refreshInventory(lease, workspaceId, tree, allowLargeDeletion, knownTrees).pipe(

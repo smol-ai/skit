@@ -93,16 +93,19 @@ export const updateAuthorWorkspace = Effect.fn("Author.updateWorkspace")(functio
   input: string,
   options: { readonly home: string; readonly expectedImportId?: string },
   registry: Pick<AuthorRegistry<E, R, P>, "origin" | "connect">,
+  heldLease?: WorkspaceLease,
 ) {
   const workspaces = yield* AuthorWorkspace;
   const root = yield* workspaces.resolveRoot(input);
-  const lease = yield* workspaces.acquire(root).pipe(
-    Effect.retry({
-      while: (error) => error._tag === "AuthorWorkspaceBusy",
-      schedule: Schedule.spaced("100 millis"),
-      times: 400,
-    }),
-  );
+  const lease =
+    heldLease ??
+    (yield* workspaces.acquire(root).pipe(
+      Effect.retry({
+        while: (error) => error._tag === "AuthorWorkspaceBusy",
+        schedule: Schedule.spaced("100 millis"),
+        times: 400,
+      }),
+    ));
   const installation = yield* updateAuthoredSkills(root, lease, {
     confirmRemovals: true,
     ...(options.expectedImportId === undefined

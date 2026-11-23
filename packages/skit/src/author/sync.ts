@@ -1,3 +1,4 @@
+import { Digest } from "effect/crypto";
 import { Effect, Option, Result, Schema } from "effect";
 import { join } from "node:path";
 import {
@@ -47,6 +48,8 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
   rootInput: string,
   options: {
     readonly apply: boolean;
+    /** Top-level sync previews plan without saving observations or fetched revisions. */
+    readonly readOnly?: boolean;
     readonly allowLargeDeletion?: boolean;
     /** Foreground commands confirm small removals; watch keeps its loop nonblocking. */
     readonly confirmRemovals?: boolean;
@@ -185,7 +188,7 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
     // A preview backs up an identified workspace as applying does. Without an identity it creates
     // nothing: it plans over the scan alone, from no checkpoint.
     const previewed =
-      applying !== undefined || Option.isNone(workspace.identity)
+      applying !== undefined || options.readOnly || Option.isNone(workspace.identity)
         ? undefined
         : { workspaceId: workspace.identity.value.workspaceId, ...(yield* observe) };
     const scan =
@@ -216,7 +219,8 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
       : api.remote;
     // This workspace's checkpoint: none until it has an identity (A5). Decoding the saved
     // checkpoints comes before creating anything or replacing a base.
-    const workspaceId = applying?.workspaceId ?? previewed?.workspaceId;
+    const workspaceId =
+      Option.getOrUndefined(workspace.identity)?.workspaceId ?? applying?.workspaceId;
     const savedState =
       workspaceId === undefined
         ? Sync.Idle.make({ base: null })
@@ -296,7 +300,16 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
     let localHash = scanned.success.localHash;
     const state =
       destination._tag === "ConnectedRemote" ? savedState : Sync.Idle.make({ base: null });
+    const digest = yield* Digest.Digest;
     let input = yield* Sync.loadPlanInput({
+      ...(options.readOnly && applying === undefined
+        ? {
+            verifyFetched: (tree, revision) =>
+              Effect.all([History.treeHash(tree), History.revisionId(revision)]).pipe(
+                Effect.provideService(Digest.Digest, digest),
+              ),
+          }
+        : {}),
       store: history.engineStore,
       remote: registry,
       state,

@@ -325,7 +325,7 @@ export interface Interface {
     >;
   };
   readonly sync: <ReadError, UploadError, WriteError, DownloadError, R>(
-    options: Parameters<typeof syncLibrary>[2],
+    options: Parameters<typeof syncLibrary>[3],
     transport: LibrarySyncTransport<ReadError, UploadError, WriteError, DownloadError, R>,
   ) => Effect.Effect<
     Effect.Success<
@@ -337,8 +337,8 @@ export interface Interface {
     R
   >;
   readonly syncSession: (
-    request: Parameters<typeof openSyncSession>[2],
-    options: Parameters<typeof openSyncSession>[3],
+    request: Parameters<typeof openSyncSession>[3],
+    options: Parameters<typeof openSyncSession>[4],
   ) => Effect.Effect<
     Effect.Success<ReturnType<typeof openSyncSession>>,
     Effect.Error<ReturnType<typeof openSyncSession>>

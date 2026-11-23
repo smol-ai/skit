@@ -1,3 +1,4 @@
+import { PullDirectoryNotEmpty } from "@smolai/skit-core/author/failures";
 import { RegistryTransportError } from "../registry/request-failures.js";
 import { ArchiveStreamInvalid, SkitValidationFailed } from "@smolai/skit-core/universal/consumer";
 import { TreeError } from "@smolai/skit-core/shared";
@@ -429,6 +430,13 @@ export const outputStories: ReadonlyArray<OutputStory> = [
           current_revision_id: History.RevisionId.make(`sha256:${"3".repeat(64)}`),
           current_revision_published: false,
           most_recent_release_version: null,
+        },
+        {
+          identity: "https://registry.example/smol-ai/published-tools",
+          visibility: "public",
+          current_revision_id: null,
+          current_revision_published: false,
+          most_recent_release_version: "1.0.0",
         },
       ],
     }),
@@ -2139,6 +2147,54 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     "library-sync",
     "pull-ready-no-changes",
     result("librarySync", { status: "pull_ready", plan: { local: [], remote: [] } }),
+  ),
+  resultStory(
+    "library-sync",
+    "author-workspaces",
+    result("librarySync", {
+      status: "clean",
+      author_workspaces: [
+        {
+          identity: "skit://registry.example/tim/tools",
+          directory: "/work/tools",
+          status: "sync",
+          sync: { status: "ready", changed: false, action: "pull" },
+        },
+        {
+          identity: "skit://registry.example/tim/notes",
+          directory: "/work/notes",
+          status: "updated",
+          installation: "updated",
+          sync_failure: new CredentialLacksScope({ scope: "authoring:write" }),
+        },
+        { identity: "local-workspace", directory: "/work/local", status: "unconnected" },
+        {
+          identity: "skit://registry.example/tim/review",
+          directory: "/work/review",
+          status: "failed",
+          failure: new PullDirectoryNotEmpty({ path: "/work/review" }),
+        },
+        {
+          identity: "skit://registry.example/tim/triage",
+          directory: "/work/triage",
+          status: "pull_ready",
+        },
+        {
+          identity: "skit://registry.example/tim/research",
+          directory: "/work/research",
+          status: "pulled",
+          revision_id: `sha256:${"a".repeat(64)}`,
+        },
+      ],
+    }),
+  ),
+  resultStory(
+    "library-sync",
+    "author-inventory-unavailable",
+    result("librarySync", {
+      status: "clean",
+      author_inventory_failure: new CredentialLacksScope({ scope: "authoring:write" }),
+    }),
   ),
   resultStory("library-sync", "clean", result("librarySync", { status: "clean" })),
   resultStory(

@@ -183,7 +183,13 @@ function presentAuthorList(data: ContractDataForId<"skit.author.list.v2">): Bloc
       rows: data.skits.map((skit) => [
         [authoredSkitLabel(skit.identity)],
         [skit.visibility],
-        [skit.current_revision_published ? "published" : "unpublished"],
+        [
+          skit.current_revision_id === null
+            ? { dim: "—" }
+            : skit.current_revision_published
+              ? "published"
+              : "unpublished",
+        ],
         [skit.most_recent_release_version ?? { dim: "—" }],
       ]),
     }),

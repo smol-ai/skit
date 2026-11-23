@@ -32,6 +32,13 @@ export const sourceFetchSubprocesses = [
   "git check-ignore",
 ] as const;
 
+/** Git commands that read the Author Workspace ignore rules. */
+export const workspaceSubprocesses = [
+  "git init --bare",
+  "git ls-files",
+  "git check-ignore",
+] as const;
+
 /** Commands the OS credential store is read through when stored Registry tokens are loaded. */
 export const credentialStoreReadSubprocesses = [
   "/usr/bin/security find-generic-password",

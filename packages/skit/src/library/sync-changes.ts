@@ -1,3 +1,4 @@
+import { CollectionSource } from "./collection-source.js";
 import { Schema } from "effect";
 
 export const SyncEnabledItem = Schema.Struct({
@@ -10,6 +11,7 @@ export const SyncChange = Schema.Union([
     kind: Schema.Literal("collection"),
     action: Schema.Literals(["add", "update", "remove"]),
     subject_id: Schema.String,
+    source_kind: Schema.optionalKey(CollectionSource.fields.kind),
     label: Schema.String,
     label_before: Schema.optionalKey(Schema.String),
     label_after: Schema.optionalKey(Schema.String),

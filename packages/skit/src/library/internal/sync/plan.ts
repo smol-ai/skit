@@ -34,6 +34,7 @@ const entriesMissing = (
   manifest: LibraryManifest,
   from: readonly Enabled[] | undefined,
   to: readonly Enabled[] | undefined,
+  labels: ReadonlyMap<string, string>,
 ): readonly SyncEnabledItem[] =>
   (from ?? [])
     .filter((item) => !(to ?? []).some((other) => Schema.toEquivalence(Enabled)(item, other)))
@@ -42,9 +43,11 @@ const entriesMissing = (
         ? {
             kind: "collection" as const,
             label:
+              labels.get(item.collection) ??
               manifest.collections.find(
                 (collection) => collection.collection_id === item.collection,
-              )?.label ?? item.collection,
+              )?.label ??
+              item.collection,
           }
         : {
             kind: "skill" as const,
@@ -53,7 +56,11 @@ const entriesMissing = (
           },
     );
 
-const changes = (before: LibraryManifest, after: LibraryManifest): readonly SyncChange[] => {
+const changes = (
+  before: LibraryManifest,
+  after: LibraryManifest,
+  labels: ReadonlyMap<string, string>,
+): readonly SyncChange[] => {
   const collectionIds = [
     ...new Set([
       ...before.collections.map((item) => item.collection_id),
@@ -78,14 +85,17 @@ const changes = (before: LibraryManifest, after: LibraryManifest): readonly Sync
       .filter(([name, hash]) => skillsBefore.has(name) && skillsBefore.get(name) !== hash)
       .map(([name]) => name)
       .sort();
+    const label = labels.get(collectionId);
+    const source = (desired ?? previous)?.upstream?.source_identity;
     return [
       {
         kind: "collection",
         action: action(previous, desired),
         subject_id: collectionId,
-        label: desired?.label ?? previous?.label ?? collectionId,
-        ...(previous === undefined ? {} : { label_before: previous.label }),
-        ...(desired === undefined ? {} : { label_after: desired.label }),
+        ...(source === undefined ? {} : { source_kind: source.kind }),
+        label: label ?? desired?.label ?? previous?.label ?? collectionId,
+        ...(previous === undefined ? {} : { label_before: label ?? previous.label }),
+        ...(desired === undefined ? {} : { label_after: label ?? desired.label }),
         skills_added,
         skills_removed,
         skills_changed,
@@ -112,8 +122,8 @@ const changes = (before: LibraryManifest, after: LibraryManifest): readonly Sync
         {
           kind: "enabled",
           action: action(previous, desired),
-          items_added: entriesMissing(after, desired, previous),
-          items_removed: entriesMissing(before, previous, desired),
+          items_added: entriesMissing(after, desired, previous, labels),
+          items_removed: entriesMissing(before, previous, desired, labels),
         },
       ];
     });
@@ -124,12 +134,13 @@ export const planLibrarySync = (
   local: LibraryManifest,
   remote: LibraryManifest,
   desired: LibraryManifest,
+  labels: ReadonlyMap<string, string> = new Map(),
 ): SyncChanges => {
   const normalizedLocal = normalizeLibraryManifest(local);
   const normalizedRemote = normalizeLibraryManifest(remote);
   const normalizedDesired = normalizeLibraryManifest(desired);
   return {
-    local: changes(normalizedLocal, normalizedDesired),
-    remote: changes(normalizedRemote, normalizedDesired),
+    local: changes(normalizedLocal, normalizedDesired, labels),
+    remote: changes(normalizedRemote, normalizedDesired, labels),
   };
 };

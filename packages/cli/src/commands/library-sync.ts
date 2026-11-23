@@ -8,6 +8,7 @@ import {
   CommandMetadata,
   credentialStoreReadSubprocesses,
   sourceFetchSubprocesses,
+  workspaceSubprocesses,
 } from "./metadata.js";
 
 import { localFlags, optionalString } from "./parameters.js";
@@ -113,7 +114,7 @@ export const librarySyncCliCommand = defineCommand(
       yield* renderer.result(result("librarySync", syncOutputContracts.librarySync, value));
     }),
 ).pipe(
-  Command.withDescription("Sync your Library with skit-server."),
+  Command.withDescription("Sync your Author Workspaces and Library with the Registry."),
   Command.withExamples([{ command: "skit sync" }, { command: "skit sync --apply" }]),
   Command.annotate(CommandMetadata, {
     handlerRules: [selectionRule, applySelectionRule],
@@ -125,7 +126,13 @@ export const librarySyncCliCommand = defineCommand(
         "network.write",
         "process.execute",
       ],
-      subprocesses: [...sourceFetchSubprocesses, ...credentialStoreReadSubprocesses],
+      subprocesses: [
+        ...new Set([
+          ...sourceFetchSubprocesses,
+          ...credentialStoreReadSubprocesses,
+          ...workspaceSubprocesses,
+        ]),
+      ],
     },
     outputSchemas: [syncOutputContracts.librarySync],
     interactive: false,

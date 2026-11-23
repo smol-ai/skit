@@ -5,7 +5,11 @@ import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { authorWorkspaceLayer, watchAuthorWorkspace } from "@smolai/skit-core/author";
 import { authorRegistry } from "../registry/author-sync.js";
 import { authorLayer } from "../application.js";
-import { CommandMetadata, credentialStoreReadSubprocesses } from "../commands/metadata.js";
+import {
+  CommandMetadata,
+  credentialStoreReadSubprocesses,
+  workspaceSubprocesses,
+} from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";
 import { jsonFlag, optionalString } from "../commands/parameters.js";
 import { result } from "../commands/result.js";
@@ -18,8 +22,6 @@ import { authorListCommand } from "./list.js";
 import { authorDeleteCommand } from "./delete.js";
 import { authorPullCommand } from "./pull.js";
 import { authorInvocationCommand } from "./invocation.js";
-
-const workspaceSubprocesses = ["git init --bare", "git ls-files", "git check-ignore"] as const;
 
 const directory = Argument.String("directory").pipe(
   Argument.withDescription("Author Workspace directory; defaults to the current directory."),

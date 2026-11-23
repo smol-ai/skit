@@ -182,7 +182,7 @@ it.effect(
         return yield* library.read;
       }).pipe(Effect.provide(Library.layer({ home, roots: testRoots(home) })));
       if (snapshot._tag !== "Present") return assert.fail("Expected an imported Library");
-      const view = libraryView(snapshot.state, join(home, "originals"));
+      const view = libraryView(snapshot.state, home);
       const rows = yield* view.readSkills();
       const subjects = yield* view.readSubjects();
       const expected = rows.map(({ authorInvocation, ...value }) => ({

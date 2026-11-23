@@ -1,7 +1,12 @@
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { readAuthorIdentity, readAuthorRemote } from "../author/workspace-metadata.js";
-import { SourceIdentity, sourceImports, type Collection } from "./library-contracts.js";
-import type { LibraryState } from "./library-state.js";
+import {
+  SourceIdentity,
+  sourceImports,
+  type Collection,
+  type LibraryManifest,
+} from "./library-contracts.js";
+import * as MachineSettings from "./machine-settings.js";
 import { sourceIdentityLabel } from "./source-identity.js";
 
 /** Source facts for local reports, not portable identity or enablement intent. */
@@ -20,14 +25,19 @@ export type CollectionSource = typeof CollectionSource.Type;
 /** Missing/broken workspace metadata must not hide its retained Library entry. Remote facts
  * are shown only when the live folder still has the identity this Collection owns. */
 export const readCollectionSource = Effect.fn("Library.readCollectionSource")(function* (
-  state: Pick<LibraryState, "imports">,
+  state: Pick<LibraryManifest, "imports">,
   collection: Collection,
+  home: string,
 ): Effect.fn.Return<CollectionSource | undefined, never, FileSystem.FileSystem> {
   const acquisition = sourceImports(state, collection.collection_id)[0];
   const source = collection.upstream?.source_identity ?? acquisition?.source_identity;
   if (source === undefined) return undefined;
   if (source.kind === "authored-workspace") {
-    const locator = acquisition?.input.value ?? "";
+    const machine =
+      acquisition === undefined
+        ? undefined
+        : yield* MachineSettings.readIdentity(home).pipe(Effect.orElseSucceed(() => undefined));
+    const locator = acquisition?.machine_id !== machine ? "" : (acquisition?.input.value ?? "");
     const base = { kind: source.kind, name: collection.label, locator };
     if (!locator) return { ...base, workspace_status: "unavailable" };
     const identity = yield* readAuthorIdentity(locator).pipe(Effect.result);

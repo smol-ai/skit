@@ -1,9 +1,9 @@
 import type { DiscoveryRestoreConflict } from "./machine-settings-conflicts.js";
-import { Effect, Schema } from "effect";
+import { Effect, FileSystem, Schema } from "effect";
 import { hostname } from "node:os";
 import { resolve } from "node:path";
-import { libraryDatabasePath } from "./store/database.js";
-import { saveMachineRows } from "./store/machine-rows.js";
+import { libraryDatabasePath, withLibraryDatabase } from "./store/database.js";
+import { loadMachineRows, saveMachineRows } from "./store/machine-rows.js";
 import { loadMachineSettings } from "./store/machine-file.js";
 import { withDatabaseTransaction } from "./store/database.js";
 
@@ -34,6 +34,14 @@ export const read = Effect.fn("MachineSettings.read")(function* (home: string) {
     libraryDatabasePath(home),
     (yield* loadMachineSettings(home)) ?? emptyMachineDocument(),
   );
+});
+
+/** Read the saved identity without initializing machine settings or importing legacy files. */
+export const readIdentity = Effect.fn("MachineSettings.readIdentity")(function* (home: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = libraryDatabasePath(home);
+  if (!(yield* fs.exists(path))) return undefined;
+  return (yield* withLibraryDatabase(path, loadMachineRows(path), true))?.machineId;
 });
 
 /** Own the complete read-modify-write, including fibers sharing an inherited root lock. */

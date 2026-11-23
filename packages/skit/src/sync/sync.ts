@@ -253,9 +253,14 @@ export const loadPlanInput = Effect.fn("Sync.loadPlanInput")(function* <E>({
   remote,
   state,
   local,
+  verifyFetched,
 }: {
   /** The device's history. */
   readonly store: History.Store;
+  readonly verifyFetched?: (
+    tree: History.Tree,
+    revision: History.Revision,
+  ) => Effect.Effect<readonly [History.TreeHash, History.RevisionId]>;
   /** The Registry's side of the SKIT. */
   readonly remote: Remote<E>;
   readonly state: SyncState;
@@ -264,7 +269,7 @@ export const loadPlanInput = Effect.fn("Sync.loadPlanInput")(function* <E>({
 }): Effect.fn.Return<PlanInput, History.StoreError | SyncFailure | E> {
   return state._tag === "Writing"
     ? yield* loadWritingInput(store, state, local)
-    : yield* loadCurrentInput({ store, remote, state, local });
+    : yield* loadCurrentInput({ store, remote, state, local, verifyFetched });
 });
 
 const loadWritingInput = Effect.fn("Sync.loadWritingInput")(function* (
@@ -290,9 +295,14 @@ const loadCurrentInput = Effect.fn("Sync.loadCurrentInput")(function* <E>({
   remote,
   state,
   local,
+  verifyFetched,
 }: {
   /** The device's history. */
   readonly store: History.Store;
+  readonly verifyFetched?: (
+    tree: History.Tree,
+    revision: History.Revision,
+  ) => Effect.Effect<readonly [History.TreeHash, History.RevisionId]>;
   /** The Registry's side of the SKIT. */
   readonly remote: Remote<E>;
   readonly state: typeof Idle.Type | typeof Sending.Type;
@@ -316,7 +326,11 @@ const loadCurrentInput = Effect.fn("Sync.loadCurrentInput")(function* <E>({
                   id: currentId,
                   reason: { _tag: "EditTimesMismatch", paths },
                 });
-              const actualTree = yield* store.putTree(fetched.tree);
+              const verified =
+                verifyFetched === undefined
+                  ? undefined
+                  : yield* verifyFetched(fetched.tree, fetched.revision);
+              const actualTree = verified?.[0] ?? (yield* store.putTree(fetched.tree));
               if (actualTree !== fetched.revision.tree)
                 return yield* new RemoteInvalid({
                   id: currentId,
@@ -326,13 +340,19 @@ const loadCurrentInput = Effect.fn("Sync.loadCurrentInput")(function* <E>({
                     actual: actualTree,
                   },
                 });
-              const actualRevision = yield* store.commit(fetched.revision);
+              const actualRevision = verified?.[1] ?? (yield* store.commit(fetched.revision));
               if (actualRevision !== currentId)
                 return yield* new RemoteInvalid({
                   id: currentId,
                   reason: { _tag: "RevisionMismatch", actual: actualRevision },
                 });
-              return yield* loadRevision(store, currentId);
+              return verified === undefined
+                ? yield* loadRevision(store, currentId)
+                : {
+                    id: currentId,
+                    revision: fetched.revision,
+                    tree: History.sortTree(fetched.tree),
+                  };
             }),
           ),
         );

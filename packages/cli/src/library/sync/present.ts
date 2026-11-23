@@ -1,3 +1,4 @@
+import { sourceKinds } from "../presentation/collection-source.js";
 import { Block, type Change, type Inline, type ListItem } from "../../terminal/blocks.js";
 import {
   SyncConflictDetail,
@@ -28,7 +29,16 @@ const collectionChange = (change: Extract<PlanChange, { kind: "collection" }>): 
     change.label_before && change.label_after && change.label_before !== change.label_after
       ? `${change.label_before} → ${change.label_after}`
       : change.label,
-  ...(change.action === "add" ? { detail: plural(change.skills_added.length, "Skill") } : {}),
+  ...(change.source_kind === "authored-workspace"
+    ? {
+        detail:
+          change.action === "add"
+            ? `${sourceKinds[change.source_kind]}, ${plural(change.skills_added.length, "Skill")}`
+            : sourceKinds[change.source_kind],
+      }
+    : change.action === "add"
+      ? { detail: plural(change.skills_added.length, "Skill") }
+      : {}),
   ...(change.action === "update"
     ? {
         children: [
@@ -162,6 +172,53 @@ export function presentLibrarySyncPlan(plan: SyncPlan): Block[] {
 }
 
 export function presentLibrarySync(data: SyncResult): Block[] {
+  const folders = data.author_workspaces ?? [];
+  return [
+    ...presentLibrarySyncResult(data),
+    ...(folders.length
+      ? [
+          Block.Heading({ text: "Author Workspaces" }),
+          Block.List({
+            items: folders.map((folder) => {
+              const failure = folder.failure ?? folder.sync_failure ?? folder.installation_failure;
+              const description = failure === undefined ? undefined : dataFailure(failure);
+              return {
+                text: [
+                  folder.identity,
+                  ...(folder.directory === undefined ? [] : [" at ", { code: folder.directory }]),
+                  " — ",
+                  ...(failure !== undefined
+                    ? [description?.message ?? errorMessage(failure)]
+                    : [
+                        folder.sync?.status === "ready"
+                          ? `ready to ${folder.sync.action}`
+                          : (folder.sync?.status ??
+                            (folder.status === "pull_ready"
+                              ? "ready to pull"
+                              : (folder.installation ?? folder.status))),
+                      ]),
+                ],
+                ...(description?.next.length ? { detail: description.next } : {}),
+              };
+            }),
+          }),
+        ]
+      : []),
+    ...(data.author_inventory_failure === undefined
+      ? []
+      : [
+          Block.Note({
+            text: [
+              "Author inventory unavailable. ",
+              dataFailure(data.author_inventory_failure)?.message ??
+                errorMessage(data.author_inventory_failure),
+            ],
+          }),
+        ]),
+  ];
+}
+
+function presentLibrarySyncResult(data: SyncResult): Block[] {
   // What syncing did to this device, when it did anything worth knowing.
   const notes = [
     ...(data.merge_base === "empty-first-sync"
@@ -202,7 +259,7 @@ export function presentLibrarySync(data: SyncResult): Block[] {
         return [
           status("error", "Library sync stopped:"),
           ...renderSyncConflicts(data.conflict_details),
-          Block.Note({ text: ["No sync changes applied."] }),
+          Block.Note({ text: ["No Library sync changes applied."] }),
           ...notes,
         ];
       return [
@@ -214,7 +271,7 @@ export function presentLibrarySync(data: SyncResult): Block[] {
           text: [
             "Preview the current conflicts with ",
             { code: "skit sync" },
-            " before choosing a resolution. No sync changes applied.",
+            " before choosing a resolution. No Library sync changes applied.",
           ],
         }),
         ...notes,

@@ -1,3 +1,8 @@
+import type { SyncResult } from "./sync/output.js";
+import { authorLayer, syncAuthorWorkspaces } from "@smolai/skit-core/author";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
+import { authorRegistry } from "../registry/author-sync.js";
+import { listAuthorInventory } from "../registry/authoring.js";
 import { type ResolvedAuth } from "../registry/index.js";
 import { Effect, Result } from "effect";
 
@@ -26,7 +31,12 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
   // With no Registry configured, sync asks the hosted Registry, which then asks for a login.
   const origin = auth.origin ?? officialRegistryOrigin;
   const library = yield* Library.Service;
-  return yield* Effect.scoped(
+  const { skitHome: home, userHome } = yield* SkitConfiguration;
+  const author = yield* syncAuthorWorkspaces(
+    { home, userHome, apply: options.apply },
+    { ...authorRegistry(home), list: listAuthorInventory(auth) },
+  ).pipe(Effect.provide(authorLayer({ home })));
+  const synced = yield* Effect.scoped(
     Effect.flatMap(
       librarySyncApi({
         origin,
@@ -56,6 +66,8 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
         ),
     ),
   );
+  const result: SyncResult = { ...synced, ...author };
+  return result;
 });
 
 export { syncOutputContracts } from "./sync/output.js";

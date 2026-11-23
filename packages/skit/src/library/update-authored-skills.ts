@@ -49,6 +49,7 @@ export const AuthoredInstallation = Schema.Struct({
 const readAuthoredInstallation = Effect.fn("Library.readAuthoredInstallation")(function* (
   state: LibraryState,
   collectionId: string,
+  home: string,
 ) {
   const collection = state.collections.find((item) => item.collection_id === collectionId)!;
   const members = currentCollectionSkills(state, collection.collection_id);
@@ -72,12 +73,12 @@ const readAuthoredInstallation = Effect.fn("Library.readAuthoredInstallation")(f
       skill: skill.name,
       path: copy.path,
       collection_label: owner.label,
-      source: yield* readCollectionSource(state, owner),
+      source: yield* readCollectionSource(state, owner, home),
     });
   }
   return {
     collection_label: collection.label,
-    source: yield* readCollectionSource(state, collection),
+    source: yield* readCollectionSource(state, collection, home),
     disabled_skills: members
       .filter((member) => !enabled.has(member.skill_id))
       .map((member) => member.name),
@@ -190,7 +191,7 @@ export const updateAuthoredSkills = Effect.fn("Library.updateAuthoredSkills")(fu
       installed: 0,
       installed_copies: [],
       issues: prepared.issues,
-      context: yield* readAuthoredInstallation(state, collection.collection_id),
+      context: yield* readAuthoredInstallation(state, collection.collection_id, writer.home),
     };
   const { hash, importedAt } = prepared;
   if (hash !== previous?.hash)
@@ -253,7 +254,7 @@ export const updateAuthoredSkills = Effect.fn("Library.updateAuthoredSkills")(fu
     installed: installedCopies.length,
     installed_copies: installedCopies,
     issues,
-    context: yield* readAuthoredInstallation(current, collection.collection_id),
+    context: yield* readAuthoredInstallation(current, collection.collection_id, writer.home),
   };
 });
 
