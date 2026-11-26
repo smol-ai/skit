@@ -50,6 +50,7 @@ export {
   authorWorkspaceLayer,
   readAuthorWorkspace,
   updateAuthorWorkspace,
+  syncInstalledWorkspace,
 } from "./operations.js";
 export { syncAuthorWorkspace } from "./sync.js";
 export { watchAuthorWorkspace, AuthorWatchEvent, AuthorWatchRetrying } from "./watch.js";

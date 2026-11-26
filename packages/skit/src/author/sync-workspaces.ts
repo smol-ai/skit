@@ -70,7 +70,13 @@ export const syncAuthorWorkspaces = Effect.fn("Author.syncWorkspaces")(function*
         status: "updated" as const,
         ...(updated.installation._tag === "Failure"
           ? { installation_failure: updated.installation.failure }
-          : { installation: updated.installation.success.status }),
+          : {
+              installation: updated.installation.success.status,
+              installation_issues: updated.installation.success.issues,
+              ...("installation_error" in updated && updated.installation_error
+                ? { installation_failure: updated.installation_error }
+                : {}),
+            }),
         ...(updated.sync?._tag === "Failure"
           ? { sync_failure: updated.sync.failure }
           : updated.sync === undefined

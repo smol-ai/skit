@@ -60,6 +60,12 @@
               "record_remote_home"
             ]
           }
+        },
+        "installation_issues": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
@@ -130,6 +136,12 @@
         },
         "published": {
           "type": "boolean"
+        },
+        "installation_issues": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
@@ -163,6 +175,12 @@
             "push",
             "merge"
           ]
+        },
+        "installation_issues": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
@@ -186,6 +204,12 @@
         },
         "revision_id": {
           "type": "string"
+        },
+        "installation_issues": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
@@ -215,6 +239,12 @@
           "items": {
             "type": "string"
           }
+        },
+        "installation_issues": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
@@ -239,6 +269,12 @@
         },
         "revision_id": {
           "type": "string"
+        },
+        "installation_issues": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
@@ -301,6 +337,12 @@
             ],
             "additionalProperties": true
           }
+        },
+        "installation_issues": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
@@ -339,6 +381,12 @@
           "items": {
             "type": "string"
           }
+        },
+        "installation_issues": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
@@ -373,6 +421,12 @@
           "maximum": 9007199254740991
         },
         "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "installation_issues": {
           "type": "array",
           "items": {
             "type": "string"

@@ -727,7 +727,12 @@ const contractPresenters: ContractPresenters = {
       ],
     }),
   ],
-  sync: presentAuthorSync,
+  sync: (data) => [
+    ...presentAuthorSync(data),
+    ...(data.installation_issues ?? []).map((message) =>
+      Block.Status({ tone: "warn", text: [message] }),
+    ),
+  ],
   librarySync: presentLibrarySync,
   libraryHistory: renderLibraryHistory,
   list: renderLibraryList,

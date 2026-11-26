@@ -144,3 +144,27 @@ export const updateAuthorWorkspace = Effect.fn("Author.updateWorkspace")(functio
     return { installation, sync, installation_error: updated.failure };
   return { installation: updated, sync };
 }, Effect.scoped);
+
+/** Foreground sync also refreshes copies owned by this workspace's Library import. */
+export const syncInstalledWorkspace = Effect.fn("Author.syncInstalledWorkspace")(function* <
+  E,
+  R,
+  P,
+>(
+  input: string,
+  options: Parameters<typeof syncAuthorWorkspace>[1],
+  registry: Pick<AuthorRegistry<E, R, P>, "origin" | "connect">,
+) {
+  if (!options.apply) return { result: yield* syncAuthorWorkspace(input, options, registry) };
+  const workspaces = yield* AuthorWorkspace;
+  const root = yield* workspaces.resolveRoot(input);
+  const lease = yield* workspaces.acquire(root);
+  const result = yield* syncAuthorWorkspace(root, options, registry, lease);
+  const identity = yield* workspaces.readIdentity(root);
+  if (identity._tag === "None") return { result };
+  const claims = yield* (yield* Library.Service).workspaceClaims(root);
+  const claim = claims.atRoot.find((entry) => entry.workspaceId === identity.value.workspaceId);
+  if (!claim) return { result };
+  const installed = yield* updateAuthoredSkills(root, lease, { confirmRemovals: true });
+  return { result, issues: installed.issues };
+}, Effect.scoped);

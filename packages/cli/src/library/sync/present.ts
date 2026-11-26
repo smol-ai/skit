@@ -1,3 +1,4 @@
+import { authoredSkillIssueLines } from "../authored-skill-issues.js";
 import { sourceKinds } from "../presentation/collection-source.js";
 import { Block, type Change, type Inline, type ListItem } from "../../terminal/blocks.js";
 import {
@@ -224,7 +225,15 @@ export function presentLibrarySync(data: SyncResult): Block[] {
                               : (folder.installation ?? folder.status))),
                       ]),
                 ],
-                ...(description?.next.length ? { detail: description.next } : {}),
+                detail: [
+                  ...(description?.next ?? []),
+                  ...authoredSkillIssueLines(folder.installation_issues),
+                  ...(folder.sync?.status === "merged"
+                    ? folder.sync.choices.map(
+                        (choice) => `${choice.path}: kept ${choice.kept} edit`,
+                      )
+                    : []),
+                ],
               };
             }),
           }),

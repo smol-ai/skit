@@ -8,6 +8,9 @@ import { resolveSkitConfiguration, SkitConfiguration } from "@smolai/skit-core/p
 import { Effect, Fiber, FileSystem, Layer, Redacted, Result, Schema } from "effect";
 import { join } from "node:path";
 import { expect } from "vitest";
+import { authorSyncCommand } from "../src/author/sync.js";
+import { installEnabledSkills } from "./helpers/installed-skills.js";
+import { libraryHome, writingTo } from "./helpers/library-home.js";
 import { syncAuthorWorkspace } from "../src/author/sync/workflow.js";
 import { librarySyncCommand } from "../src/library/sync.js";
 import { makeAuthorSyncServer } from "../src/platform/author-sync-fixture/server.js";
@@ -363,3 +366,39 @@ it.effect("reports a malformed inventory entry and pulls the next SKIT", () =>
     ]);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
+
+for (const scope of ["author", "device"] as const) {
+  it.effect(`refreshes enabled harness bytes after a ${scope} sync receives a remote edit`, () =>
+    Effect.gen(function* () {
+      const { fs, first, second, userA, homeA, userB, homeB, onDevice, sync } = yield* world();
+      const library = yield* libraryHome({ home: homeA });
+      const state = yield* library.durable;
+      const skill = state?.skills[0];
+      if (!skill) throw new Error("Expected an imported skill");
+      yield* library.enable([{ skill: skill.skill_id }]);
+      const root = join(testRoots(userA).home, ".agents", "skills");
+      yield* writingTo(
+        homeA,
+        installEnabledSkills({ target: "agents", root, variantsPath: join(homeA, "variants") }),
+      );
+      const file = join("skills", "review", "SKILL.md");
+      const before = yield* fs.readFileString(join(first, file));
+      const installed = join(root, "review", "SKILL.md");
+      const projected = yield* fs.readFileString(installed);
+      yield* onDevice(userA, homeA, "a", sync(true));
+      yield* onDevice(userB, homeB, "b", sync(true));
+      const edited = before + "\nRemote edit\n";
+      yield* fs.writeFileString(join(second, file), edited);
+      yield* onDevice(userB, homeB, "b", sync(true));
+      if (scope === "author")
+        yield* onDevice(
+          userA,
+          homeA,
+          "a",
+          authorSyncCommand({ root: first, home: homeA, apply: true }),
+        );
+      else yield* onDevice(userA, homeA, "a", sync(true));
+      expect(yield* fs.readFileString(installed)).toBe(projected + "\nRemote edit\n");
+    }).pipe(Effect.provide(testPlatformLayer)),
+  );
+}
