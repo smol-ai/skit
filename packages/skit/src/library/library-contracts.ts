@@ -131,6 +131,14 @@ export const Upstream = Schema.Struct({
 });
 export type Upstream = typeof Upstream.Type;
 
+export const sameUpstream = (left: Upstream, right: Upstream) =>
+  left.source_identity.kind === "authored-workspace" &&
+  right.source_identity.kind === "authored-workspace" &&
+  left.draft_home &&
+  right.draft_home
+    ? Schema.toEquivalence(CanonicalAuthorRemoteHome)(left.draft_home, right.draft_home)
+    : Schema.toEquivalence(Upstream)(left, right);
+
 export const SkillsShLockFileEntry = Schema.Struct({
   type: Schema.Literal("skills.sh-lock"),
   machine_id: MachineId,
@@ -531,11 +539,7 @@ export const LibraryManifest = Schema.Struct({
       if (upstream === undefined) continue;
       const duplicate = manifest.collections
         .slice(index + 1)
-        .find(
-          (other) =>
-            other.upstream !== undefined &&
-            Schema.toEquivalence(Upstream)(upstream, other.upstream),
-        );
+        .find((other) => other.upstream !== undefined && sameUpstream(upstream, other.upstream));
       if (duplicate !== undefined)
         return manifestViolationIssue(["collections"], {
           _tag: "DuplicateUpstream",

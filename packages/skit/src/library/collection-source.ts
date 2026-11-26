@@ -20,20 +20,20 @@ export const CollectionSource = Schema.Struct({
   authority: Schema.optionalKey(Schema.String),
   revision: Schema.optionalKey(Schema.String),
   workspace_status: Schema.optionalKey(
-    Schema.Literals(["connected", "unconnected", "unavailable", "identity-mismatch"]),
+    Schema.Literals(["connected", "unconnected", "unavailable", "identity-mismatch", "ambiguous"]),
   ),
 });
 export type CollectionSource = typeof CollectionSource.Type;
 
 /** A portable Draft selects a workspace only through this device's confirmed checkpoint. */
-export const localWorkspace = Effect.fn("Library.localWorkspace")(function* (
+export const localWorkspaceLocations = Effect.fn("Library.localWorkspaceLocations")(function* (
   state: Pick<LibraryManifest, "imports">,
   collection: Collection,
   home: string,
 ) {
   const upstream = collection.upstream;
   const source = upstream?.source_identity;
-  if (source?.kind !== "authored-workspace") return undefined;
+  if (source?.kind !== "authored-workspace") return [];
   const ownerLocation = Effect.gen(function* () {
     const machine = yield* MachineSettings.readIdentity(home);
     const local = sourceImports(state, collection.collection_id).find(
@@ -45,17 +45,42 @@ export const localWorkspace = Effect.fn("Library.localWorkspace")(function* (
     );
     return local ? { workspaceId: source.workspace_id, path: local.input.value } : undefined;
   });
-  if (!upstream?.draft_home) return yield* ownerLocation;
-  const locations = yield* draftWorkspaces(home, skitLocator(upstream.draft_home));
-  if (locations.length > 1) return undefined;
-  const location = locations[0] ?? (yield* ownerLocation);
-  if (!location) return undefined;
-  const identity = yield* readAuthorIdentity(location.path);
-  if (Option.getOrUndefined(identity)?.workspaceId !== location.workspaceId) return undefined;
-  const remote = Option.getOrUndefined(yield* readAuthorRemote(location.path));
-  return remote && Schema.toEquivalence(AuthorRemoteHome)(remote, upstream.draft_home)
-    ? location
-    : undefined;
+  const draft = upstream?.draft_home;
+  if (!draft) {
+    const owner = yield* ownerLocation;
+    return owner ? [owner] : [];
+  }
+  const recorded = yield* draftWorkspaces(home, skitLocator(draft));
+  const locations = [...recorded];
+  if (!locations.length) {
+    const owner = yield* ownerLocation;
+    if (owner) locations.push(owner);
+  }
+  const fs = yield* FileSystem.FileSystem;
+  const live = [];
+  for (const location of locations) {
+    const identity = yield* readAuthorIdentity(location.path).pipe(
+      Effect.orElseSucceed(() => Option.none()),
+    );
+    if (Option.getOrUndefined(identity)?.workspaceId !== location.workspaceId) continue;
+    const remote = yield* readAuthorRemote(location.path).pipe(
+      Effect.orElseSucceed(() => Option.none()),
+    );
+    const address = Option.getOrUndefined(remote);
+    if (!address || !Schema.toEquivalence(AuthorRemoteHome)(address, draft)) continue;
+    const path = yield* fs.realPath(location.path).pipe(Effect.option);
+    if (Option.isSome(path)) live.push({ ...location, path: path.value });
+  }
+  return live;
+});
+
+export const localWorkspace = Effect.fn("Library.localWorkspace")(function* (
+  state: Pick<LibraryManifest, "imports">,
+  collection: Collection,
+  home: string,
+) {
+  const locations = yield* localWorkspaceLocations(state, collection, home);
+  return locations.length === 1 ? locations[0] : undefined;
 });
 /** Missing/broken workspace metadata must not hide its retained Library entry. Remote facts
  * are shown only when the live folder still has the identity this Collection owns. */
@@ -68,9 +93,10 @@ export const readCollectionSource = Effect.fn("Library.readCollectionSource")(fu
   const source = collection.upstream?.source_identity ?? acquisition?.source_identity;
   if (source === undefined) return undefined;
   if (source.kind === "authored-workspace") {
-    const local = yield* localWorkspace(state, collection, home).pipe(
-      Effect.orElseSucceed(() => undefined),
+    const locations = yield* localWorkspaceLocations(state, collection, home).pipe(
+      Effect.orElseSucceed(() => []),
     );
+    const local = locations.length === 1 ? locations[0] : undefined;
     const locator = local?.path ?? "";
     const draft = collection.upstream?.draft_home;
     const base = {
@@ -79,6 +105,7 @@ export const readCollectionSource = Effect.fn("Library.readCollectionSource")(fu
       locator,
       ...(draft ? { authority: draft.origin } : {}),
     };
+    if (locations.length > 1) return { ...base, workspace_status: "ambiguous" };
     if (!locator) return { ...base, workspace_status: "unavailable" };
     const identity = yield* readAuthorIdentity(locator).pipe(Effect.result);
     if (identity._tag === "Failure" || Option.isNone(identity.success))

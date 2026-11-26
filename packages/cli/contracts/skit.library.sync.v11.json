@@ -13869,7 +13869,8 @@
                       "connected",
                       "unconnected",
                       "unavailable",
-                      "identity-mismatch"
+                      "identity-mismatch",
+                      "ambiguous"
                     ]
                   }
                 },

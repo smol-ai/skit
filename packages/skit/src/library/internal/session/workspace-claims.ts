@@ -1,6 +1,6 @@
 import { Effect, FileSystem } from "effect";
 import type { LibraryState } from "../../library-state.js";
-import { localWorkspace } from "../../collection-source.js";
+import { localWorkspaceLocations } from "../../collection-source.js";
 
 import * as MachineSettings from "../../machine-settings.js";
 
@@ -27,7 +27,14 @@ export const readWorkspaceClaims = Effect.fn("LibraryView.readWorkspaceClaims")(
     { collectionId: string; input?: string; sourceWorkspaceId: string }
   >();
   for (const collection of state.collections) {
-    const location = yield* localWorkspace(state, collection, home);
+    const locations = yield* localWorkspaceLocations(state, collection, home);
+    if (locations.length > 1) {
+      // An occupied root with no adoptable identity makes init refuse a second Collection.
+      if (locations.some((item) => item.path === root))
+        atRoot.push({ collectionId: collection.collection_id });
+      continue;
+    }
+    const location = locations[0];
     const sourceWorkspaceId = workspaceIdOf(collection);
     if (sourceWorkspaceId !== undefined) {
       registrations.set(location?.workspaceId ?? sourceWorkspaceId, {

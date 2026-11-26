@@ -2,17 +2,20 @@ import { AuthorWorkspaceBusy } from "@smolai/skit-core/author/workspace-contract
 import { encodeResult } from "../src/commands/encode-result.js";
 import { SyncResult, syncOutputContracts } from "../src/library/sync/output.js";
 import { it } from "@effect/vitest";
-import { initializeAuthorWorkspace, updateAuthorWorkspace } from "@smolai/skit-core/author";
+import { initializeAuthorWorkspace, pullAuthorSkit } from "@smolai/skit-core/author";
 import * as Library from "@smolai/skit-core/library";
 import { resolveSkitConfiguration, SkitConfiguration } from "@smolai/skit-core/platform";
 import { Effect, Fiber, FileSystem, Layer, Redacted, Result, Schema } from "effect";
 import { join } from "node:path";
 import { expect } from "vitest";
+import { authorRegistry } from "../src/registry/author-sync.js";
+import { updateAdapters } from "../src/library/update/adapters.js";
 import { inspectLibrarySource } from "../src/library/source.js";
 import { authorSyncCommand } from "../src/author/sync.js";
 import { installEnabledSkills } from "./helpers/installed-skills.js";
 import { libraryHome, writingTo } from "./helpers/library-home.js";
 import { syncAuthorWorkspace } from "../src/author/sync/workflow.js";
+import { librarySyncApi } from "../src/library/sync/api.js";
 import { librarySyncCommand } from "../src/library/sync.js";
 import { makeAuthorSyncServer } from "../src/platform/author-sync-fixture/server.js";
 import { authorLayer } from "../src/platform/author-sync-fixture/history.js";
@@ -66,8 +69,10 @@ const world = (malformed = false, secondSkill = false) =>
       home: string,
       device: "a" | "b" | "c",
       effect: Effect.Effect<A, E, R>,
+      offline = false,
     ) => {
       const transport: TestHttpHandler = (request, url, signal) => {
+        if (offline) return Effect.succeed(new Response(null, { status: 503 }));
         if (
           url.pathname.startsWith("/api/library/") ||
           url.pathname.startsWith("/api/libraries/")
@@ -147,7 +152,8 @@ const world = (malformed = false, secondSkill = false) =>
       "a",
       Effect.gen(function* () {
         yield* initializeAuthorWorkspace(first, homeA);
-        yield* syncAuthorWorkspace(first, {
+        yield* authorSyncCommand({
+          root: first,
           apply: true,
           home: homeA,
           to: `${origin}/swyx/tools`,
@@ -453,13 +459,31 @@ it.effect(
       yield* a.enable([{ collection: collectionId }]);
       yield* onDevice(userA, homeA, "a", sync(true));
       yield* onDevice(userB, homeB, "b", sync(true));
-      const root = join(testRoots(userB).home, ".agents", "skills");
-      yield* writingTo(
+      // B has its own import, then A publishes the newest import. Refresh only
+      // B’s Library to leave its workspace untouched until the offline edit.
+      yield* onDevice(userB, homeB, "b", initializeAuthorWorkspace(second, homeB));
+      const reviewFile = join(first, "skills/review/SKILL.md");
+      const aOriginal = yield* fs.readFileString(reviewFile);
+      yield* fs.writeFileString(reviewFile, aOriginal + "\nA updated the skill\n");
+      yield* onDevice(userA, homeA, "a", sync(true));
+      yield* onDevice(
+        userB,
         homeB,
-        installEnabledSkills({ target: "agents", root, variantsPath: join(homeB, "variants") }),
+        "b",
+        Effect.gen(function* () {
+          const library = yield* Library.Service;
+          yield* library.sync(
+            { origin, apply: true },
+            yield* librarySyncApi({ origin, token: "test-token" }),
+          );
+          const listed = yield* library.list();
+          expect(listed.collections[0]?.collectionSource?.locator).toBe(yield* fs.realPath(second));
+        }),
       );
+      const root = join(testRoots(userB).home, ".agents", "skills");
       const installed = (name: string) => join(root, name, "SKILL.md");
       const valid = yield* fs.readFileString(installed("review"));
+      expect(valid).toContain("A updated the skill");
       const held = yield* fs.readFileString(installed("explain"));
       const file = "skills/review/SKILL.md";
       const original = yield* fs.readFileString(join(first, file));
@@ -477,24 +501,89 @@ it.effect(
       expect(
         preview[0]?.issues?.some((issue) => "skill" in issue && issue.skill === "explain"),
       ).toBe(true);
-      const result = yield* onDevice(
+      const updated = yield* onDevice(
         userB,
         homeB,
         "b",
-        updateAuthorWorkspace(
-          second,
-          { home: homeB },
-          {
-            origin: Effect.succeed(origin),
-            connect: () => Effect.fail("offline" as const),
-          },
-        ),
+        Effect.gen(function* () {
+          return yield* (yield* Library.Service).update(collectionId, yield* updateAdapters);
+        }),
+        true,
       );
-      expect(result.sync?._tag).toBe("Failure");
+      expect(updated).toHaveLength(1);
       expect(yield* fs.readFileString(installed("review"))).toBe(valid + "\nOffline edit\n");
       expect(yield* fs.readFileString(installed("explain"))).toBe(held);
       expect(yield* fs.readFileString(join(first, file))).toBe(original);
       const b = yield* libraryHome({ home: homeB });
       expect((yield* b.durable)!.collections.map((c) => c.collection_id)).toEqual([collectionId]);
+    }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.effect(
+  "ignores stale Draft checkpoints and refuses registration at either ambiguous live clone",
+  () =>
+    Effect.gen(function* () {
+      const { fs, first, second, userA, homeA, userB, homeB, onDevice, sync } = yield* world();
+      yield* onDevice(userA, homeA, "a", sync(true));
+      yield* onDevice(userB, homeB, "b", sync(true));
+      const clone = join(userB, "clone");
+      yield* onDevice(
+        userB,
+        homeB,
+        "b",
+        pullAuthorSkit("swyx/tools", { directory: clone, home: homeB }, authorRegistry(homeB)),
+      );
+      const listed = yield* onDevice(
+        userB,
+        homeB,
+        "b",
+        Effect.flatMap(Library.Service, (library) => library.list()),
+      );
+      expect(listed.collections[0]?.collectionSource?.workspace_status).toBe("ambiguous");
+      for (const root of [second, clone]) {
+        const error = yield* onDevice(
+          userB,
+          homeB,
+          "b",
+          initializeAuthorWorkspace(root, homeB).pipe(Effect.flip),
+        );
+        expect(error._tag).toBe("DirectoryAlreadyInLibrary");
+      }
+      yield* fs.rename(second, second + "-old");
+      const alias = join(userB, "alias");
+      yield* fs.symlink(clone, alias);
+      const b = yield* onDevice(userB, homeB, "b", initializeAuthorWorkspace(alias, homeB));
+      const a = yield* libraryHome({ home: homeA });
+      expect(b.entry.collection.collection_id).toBe(
+        (yield* a.durable)!.collections[0]!.collection_id,
+      );
+      yield* fs.writeFileString(join(clone, "skit.remote.json"), "{");
+      const other = join(userB, "unrelated");
+      yield* copySkitFixtureEffect("authored", other);
+      yield* onDevice(userB, homeB, "b", initializeAuthorWorkspace(other, homeB));
+      expect(yield* fs.exists(join(first, "skit.json"))).toBe(true);
+    }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.effect(
+  "independent imports of one connected Draft converge on the Registry collection handle",
+  () =>
+    Effect.gen(function* () {
+      const { second, userA, homeA, userB, homeB, onDevice, sync } = yield* world();
+      yield* onDevice(
+        userB,
+        homeB,
+        "b",
+        pullAuthorSkit("swyx/tools", { directory: second, home: homeB }, authorRegistry(homeB)),
+      );
+      yield* onDevice(userB, homeB, "b", initializeAuthorWorkspace(second, homeB));
+      yield* onDevice(userA, homeA, "a", sync(true));
+      const merged = yield* onDevice(userB, homeB, "b", sync(true));
+      expect(["merged", "pulled", "clean", "pushed"]).toContain(merged.status);
+      const a = yield* libraryHome({ home: homeA });
+      const b = yield* libraryHome({ home: homeB });
+      expect((yield* b.durable)!.collections.map((c) => c.collection_id)).toEqual(
+        (yield* a.durable)!.collections.map((c) => c.collection_id),
+      );
     }).pipe(Effect.provide(testPlatformLayer)),
 );

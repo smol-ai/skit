@@ -28,6 +28,8 @@ export function collectionWarnings(source?: CollectionSource): string[] {
           ? "Workspace metadata unavailable; showing last-known location"
           : "Workspace location is not recorded",
       ];
+    case "ambiguous":
+      return ["Multiple local folders are connected to this Draft"];
     case "identity-mismatch":
       return ["Folder identity does not match this workspace"];
     default:
