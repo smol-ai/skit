@@ -37,6 +37,7 @@ export function coveragePage(atlas: Atlas, model: Model, h: HtmlBuilder<Message>
       ),
     ],
   });
+  const unattached = atlas.guaranteeFiles?.filter((file) => file.unattached) ?? [];
   const orphans = atlas.stories.filter((story) => commandsShowing(atlas, story.key).length === 0);
   return h.article(
     [h.Class("grid min-w-0 max-w-7xl content-start gap-8 px-6 pt-6 pb-8 text-body font-body")],
@@ -87,6 +88,33 @@ export function coveragePage(atlas: Atlas, model: Model, h: HtmlBuilder<Message>
         },
         h,
       ),
+      ...(unattached.length
+        ? [
+            h.details(
+              [],
+              [
+                h.summary(
+                  [h.Class("cursor-pointer font-heading")],
+                  [
+                    `Tests outside command guarantees (${unattached.reduce((total, file) => total + file.unattached!, 0)} across ${unattached.length} ${unattached.length === 1 ? "file" : "files"})`,
+                  ],
+                ),
+                Item.group(
+                  {
+                    label: "Tests outside command guarantees",
+                    items: unattached.map((file) => ({
+                      key: file.file,
+                      title: [file.file],
+                      trailing: [String(file.unattached)],
+                      size: "compact",
+                    })),
+                  },
+                  h,
+                ),
+              ],
+            ),
+          ]
+        : []),
       h.section(
         [h.Class("grid min-w-0 gap-3")],
         [

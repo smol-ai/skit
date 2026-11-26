@@ -30,6 +30,7 @@
     "test:collections": "pnpm --filter @smolai/skit test:collections",
     "cli:image": "bun packages/storybook/src/image/main.ts",
     "cli:atlas": "pnpm --filter @smolai/skit-storybook atlas",
+    "cli:atlas:guarantees": "pnpm --filter @smolai/skit-storybook atlas:guarantees",
     "cli:atlas:generate": "pnpm --filter @smolai/skit build && pnpm --filter @smolai/skit-storybook atlas:generate",
     "cli:atlas:build": "pnpm --filter @smolai/skit-storybook atlas:build"
   },

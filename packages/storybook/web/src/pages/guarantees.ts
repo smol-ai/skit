@@ -1,3 +1,5 @@
+import { commandGuarantees } from "../../../src/atlas/guarantees.ts";
+export { commandGuarantees } from "../../../src/atlas/guarantees.ts";
 import type { HtmlBuilder } from "foldkit/html";
 import type { Atlas } from "../../../src/atlas/data.ts";
 import { Message, tipOf, type Model } from "../model.ts";
@@ -8,85 +10,7 @@ import * as Item from "../components/item.ts";
 import * as DataList from "../components/data-list.ts";
 import { flowItem } from "./flow-item.ts";
 import { icon } from "../fluid/components/icons";
-import { commandHref } from "../route.ts";
-
-/** Command membership and guarantee wording come only from the real test's describe groups. */
-export const commandGuarantees = (atlas: Atlas, command: string) => {
-  const groups = new Map<
-    string,
-    {
-      key: string;
-      sections: string[];
-      title: string;
-      tests: Array<{
-        file: string;
-        test: {
-          title: string;
-          ancestorTitles: readonly string[];
-          status?: Atlas["testReports"][number]["files"][number]["tests"][number]["status"];
-        };
-      }>;
-    }
-  >();
-  const sectionOrder = new Map<string, Set<string>>();
-  const currentFiles = atlas.testReports
-    .filter((report) => report.provenance === "current")
-    .flatMap((report) => report.files);
-  const testKey = (file: string, ancestry: readonly string[], title: string) =>
-    JSON.stringify([file, ...ancestry, title]);
-  const results = new Map(
-    currentFiles.flatMap((file) =>
-      file.tests.map(
-        (test) => [testKey(file.file, test.ancestorTitles, test.title), test.status] as const,
-      ),
-    ),
-  );
-  for (const file of atlas.guaranteeFiles ?? currentFiles) {
-    let previousSection: string | undefined;
-    const seenSections = new Set<string>();
-    for (const test of file.tests) {
-      if (test.ancestorTitles[0] !== `skit ${command}`) continue;
-      if (test.ancestorTitles.length < 2) continue;
-      const title = test.ancestorTitles.at(-1)!;
-      const sections = test.ancestorTitles.slice(1, -1);
-      const section = JSON.stringify(sections);
-      if (!sectionOrder.has(section)) sectionOrder.set(section, new Set());
-      // Separate describe blocks can revisit a section. Its first appearance
-      // declares its position; a later block adds tests, not a reverse edge.
-      if (!seenSections.has(section)) {
-        if (previousSection !== undefined) sectionOrder.get(previousSection)!.add(section);
-        seenSections.add(section);
-        previousSection = section;
-      }
-      const key = JSON.stringify([...sections, title]);
-      let group = groups.get(key);
-      if (group === undefined) {
-        group = { key, sections, title, tests: [] };
-        groups.set(key, group);
-      }
-      group.tests.push({
-        file: file.file,
-        test: { ...test, status: results.get(testKey(file.file, test.ancestorTitles, test.title)) },
-      });
-    }
-  }
-  // Merge the section order declared by each file; no page owns the section names or count.
-  const remaining = [...sectionOrder.keys()];
-  const ordered: string[] = [];
-  while (remaining.length > 0) {
-    const next = remaining.find(
-      (key) => !remaining.some((other) => sectionOrder.get(other)!.has(key)),
-    );
-    if (next === undefined) throw new Error("Conflicting test section order");
-    ordered.push(next);
-    remaining.splice(remaining.indexOf(next), 1);
-  }
-  return [...groups.values()].sort(
-    (left, right) =>
-      ordered.indexOf(JSON.stringify(left.sections)) -
-      ordered.indexOf(JSON.stringify(right.sections)),
-  );
-};
+import { commandHref, coverageHref } from "../route.ts";
 
 /** The section owns status aggregation; Accordion and Item receive only presentation data. */
 export const guaranteesPage = (
@@ -307,6 +231,14 @@ export const guaranteesPage = (
           ),
         ],
       ),
+      ...(atlas.guaranteeFiles?.some((file) => file.unattached)
+        ? [
+            h.a(
+              [h.Href(coverageHref), h.Class("w-fit underline")],
+              ["View tests outside command guarantees"],
+            ),
+          ]
+        : []),
       DataList.view(
         {
           label: "Saved test runs",

@@ -389,6 +389,7 @@ export const Atlas = Schema.Struct({
     Schema.Array(
       Schema.Struct({
         file: Schema.String,
+        unattached: Schema.optionalKey(Schema.Int),
         tests: Schema.Array(
           Schema.Struct({ title: Schema.String, ancestorTitles: Schema.Array(Schema.String) }),
         ),

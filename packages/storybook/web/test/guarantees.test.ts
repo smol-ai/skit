@@ -145,6 +145,20 @@ describe("guarantee membership from describe ancestry", () => {
     ]);
   });
 
+  it("uses the sync catalog section order even when separate files register sections in opposite orders", () => {
+    const first = test("first", ["skit sync", "Connecting and previewing", "First guarantee."]);
+    const last = test("last", ["skit sync", "Keeping device choices", "Last guarantee."]);
+    const files = [
+      { file: "one.ts", tests: [last, first] },
+      { file: "two.ts", tests: [first, last] },
+    ];
+    expect(
+      commandGuarantees({ guaranteeFiles: files, testReports: [] }, "sync").map(
+        (group) => group.sections,
+      ),
+    ).toEqual([["Connecting and previewing"], ["Keeping device choices"]]);
+  });
+
   it("still refuses contradictory section positions declared by different files", () => {
     const reports = [
       {

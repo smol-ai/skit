@@ -55,6 +55,20 @@ it("keeps coverage on its own page and explains commands on the overview", () =>
   );
 });
 
+it("shows the files and counts for tests outside command guarantees", () => {
+  const data = {
+    ...atlas,
+    guaranteeFiles: [{ file: "test/mixed.test.ts", tests: [], unattached: 2 }],
+  };
+  Scene.scene(
+    { update, view },
+    Scene.given({ ...loadedAt("#/coverage"), atlas: AtlasData.Success({ data }) }),
+    settle,
+    Scene.expect(Scene.text("Tests outside command guarantees (2 across 1 file)")).toExist(),
+    Scene.expect(Scene.text("test/mixed.test.ts")).toExist(),
+  );
+});
+
 it("groups adjacent progress ticks while keeping prompts, answers and results separate", () => {
   const step = (kind: Step["kind"], progress?: string): { step: Step } => ({
     step: { kind, progress, label: kind, issues: [], frame: `${kind}.json` },

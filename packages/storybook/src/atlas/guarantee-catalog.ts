@@ -30,15 +30,17 @@ export async function collectGuarantees(root: string) {
               `Cannot collect ${module.moduleId}: ${errors.map((e) => e.message).join(", ")}`,
             );
           const tests = [];
+          let unattached = 0;
           for (const test of module.children.allTests()) {
             const ancestorTitles = [];
             for (let parent = test.parent; parent.type === "suite"; parent = parent.parent)
               ancestorTitles.unshift(parent.name);
             if (ancestorTitles.length >= 2 && ancestorTitles[0]!.startsWith("skit "))
               tests.push({ title: test.name, ancestorTitles });
+            else unattached++;
           }
-          return tests.length
-            ? [{ file: relative(root, module.moduleId).replaceAll("\\", "/"), tests }]
+          return tests.length || unattached
+            ? [{ file: relative(root, module.moduleId).replaceAll("\\", "/"), tests, unattached }]
             : [];
         }),
       );

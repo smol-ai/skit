@@ -115,6 +115,10 @@ fixtures. Atlas does not inspect your installed Skills or saved Library data.
 
 Atlas collects guarantee names and their tests from the current CLI and core test suites during generation, without running the tests. Commands with declared guarantees show a Guarantees tab even when no report exists. Matching results from a current clean checkout add pass, failure or skip statuses.
 
+The evidence runner and collector discover `test/**/*.test.ts` under the CLI and core packages. Fixture directories and separate opt-in `.e2e.ts` entrypoints are excluded. For `skit sync`, add a title to `test-support/sync-guarantees.json` in its display section, then register cases with `syncGuarantee(describe, key, tests)`. Atlas validates section order and reports copy issues when generating. The Coverage page lists files containing tests outside a command guarantee.
+
+Run `pnpm cli:atlas:guarantees` to refresh declarations and saved outcomes in the existing index. The first run builds the full Atlas if the index is missing.
+
 Atlas reads saved results from Vitest's standard JSON reporter. To save local author
 test results (including author sync/watch and the replayable scenarios), run:
 
@@ -127,9 +131,8 @@ pnpm cli:atlas
 ```
 
 The CLI and core reports live at `packages/cli/.atlas/vitest.json` and
-`packages/skit/.atlas/vitest.json`. Both are ignored. The scripts use the package
-Vitest configs, including the isolated HOME. Atlas does not run Vitest or require
-reports to build: missing reports show “No saved test report”. Invalid reports fail
+`packages/skit/.atlas/vitest.json`. Both are ignored. The scripts use the
+shared Atlas Vitest config, including the isolated HOME. Collection does not execute test bodies. Missing reports show “No saved test report”. Invalid reports fail
 the build. CI does not publish these reports.
 
 Each report records the Git revision and whether the checkout was dirty during

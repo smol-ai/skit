@@ -14,6 +14,7 @@
     "image": "bun src/image/main.ts",
     "atlas": "vite",
     "atlas:dev": "vite",
+    "atlas:guarantees": "node src/atlas/main.ts --only guarantees",
     "atlas:generate": "node src/atlas/main.ts",
     "atlas:build": "vite build"
   },
