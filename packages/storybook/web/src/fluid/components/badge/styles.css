@@ -1,0 +1,56 @@
+.ff-badge {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  height: 24px;
+  padding: 0 10px;
+  gap: 6px;
+  border-radius: 8px;
+  color: var(--foreground, #171717);
+  font: var(--fs-caption, 12px)/var(--lh-caption, 16px)
+    var(--font-sans, Inter, system-ui, sans-serif);
+}
+.ff-badge[data-radius='pill'] {
+  border-radius: 20px;
+}
+.ff-badge[data-size='compact'] {
+  height: 20px;
+  padding: 0 8px;
+  gap: 4px;
+  font-size: var(--fs-caption-compact, 11px);
+  line-height: var(--lh-caption-compact, 14px);
+}
+.ff-badge[data-variant='solid'] {
+  background: color-mix(in srgb, var(--badge-color) 15%, var(--background, #fff));
+}
+.ff-badge[data-variant='solid'][data-color='gray'] {
+  background: var(--accent, #f5f5f5);
+}
+.ff-badge[data-variant='dot'] {
+  border: 1px solid var(--border, #ddd);
+}
+.ff-badge-dot {
+  flex: none;
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--badge-color);
+}
+.ff-badge[data-color='gray'] .ff-badge-dot {
+  background: var(--muted-foreground, #737373);
+}
+.ff-badge[data-size='compact'] .ff-badge-dot {
+  width: 6px;
+  height: 6px;
+}
+.ff-badge-label {
+  text-box: trim-both cap alphabetic;
+}
+
+/* Sharp uses the source shape-context radii. */
+.ff-badge[data-radius='sharp'] {
+  border-radius: 1px;
+}

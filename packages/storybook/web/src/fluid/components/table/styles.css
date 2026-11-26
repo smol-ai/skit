@@ -1,0 +1,90 @@
+/* Defaults sit in the components layer, beneath the site's utilities layer,
+ * and inside :where() at zero specificity. Upstream merges consumer classes
+ * with tailwind-merge so `text-right`, `whitespace-nowrap`, `w-max` or `pl-0`
+ * replace a default; this ordering gives consumer classes the same win. */
+@layer components {
+  :where(.ff-table) {
+    position: relative;
+  }
+  /* --table-cell-py is the one source for row height: cells pad by it and an
+   * empty row holds its height with it. */
+  :where(.ff-table-element) {
+    --table-cell-py: 8px;
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--fs-body, 13px);
+    line-height: var(--lh-body, 20px);
+  }
+  :where(.ff-table[data-size='compact']) > :where(.ff-table-element) {
+    --table-cell-py: 5px;
+    font-size: var(--fs-body-compact, 12px);
+    line-height: var(--lh-body-compact, 18px);
+  }
+  :where(.ff-table-row) {
+    position: relative;
+    z-index: 10;
+    border-bottom: 1px solid color-mix(in oklab, var(--accent) 40%, transparent);
+    transition: border-color 80ms;
+    font-variation-settings:
+      'wght' 550,
+      'opsz' 18;
+  }
+  :where(.ff-table-row[data-fluid-hover-index]) {
+    font-variation-settings:
+      'wght' 400,
+      'opsz' 14;
+  }
+  :where(.ff-table-row[data-table-hide-border]) {
+    border-bottom-color: transparent;
+  }
+  :where(.ff-table-head) {
+    padding: var(--table-cell-py) 12px;
+    text-align: left;
+    color: var(--foreground);
+    font-weight: inherit;
+  }
+  :where(.ff-table-cell) {
+    padding: var(--table-cell-py) 12px;
+    color: var(--muted-foreground);
+    transition: color 80ms;
+  }
+  :where(
+      .ff-table[data-size='compact']
+        > .ff-table-element
+        > *
+        > .ff-table-row
+        > :is(.ff-table-head, .ff-table-cell)
+    ) {
+    padding-inline: 10px;
+  }
+  :where(.ff-table-empty-cell) {
+    padding: 0;
+  }
+  :where(.ff-table-empty) {
+    display: flex;
+    min-height: calc(var(--table-empty-rows, 3) * (1lh + 2 * var(--table-cell-py)));
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 16px 12px;
+    text-align: center;
+  }
+  :where(.ff-table-empty-title) {
+    color: var(--foreground);
+    font-variation-settings:
+      'wght' 550,
+      'opsz' 18;
+  }
+  :where(.ff-table-empty-description) {
+    color: var(--muted-foreground);
+  }
+  :where(.ff-table-empty-action) {
+    margin-top: 8px;
+  }
+}
+/* Like upstream's `group-[.is-active]/row:` variant, the lit row outranks a
+ * consumer's resting text colour, so it stays unlayered. */
+.ff-table-row.is-active > .ff-table-cell {
+  color: var(--foreground);
+}

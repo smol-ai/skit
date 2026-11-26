@@ -51,7 +51,8 @@
     "test:package": "node --test scripts/package.test.mjs scripts/published-contracts.test.mjs",
     "test:e2e:live": "vitest run --config vitest.live.config.ts",
     "typecheck": "tsc --noEmit",
-    "test:collections": "node scripts/cache-collections.mjs && pnpm --filter @smolai/skit-core build && vitest run --config vitest.collections.config.ts"
+    "test:collections": "node scripts/cache-collections.mjs && pnpm --filter @smolai/skit-core build && vitest run --config vitest.collections.config.ts",
+    "test:atlas": "node ../storybook/scripts/atlas-test.ts cli"
   },
   "devDependencies": {
     "@effect/platform-node": "4.1.2",

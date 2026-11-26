@@ -1,0 +1,7 @@
+.ff-list-focus {
+  position: absolute;
+  z-index: 20;
+  box-sizing: border-box;
+  border: 1px solid var(--focus-ring, #6b97ff);
+  pointer-events: none;
+}

@@ -51,7 +51,7 @@ const bodyPaddingY = 28;
 type TerminalColor = number | string;
 
 /** Equally styled cells side by side on one terminal row. */
-type TerminalRun = {
+export type TerminalRun = {
   readonly column: number;
   readonly cells: ReadonlyArray<{ readonly column: number; readonly char: string }>;
   readonly width: number;
@@ -77,7 +77,7 @@ const paletteColor = (index: number): string => {
 const drawn = (color: TerminalColor) => (typeof color === "number" ? paletteColor(color) : color);
 
 /** Lays ANSI text onto an exact terminal grid and groups equally styled cells into runs. */
-async function layoutTerminal(
+export async function layoutTerminal(
   ansi: string,
   columns: number,
 ): Promise<ReadonlyArray<ReadonlyArray<TerminalRun>>> {

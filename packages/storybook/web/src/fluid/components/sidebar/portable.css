@@ -1,0 +1,355 @@
+/* Component-owned defaults for applications without utility CSS. Keep these
+   in the components layer so caller utility classes can override them. */
+@layer components {
+  :where([data-slot='sidebar-wrapper']) {
+    position: relative;
+    display: flex;
+    width: 100%;
+    min-height: 100svh;
+    color: var(--foreground);
+    font: var(--fs-body, 13px) / var(--lh-body, 20px) var(--font-sans, system-ui, sans-serif);
+  }
+  :where([data-sidebar-root] *) {
+    box-sizing: border-box;
+  }
+  :where([data-slot='sidebar']) {
+    position: relative;
+    flex-shrink: 0;
+    align-self: stretch;
+    height: auto;
+    overflow: hidden;
+  }
+  :where([data-slot='sidebar'].h-svh) {
+    position: sticky;
+    top: 0;
+    height: 100svh;
+  }
+  :where([data-slot='sidebar'][data-side='right']) {
+    order: 1;
+  }
+  :where([data-sidebar='panel']) {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    display: flex;
+    height: 100%;
+    flex-direction: column;
+  }
+  :where([data-slot='sidebar'][data-side='left'] > [data-sidebar='panel']) {
+    left: 0;
+  }
+  :where([data-slot='sidebar'][data-side='right'] > [data-sidebar='panel']) {
+    right: 0;
+  }
+  :where([data-sidebar='sidebar']) {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    flex-direction: column;
+    background: var(--sidebar-surface, var(--background));
+  }
+  :where([data-sidebar='sidebar'][data-bordered='true'][data-side='left']) {
+    border-right: 1px solid var(--border);
+  }
+  :where([data-sidebar='sidebar'][data-bordered='true'][data-side='right']) {
+    border-left: 1px solid var(--border);
+  }
+  :where([data-slot='sidebar'][data-variant='floating'] > [data-sidebar='panel']) {
+    padding: 8px;
+  }
+  :where([data-slot='sidebar'][data-variant='inset'] > [data-sidebar='panel']) {
+    padding-block: 8px;
+  }
+  :where([data-slot='sidebar'][data-variant='floating'] [data-sidebar='sidebar']) {
+    border-radius: 12px;
+    box-shadow: var(--shadow-3, 0 0 0 1px var(--border));
+    overflow: hidden;
+  }
+  :where([data-sidebar='sidebar'][data-radius='pill']) {
+    border-radius: 24px;
+  }
+  :where([data-sidebar='sidebar'][data-radius='sharp']) {
+    border-radius: 1px;
+  }
+  :where([data-slot='sidebar-inset']) {
+    position: relative;
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    background: var(--background);
+  }
+  :where([data-slot='sidebar'][data-variant='inset'] ~ [data-slot='sidebar-inset']) {
+    margin: 8px;
+    border-radius: 12px;
+    background: var(--surface-2);
+    box-shadow: var(--shadow-2, 0 0 0 1px var(--border));
+  }
+  :where([data-sidebar='header'], [data-sidebar='footer'], [data-sidebar='group']) {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+  }
+  :where([data-sidebar='header'], [data-sidebar='footer']) {
+    flex-shrink: 0;
+  }
+  :where([data-sidebar='footer']) {
+    margin-top: auto;
+  }
+  :where([data-sidebar='content']) {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  :where([data-sidebar='group-content'], [data-sidebar='group-collapse']) {
+    min-width: 0;
+  }
+  :where([data-sidebar='group-collapse']) {
+    overflow: hidden;
+  }
+  :where([data-sidebar='group-label']) {
+    display: flex;
+    width: 100%;
+    min-height: 32px;
+    align-items: center;
+    gap: 8px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted-foreground);
+    text-align: left;
+    font: var(--fs-caption, 12px) / var(--lh-caption, 16px) var(--font-sans, system-ui, sans-serif);
+  }
+  :where([data-sidebar='group-label'] > span:first-child) {
+    flex: 1;
+  }
+  :where([data-sidebar='menu'], [data-sidebar='menu-sub']) {
+    position: relative;
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  :where([data-sidebar='menu-item'], [data-sidebar='menu-sub-item']) {
+    position: relative;
+    min-width: 0;
+    list-style: none;
+  }
+  :where([data-sidebar='menu-button'], [data-sidebar='menu-sub-button']) {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    width: 100%;
+    min-height: var(--row-h, 32px);
+    align-items: center;
+    gap: 8px;
+    padding: 0 var(--row-gutter, 8px) 0 8px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted-foreground);
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+    font: inherit;
+  }
+  :where(
+    [data-sidebar='menu-button'][aria-current='page'],
+    [data-sidebar='menu-sub-button'][aria-current='page']
+  ) {
+    color: var(--foreground);
+  }
+  :where([data-sidebar='menu-button']:hover, [data-sidebar='menu-sub-button']:hover) {
+    padding-right: var(--row-gutter-hover, var(--row-gutter, 8px));
+  }
+  :where([data-sidebar='menu-label']) {
+    display: inline-grid;
+    min-width: 0;
+    text-align: left;
+  }
+  :where([data-sidebar='menu-label'] > span) {
+    grid-area: 1 / 1;
+  }
+  :where([data-sidebar='menu-label'] > [aria-hidden='true']) {
+    visibility: hidden;
+  }
+  :where([data-sidebar='menu-label-text']) {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  :where([data-sidebar='menu-sub']) {
+    padding-left: 16px;
+  }
+  :where([data-sidebar='menu-sub'][data-state='closed']) {
+    display: none;
+  }
+  :where([data-sidebar='menu-badge']) {
+    margin-left: auto;
+    padding-inline: 6px;
+    font-size: 12px;
+  }
+  :where([data-sidebar='menu-actions'], [data-sidebar='group-actions']) {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+  }
+  :where([data-sidebar='menu-action'], [data-sidebar='group-action']) {
+    width: 24px;
+    height: 24px;
+    padding: 4px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+  }
+  :where([data-sidebar='trigger']) {
+    position: relative;
+    display: inline-flex;
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--muted-foreground);
+    cursor: pointer;
+  }
+  :where([data-sidebar='trigger'].h-7) {
+    width: 28px;
+    height: 28px;
+  }
+  :where([data-sidebar='trigger']:hover) {
+    color: var(--foreground);
+  }
+  :where(
+    [data-sidebar='trigger']:focus-visible,
+    [data-sidebar='group-label']:focus-visible,
+    [data-sidebar='menu-button']:focus-visible,
+    [data-sidebar='menu-sub-button']:focus-visible
+  ) {
+    outline: 1px solid var(--focus-ring, #6b97ff);
+    outline-offset: 1px;
+  }
+  :where([data-sidebar='separator']) {
+    height: 1px;
+    margin: 0 8px;
+    background: var(--border);
+  }
+  :where([data-sidebar='input']) {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+  }
+  :where([data-sidebar='workspace-tile']) {
+    display: inline-flex;
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    background: var(--foreground);
+    color: var(--background);
+    font-size: 10px;
+  }
+  :where([data-sidebar='workspace-tile'][data-radius='pill']) {
+    border-radius: 50%;
+  }
+  :where([data-sidebar='workspace-tile'][data-radius='sharp']) {
+    border-radius: 1px;
+  }
+  :where([data-sidebar='rail']) {
+    position: absolute;
+    inset-block: 0;
+    right: 0;
+    z-index: 2;
+    width: 8px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: col-resize;
+    touch-action: none;
+  }
+  :where([data-slot='sidebar'][data-side='right'] [data-sidebar='rail']) {
+    left: 0;
+    right: auto;
+  }
+  :where([data-sidebar='peek-strip']) {
+    position: absolute;
+    inset-block: 0;
+    width: 12px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  :where([data-slot='sidebar'][data-side='right'] [data-sidebar='peek-strip']) {
+    right: 0;
+  }
+  :where([data-sidebar='peek']) {
+    position: absolute;
+    inset-block: 8px;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    border-radius: 12px;
+    background: var(--surface-2);
+    box-shadow: var(--shadow-3, 0 0 0 1px var(--border));
+    overflow: hidden;
+  }
+  :where([data-slot='sidebar'][data-side='right'] [data-sidebar='peek']) {
+    right: 0;
+  }
+  :where([data-sidebar='scrim']) {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: light-dark(#0006, #000c);
+  }
+  :where([data-sidebar='sidebar'][data-mobile='true']) {
+    position: fixed;
+    inset-block: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    color: var(--foreground);
+    max-height: none;
+    z-index: 50;
+    max-width: 100vw;
+    height: 100dvh;
+    border-radius: 0;
+    outline: none;
+    overflow: hidden;
+  }
+  :where([data-sidebar='sidebar'][data-mobile='true'][data-side='left']) {
+    left: 0;
+  }
+  :where([data-sidebar='sidebar'][data-mobile='true'][data-side='right']) {
+    right: 0;
+  }
+}
+
+[data-sidebar='sidebar'][data-mobile='true']::backdrop {
+  background: light-dark(#0006, #000c);
+}

@@ -28,7 +28,10 @@
     "check": "pnpm format:check && pnpm lint && pnpm build && pnpm typecheck && pnpm test",
     "check:ci": "pnpm format:check && pnpm lint && pnpm build && pnpm typecheck && pnpm test:ci && pnpm --fail-if-no-match --filter @smolai/skit-server-effect test:e2e",
     "test:collections": "pnpm --filter @smolai/skit test:collections",
-    "cli:image": "bun packages/storybook/src/image/main.ts"
+    "cli:image": "bun packages/storybook/src/image/main.ts",
+    "cli:atlas": "pnpm --filter @smolai/skit-storybook atlas",
+    "cli:atlas:generate": "pnpm --filter @smolai/skit build && pnpm --filter @smolai/skit-storybook atlas:generate",
+    "cli:atlas:build": "pnpm --filter @smolai/skit-storybook atlas:build"
   },
   "devDependencies": {
     "@effect/tsgo": "0.67.5",

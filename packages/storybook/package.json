@@ -8,22 +8,38 @@
     "start": "bun src/index.ts",
     "dev": "bun --watch src/index.ts",
     "test": "vitest run && bun scripts/playback-smoke.ts",
+    "test:atlas-map": "vitest run test/atlas-system-map.test.ts test/atlas-provider-scopes.test.ts test/atlas-provider-tracing.test.ts web/test/routing.story.test.ts web/test/node-graph.test.ts",
     "test:preview": "bun scripts/playback-smoke.ts",
-    "typecheck": "tsc --noEmit",
-    "image": "bun src/image/main.ts"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p web/tsconfig.json",
+    "image": "bun src/image/main.ts",
+    "atlas": "vite",
+    "atlas:dev": "vite",
+    "atlas:generate": "node src/atlas/main.ts",
+    "atlas:build": "vite build"
   },
   "dependencies": {
+    "@effect/platform-browser": "4.1.2",
     "@effect/platform-node": "4.1.2",
+    "@foldkit/ui": "0.170.0",
     "@opentui/core": "0.5.9",
     "@smolai/skit": "workspace:*",
-    "effect": "4.1.2"
+    "clsx": "2.1.1",
+    "effect": "4.1.2",
+    "foldkit": "0.170.0",
+    "motion": "14.7.1",
+    "tailwind-merge": "3.7.0"
   },
   "devDependencies": {
+    "@foldkit/vite-plugin": "0.29.0",
     "@resvg/resvg-js": "2.6.2",
+    "@tailwindcss/vite": "4.3.3",
     "@types/node": "24.10.1",
     "@xterm/headless": "6.0.0",
     "dejavu-fonts-ttf": "2.37.3",
+    "tailwindcss": "4.3.3",
+    "tsrs": "0.20.0-ts7.1.0-beta",
     "typescript": "5.9.3",
+    "vite": "8.3.2",
     "vitest": "5.0.3"
   },
   "engines": {

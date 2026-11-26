@@ -1,0 +1,207 @@
+.ff-popup {
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  min-width: var(--button-width, 160px);
+  max-width: calc(100vw - 16px);
+  overflow: hidden;
+  outline: none;
+  border-radius: 12px;
+  color: var(--foreground, #171717);
+  background: var(--surface-3, light-dark(#fff, #262626));
+  box-shadow: var(
+    --shadow-3,
+    0 0 0 1px #00000014,
+    0 1px 1px -0.5px #00000014,
+    0 3px 3px -1.5px #00000014
+  );
+  user-select: none;
+  --popup-enter-y: -4px;
+  transform-origin: top;
+  opacity: 1;
+  transform: translateY(0) scaleY(1);
+}
+.ff-popup .ff-popup-row {
+  border-radius: 8px;
+}
+.ff-popup[data-placement^='top'] {
+  transform-origin: bottom;
+  --popup-enter-y: 4px;
+}
+.ff-popup[data-placement^='left'] {
+  transform-origin: right;
+  --popup-enter-y: 0px;
+}
+.ff-popup[data-placement^='right'] {
+  transform-origin: left;
+  --popup-enter-y: 0px;
+}
+.ff-popup[data-transition] {
+  transition:
+    opacity 80ms ease-out,
+    transform 80ms ease-out;
+}
+.ff-popup[data-leave] {
+  transition-duration: 60ms;
+  pointer-events: none;
+}
+.ff-popup[data-closed] {
+  opacity: 0;
+  transform: translateY(var(--popup-enter-y)) scaleY(0.96);
+}
+.ff-popup-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+}
+.ff-popup-viewport {
+  --scroll-fade-size: 32px;
+  position: relative;
+  min-height: 0;
+  max-height: 300px;
+  padding: 4px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+  scrollbar-width: none;
+}
+.ff-popup-viewport::-webkit-scrollbar {
+  display: none;
+}
+.ff-popup-selection {
+  position: absolute;
+  border-radius: 8px;
+  background: var(--active, rgb(0 0 0 / 0.08));
+  pointer-events: none;
+  z-index: 0;
+}
+.ff-popup .ff-list-focus {
+  border-radius: 10px;
+}
+.ff-popup-row {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 36px;
+  gap: 8px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  outline: none;
+  cursor: pointer;
+  color: var(--muted-foreground, #737373);
+  font: var(--fs-body, 13px)/var(--lh-body, 20px) var(--font-sans, Inter, system-ui, sans-serif);
+  transition: color 80ms;
+}
+.ff-popup[data-size='compact'] .ff-popup-row {
+  height: 28px;
+  gap: 4px;
+  padding: 0 6px;
+  font-size: var(--fs-body-compact, 12px);
+  line-height: var(--lh-body-compact, 18px);
+}
+.ff-popup-row:is(
+  [aria-selected='true'],
+  [aria-checked='true'],
+  [data-active],
+  [data-fluid-hover-active]
+) {
+  color: var(--foreground, #171717);
+}
+.ff-popup-row[aria-disabled='true'] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+.ff-popup-row-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-box: trim-both cap alphabetic;
+  padding: 4px 0;
+  margin: -4px 0;
+}
+.ff-popup-row-icon,
+.ff-popup-row-check {
+  display: flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.ff-popup[data-size='compact'] :is(.ff-popup-row-icon, .ff-popup-row-check) {
+  width: 14px;
+  height: 14px;
+}
+.ff-popup-row-icon svg,
+.ff-popup-row-check svg {
+  width: 100%;
+  height: 100%;
+}
+.ff-popup-row-check path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 40ms ease-in;
+}
+.ff-popup-row:is([aria-selected='true'], [aria-checked='true']) .ff-popup-row-check path {
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 80ms ease-out;
+}
+.ff-popup-row[aria-checked='true'] .ff-popup-row-label {
+  font-variation-settings:
+    'wght' 550,
+    'opsz' 18;
+}
+.ff-popup-row-icon svg {
+  stroke-width: 1.5;
+  transition: stroke-width 80ms;
+}
+.ff-popup-row:is(
+    [aria-selected='true'],
+    [aria-checked='true'],
+    [data-active],
+    [data-fluid-hover-active]
+  )
+  .ff-popup-row-icon
+  svg {
+  stroke-width: 2;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff-popup[data-transition],
+  .ff-popup-row,
+  .ff-popup-row-check path {
+    transition: none;
+  }
+}
+
+.ff-popup-row-content {
+  display: contents;
+}
+.ff-popup-heading {
+  display: block;
+  padding: 8px 8px 4px;
+  color: var(--muted-foreground, #737373);
+  font: var(--fs-caption, 12px)/var(--lh-caption, 16px)
+    var(--font-sans, Inter, system-ui, sans-serif);
+}
+.ff-popup[data-size='compact'] .ff-popup-heading {
+  /* The caption's compact step (11/14), as upstream's group labels. */
+  font-size: var(--fs-caption-compact, 11px);
+  line-height: var(--lh-caption-compact, 14px);
+}
+.ff-popup-separator {
+  height: 1px;
+  margin: 4px -4px;
+  background: color-mix(in srgb, var(--border, #ddd) 60%, transparent);
+}
+
+.ff-popup[data-radius='sharp'],
+.ff-popup[data-radius='sharp'] .ff-popup-row,
+.ff-popup[data-radius='sharp'] .ff-popup-selection {
+  border-radius: 1px;
+}
+.ff-popup[data-radius='sharp'] .ff-list-focus {
+  border-radius: 3px;
+}

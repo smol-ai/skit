@@ -208,7 +208,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.typecheck.json"
+    "typecheck": "tsc -p tsconfig.typecheck.json",
+    "test:atlas": "node ../storybook/scripts/atlas-test.ts skit"
   },
   "dependencies": {
     "@effect/platform-node": "4.1.2",

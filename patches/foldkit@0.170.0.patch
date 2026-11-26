@@ -1,0 +1,55 @@
+diff --git a/dist/html/boundary.js b/dist/html/boundary.js
+index 50e4bc7b1cd48dbdd9220f87fa131779f8e4db47..85c9129fce3380824b8cd8d23d123ec14fa6211b 100644
+--- a/dist/html/boundary.js
++++ b/dist/html/boundary.js
+@@ -20,9 +20,9 @@ export const createBoundaryRegistry = () => ({
+     boundaryWrapTransactionLog: [],
+     activeBoundaryWrapTransaction: undefined,
+     dedupeSeen: new Set(),
++    callSites: new Map(),
+ });
+-const captureCallSite = () => {
+-    const stack = new Error().stack ?? '';
++const formatCallSite = (stack) => {
+     const lines = stack.split('\n');
+     for (const line of lines) {
+         const trimmed = line.trim();
+@@ -41,6 +41,19 @@ const captureCallSite = () => {
+     }
+     return '(call site unavailable)';
+ };
++// PATCH(fluid-foldkit): every h.submodel registration captured and formatted
++// a stack trace on every render, only to word the duplicate-slotId error.
++// Capturing walks the whole stack, which is deep inside a render (~160us per
++// call on the docs pages), so registerBoundaryWrap keeps one call site per
++// boundary id, and the frames are formatted only when an error message
++// interpolates them.
++const captureCallSite = () => {
++    const error = new Error();
++    let formatted;
++    return {
++        toString: () => (formatted ??= formatCallSite(error.stack ?? '')),
++    };
++};
+ const assertBoundaryNotSeen = (registry, boundaryId) => {
+     const existingCallSite = registry.seenThisRender.get(boundaryId);
+     if (existingCallSite !== undefined) {
+@@ -65,7 +78,8 @@ export const registerBoundaryWrap = (registry, boundaryId, descriptor, mountOute
+     // Error.stack), neither map is mutated, so a later registration
+     // with the same slotId throws the duplicate error correctly instead
+     // of silently overwriting after a half-finished prior write.
+-    const callSite = captureCallSite();
++    const callSite = registry.callSites.get(boundaryId) ?? captureCallSite();
++    registry.callSites.set(boundaryId, callSite);
+     writeBoundaryWrap(registry, boundaryId, descriptor, mountOuterDispatch, callSite);
+ };
+ const writeBoundaryWrap = (registry, boundaryId, descriptor, mountOuterDispatch, callSite) => {
+@@ -163,6 +177,8 @@ export const restoreBoundaryWrapsForLazyHit = (registry, trackedBoundaries) => {
+ export const deregisterBoundaryWrap = (registry, boundaryId, descriptor, mountOuterDispatch) => {
+     if (registry.wraps.get(boundaryId) === descriptor) {
+         registry.wraps.delete(boundaryId);
++        // PATCH(fluid-foldkit): drop the cached call site with the wrap.
++        registry.callSites.delete(boundaryId);
+         const mountWrapOwners = registry.mountWrapOwners.get(boundaryId);
+         if (mountWrapOwners !== undefined) {
+             for (const owner of mountWrapOwners) {

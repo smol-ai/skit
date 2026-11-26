@@ -2,10 +2,15 @@
   "$schema": "./node_modules/@effect/tsgo/oxlint-schema.json",
   "extends": ["./node_modules/@effect/tsgo/oxlint-presets/recommended.json"],
   "plugins": ["typescript", "unicorn", "oxc", "import"],
-  "ignorePatterns": ["packages/cli/test/fixtures/source-regressions/humanlayer/**"],
+  "ignorePatterns": [
+    "packages/cli/test/fixtures/source-regressions/humanlayer/**",
+    "packages/storybook/web/src/fluid/**",
+    "packages/storybook/src/atlas/effect-graph/**"
+  ],
   "jsPlugins": ["./lint/oxlint-plugin-skit.mjs"],
   "rules": {
     "skit/no-middle-dot-delimiter": "error",
+    "skit/atlas-tokens": "error",
     "effecttsgo/experimental-api-usage": "off",
     "oxc/no-barrel-file": "error",
     "skit/frontend-no-resources": "error",

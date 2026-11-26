@@ -1,0 +1,120 @@
+diff --git a/dist/combobox/shared.d.ts b/dist/combobox/shared.d.ts
+index 9d4c69e12da99a79de5d6345331cd572e9968321..7a9c64261636390a9dd301afb1cc0135dd8db4e9 100644
+--- a/dist/combobox/shared.d.ts
++++ b/dist/combobox/shared.d.ts
+@@ -399,6 +399,11 @@ export type BaseViewInputsCommon<Item extends string> = Readonly<{
+     itemToValue: (item: Item, index: number) => Item;
+     itemToDisplayText: (item: Item, index: number) => string;
+     isItemDisabled?: (item: Item, index: number) => boolean;
++    /** Render slots owned by the consuming Submodel. */
++    renderInputContent?: (input: Html) => Html;
++    renderInputPrefix?: () => Html;
++    renderInputSuffix?: () => Html;
++    renderItemsFooter?: () => Html;
+     inputClassName?: string;
+     inputAttributes?: ReadonlyArray<ChildAttribute>;
+     inputPlaceholder?: string;
+diff --git a/dist/combobox/shared.js b/dist/combobox/shared.js
+index f5ee8f571123f7e2f71c77f707499caf1f127763..444e360151df828d779699ef863ab0bddbc9ee65 100644
+--- a/dist/combobox/shared.js
++++ b/dist/combobox/shared.js
+@@ -469,7 +469,7 @@ export const PortalComboboxBackdrop = Mount.define('PortalComboboxBackdrop', {
+ export const makeView = (behavior) => {
+     const impl = defineView((model, viewInputs, h) => {
+         const { id, isOpen, immediate, animation: { transitionState }, maybeActiveItemIndex, } = model;
+-        const { items, selectedValues, restingInputValue, itemToConfig, itemToValue, itemToDisplayText, isItemDisabled, inputClassName, inputAttributes = [], inputPlaceholder, inputWrapperClassName, inputWrapperAttributes = [], itemsClassName, itemsAttributes = [], itemsScrollClassName, itemsScrollAttributes = [], backdropClassName, backdropAttributes = [], className, attributes = [], buttonContent, buttonClassName, buttonAttributes = [], formName, isDisabled, isReadOnly = false, isInvalid, openOnFocus, itemGroupKey, groupToHeading, groupClassName, groupAttributes = [], separatorClassName, separatorAttributes = [], anchor = {}, ariaLabel, ariaLabelledBy, } = viewInputs;
++        const { items, selectedValues, restingInputValue, itemToConfig, itemToValue, itemToDisplayText, isItemDisabled, renderInputContent, renderInputPrefix, renderInputSuffix, renderItemsFooter, inputClassName, inputAttributes = [], inputPlaceholder, inputWrapperClassName, inputWrapperAttributes = [], itemsClassName, itemsAttributes = [], itemsScrollClassName, itemsScrollAttributes = [], backdropClassName, backdropAttributes = [], className, attributes = [], buttonContent, buttonClassName, buttonAttributes = [], formName, isDisabled, isReadOnly = false, isInvalid, openOnFocus, itemGroupKey, groupToHeading, groupClassName, groupAttributes = [], separatorClassName, separatorAttributes = [], anchor = {}, ariaLabel, ariaLabelledBy, } = viewInputs;
+         const resolveInputLabel = () => {
+             if (Predicate.isNotUndefined(ariaLabel)) {
+                 return __foldkitBrandViewResult(([h.AriaLabel(ariaLabel)]), "@foldkit/ui/combobox/shared.js#resolveInputLabel");
+@@ -761,7 +761,7 @@ export const makeView = (behavior) => {
+             ...(backdropClassName ? [h.Class(backdropClassName)] : []),
+             ...backdropAttributes,
+         ]);
+-        const renderedItems = renderGroupedItems();
++        const renderedItems = [...renderGroupedItems(), ...(renderItemsFooter ? [renderItemsFooter()] : [])];
+         const scrollableItems = itemsScrollClassName ||
+             Array.isReadonlyArrayNonEmpty(itemsScrollAttributes)
+             ? [
+@@ -823,7 +823,9 @@ export const makeView = (behavior) => {
+         ];
+         return __foldkitBrandViewResult((h.div(wrapperAttributes, [
+             h.div(resolvedInputWrapperAttributes, [
+-                h.input(resolvedInputAttributes),
++                ...(renderInputPrefix ? [renderInputPrefix()] : []),
++                renderInputContent ? renderInputContent(h.input(resolvedInputAttributes)) : h.input(resolvedInputAttributes),
++                ...(renderInputSuffix ? [renderInputSuffix()] : []),
+                 ...toggleButton,
+             ]),
+             ...(isBackdropVisible ? [backdrop] : []),
+diff --git a/dist/menu/index.d.ts b/dist/menu/index.d.ts
+index 15cee8d86bccbb9cf3dfc6d3c8d3428580cc1d6b..1cf5e4fe8259860ba0569fb7f5afd02e4648861d 100644
+--- a/dist/menu/index.d.ts
++++ b/dist/menu/index.d.ts
+@@ -400,6 +400,8 @@ export declare const selectItem: (model: Model, item: string, index: number) =>
+ export type ItemConfig = Readonly<{
+     className?: string;
+     content: Html;
++    /** Additional attributes for the item element, after the primitive attributes. */
++    attributes?: ReadonlyArray<ChildAttribute>;
+ }>;
+ /** Configuration for a group heading rendered above a group of items. */
+ export type GroupHeading = Readonly<{
+@@ -425,6 +427,9 @@ export type ViewInputs<Item extends string> = Readonly<{
+     buttonAttributes?: ReadonlyArray<ChildAttribute>;
+     itemsClassName?: string;
+     itemsAttributes?: ReadonlyArray<ChildAttribute>;
++    /** Content before and after rows, inside the scroll viewport. */
++    renderItemsHeader?: () => Html;
++    renderItemsFooter?: () => Html;
+     itemsScrollClassName?: string;
+     itemsScrollAttributes?: ReadonlyArray<ChildAttribute>;
+     backdropClassName?: string;
+@@ -437,6 +442,8 @@ export type ViewInputs<Item extends string> = Readonly<{
+     groupAttributes?: ReadonlyArray<ChildAttribute>;
+     separatorClassName?: string;
+     separatorAttributes?: ReadonlyArray<ChildAttribute>;
++    /** Anchor a separately rendered panel to an existing trigger element. */
++    anchorTriggerId?: string;
+     anchor?: AnchorConfig;
+     ariaLabel?: string;
+     ariaLabelledBy?: string;
+diff --git a/dist/menu/index.js b/dist/menu/index.js
+index eeb17e214a91888657f7d4f2aee84382d8df0ce4..72449372f46625613d8c8b24352b7a58410e2206 100644
+--- a/dist/menu/index.js
++++ b/dist/menu/index.js
+@@ -483,7 +483,7 @@ const internalView = () =>
+ __foldkitBrandViewResult((menuViewImpl), "@foldkit/ui/menu/index.js#internalView");
+ const menuViewImpl = defineView((model, viewInputs, h) => {
+     const { id, isOpen, animation: { transitionState }, maybeActiveItemIndex, searchQuery, } = model;
+-    const { items, itemToConfig, isItemDisabled, itemToSearchText = (item) => __foldkitBrandViewResult((item), "@foldkit/ui/menu/index.js#anonymous~19"), isButtonDisabled, buttonContent, buttonClassName, buttonAttributes = [], itemsClassName, itemsAttributes = [], itemsScrollClassName, itemsScrollAttributes = [], backdropClassName, backdropAttributes = [], className, attributes = [], itemGroupKey, groupToHeading, groupClassName, groupAttributes = [], separatorClassName, separatorAttributes = [], anchor = {}, ariaLabel, ariaLabelledBy, } = viewInputs;
++    const { items, itemToConfig, isItemDisabled, itemToSearchText = (item) => __foldkitBrandViewResult((item), "@foldkit/ui/menu/index.js#anonymous~19"), isButtonDisabled, buttonContent, buttonClassName, buttonAttributes = [], itemsClassName, itemsAttributes = [], renderItemsHeader, renderItemsFooter, itemsScrollClassName, itemsScrollAttributes = [], backdropClassName, backdropAttributes = [], className, attributes = [], itemGroupKey, groupToHeading, groupClassName, groupAttributes = [], separatorClassName, separatorAttributes = [], anchorTriggerId, anchor = {}, ariaLabel, ariaLabelledBy, } = viewInputs;
+     const dispatchSelectedItem = (item, index) => __foldkitBrandViewResult((Message.SelectedItem({ index, item })), "@foldkit/ui/menu/index.js#dispatchSelectedItem");
+     const isLeaving = transitionState === 'LeaveStart' || transitionState === 'LeaveAnimating';
+     const isVisible = isOpen || isLeaving;
+@@ -579,7 +579,7 @@ const menuViewImpl = defineView((model, viewInputs, h) => {
+     });
+     const anchorAttributes = [
+         h.Style({ position: 'absolute', margin: '0', visibility: 'hidden' }),
+-        h.OnMount(AnchorMenu({ buttonId: `${id}-button`, anchor })),
++        h.OnMount(AnchorMenu({ buttonId: anchorTriggerId ?? `${id}-button`, anchor })),
+     ];
+     const itemsContainerAttributes = [
+         h.Id(`${id}-items`),
+@@ -631,6 +631,7 @@ const menuViewImpl = defineView((model, viewInputs, h) => {
+                 ]
+                 : []),
+             ...(itemConfig.className ? [h.Class(itemConfig.className)] : []),
++            ...(itemConfig.attributes ?? []),
+         ], [itemConfig.content])), "@foldkit/ui/menu/index.js#anonymous~38");
+     });
+     const renderGroupedItems = () => {
+@@ -683,7 +684,7 @@ const menuViewImpl = defineView((model, viewInputs, h) => {
+         ...(backdropClassName ? [h.Class(backdropClassName)] : []),
+         ...backdropAttributes,
+     ]);
+-    const renderedItems = renderGroupedItems();
++    const renderedItems = [renderItemsHeader?.() ?? null, ...renderGroupedItems(), renderItemsFooter?.() ?? null];
+     const scrollableItems = itemsScrollClassName ||
+         Array.isReadonlyArrayNonEmpty(itemsScrollAttributes)
+         ? [
