@@ -72,6 +72,9 @@ export function flowPage(
         test.ancestorTitles.length >= 2 &&
         test.ancestorTitles[0]!.startsWith("skit "),
     );
+  const declaration = atlas.guaranteeFiles
+    ?.flatMap((file) => file.tests)
+    .find((test) => test.title === flow.name);
   const branches = branchesAfter(atlas, flow.name, index);
   const glyphs: Readonly<Record<string, IconName>> = {
     command: "monitor",
@@ -190,7 +193,19 @@ export function flowPage(
                   ],
                 ),
               ]
-            : [],
+            : declaration
+              ? [
+                  h.a(
+                    [
+                      h.Href(
+                        testHref(declaration.ancestorTitles[0]!.slice("skit ".length), flow.name),
+                      ),
+                      h.Class("w-fit underline"),
+                    ],
+                    ["Open guarantee"],
+                  ),
+                ]
+              : [],
         },
         h,
       ),

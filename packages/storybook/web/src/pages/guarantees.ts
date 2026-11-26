@@ -20,41 +20,56 @@ export const commandGuarantees = (atlas: Atlas, command: string) => {
       title: string;
       tests: Array<{
         file: string;
-        test: Atlas["testReports"][number]["files"][number]["tests"][number];
+        test: {
+          title: string;
+          ancestorTitles: readonly string[];
+          status?: Atlas["testReports"][number]["files"][number]["tests"][number]["status"];
+        };
       }>;
     }
   >();
   const sectionOrder = new Map<string, Set<string>>();
-  for (const report of atlas.testReports.filter((report) => report.provenance === "current"))
-    for (const file of report.files) {
-      let previousSection: string | undefined;
-      const seenSections = new Set<string>();
-      for (const test of file.tests) {
-        if (test.ancestorTitles[0] !== `skit ${command}`) continue;
-        if (test.ancestorTitles.length < 2) continue;
-        const title = test.ancestorTitles.at(-1)!;
-        const sections = test.ancestorTitles.slice(1, -1);
-        const section = JSON.stringify(sections);
-        if (!sectionOrder.has(section)) sectionOrder.set(section, new Set());
-        // Separate describe blocks can revisit a section. Its first appearance
-        // declares its position; a later block adds tests, not a reverse edge.
-        if (!seenSections.has(section)) {
-          if (previousSection !== undefined) sectionOrder.get(previousSection)!.add(section);
-          seenSections.add(section);
-          previousSection = section;
-        }
-        const key = JSON.stringify([...sections, title]);
-        let group = groups.get(key);
-        if (group === undefined) {
-          group = { key, sections, title, tests: [] };
-          groups.set(key, group);
-        }
-        group.tests.push({
-          file: file.file,
-          test,
-        });
+  const currentFiles = atlas.testReports
+    .filter((report) => report.provenance === "current")
+    .flatMap((report) => report.files);
+  const testKey = (file: string, ancestry: readonly string[], title: string) =>
+    JSON.stringify([file, ...ancestry, title]);
+  const results = new Map(
+    currentFiles.flatMap((file) =>
+      file.tests.map(
+        (test) => [testKey(file.file, test.ancestorTitles, test.title), test.status] as const,
+      ),
+    ),
+  );
+  for (const file of atlas.guaranteeFiles ?? currentFiles) {
+    let previousSection: string | undefined;
+    const seenSections = new Set<string>();
+    for (const test of file.tests) {
+      if (test.ancestorTitles[0] !== `skit ${command}`) continue;
+      if (test.ancestorTitles.length < 2) continue;
+      const title = test.ancestorTitles.at(-1)!;
+      const sections = test.ancestorTitles.slice(1, -1);
+      const section = JSON.stringify(sections);
+      if (!sectionOrder.has(section)) sectionOrder.set(section, new Set());
+      // Separate describe blocks can revisit a section. Its first appearance
+      // declares its position; a later block adds tests, not a reverse edge.
+      if (!seenSections.has(section)) {
+        if (previousSection !== undefined) sectionOrder.get(previousSection)!.add(section);
+        seenSections.add(section);
+        previousSection = section;
       }
+      const key = JSON.stringify([...sections, title]);
+      let group = groups.get(key);
+      if (group === undefined) {
+        group = { key, sections, title, tests: [] };
+        groups.set(key, group);
+      }
+      group.tests.push({
+        file: file.file,
+        test: { ...test, status: results.get(testKey(file.file, test.ancestorTitles, test.title)) },
+      });
     }
+  }
   // Merge the section order declared by each file; no page owns the section names or count.
   const remaining = [...sectionOrder.keys()];
   const ordered: string[] = [];
@@ -111,10 +126,10 @@ export const guaranteesPage = (
           const tests = sectionGroups.find((group) => group.key === value)?.tests ?? [];
           const counts = tests.reduce(
             (counts, { test }) => {
-              counts[test.status]++;
+              counts[test.status ?? "no current result"]++;
               return counts;
             },
-            { passed: 0, failed: 0, skipped: 0, todo: 0 },
+            { passed: 0, failed: 0, skipped: 0, todo: 0, "no current result": 0 },
           );
           const passed = counts.passed === tests.length;
           return h.span(
@@ -132,10 +147,16 @@ export const guaranteesPage = (
               Badge.view(
                 {
                   size: "compact",
-                  tone: passed ? "success" : counts.failed ? "destructive" : "warning",
+                  tone: passed
+                    ? "success"
+                    : counts.failed
+                      ? "destructive"
+                      : counts.skipped || counts.todo
+                        ? "warning"
+                        : undefined,
                   children: [
-                    passed
-                      ? `${tests.length} passed`
+                    counts["no current result"] === tests.length
+                      ? `${tests.length} ${tests.length === 1 ? "test" : "tests"}`
                       : Object.entries(counts)
                           .filter(([, count]) => count > 0)
                           .map(([status, count]) => `${count} ${status}`)
@@ -190,7 +211,7 @@ export const guaranteesPage = (
                               ],
                               [
                                 h.submodel({
-                                  slotId: `tip-test-kind-${key}`,
+                                  slotId: `tip-test-kind-${encodeURIComponent(key)}`,
                                   model: tipOf(model, `test-kind-${key}`),
                                   view: Tooltip.view,
                                   toParentMessage: (message) =>
@@ -225,13 +246,14 @@ export const guaranteesPage = (
                               Badge.view(
                                 {
                                   size: "compact",
-                                  tone:
-                                    test.status === "passed"
+                                  tone: !test.status
+                                    ? undefined
+                                    : test.status === "passed"
                                       ? "success"
                                       : test.status === "failed"
                                         ? "destructive"
                                         : "warning",
-                                  children: [test.status],
+                                  children: [test.status ?? "No current result"],
                                 },
                                 h,
                               ),
@@ -279,7 +301,9 @@ export const guaranteesPage = (
               ]),
           h.p(
             [h.Class("m-0 text-muted-foreground")],
-            ["Saved Vitest results cover the recorded run, not later edits."],
+            [
+              "Guarantees come from the tests in this checkout. Statuses come from matching saved runs.",
+            ],
           ),
         ],
       ),
@@ -308,8 +332,8 @@ export const guaranteesPage = (
               [h.Class("m-0 text-muted-foreground")],
               [
                 selectedTest === undefined
-                  ? "No saved guarantees for this command"
-                  : "No saved result for this test",
+                  ? "No declared guarantees for this command"
+                  : "No matching guarantee for this test",
               ],
             ),
           ]

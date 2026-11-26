@@ -1,3 +1,4 @@
+import { collectGuarantees } from "./guarantee-catalog.ts";
 import { readTestReports } from "./test-reports.ts";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
@@ -315,6 +316,7 @@ console.log(
 );
 const atlas = {
   systemMap,
+  guaranteeFiles: await collectGuarantees(root),
   testReports: await Effect.runPromise(readTestReports(root)),
   ...(await domainVocabulary(root)),
   persistence,

@@ -385,6 +385,16 @@ export type SystemMap = typeof SystemMap.Type;
 
 export const Atlas = Schema.Struct({
   systemMap: SystemMap,
+  guaranteeFiles: Schema.optionalKey(
+    Schema.Array(
+      Schema.Struct({
+        file: Schema.String,
+        tests: Schema.Array(
+          Schema.Struct({ title: Schema.String, ancestorTitles: Schema.Array(Schema.String) }),
+        ),
+      }),
+    ),
+  ),
   testReports: Schema.Array(
     Schema.Struct({
       package: Schema.String,

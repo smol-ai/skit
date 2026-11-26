@@ -359,6 +359,35 @@ describe("author command tests", () => {
     ],
   } satisfies Atlas;
 
+  it("opens on the declared guarantee when neither package has a saved report", () => {
+    const declarations = [
+      {
+        file: "watch.test.ts",
+        tests: [
+          { title: "writes offline", ancestorTitles: ["skit author watch", "Edits are saved."] },
+        ],
+      },
+    ];
+    Scene.scene(
+      { update, view },
+      Scene.given(
+        update(
+          loadedAt(commandHref("author watch")),
+          Message.LoadedAtlas({
+            atlas: { ...data, guaranteeFiles: declarations, testReports: [] },
+          }),
+        ).model,
+      ),
+      settle,
+      Scene.expect(Scene.selector('[role="tab"][aria-selected="true"]')).toContainText(
+        "Guarantees",
+      ),
+      Scene.click(Scene.role("button", { name: "Edits are saved. 1 test" })),
+      Scene.expect(Scene.text("writes offline")).toExist(),
+      Scene.expect(Scene.text("No current result")).toExist(),
+    );
+  });
+
   it("opens on guarantees, shows saved results and missing reports, and links scenarios to flows", () => {
     Scene.scene(
       { update, view },

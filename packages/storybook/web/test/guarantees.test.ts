@@ -25,6 +25,38 @@ describe("guarantee membership from describe ancestry", () => {
     expect(groups).toEqual([]);
   });
 
+  it("shows declared guarantees without results and overlays only matching current tests", () => {
+    const tests = [
+      test("one", ["skit example", "Promise"]),
+      test("two", ["skit example", "Promise"]),
+    ];
+    const declarations = [
+      {
+        file: "current.ts",
+        tests: tests.map(({ title, ancestorTitles }) => ({ title, ancestorTitles })),
+      },
+    ];
+    const statuses = (reports: typeof atlas.testReports) =>
+      commandGuarantees(
+        { ...atlas, guaranteeFiles: declarations, testReports: reports },
+        "example",
+      )[0]!.tests.map((entry) => entry.test.status);
+    expect(statuses([])).toEqual([undefined, undefined]);
+    const report = {
+      package: "cli",
+      startTime: 1000,
+      provenance: "current" as const,
+      files: [
+        {
+          file: "current.ts",
+          tests: [tests[0]!, test("removed", ["skit example", "Removed promise"])],
+        },
+      ],
+    };
+    expect(statuses([report])).toEqual(["passed", undefined]);
+    expect(statuses([{ ...report, provenance: "stale" }])).toEqual([undefined, undefined]);
+  });
+
   it("merges the same section and guarantee across files, respecting file-declared section order", () => {
     const reports = [
       {

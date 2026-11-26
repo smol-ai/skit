@@ -113,6 +113,8 @@ fixtures. Atlas does not inspect your installed Skills or saved Library data.
 
 ## Atlas test results
 
+Atlas collects guarantee names and their tests from the current CLI and core test suites during generation, without running the tests. Commands with declared guarantees show a Guarantees tab even when no report exists. Matching results from a current clean checkout add pass, failure or skip statuses.
+
 Atlas reads saved results from Vitest's standard JSON reporter. To save local author
 test results (including author sync/watch and the replayable scenarios), run:
 
