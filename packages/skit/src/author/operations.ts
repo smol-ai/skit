@@ -72,7 +72,9 @@ export const updateAuthoredSkills = Effect.fn("Author.updateSkills")(function* (
   }
   const { saved, tree, removal } = observed;
   const library = yield* Library.Service;
+  const { connection } = yield* workspaces.read(root);
   const updated = yield* library.updateAuthoredSkills({
+    ...(connection._tag === "Connected" ? { draftHome: connection.remote } : {}),
     workspaceId: identity.value.workspaceId,
     input: root,
     tree,

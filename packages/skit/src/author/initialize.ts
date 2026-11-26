@@ -86,7 +86,10 @@ export const initializeAuthorWorkspace = Effect.fn("Author.initialize")(function
   const entry = yield* library.import.authored({
     root: folder,
     source: { type: "local", path: folder },
-    sourceIdentity: { kind: "authored-workspace", workspace_id: workspace.workspaceId },
+    sourceIdentity: {
+      kind: "authored-workspace",
+      workspace_id: claims.existing?.sourceWorkspaceId ?? workspace.workspaceId,
+    },
     label: validated.identity.slug,
     input: folder,
     importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),

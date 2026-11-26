@@ -1,3 +1,4 @@
+import { CanonicalAuthorRemoteHome } from "../author/remote.js";
 import { manifestViolationIssue } from "./manifest-violation.js";
 import { Schema } from "effect";
 import { canonicalJson } from "../shared/json.js";
@@ -124,6 +125,7 @@ export type SourceTracking = typeof SourceTracking.Type;
 
 /** Refresh intent for a Collection: where it comes from and what to follow. */
 export const Upstream = Schema.Struct({
+  draft_home: Schema.optionalKey(CanonicalAuthorRemoteHome),
   source_identity: SourceIdentity,
   tracking: SourceTracking,
 });

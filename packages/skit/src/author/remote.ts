@@ -22,6 +22,20 @@ export const AuthorRemoteHome = Schema.Struct({
 });
 export type AuthorRemoteHome = typeof AuthorRemoteHome.Type;
 
+const allowedOrigin = (origin: string) =>
+  origin.startsWith("https://") || /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/.test(origin);
+
+/** Portable references have already passed the connection's normalization rules. */
+export const CanonicalAuthorRemoteHome = AuthorRemoteHome.check(
+  Schema.makeFilter(
+    (home) =>
+      URL.canParse(home.origin) &&
+      new URL(home.origin).origin === home.origin &&
+      allowedOrigin(home.origin) &&
+      normalizeRegistryNamespace(home.namespace) === home.namespace &&
+      normalizeRegistrySkitSlug(home.skit) === home.skit,
+  ),
+);
 export const decodeUrl = (input: string) =>
   Schema.decodeEffect(Schema.URLFromString)(input).pipe(
     Effect.mapError(() => new AuthorDestinationMalformed({ kind: "url" })),
@@ -32,11 +46,7 @@ export const normalizeRemote = Effect.fn("Author.normalizeRemote")(function* (
   value: Omit<AuthorRemoteHome, "schema">,
 ) {
   const origin = (yield* decodeUrl(value.origin)).origin;
-  if (
-    !origin.startsWith("https://") &&
-    !/^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/.test(origin)
-  )
-    return yield* new InsecureOrigin({ purpose: "author remote" });
+  if (!allowedOrigin(origin)) return yield* new InsecureOrigin({ purpose: "author remote" });
   const namespace = normalizeRegistryNamespace(value.namespace);
   const skit = normalizeRegistrySkitSlug(value.skit);
   if (!namespace || !skit) return yield* new AuthorDestinationInvalid({ form: "bare" });

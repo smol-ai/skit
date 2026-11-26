@@ -99,12 +99,16 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <E, R>(
   let sourceImported = false;
   return yield* Effect.scoped(
     Effect.gen(function* () {
-      const { priorTree, input, acquisition } = yield* resolveUpdate(state, before);
+      const { priorTree, input, acquisition, workspace } = yield* resolveUpdate(
+        state,
+        before,
+        home,
+      );
       source = sourceLocator(input);
       const subject = { id: before.subjectId, label: before.label };
       const authored =
-        acquisition.source_identity.kind === "authored-workspace"
-          ? yield* adapters.updateAuthoredSkills(acquisition.input.value, {
+        workspace !== undefined
+          ? yield* adapters.updateAuthoredSkills(workspace.path, {
               library,
               home,
               expectedImportId: acquisition.import_id,

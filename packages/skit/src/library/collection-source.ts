@@ -1,4 +1,7 @@
+import { AuthorRemoteHome } from "../author/remote.js";
 import { Effect, FileSystem, Option, Schema } from "effect";
+import { skitLocator } from "../author/destination.js";
+import { draftWorkspaces } from "../author/state-store.js";
 import { readAuthorIdentity, readAuthorRemote } from "../author/workspace-metadata.js";
 import {
   SourceIdentity,
@@ -22,6 +25,38 @@ export const CollectionSource = Schema.Struct({
 });
 export type CollectionSource = typeof CollectionSource.Type;
 
+/** A portable Draft selects a workspace only through this device's confirmed checkpoint. */
+export const localWorkspace = Effect.fn("Library.localWorkspace")(function* (
+  state: Pick<LibraryManifest, "imports">,
+  collection: Collection,
+  home: string,
+) {
+  const upstream = collection.upstream;
+  const source = upstream?.source_identity;
+  if (source?.kind !== "authored-workspace") return undefined;
+  const ownerLocation = Effect.gen(function* () {
+    const machine = yield* MachineSettings.readIdentity(home);
+    const local = sourceImports(state, collection.collection_id).find(
+      (item) =>
+        machine !== undefined &&
+        item.machine_id === machine &&
+        item.source_identity.kind === "authored-workspace" &&
+        item.source_identity.workspace_id === source.workspace_id,
+    );
+    return local ? { workspaceId: source.workspace_id, path: local.input.value } : undefined;
+  });
+  if (!upstream?.draft_home) return yield* ownerLocation;
+  const locations = yield* draftWorkspaces(home, skitLocator(upstream.draft_home));
+  if (locations.length > 1) return undefined;
+  const location = locations[0] ?? (yield* ownerLocation);
+  if (!location) return undefined;
+  const identity = yield* readAuthorIdentity(location.path);
+  if (Option.getOrUndefined(identity)?.workspaceId !== location.workspaceId) return undefined;
+  const remote = Option.getOrUndefined(yield* readAuthorRemote(location.path));
+  return remote && Schema.toEquivalence(AuthorRemoteHome)(remote, upstream.draft_home)
+    ? location
+    : undefined;
+});
 /** Missing/broken workspace metadata must not hide its retained Library entry. Remote facts
  * are shown only when the live folder still has the identity this Collection owns. */
 export const readCollectionSource = Effect.fn("Library.readCollectionSource")(function* (
@@ -33,17 +68,22 @@ export const readCollectionSource = Effect.fn("Library.readCollectionSource")(fu
   const source = collection.upstream?.source_identity ?? acquisition?.source_identity;
   if (source === undefined) return undefined;
   if (source.kind === "authored-workspace") {
-    const machine =
-      acquisition === undefined
-        ? undefined
-        : yield* MachineSettings.readIdentity(home).pipe(Effect.orElseSucceed(() => undefined));
-    const locator = acquisition?.machine_id !== machine ? "" : (acquisition?.input.value ?? "");
-    const base = { kind: source.kind, name: collection.label, locator };
+    const local = yield* localWorkspace(state, collection, home).pipe(
+      Effect.orElseSucceed(() => undefined),
+    );
+    const locator = local?.path ?? "";
+    const draft = collection.upstream?.draft_home;
+    const base = {
+      kind: source.kind,
+      name: draft ? `${draft.namespace}/${draft.skit}` : collection.label,
+      locator,
+      ...(draft ? { authority: draft.origin } : {}),
+    };
     if (!locator) return { ...base, workspace_status: "unavailable" };
     const identity = yield* readAuthorIdentity(locator).pipe(Effect.result);
     if (identity._tag === "Failure" || Option.isNone(identity.success))
       return { ...base, workspace_status: "unavailable" };
-    if (identity.success.value.workspaceId !== source.workspace_id)
+    if (identity.success.value.workspaceId !== local?.workspaceId)
       return { ...base, workspace_status: "identity-mismatch" };
     const remote = yield* readAuthorRemote(locator).pipe(Effect.result);
     if (remote._tag === "Failure") return { ...base, workspace_status: "unavailable" };

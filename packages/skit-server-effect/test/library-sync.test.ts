@@ -206,6 +206,37 @@ describe("Library sync Worker persistence", () => {
         yield* assertArchive(uploaded.library_id);
       }).pipe(Effect.provide(databaseLayer(env.DB))),
   );
+  it.effect("retains the connected Draft address when a second client reads the Library", () =>
+    Effect.gen(function* () {
+      const headers = yield* session();
+      yield* upload(headers);
+      const draft_home = {
+        schema: "skit.remote.v1",
+        origin,
+        namespace: "test",
+        skit: "library",
+      } as const;
+      const source_identity = { kind: "authored-workspace", workspace_id: "workspace-a" } as const;
+      const connected = {
+        ...manifest,
+        collections: manifest.collections.map((collection) => ({
+          ...collection,
+          upstream: { source_identity, tracking: { kind: "default" as const }, draft_home },
+        })),
+        imports: manifest.imports.map((item) => ({ ...item, source_identity })),
+      };
+      expect((yield* write(headers, null, connected)).status).toBe(200);
+      const read = yield* Effect.promise(() =>
+        SELF.fetch(`${origin}/api/library/portable`, { headers }),
+      );
+      expect(read.status).toBe(200);
+      const body = yield* Schema.decodeUnknownEffect(remote)(
+        yield* Effect.promise(() => read.json()),
+      );
+      expect(body.library.manifest.collections[0]?.upstream?.draft_home).toEqual(draft_home);
+    }),
+  );
+
   it.effect("snapshot upload and a first revision share one default Library", () =>
     Effect.gen(function* () {
       const headers = yield* session();
