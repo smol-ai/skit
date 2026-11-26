@@ -11,7 +11,7 @@ import * as Library from "@smolai/skit-core/library";
 import { resolveSkitConfiguration, SkitConfiguration } from "@smolai/skit-core/platform";
 import { Clock, Effect, Fiber, FileSystem, Layer, Redacted, Result, Schema } from "effect";
 import { join } from "node:path";
-import { expect } from "vitest";
+import { describe, expect } from "vitest";
 import { authorRegistry } from "../src/registry/author-sync.js";
 import { updateAdapters } from "../src/library/update/adapters.js";
 import { inspectLibrarySource } from "../src/library/source.js";
@@ -185,7 +185,10 @@ const world = (malformed = false, secondSkill = false) =>
     };
   });
 
-it.effect("names the authored Collection in plan data", () =>
+describe("skit sync", () => {
+  describe("Syncing Author Workspaces", () => {
+    describe("Sync pulls missing authored SKITs into this device without creating duplicate Collections.", () => {
+      it.effect("names the authored Collection in plan data", () =>
   Effect.gen(function* () {
     const { onDevice, userA, homeA, sync } = yield* world();
     const initialPlan = yield* onDevice(userA, homeA, "a", sync(false));
@@ -261,7 +264,10 @@ it.effect(
     }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("syncs an edit to the other device's folder", () =>
+    });
+
+    describe("Sync propagates edits between connected Author Workspaces and refreshes enabled harnesses.", () => {
+      it.effect("syncs an edit to the other device's folder", () =>
   Effect.gen(function* () {
     const { fs, first, second, onDevice, userB, homeB, sync, userA, homeA } = yield* world();
     expect((yield* onDevice(userA, homeA, "a", sync(true))).status).toBe("pushed");
@@ -309,7 +315,10 @@ it.effect("previews an incoming edit without writing files, history or Registry 
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("continues Library sync when an Author Workspace is busy", () =>
+    });
+
+    describe("Sync leaves occupied or deleted workspace folders alone and continues Library sync if a workspace is busy.", () => {
+      it.effect("continues Library sync when an Author Workspace is busy", () =>
   Effect.gen(function* () {
     const { author, onDevice, userB, homeB, second, sync, libraryReads, userA, homeA } =
       yield* world();
@@ -377,7 +386,10 @@ it.effect("leaves an occupied destination untouched", () =>
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("pulls under a symlinked skit directory", () =>
+    });
+
+    describe("Sync pulls missing authored SKITs into this device without creating duplicate Collections.", () => {
+      it.effect("pulls under a symlinked skit directory", () =>
   Effect.gen(function* () {
     const { fs, scratchRoot, onDevice, sync, userA, homeA } = yield* world();
     expect((yield* onDevice(userA, homeA, "a", sync(true))).status).toBe("pushed");
@@ -414,7 +426,10 @@ it.effect("reports a malformed inventory entry and pulls the next SKIT", () =>
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-for (const scope of ["author", "device"] as const) {
+    });
+
+    describe("Sync propagates edits between connected Author Workspaces and refreshes enabled harnesses.", () => {
+      for (const scope of ["author", "device"] as const) {
   it.effect(`refreshes enabled harness bytes after a ${scope} sync receives a remote edit`, () =>
     Effect.gen(function* () {
       const { fs, first, second, userA, homeA, userB, homeB, onDevice, sync } = yield* world();
@@ -450,8 +465,11 @@ for (const scope of ["author", "device"] as const) {
   );
 }
 
-it.effect(
-  "a pulled workspace updates its enabled skills offline and retains last-valid bytes",
+    });
+
+    describe("A pulled workspace links to the synced Collection and updates enabled Skills offline.", () => {
+      it.effect(
+        "a pulled workspace updates its enabled skills offline and retains last-valid bytes",
   () =>
     Effect.gen(function* () {
       const { fs, first, second, userA, homeA, userB, homeB, onDevice, sync } = yield* world(
@@ -569,8 +587,11 @@ it.effect(
     }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect(
-  "independent imports of one connected Draft converge on the Registry collection handle",
+    });
+
+    describe("Sync pulls missing authored SKITs into this device without creating duplicate Collections.", () => {
+      it.effect(
+        "independent imports of one connected Draft converge on the Registry collection handle",
   () =>
     Effect.gen(function* () {
       const { second, userA, homeA, userB, homeB, onDevice, sync } = yield* world();
@@ -592,7 +613,10 @@ it.effect(
     }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("converges overlapping offline edits without a second Library conflict", () =>
+    });
+
+    describe("Overlapping offline edits to a connected Draft converge without losing either device’s history.", () => {
+      it.effect("converges overlapping offline edits without a second Library conflict", () =>
   Effect.gen(function* () {
     const { fs, first, second, userA, homeA, userB, homeB, onDevice, sync } = yield* world();
     const a = yield* libraryHome({ home: homeA });
@@ -712,3 +736,6 @@ it.effect("converges overlapping offline edits without a second Library conflict
     }
   }).pipe(Effect.provide(testPlatformLayer)),
 );
+    });
+  });
+});

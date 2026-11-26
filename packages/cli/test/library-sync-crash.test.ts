@@ -135,7 +135,7 @@ describe("skit sync", () => {
 
 describe("skit sync", () => {
   describe("Choosing between changes", () => {
-    describe("A Collection removal is decided for the whole Collection.", () => {
+    describe("Removing a Collection on one device while editing it on another conflicts as one decision.", () => {
       for (const removalSyncsFirst of [true, false])
         it.effect(
           `a removal wins over enabling its Skill elsewhere (removal syncs first=${removalSyncsFirst})`,
@@ -262,7 +262,7 @@ describe("skit sync", () => {
 
 describe("skit sync", () => {
   describe("Recovering interrupted work", () => {
-    describe("Sync remembers which Registry changes its saved Library includes.", () => {
+    describe("Sync records the Registry revision it merged before uploading local changes.", () => {
       for (const ancestry of ["missing", "stale"] as const)
         it.effect(`a clean sync anchoring ${ancestry} ancestry records one completed Sync`, () =>
           Effect.gen(function* () {
@@ -321,7 +321,7 @@ describe("skit sync", () => {
 });
 
 describe("skit sync", () => {
-  describe("Recovering interrupted work", () => {
+  describe("Choosing between changes", () => {
     describe("Sync sends removals made since this Library last synced.", () => {
       it.effect("a local removal after sync still removes the Collection everywhere", () =>
         Effect.gen(function* () {
@@ -438,7 +438,7 @@ describe("skit sync", () => {
 
 describe("skit sync", () => {
   describe("Keeping device choices", () => {
-    describe("An obstructed installation stops sync before saving its local Library change.", () => {
+    describe("If a harness skills directory is unusable before sync, sync stops without saving.", () => {
       it.effect("an obstructed install directory is refused before Sync publishes locally", () =>
         Effect.gen(function* () {
           const { fs, a, b, remote, server } = yield* devices;

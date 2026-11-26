@@ -299,7 +299,7 @@ describe("skit sync", () => {
 
 describe("skit sync", () => {
   describe("Keeping device choices", () => {
-    describe("An installed-copy failure does not undo an already completed Library sync.", () => {
+    describe("If copying Skills to a harness fails after syncing, the synced Library is kept.", () => {
       it.effect("a blocked selected destination leaves the Library synced and can be retried", () =>
         Effect.gen(function* () {
           const homes = yield* devices;

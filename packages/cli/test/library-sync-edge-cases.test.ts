@@ -288,7 +288,7 @@ describe("skit sync", () => {
 
 describe("skit sync", () => {
   describe("Choosing between changes", () => {
-    describe("Independent imports of the same source can use one Registry identity.", () => {
+    describe("Adding the same source on two devices merges into one Collection instead of duplicating it.", () => {
       it.effect(
         "independent imports share published identity and keep provenance, policies and native deletion",
         () =>
@@ -471,7 +471,7 @@ describe("skit sync", () => {
 
 describe("skit sync", () => {
   describe("Choosing between changes", () => {
-    describe("A Collection removal is decided for the whole Collection.", () => {
+    describe("Removing a Collection on one device while editing it on another conflicts as one decision.", () => {
       for (const remoteDeletes of [false, true]) {
         it.effect(
           `Collection removal versus update resolves as a whole (${remoteDeletes ? "take deletion" : "take update"})`,
@@ -512,7 +512,7 @@ describe("skit sync", () => {
 
 describe("skit sync", () => {
   describe("Choosing between changes", () => {
-    describe("Taking the Registry’s choice keeps older saved local files available.", () => {
+    describe("Resolving a conflict with --take-remote keeps older local Skill versions in history.", () => {
       for (const repository of [false, true]) {
         for (const edited of [false, true]) {
           it.effect(
@@ -730,7 +730,7 @@ describe("skit sync", () => {
 
 describe("skit sync", () => {
   describe("Keeping device choices", () => {
-    describe("Sync refuses to remove an edited installed Skill.", () => {
+    describe("Sync never overwrites or deletes a Skill folder you edited directly.", () => {
       it.effect(
         "edited installed skills block remote removal during preview and apply without changing either head",
         () =>
@@ -816,7 +816,7 @@ describe("skit sync", () => {
 
 describe("skit sync", () => {
   describe("Keeping device choices", () => {
-    describe("An edited inactive installed copy does not block sync.", () => {
+    describe("Edits left in an uninstalled harness do not block sync.", () => {
       it.effect(
         "edited inactive installed skills remain non-blocking while their references survive",
         () =>

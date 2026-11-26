@@ -979,6 +979,67 @@ it.effect("sync exposes bounded completed phases in transfer and save order", ()
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
+const oracleTitle = (row: string) =>
+  (
+    ({
+      "Different Library: preview merges from an empty base":
+        "preview against a different Registry Library merges from an empty base without writing",
+      "First connection: add-only preview writes nothing":
+        "first-sync preview writes nothing locally or remotely",
+      "Merge: merge_ready writes nothing": "merge preview writes nothing locally or remotely",
+      "Merge: conflicted writes nothing": "conflicted merge writes nothing locally or remotely",
+      "Merge: resolution_invalid writes nothing":
+        "invalid conflict resolution writes nothing locally or remotely",
+      "Merge: after M5 before M7 (--take-remote must be repeated)":
+        "interrupted merge before local save still requires --take-remote on retry",
+      "Push: before P2 (failed upload)": "failed snapshot upload during push leaves Library unchanged",
+      "Push: P2 loses the CAS on the first push":
+        "concurrent Registry change on first push leaves local Library unchanged",
+      "Pull: U3 finds a concurrent local write (SyncLocalChanged)":
+        "concurrent local edit before saving pull stops with SyncLocalChanged",
+      "Merge: M3 finds a concurrent local write (SyncLocalChanged)":
+        "concurrent local edit before saving merge stops with SyncLocalChanged",
+      "Merge: M3 stops a merge that would upload and write before either":
+        "concurrent local edit stops merge before uploading or writing remotely",
+      "Pull: U3 stops before writing a --keep-enabled choice":
+        "concurrent local edit stops pull before saving a --keep-enabled choice",
+      "Merge: a lost CAS merges the changed head from the incorporated head":
+        "lost Registry write retries by merging from the updated remote head",
+      "Merge: before M5 (failed upload after retaining remote originals)":
+        "failed upload during merge leaves saved Library records unchanged",
+      "Preflight: local_bytes_changed preserves every store":
+        "modified stored Skill copy stops sync before changing any store",
+      "Push: refused locally before sending, then local enabled intent changes":
+        "refused push can be retried after local enabled choices change",
+      "Push: collision choice survives refused publication with subsequent compatible edits":
+        "collision choice survives a refused local save and retries cleanly",
+      "Push: HTTP 500 after commit is verified by reading the head":
+        "HTTP 500 after Registry commit is recovered by verifying the remote head",
+      "Push: P2 response lost before P4":
+        "lost Registry response during push is recovered without losing the accepted write",
+      "Push: a changed device choice is refused before remote write":
+        "changed device selection before push is refused before writing remotely",
+      "Push: lost response is verified before another home writes":
+        "lost push response is verified before another device writes",
+      "Pull: before U4 (failed local publish)":
+        "failed local save during pull can be retried cleanly",
+      "Merge: after M5 before M7 (failed local publish)":
+        "failed local save after Registry merge can be retried without losing the remote change",
+      "Push: after P4 before P5":
+        "harness copy failure after push leaves the synced Library intact",
+      "Pull: after U4 before U5":
+        "harness copy failure after pull leaves the synced Library intact",
+      "Merge: after M7 before M8":
+        "harness copy failure after merge leaves the synced Library intact",
+      "Clean: after anchoring before reconciliation":
+        "harness copy failure on an already synced Library leaves sync state intact",
+      "Push: an edited copy is recorded with its observed bytes before reconciliation":
+        "push records directly edited installed Skill files without overwriting them",
+      "Merge: an edited copy is recorded with its observed bytes before reconciliation":
+        "merge records directly edited installed Skill files without overwriting them",
+    }) as Record<string, string>
+  )[row] ?? row;
+
 describe("skit sync", () => {
   describe("Connecting and previewing", () => {
     describe("Preview leaves the proposed Library sync unapplied.", () => {
@@ -987,7 +1048,7 @@ describe("skit sync", () => {
         "First connection: add-only preview writes nothing",
         "Merge: merge_ready writes nothing",
       ]))
-        it.effect(`oracle row: ${scenario.row}`, () =>
+        it.effect(oracleTitle(scenario.row), () =>
           Effect.gen(function* () {
             yield* scenario.run(yield* devices);
           }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -1005,7 +1066,7 @@ describe("skit sync", () => {
       for (const home of ["current", "legacy", "absent"] as const)
         for (const apply of [false, true])
           it.effect(
-            `oracle row: Preflight: a newer remote manifest is refused (${home} home, ${apply ? "apply" : "preview"})`,
+            `newer Registry manifest is refused before uploading (${home} home, ${apply ? "apply" : "preview"})`,
             () =>
               Effect.gen(function* () {
                 const { fs, a: source, b, inject, server } = yield* devices;
@@ -1077,7 +1138,7 @@ describe("skit sync", () => {
         "Merge: conflicted writes nothing",
         "Merge: resolution_invalid writes nothing",
       ]))
-        it.effect(`oracle row: ${scenario.row}`, () =>
+        it.effect(oracleTitle(scenario.row), () =>
           Effect.gen(function* () {
             yield* scenario.run(yield* devices);
           }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -1088,11 +1149,11 @@ describe("skit sync", () => {
 
 describe("skit sync", () => {
   describe("Choosing between changes", () => {
-    describe("A retried conflict still requires the selected Registry choice.", () => {
+    describe("Retrying after a failed conflict resolution still requires passing --take-remote again.", () => {
       for (const scenario of casesFor([
         "Merge: after M5 before M7 (--take-remote must be repeated)",
       ]))
-        it.effect(`oracle row: ${scenario.row}`, () =>
+        it.effect(oracleTitle(scenario.row), () =>
           Effect.gen(function* () {
             yield* scenario.run(yield* devices);
           }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -1114,7 +1175,7 @@ describe("skit sync", () => {
         "Merge: a lost CAS merges the changed head from the incorporated head",
         "Merge: before M5 (failed upload after retaining remote originals)",
       ]))
-        it.effect(`oracle row: ${scenario.row}`, () =>
+        it.effect(oracleTitle(scenario.row), () =>
           Effect.gen(function* () {
             yield* scenario.run(yield* devices);
           }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -1125,9 +1186,9 @@ describe("skit sync", () => {
 
 describe("skit sync", () => {
   describe("Recovering interrupted work", () => {
-    describe("Sync reports changed saved files instead of replacing them.", () => {
+    describe("Sync stops if SKIT’s stored Skill copies were modified on disk.", () => {
       for (const scenario of casesFor(["Preflight: local_bytes_changed preserves every store"]))
-        it.effect(`oracle row: ${scenario.row}`, () =>
+        it.effect(oracleTitle(scenario.row), () =>
           Effect.gen(function* () {
             yield* scenario.run(yield* devices);
           }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -1149,7 +1210,7 @@ describe("skit sync", () => {
         "Pull: before U4 (failed local publish)",
         "Merge: after M5 before M7 (failed local publish)",
       ]))
-        it.effect(`oracle row: ${scenario.row}`, () =>
+        it.effect(oracleTitle(scenario.row), () =>
           Effect.gen(function* () {
             yield* scenario.run(yield* devices);
           }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -1229,8 +1290,8 @@ describe("skit sync", () => {
 
 describe("skit sync", () => {
   describe("Recovering interrupted work", () => {
-    describe("Sync remembers which Registry changes its saved Library includes.", () => {
-      it.effect("oracle: applying paths retain local results and send the revision they read", () =>
+    describe("Sync records the Registry revision it merged before uploading local changes.", () => {
+      it.effect("applying paths save the merged Registry revision locally before uploading", () =>
         Effect.gen(function* () {
           const { a, b, events, server } = yield* devices;
           const committed = <A, E, R>(sync: Effect.Effect<A, E, R>) =>
@@ -1301,14 +1362,14 @@ describe("skit sync", () => {
 
 describe("skit sync", () => {
   describe("Keeping device choices", () => {
-    describe("An installed-copy failure does not undo an already completed Library sync.", () => {
+    describe("If copying Skills to a harness fails after syncing, the synced Library is kept.", () => {
       for (const scenario of casesFor([
         "Push: after P4 before P5",
         "Pull: after U4 before U5",
         "Merge: after M7 before M8",
         "Clean: after anchoring before reconciliation",
       ]))
-        it.effect(`oracle row: ${scenario.row}`, () =>
+        it.effect(oracleTitle(scenario.row), () =>
           Effect.gen(function* () {
             yield* scenario.run(yield* devices);
           }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -1319,12 +1380,12 @@ describe("skit sync", () => {
 
 describe("skit sync", () => {
   describe("Keeping device choices", () => {
-    describe("Sync leaves an unapproved edit to an installed Skill unchanged.", () => {
+    describe("Sync never overwrites or deletes a Skill folder you edited directly.", () => {
       for (const scenario of casesFor([
         "Push: an edited copy is recorded with its observed bytes before reconciliation",
         "Merge: an edited copy is recorded with its observed bytes before reconciliation",
       ]))
-        it.effect(`oracle row: ${scenario.row}`, () =>
+        it.effect(oracleTitle(scenario.row), () =>
           Effect.gen(function* () {
             yield* scenario.run(yield* devices);
           }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),

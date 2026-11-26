@@ -48,6 +48,7 @@ export default defineConfig({
             "test/installed-skill-changes.test.ts",
             "test/installed-skill-version-advance.test.ts",
             "test/library-add.test.ts",
+            "test/library-author-sync.test.ts",
             "test/library-author-workspace.test.ts",
             "test/library-authored-update.test.ts",
             "test/library-check.test.ts",

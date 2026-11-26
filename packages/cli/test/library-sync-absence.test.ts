@@ -399,7 +399,7 @@ describe("skit sync", () => {
 });
 
 describe("skit sync", () => {
-  describe("Recovering interrupted work", () => {
+  describe("Choosing between changes", () => {
     describe("Sync sends removals made since this Library last synced.", () => {
       it.effect("empty L with an accepted base removes what the base held, and only that", () =>
         Effect.gen(function* () {

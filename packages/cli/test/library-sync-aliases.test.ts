@@ -60,7 +60,7 @@ const publicationBytes = (_fs: FileSystem.FileSystem, device: Device) =>
 
 describe("skit sync", () => {
   describe("Choosing between changes", () => {
-    describe("Independent imports of the same source can use one Registry identity.", () => {
+    describe("Adding the same source on two devices merges into one Collection instead of duplicating it.", () => {
       it.effect(
         "the same upstream under different Collection IDs adopts the published identity and remaps every device reference",
         () =>
@@ -417,7 +417,7 @@ describe("skit sync", () => {
 
 describe("skit sync", () => {
   describe("Choosing between changes", () => {
-    describe("Taking the Registry’s choice keeps older saved local files available.", () => {
+    describe("Resolving a conflict with --take-remote keeps older local Skill versions in history.", () => {
       it.effect(
         "a divergent import whose local import is not strictly older cannot be taken remotely",
         () =>

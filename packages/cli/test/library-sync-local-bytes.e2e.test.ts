@@ -11,7 +11,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 
 describe("skit sync", () => {
   describe("Recovering interrupted work", () => {
-    describe("Sync reports changed saved files instead of replacing them.", () => {
+    describe("Sync stops if SKIT’s stored Skill copies were modified on disk.", () => {
       it.effect("reports local_bytes_changed as a stopped sync with exit 1", () =>
         Effect.gen(function* () {
           const { a } = yield* devices;
@@ -46,7 +46,7 @@ describe("skit sync", () => {
 
 describe("skit sync", () => {
   describe("Keeping device choices", () => {
-    describe("An installed-copy failure does not undo an already completed Library sync.", () => {
+    describe("If copying Skills to a harness fails after syncing, the synced Library is kept.", () => {
       it.effect(
         "reports an already-synced Library with a blocked device selection as nonzero",
         () =>
