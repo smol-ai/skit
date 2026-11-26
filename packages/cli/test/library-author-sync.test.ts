@@ -2,10 +2,14 @@ import { AuthorWorkspaceBusy } from "@smolai/skit-core/author/workspace-contract
 import { encodeResult } from "../src/commands/encode-result.js";
 import { SyncResult, syncOutputContracts } from "../src/library/sync/output.js";
 import { it } from "@effect/vitest";
-import { initializeAuthorWorkspace, pullAuthorSkit } from "@smolai/skit-core/author";
+import {
+  initializeAuthorWorkspace,
+  pullAuthorSkit,
+  refreshAuthorWorkspace,
+} from "@smolai/skit-core/author";
 import * as Library from "@smolai/skit-core/library";
 import { resolveSkitConfiguration, SkitConfiguration } from "@smolai/skit-core/platform";
-import { Effect, Fiber, FileSystem, Layer, Redacted, Result, Schema } from "effect";
+import { Clock, Effect, Fiber, FileSystem, Layer, Redacted, Result, Schema } from "effect";
 import { join } from "node:path";
 import { expect } from "vitest";
 import { authorRegistry } from "../src/registry/author-sync.js";
@@ -586,4 +590,103 @@ it.effect(
         (yield* a.durable)!.collections.map((c) => c.collection_id),
       );
     }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.effect("converges overlapping offline edits without a second Library conflict", () =>
+  Effect.gen(function* () {
+    const { fs, first, second, userA, homeA, userB, homeB, onDevice, sync } = yield* world();
+    const a = yield* libraryHome({ home: homeA });
+    const id = (yield* a.durable)!.collections[0]!.collection_id;
+    yield* a.enable([{ collection: id }]);
+    yield* onDevice(userA, homeA, "a", sync(true));
+    yield* onDevice(userB, homeB, "b", sync(true));
+    const file = "skills/review/SKILL.md";
+    const initial = yield* fs.readFileString(join(first, file));
+    const update = Effect.gen(function* () {
+      return yield* (yield* Library.Service).update(id, yield* updateAdapters);
+    });
+    const offlineVersions = new Set<string>();
+    const offlineCopies = new Set<string>();
+    for (const [device, user, home, root] of [
+      ["a", userA, homeA, first],
+      ["b", userB, homeB, second],
+    ] as const) {
+      yield* fs.writeFileString(join(root, file), initial + device + "\n");
+      // Capture A’s file edit first, then let its Library report a future import time.
+      // Observation time in the Library must not choose the Draft on either device.
+      yield* onDevice(user, home, device, refreshAuthorWorkspace(root));
+      const offlineUpdate =
+        device === "a"
+          ? update.pipe(
+              Effect.updateService(Clock.Clock, (clock) => ({
+                ...clock,
+                currentTimeMillis: clock.currentTimeMillis.pipe(
+                  Effect.map((time) => time + 86_400_000),
+                ),
+              })),
+            )
+          : update;
+      yield* onDevice(user, home, device, offlineUpdate, true);
+      const saved = (yield* (yield* libraryHome({ home })).durable)!;
+      for (const version of saved.skills[0]!.versions)
+        offlineVersions.add(version.skill_version_id);
+      for (const source of saved.imports) offlineCopies.add(source.collection_version_id);
+      expect(
+        yield* fs.readFileString(join(testRoots(user).home, ".agents/skills/review/SKILL.md")),
+      ).toContain("\n" + device + "\n");
+    }
+    yield* onDevice(userA, homeA, "a", sync(true));
+    // Let B retrieve A's later-dated Library history before it can reach the Draft.
+    const caughtUp = yield* onDevice(
+      userB,
+      homeB,
+      "b",
+      Effect.gen(function* () {
+        return yield* (yield* Library.Service).sync(
+          { origin, apply: true },
+          yield* librarySyncApi({ origin, token: "test-token" }),
+        );
+      }),
+    );
+    expect(["clean", "pulled", "merged", "pushed"]).toContain(caughtUp.status);
+    expect(
+      yield* fs.readFileString(join(testRoots(userB).home, ".agents/skills/review/SKILL.md")),
+    ).toContain("\nb\n");
+    for (const [device, user, home] of [
+      ["b", userB, homeB],
+      ["a", userA, homeA],
+      ["b", userB, homeB],
+      ["a", userA, homeA],
+    ] as const) {
+      const result = yield* onDevice(user, home, device, sync(true));
+      expect(result.conflict_details ?? []).toEqual([]);
+      expect(["clean", "merged", "pushed", "pulled"]).toContain(result.status);
+    }
+    const accepted = yield* fs.readFileString(join(first, file));
+    expect([initial + "a\n", initial + "b\n"]).toContain(accepted);
+    expect(yield* fs.readFileString(join(second, file))).toBe(accepted);
+    for (const [user, home, device] of [
+      [userA, homeA, "a"],
+      [userB, homeB, "b"],
+    ] as const) {
+      expect(
+        yield* fs.readFileString(join(testRoots(user).home, ".agents/skills/review/SKILL.md")),
+      ).toContain(accepted.slice(initial.length - 1));
+      const saved = (yield* (yield* libraryHome({ home })).durable)!;
+      const portable = yield* onDevice(
+        user,
+        home,
+        device,
+        Effect.flatMap(Library.Service, (library) => library.manifest),
+      );
+      expect(portable).not.toHaveProperty("local_draft_imports");
+      expect(saved.skills[0]!.versions.map((v) => v.skill_version_id)).toEqual(
+        expect.arrayContaining([...offlineVersions]),
+      );
+      expect(saved.collection_versions.map((v) => v.collection_version_id)).toEqual(
+        expect.arrayContaining([...offlineCopies]),
+      );
+      expect((yield* onDevice(user, home, device, sync(true))).status).toBe("clean");
+    }
+  }).pipe(Effect.provide(testPlatformLayer)),
 );

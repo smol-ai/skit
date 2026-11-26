@@ -14,6 +14,7 @@ import { TreeError } from "../shared/tree-error.js";
 import type { Interface } from "./library.js";
 import {
   sourceImports,
+  selectedSourceImport,
   currentCollectionSkills,
   enabledSkillIds,
   type Import,
@@ -179,7 +180,7 @@ export const updateAuthoredSkills = Effect.fn("Library.updateAuthoredSkills")(fu
   if (
     request.expectedImportId !== undefined &&
     (collection === undefined ||
-      sourceImports(state, collection.collection_id)[0]?.import_id !== request.expectedImportId)
+      selectedSourceImport(state, collection.collection_id)?.import_id !== request.expectedImportId)
   )
     return yield* new LibraryChanged({ path: writer.home });
   if (collection === undefined)
@@ -191,6 +192,7 @@ export const updateAuthoredSkills = Effect.fn("Library.updateAuthoredSkills")(fu
     };
   // An offline observation can update a local installation. Only a checkpoint from
   // this workspace may introduce a Registry address into the portable catalogue.
+  let connected = collection.upstream?.draft_home !== undefined;
   if (
     request.draftHome &&
     collection.upstream &&
@@ -206,8 +208,9 @@ export const updateAuthoredSkills = Effect.fn("Library.updateAuthoredSkills")(fu
         : item,
     );
     yield* writer.saveCatalogue({ ...stored.value, collections }, stored.value, stored.revision);
+    connected = true;
   }
-  const previousImport = sourceImports(state, collection.collection_id)[0];
+  const previousImport = selectedSourceImport(state, collection.collection_id);
   const previous = state.collection_versions.find(
     (copy) => copy.collection_version_id === previousImport?.collection_version_id,
   );
@@ -228,15 +231,31 @@ export const updateAuthoredSkills = Effect.fn("Library.updateAuthoredSkills")(fu
       context: yield* readAuthoredInstallation(state, collection.collection_id, writer.home),
     };
   const { hash, importedAt } = prepared;
-  if (hash !== previous?.hash)
-    yield* importAuthoredCollection({
-      root: prepared.root,
-      input: request.input,
-      source: { type: "local", path: request.input },
-      sourceIdentity: collection.upstream!.source_identity,
-      label: collection.label,
-      importedAt,
-    });
+  if (hash !== previous?.hash) {
+    yield* importAuthoredCollection(
+      {
+        root: prepared.root,
+        input: request.input,
+        source: { type: "local", path: request.input },
+        sourceIdentity: collection.upstream!.source_identity,
+        label: collection.label,
+        importedAt,
+      },
+      connected,
+    );
+  } else if (
+    connected &&
+    previousImport &&
+    !state.local_draft_imports?.includes(previousImport.import_id)
+  ) {
+    const stored = yield* readCatalogue(writer.home);
+    yield* writer.saveCatalogue(
+      stored.value,
+      stored.value,
+      stored.revision,
+      previousImport.import_id,
+    );
+  }
   const current = yield* loadLibrary(writer.home);
   const issues = [...prepared.issues];
   const installedCopies: Array<typeof AuthoredInstalledCopy.Type> = [];

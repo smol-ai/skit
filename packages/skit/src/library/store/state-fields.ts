@@ -1,3 +1,4 @@
+import { ImportId } from "../entity-ids.js";
 import { Schema } from "effect";
 import { HarnessName } from "../../harnesses/contracts.js";
 import { Hash } from "../../shared/hash.js";
@@ -78,6 +79,7 @@ export const LibraryStateFields = {
   ...LibraryDeviceStateFields,
   schemaVersion: Schema.Literal(CURRENT_LIBRARY_STATE_VERSION),
   sync_ancestry: Schema.optionalKey(SyncAncestry),
+  local_draft_imports: Schema.optionalKey(Schema.Array(ImportId)),
   device_skill_selection: Schema.optionalKey(DeviceSkillSelection),
   pending_device_selection_origin: Schema.optionalKey(Schema.NonEmptyString),
   collections: Schema.mutable(Schema.Array(Collection)),

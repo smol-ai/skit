@@ -332,6 +332,7 @@ export const mergeEnabled = (
 };
 
 interface LibraryEntities {
+  readonly local_draft_imports?: readonly ImportId[];
   readonly skills: readonly Skill[];
   readonly collection_versions: readonly CollectionVersion[];
   readonly imports: readonly Import[];
@@ -360,9 +361,24 @@ export const sourceImports = (
 ): Import[] =>
   collectionImports(library, collectionId).filter((sourceImport) => sourceImport.kind === "source");
 
+/** Shared manifests retain history in observation order. A connected workspace on
+ * this device installs the import derived from its own last valid inputs first. */
+const installationSources = (
+  library: Pick<LibraryEntities, "imports" | "local_draft_imports">,
+  collectionId: CollectionId,
+) => {
+  const sources = sourceImports(library, collectionId);
+  const local = sources.find((source) => library.local_draft_imports?.includes(source.import_id));
+  return local ? [local, ...sources.filter((source) => source !== local)] : sources;
+};
+export const selectedSourceImport = (
+  library: Pick<LibraryEntities, "imports" | "local_draft_imports">,
+  collectionId: CollectionId,
+) => installationSources(library, collectionId)[0];
+
 /** The Skills present in a Collection's latest source import. */
 export const currentCollectionSkills = (library: LibraryEntities, collectionId: CollectionId) => {
-  const latest = sourceImports(library, collectionId)[0];
+  const latest = selectedSourceImport(library, collectionId);
   const copy = library.collection_versions.find(
     (candidate) => candidate.collection_version_id === latest?.collection_version_id,
   );
@@ -402,7 +418,7 @@ export const versionBacking = (library: LibraryEntities, skill: Skill, version: 
  * Versions) is skipped rather than leaving the Skill without one.
  */
 const lastImportedVersion = (library: LibraryEntities, skill: Skill) => {
-  for (const sourceImport of sourceImports(library, skill.collection_id)) {
+  for (const sourceImport of installationSources(library, skill.collection_id)) {
     const member = library.collection_versions
       .find((copy) => copy.collection_version_id === sourceImport.collection_version_id)
       ?.members.find((candidate) => candidate.source_path === skill.path);

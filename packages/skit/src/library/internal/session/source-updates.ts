@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { localWorkspace } from "../../collection-source.js";
 import { CollectionNotUpdatable } from "../../update-failures.js";
 import { enabledByScope } from "../../enabled.js";
-import { enabledSkillIds, type SkitSource } from "../../library-contracts.js";
+import { enabledSkillIds, selectedSourceImport, type SkitSource } from "../../library-contracts.js";
 import type { LibraryState } from "../../library-state.js";
 import {
   latestSourceImport,
@@ -115,7 +115,8 @@ export const resolveUpdate = Effect.fn("Library.resolveCollectionUpdate")(functi
   subject: LibrarySubject,
   home: string,
 ) {
-  const sourceImport = latestSourceImport(state, subject);
+  const latest = latestSourceImport(state, subject);
+  const sourceImport = latest && selectedSourceImport(state, latest.collection_id);
   const priorTree =
     sourceImport === undefined
       ? undefined

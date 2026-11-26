@@ -475,9 +475,17 @@ export const blendRestoredState = Effect.fn("Library.blendRestoredState")(functi
       reason: { _tag: "OwnershipWouldBeStranded", conflicts: ownership },
     });
   // This device's invocation overrides apply to whatever the restored Library enables.
-  const { invocation_policies: localPolicies, ...device } = current;
+  const {
+    invocation_policies: localPolicies,
+    local_draft_imports: localDrafts,
+    ...device
+  } = current;
+  const selected = localDrafts?.filter((id) =>
+    restored.imports.some((item) => item.import_id === id),
+  );
   return yield* decodeLibraryState({
     ...device,
+    ...(selected?.length ? { local_draft_imports: selected } : {}),
     collections: restored.collections,
     skills: restored.skills,
     collection_versions: restored.collection_versions,

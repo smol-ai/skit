@@ -133,6 +133,11 @@ const device: Table = {
   keys: ["id"],
   fields: fields("pending_device_selection_origin"),
 };
+const localDraftImports: Table = {
+  name: "library_local_draft_imports",
+  keys: ["import_id"],
+  fields: fields("import_id"),
+};
 const sync: Table = {
   name: "library_sync",
   keys: ["id"],
@@ -155,6 +160,7 @@ const libraryTables = [
   repositories,
   installed,
   acceptances,
+  localDraftImports,
   device,
   sync,
   base,
@@ -257,6 +263,7 @@ const splitEnabledRows = Effect.fn("Library.splitEnabledRows")(function* (value:
     "assessmentAcceptances",
     "sync_ancestry",
     "device_skill_selection",
+    "local_draft_imports",
     "invocation_policies",
   ];
   const deviceRow = yield* rowOf(value, device, omitted);
@@ -328,6 +335,9 @@ const splitLibraryRows = Effect.fn("Library.splitRows")(function* (value: JsonOb
   const add = (table: Table, row: Row) => rows.get(table.name)?.push(row);
   for (const [table, entries] of yield* splitCatalogueRows(value)) rows.set(table, entries);
   for (const [table, entries] of yield* splitEnabledRows(value)) rows.set(table, entries);
+  for (const id of arrayAt(value, "local_draft_imports")) {
+    add(localDraftImports, { import_id: yield* Schema.decodeUnknownEffect(Schema.String)(id) });
+  }
   for (const entry of objects(value, "installed_skills"))
     add(installed, yield* rowOf(entry, installed));
   for (const entry of objects(value, "assessmentAcceptances"))
@@ -368,6 +378,8 @@ const assembleLibraryListing = Effect.fn("Library.assembleListing")(function* (
   }
   const first = list(device)[0];
   const value = first ? yield* objectOf(first, device) : {};
+  const localDraftIds = list(localDraftImports).map((row) => row.import_id);
+  if (localDraftIds.length) value.local_draft_imports = localDraftIds;
   if (first) {
     value.schemaVersion = yield* Schema.decodeUnknownEffect(Schema.Literal(12))(
       first.schema_version,
@@ -605,6 +617,7 @@ export const loadLibraryListing = Effect.fn("Library.loadListing")(function* (pa
     policies,
     repositories,
     installed,
+    localDraftImports,
     device,
   ]);
   if (!rows.get(device.name)?.length && [...rows.values()].some((list) => list.length))
@@ -624,6 +637,7 @@ export const loadLibraryListing = Effect.fn("Library.loadListing")(function* (pa
           "repositories",
           "installed_skills",
           "device_skill_selection",
+          "local_draft_imports",
           "invocation_policies",
         ] as const;
         const checked = yield* Schema.decodeUnknownEffect(

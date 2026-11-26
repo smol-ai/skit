@@ -20,7 +20,7 @@ import type { OperationKind, SetupStopReason } from "./state-schema.js";
 import type { Snapshot } from "../snapshot.js";
 import type { LibraryAuditInvalid } from "../audit/failures.js";
 import type { HistoryAction } from "./history-action.js";
-import type { OperationId } from "../entity-ids.js";
+import type { OperationId, ImportId } from "../entity-ids.js";
 import { Context, Effect, FileSystem, Option, References } from "effect";
 import { Digest } from "effect/crypto";
 import type { PlatformError } from "effect/PlatformError";
@@ -105,6 +105,7 @@ export class LibraryWriter extends Context.Service<
       next: Catalogue,
       base: Catalogue,
       revision: number | null,
+      draftImport?: ImportId,
     ) => Effect.Effect<number | null, LibraryStateWriteError>;
     readonly saveEnabled: (
       next: EnabledState,
@@ -209,8 +210,8 @@ export const writeLibrary = <A, E, R>(
             write((action) => saveInventory(root, next, base, revision, action)),
           saveAcceptance: (acceptance, revision) =>
             write((action) => saveAcceptance(root, acceptance, revision, action)),
-          saveCatalogue: (next, base, revision) =>
-            write((action) => saveCatalogue(root, next, base, revision, action)),
+          saveCatalogue: (next, base, revision, draftImport) =>
+            write((action) => saveCatalogue(root, next, base, revision, action, draftImport)),
           saveEnabled: (next, base, revision) =>
             write((action) => saveEnabled(root, next, base, revision, action)),
           saveInstalledSkill: (next, base, revision) =>

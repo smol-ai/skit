@@ -198,6 +198,41 @@ function mergeRecords<T>(
   };
 }
 
+/** Connected workspaces retain each observed artifact as Author reconciles their files. */
+function mergedDraftHistory(base: Skill, local: Skill, remote: Skill): Skill | undefined {
+  const { versions: before, ...identity } = base;
+  const { versions: mine, ...localIdentity } = local;
+  const { versions: theirs, ...remoteIdentity } = remote;
+  if (
+    base.local_version_id !== undefined ||
+    !equal(identity, localIdentity) ||
+    !equal(identity, remoteIdentity)
+  )
+    return undefined;
+  const versions = new Map(theirs.map((version) => [version.skill_version_id, version]));
+  const artifactIds = new Map(
+    theirs.map((version) => [version.artifact_hash, version.skill_version_id]),
+  );
+  for (const version of before) {
+    if (
+      !equal(versions.get(version.skill_version_id), version) ||
+      !mine.some(
+        (candidate) =>
+          candidate.skill_version_id === version.skill_version_id && equal(candidate, version),
+      )
+    )
+      return undefined;
+  }
+  for (const version of mine) {
+    const existing = versions.get(version.skill_version_id);
+    if (existing && !equal(existing, version)) return undefined;
+    const id = artifactIds.get(version.artifact_hash);
+    if (id !== undefined && id !== version.skill_version_id) return undefined;
+    versions.set(version.skill_version_id, version);
+  }
+  return { ...remote, versions: [...versions.values()] };
+}
+
 /** Pure accepted-base merge of portable Library entities and global Binding intent. */
 export function mergeLibraryManifests(
   base: LibraryManifest,
@@ -320,6 +355,31 @@ export function mergeLibraryManifests(
     (item) => item.skill_id,
     takeRemote,
   );
+  for (const skill of base.skills) {
+    const key = `skill:${skill.skill_id}`;
+    if (!skills.conflicts.includes(key)) continue;
+    const upstream = base.collections.find(
+      (item) => item.collection_id === skill.collection_id,
+    )?.upstream;
+    if (
+      upstream?.source_identity.kind !== "authored-workspace" ||
+      !upstream.draft_home ||
+      ![local, remote].every((manifest) =>
+        equal(
+          manifest.collections.find((item) => item.collection_id === skill.collection_id)?.upstream,
+          upstream,
+        ),
+      )
+    )
+      continue;
+    const mine = local.skills.find((item) => item.skill_id === skill.skill_id);
+    const theirs = remote.skills.find((item) => item.skill_id === skill.skill_id);
+    if (!mine || !theirs) continue;
+    const merged = mergedDraftHistory(skill, mine, theirs);
+    if (!merged) continue;
+    skills.values.push(merged);
+    skills.conflicts = skills.conflicts.filter((item) => item !== key);
+  }
   for (const id of independentImports) {
     const mine = local.skills.find((item) => item.skill_id === id);
     const theirs = remote.skills.find((item) => item.skill_id === id);
