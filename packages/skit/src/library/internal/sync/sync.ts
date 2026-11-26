@@ -304,10 +304,9 @@ export const planSync = Effect.fn("Library.planSync")(function* (
     ? [...missingSelection, ...conflicts, ...(Option.getOrUndefined(installedSkills)?.issues ?? [])]
     : [];
   if (installation.independent) {
-    const names = manifest.skills
-      .filter((skill) =>
-        enabledSkillIds(manifest, installation.manifest.enabled).includes(skill.skill_id),
-      )
+    const enabled = new Set(enabledSkillIds(installation.manifest, installation.manifest.enabled));
+    const names = installation.manifest.skills
+      .filter((skill) => enabled.has(skill.skill_id))
       .map((skill) => skill.name);
     if (names.length) {
       const inspected = yield* Effect.result(

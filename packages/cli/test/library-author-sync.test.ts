@@ -652,6 +652,28 @@ it.effect("converges overlapping offline edits without a second Library conflict
     expect(
       yield* fs.readFileString(join(testRoots(userB).home, ".agents/skills/review/SKILL.md")),
     ).toContain("\nb\n");
+    const stateB = (yield* (yield* libraryHome({ home: homeB })).durable)!;
+    const selected = stateB.imports.find((item) =>
+      stateB.local_draft_imports?.includes(item.import_id),
+    )!;
+    const tree = stateB.collection_versions.find(
+      (item) => item.collection_version_id === selected.collection_version_id,
+    )!;
+    const checks = yield* onDevice(
+      userB,
+      homeB,
+      "b",
+      Effect.flatMap(Library.Service, (library) =>
+        library.check(id, { inspectSource: () => Effect.succeed({ snapshot_digest: tree.hash }) }),
+      ),
+    );
+    expect(checks[0]?.current_snapshot_digest).toBe(tree.hash);
+    const reports = yield* onDevice(userB, homeB, "b", update, true);
+    expect(reports[0]).toMatchObject({
+      changed: false,
+      selected_collection_version_id: tree.collection_version_id,
+      snapshot_digest: tree.hash,
+    });
     for (const [device, user, home] of [
       ["b", userB, homeB],
       ["a", userA, homeA],

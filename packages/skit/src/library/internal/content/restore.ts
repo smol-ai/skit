@@ -26,6 +26,7 @@ import {
   type LibraryManifest,
   type SnapshotArchive,
 } from "../../library-contracts.js";
+import { prepareDeviceInstallation } from "../../enabled.js";
 import { repositorySelectsInstalledSkill } from "../../installation/uninstall.js";
 import {
   RestoreInvalid,
@@ -426,7 +427,8 @@ function strandedByRestore(current: LibraryState, manifest: LibraryManifest) {
     manifest.skills.flatMap((skill) => skill.versions.map((version) => version.skill_version_id)),
   );
   const conflicts: RestoreOwnershipConflict[] = [];
-  const enabled = new Set(enabledSkillIds(manifest, manifest.enabled));
+  const installation = prepareDeviceInstallation(current, manifest).manifest;
+  const enabled = new Set(enabledSkillIds(installation, installation.enabled));
   for (const installed of current.installed_skills) {
     if (
       (!enabled.has(installed.skill_id) && !repositorySelectsInstalledSkill(current, installed)) ||

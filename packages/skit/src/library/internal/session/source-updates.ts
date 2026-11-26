@@ -3,10 +3,10 @@ import { Effect } from "effect";
 import { localWorkspace } from "../../collection-source.js";
 import { CollectionNotUpdatable } from "../../update-failures.js";
 import { enabledByScope } from "../../enabled.js";
-import { enabledSkillIds, selectedSourceImport, type SkitSource } from "../../library-contracts.js";
+import { enabledSkillIds, type SkitSource } from "../../library-contracts.js";
 import type { LibraryState } from "../../library-state.js";
 import {
-  latestSourceImport,
+  subjectSourceImport,
   resolveOwningLibrarySubjects,
   type LibrarySubject,
 } from "../../subject-resolution.js";
@@ -115,8 +115,7 @@ export const resolveUpdate = Effect.fn("Library.resolveCollectionUpdate")(functi
   subject: LibrarySubject,
   home: string,
 ) {
-  const latest = latestSourceImport(state, subject);
-  const sourceImport = latest && selectedSourceImport(state, latest.collection_id);
+  const sourceImport = subjectSourceImport(state, subject);
   const priorTree =
     sourceImport === undefined
       ? undefined
@@ -217,10 +216,10 @@ const selectSubjects = Effect.fn("Library.selectUpdates")(function* (
   if (query === undefined)
     return matches.filter(
       (subject) =>
-        latestSourceImport(state, subject) !== undefined &&
+        subjectSourceImport(state, subject) !== undefined &&
         subject.kind === "collection" &&
         (subject.collection.upstream !== undefined ||
-          latestSourceImport(state, subject)?.source_identity.kind === "authored-workspace"),
+          subjectSourceImport(state, subject)?.source_identity.kind === "authored-workspace"),
     );
   return matches;
 });

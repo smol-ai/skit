@@ -1,6 +1,6 @@
 import { LibrarySubjectAmbiguous, LibrarySubjectNotFound } from "./failures.js";
 import { Effect } from "effect";
-import { sourceImports } from "./library-contracts.js";
+import { selectedSourceImport } from "./library-contracts.js";
 import type { LibraryState } from "./library-state.js";
 import { sourceIdentityLabel } from "./source-identity.js";
 
@@ -65,7 +65,7 @@ export const matchingLibrarySubjects = (
   if (identityMatches.length > 0) return identityMatches;
   const sourceMatches = subjects.filter((subject) => {
     if (subject.kind !== "collection") return false;
-    const latest = sourceImports(state, subject.subjectId)[0];
+    const latest = selectedSourceImport(state, subject.subjectId);
     const source = subject.collection.upstream?.source_identity ?? latest?.source_identity;
     return source?.kind === "authored-workspace"
       ? latest?.input.value === query
@@ -133,8 +133,8 @@ export const resolveOwningLibrarySubjects = Effect.fn("Library.resolveOwningSubj
   ]);
 });
 
-/** The subject's Collection's latest source import. */
-export const latestSourceImport = (state: LibraryState, subject: LibrarySubject) =>
-  sourceImports(state, subjectCollectionId(subject))[0];
+/** The source import selected on this device for the subject’s Collection. */
+export const subjectSourceImport = (state: LibraryState, subject: LibrarySubject) =>
+  selectedSourceImport(state, subjectCollectionId(subject));
 
 export { LibrarySubjectNotFound } from "./failures.js";
