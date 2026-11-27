@@ -115,7 +115,7 @@ fixtures. Atlas does not inspect your installed Skills or saved Library data.
 
 Atlas collects guarantee names and their tests from the current CLI and core test suites during generation, without running the tests. Commands with declared guarantees show a Guarantees tab even when no report exists. Matching results from a current clean checkout add pass, failure or skip statuses.
 
-The evidence runner and collector discover `test/**/*.test.ts` under the CLI and core packages. Fixture directories and separate opt-in `.e2e.ts` entrypoints are excluded. For `skit sync`, add a title to `test-support/sync-guarantees.json` in its display section, then register cases with `syncGuarantee(describe, key, tests)`. Atlas validates section order and reports copy issues when generating. The Coverage page lists files containing tests outside a command guarantee.
+The evidence runner and collector discover `test/**/*.test.ts` under the CLI and core packages. Fixture directories and separate opt-in `.e2e.ts` entrypoints are excluded. For `skit sync`, add a named guarantee to `packages/skit/test/fixtures/sync-guarantees.json` and pass it to Vitest with `describe(g.title, { meta: { guarantee: g } }, tests)`. The catalog records each guarantee’s command, stable key, section and display order. Atlas validates section order and reports copy issues when generating. The Coverage page lists files containing tests outside a command guarantee.
 
 Run `pnpm cli:atlas:guarantees` to refresh declarations and saved outcomes in the existing index. The first run builds the full Atlas if the index is missing.
 

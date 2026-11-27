@@ -1,4 +1,4 @@
-import { syncGuarantee } from "../../../test-support/sync-guarantees.mjs";
+import sync from "../../skit/test/fixtures/sync-guarantees.json" with { type: "json" };
 import { describe } from "@effect/vitest";
 import { assert, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
@@ -9,7 +9,7 @@ import { renderResultFrame, defaultTerminalEnvironment } from "../src/commands/o
 import { devices } from "./helpers/library-sync-devices.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
-syncGuarantee(describe, "preserveConflicts", () => {
+describe(sync.preserveConflicts.title, { meta: { guarantee: sync.preserveConflicts } }, () => {
   it.effect(
     "invalid merged paths stop sync before local or Registry writes and remain precise in command output",
     () =>

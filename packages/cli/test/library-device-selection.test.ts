@@ -1,4 +1,4 @@
-import { syncGuarantee } from "../../../test-support/sync-guarantees.mjs";
+import sync from "../../skit/test/fixtures/sync-guarantees.json" with { type: "json" };
 import { describe } from "@effect/vitest";
 import { SyncInputInvalid } from "@smolai/skit-core/library/sync/failures";
 import { classifyFailure } from "../src/commands/failure-classification.js";
@@ -143,7 +143,7 @@ describe("skit remove", () => {
   });
 });
 
-syncGuarantee(describe, "keepDeviceSelection", () => {
+describe(sync.keepDeviceSelection.title, { meta: { guarantee: sync.keepDeviceSelection } }, () => {
   it.effect("syncs new Library content while preserving an edited deselected installed skill", () =>
     Effect.gen(function* () {
       const { a, b, fs } = yield* devices;
@@ -287,36 +287,40 @@ syncGuarantee(describe, "keepDeviceSelection", () => {
   );
 });
 
-syncGuarantee(describe, "retainAfterInstallFailure", () => {
-  it.effect("a blocked selected destination leaves the Library synced and can be retried", () =>
-    Effect.gen(function* () {
-      const homes = yield* devices;
-      const { a, b, fs, remote } = homes;
-      const first = yield* a.importSource("first");
-      yield* a.edit((state) => ({
-        ...state,
-        enabled: [{ skill: first.skills[0]!.skill_id }],
-      }));
-      yield* a.sync();
-      const head = yield* remote;
-      yield* fs.makeDirectory(join(b.root, "first"), { recursive: true });
-      yield* fs.writeFileString(join(b.root, "first", "SKILL.md"), "existing copy\n");
-      const result = yield* b.sync({ deviceSelection: { skills: ["first"], collections: [] } });
-      assert.strictEqual(result.status, "enablement_incomplete");
-      assert.strictEqual((yield* b.state).skills.length, 1);
-      assert.strictEqual(
-        yield* fs.readFileString(join(b.root, "first", "SKILL.md")),
-        "existing copy\n",
-      );
-      assert.deepStrictEqual(yield* remote, head);
-      const downloads = homes.snapshotReads;
-      yield* fs.remove(join(b.root, "first"), { recursive: true });
-      assert.strictEqual((yield* b.sync()).status, "clean");
-      assert.strictEqual(homes.snapshotReads, downloads);
-      assert.strictEqual(yield* fs.readFileString(join(b.root, "first", "SKILL.md")), "first\n");
-    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-  );
-});
+describe(
+  sync.retainAfterInstallFailure.title,
+  { meta: { guarantee: sync.retainAfterInstallFailure } },
+  () => {
+    it.effect("a blocked selected destination leaves the Library synced and can be retried", () =>
+      Effect.gen(function* () {
+        const homes = yield* devices;
+        const { a, b, fs, remote } = homes;
+        const first = yield* a.importSource("first");
+        yield* a.edit((state) => ({
+          ...state,
+          enabled: [{ skill: first.skills[0]!.skill_id }],
+        }));
+        yield* a.sync();
+        const head = yield* remote;
+        yield* fs.makeDirectory(join(b.root, "first"), { recursive: true });
+        yield* fs.writeFileString(join(b.root, "first", "SKILL.md"), "existing copy\n");
+        const result = yield* b.sync({ deviceSelection: { skills: ["first"], collections: [] } });
+        assert.strictEqual(result.status, "enablement_incomplete");
+        assert.strictEqual((yield* b.state).skills.length, 1);
+        assert.strictEqual(
+          yield* fs.readFileString(join(b.root, "first", "SKILL.md")),
+          "existing copy\n",
+        );
+        assert.deepStrictEqual(yield* remote, head);
+        const downloads = homes.snapshotReads;
+        yield* fs.remove(join(b.root, "first"), { recursive: true });
+        assert.strictEqual((yield* b.sync()).status, "clean");
+        assert.strictEqual(homes.snapshotReads, downloads);
+        assert.strictEqual(yield* fs.readFileString(join(b.root, "first", "SKILL.md")), "first\n");
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+    );
+  },
+);
 
 describe("skit enable", () => {
   describe("Enable refuses an unapproved copy at an installation destination.", () => {

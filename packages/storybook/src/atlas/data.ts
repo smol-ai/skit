@@ -1,3 +1,4 @@
+import { Guarantee } from "./guarantee-metadata.ts";
 import { Schema } from "effect";
 
 /**
@@ -391,7 +392,11 @@ export const Atlas = Schema.Struct({
         file: Schema.String,
         unattached: Schema.optionalKey(Schema.Int),
         tests: Schema.Array(
-          Schema.Struct({ title: Schema.String, ancestorTitles: Schema.Array(Schema.String) }),
+          Schema.Struct({
+            title: Schema.String,
+            ancestorTitles: Schema.Array(Schema.String),
+            guarantee: Schema.optionalKey(Guarantee),
+          }),
         ),
       }),
     ),
@@ -410,6 +415,7 @@ export const Atlas = Schema.Struct({
               name: Schema.String,
               title: Schema.String,
               ancestorTitles: Schema.Array(Schema.String),
+              guarantee: Schema.optionalKey(Guarantee),
               status: Schema.Literals(["passed", "failed", "skipped", "todo"]),
             }),
           ),

@@ -1,4 +1,4 @@
-import { syncGuarantee } from "../../../test-support/sync-guarantees.mjs";
+import sync from "../../skit/test/fixtures/sync-guarantees.json" with { type: "json" };
 import { describe } from "@effect/vitest";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
@@ -71,7 +71,7 @@ const anchored = Effect.fn("Test.anchoredHome")(function* (device: Device) {
   assert.strictEqual((yield* device.sync()).status, "clean");
 });
 
-syncGuarantee(describe, "keepRegistryRecords", () => {
+describe(sync.keepRegistryRecords.title, { meta: { guarantee: sync.keepRegistryRecords } }, () => {
   it.effect("absent R and absent L: clean, and nothing is created anywhere", () =>
     Effect.gen(function* () {
       const homes = yield* devices;
@@ -336,49 +336,57 @@ syncGuarantee(describe, "keepRegistryRecords", () => {
   );
 });
 
-syncGuarantee(describe, "previewWithoutWrites", () => {
-  it.effect("Library sync preview leaves an absent Registry Library untouched", () =>
-    Effect.gen(function* () {
-      const homes = yield* devices;
+describe(
+  sync.previewWithoutWrites.title,
+  { meta: { guarantee: sync.previewWithoutWrites } },
+  () => {
+    it.effect("Library sync preview leaves an absent Registry Library untouched", () =>
+      Effect.gen(function* () {
+        const homes = yield* devices;
 
-      const { a, server } = homes;
+        const { a, server } = homes;
 
-      yield* a.importSource("first");
+        yield* a.importSource("first");
 
-      yield* a.sync();
+        yield* a.sync();
 
-      yield* homes.resetRemote;
+        yield* homes.resetRemote;
 
-      const unchanged = yield* unwritten(homes, a);
+        const unchanged = yield* unwritten(homes, a);
 
-      const preview = yield* a.sync({ apply: false });
+        const preview = yield* a.sync({ apply: false });
 
-      assert.strictEqual(preview.status, "push_ready");
+        assert.strictEqual(preview.status, "push_ready");
 
-      assert.ok("merge_base" in preview);
+        assert.ok("merge_base" in preview);
 
-      assert.strictEqual(preview.merge_base, "empty-different-library");
+        assert.strictEqual(preview.merge_base, "empty-different-library");
 
-      yield* unchanged.check;
+        yield* unchanged.check;
 
-      assert.strictEqual(server.remote, null);
-    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-  );
-});
+        assert.strictEqual(server.remote, null);
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+    );
+  },
+);
 
-syncGuarantee(describe, "previewWithoutWrites", () => {
-  it.effect("an anchored home that matches the remote: a clean preview writes nothing", () =>
-    Effect.gen(function* () {
-      const homes = yield* devices;
-      yield* anchored(homes.a);
-      const unchanged = yield* unwritten(homes, homes.a);
-      assert.strictEqual((yield* homes.a.sync({ apply: false })).status, "clean");
-      yield* unchanged.check;
-    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-  );
-});
+describe(
+  sync.previewWithoutWrites.title,
+  { meta: { guarantee: sync.previewWithoutWrites } },
+  () => {
+    it.effect("an anchored home that matches the remote: a clean preview writes nothing", () =>
+      Effect.gen(function* () {
+        const homes = yield* devices;
+        yield* anchored(homes.a);
+        const unchanged = yield* unwritten(homes, homes.a);
+        assert.strictEqual((yield* homes.a.sync({ apply: false })).status, "clean");
+        yield* unchanged.check;
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+    );
+  },
+);
 
-syncGuarantee(describe, "sendRemovals", () => {
+describe(sync.sendRemovals.title, { meta: { guarantee: sync.sendRemovals } }, () => {
   it.effect("empty L with an accepted base removes what the base held, and only that", () =>
     Effect.gen(function* () {
       const homes = yield* devices;

@@ -145,18 +145,55 @@ describe("guarantee membership from describe ancestry", () => {
     ]);
   });
 
-  it("uses the sync catalog section order even when separate files register sections in opposite orders", () => {
-    const first = test("first", ["skit sync", "Connecting and previewing", "First guarantee."]);
-    const last = test("last", ["skit sync", "Keeping device choices", "Last guarantee."]);
+  it("uses declared section order when files register sections in opposite orders", () => {
+    const entry = (key: string, section: string, sectionOrder: number) => ({
+      ...test(key, ["skit example", section, key]),
+      guarantee: { command: "example", section, sectionOrder, title: key, key },
+    });
+    const first = entry("first", "Connecting and previewing", 1);
+    const last = entry("last", "Keeping device choices", 5);
     const files = [
       { file: "one.ts", tests: [last, first] },
       { file: "two.ts", tests: [first, last] },
     ];
     expect(
-      commandGuarantees({ guaranteeFiles: files, testReports: [] }, "sync").map(
+      commandGuarantees({ guaranteeFiles: files, testReports: [] }, "example").map(
         (group) => group.sections,
       ),
     ).toEqual([["Connecting and previewing"], ["Keeping device choices"]]);
+  });
+
+  it("matches a saved result by stable guarantee key after display copy changes", () => {
+    const guarantee = {
+      command: "example",
+      section: "Setup",
+      sectionOrder: 1,
+      title: "New copy",
+      key: "setup",
+    };
+    const declaration = { ...test("one", ["skit example", "Setup", "New copy"]), guarantee };
+    const saved = {
+      ...test("one", ["skit example", "Setup", "Old copy"]),
+      guarantee: { ...guarantee, title: "Old copy" },
+    };
+    const status = (result: typeof saved | ReturnType<typeof test>) =>
+      commandGuarantees(
+        {
+          guaranteeFiles: [{ file: "one.ts", tests: [declaration] }],
+          testReports: [
+            {
+              package: "cli",
+              provenance: "current",
+              startTime: 1,
+              files: [{ file: "one.ts", tests: [result] }],
+            },
+          ],
+        },
+        "example",
+      )[0]?.tests[0]?.test.status;
+    expect(status(saved)).toBe("passed");
+    expect(status(test("one", declaration.ancestorTitles))).toBe("passed");
+    expect(status({ ...declaration, guarantee: { ...guarantee, key: "other" } })).toBeUndefined();
   });
 
   it("still refuses contradictory section positions declared by different files", () => {

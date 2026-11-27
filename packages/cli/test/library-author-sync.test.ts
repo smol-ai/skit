@@ -1,4 +1,4 @@
-import { syncGuarantee } from "../../../test-support/sync-guarantees.mjs";
+import sync from "../../skit/test/fixtures/sync-guarantees.json" with { type: "json" };
 import { AuthorWorkspaceBusy } from "@smolai/skit-core/author/workspace-contracts";
 import { encodeResult } from "../src/commands/encode-result.js";
 import { SyncResult, syncOutputContracts } from "../src/library/sync/output.js";
@@ -186,7 +186,7 @@ const world = (malformed = false, secondSkill = false) =>
     };
   });
 
-syncGuarantee(describe, "pullMissing", () => {
+describe(sync.pullMissing.title, { meta: { guarantee: sync.pullMissing } }, () => {
   it.effect("names the authored Collection in plan data", () =>
     Effect.gen(function* () {
       const { onDevice, userA, homeA, sync } = yield* world();
@@ -268,7 +268,7 @@ syncGuarantee(describe, "pullMissing", () => {
   );
 });
 
-syncGuarantee(describe, "propagateEdits", () => {
+describe(sync.propagateEdits.title, { meta: { guarantee: sync.propagateEdits } }, () => {
   it.effect("syncs an edit to the other device's folder", () =>
     Effect.gen(function* () {
       const { fs, first, second, onDevice, userB, homeB, sync, userA, homeA } = yield* world();
@@ -318,79 +318,83 @@ syncGuarantee(describe, "propagateEdits", () => {
   );
 });
 
-syncGuarantee(describe, "preserveWorkspaceFolders", () => {
-  it.effect("continues Library sync when an Author Workspace is busy", () =>
-    Effect.gen(function* () {
-      const { author, onDevice, userB, homeB, second, sync, libraryReads, userA, homeA } =
-        yield* world();
-      expect((yield* onDevice(userA, homeA, "a", sync(true))).status).toBe("pushed");
-      yield* onDevice(userB, homeB, "b", sync(true));
-      const readsBeforeBusy = libraryReads.length;
-      const busy = yield* Effect.scoped(
-        Effect.gen(function* () {
-          const gate = yield* author.gate("b", "before-current");
-          const manual = yield* onDevice(
-            userB,
-            homeB,
-            "b",
-            syncAuthorWorkspace(second, { home: homeB, apply: true }),
-          ).pipe(Effect.forkScoped);
-          yield* gate.reached();
-          const result = yield* onDevice(userB, homeB, "b", sync(true));
-          yield* gate.release();
-          yield* Fiber.join(manual);
-          return result;
-        }),
-      );
-      expect(libraryReads.slice(readsBeforeBusy)).toContain("b");
-      expect(busy.status).not.toBe("conflicted");
-      const encoded = encodeResult("librarySync", syncOutputContracts.librarySync, busy);
-      const decoded = Schema.decodeUnknownSync(SyncResult)(
-        JSON.parse(JSON.stringify(encoded.encodedData)),
-      );
-      const failure = decoded.author_workspaces?.[0]?.failure;
-      expect(decoded.author_workspaces?.[0]?.status).toBe("failed");
-      expect(failure).toBeInstanceOf(AuthorWorkspaceBusy);
-      expect(failure).toMatchObject({
-        root: yield* (yield* FileSystem.FileSystem).realPath(second),
-      });
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
-
-  it.effect("omits a deleted workspace from preview and does not recreate it on apply", () =>
-    Effect.gen(function* () {
-      const { fs, onDevice, userB, homeB, second, sync, userA, homeA } = yield* world();
-      expect((yield* onDevice(userA, homeA, "a", sync(true))).status).toBe("pushed");
-      yield* onDevice(userB, homeB, "b", sync(true));
-      yield* fs.remove(second, { recursive: true });
-      expect((yield* onDevice(userB, homeB, "b", sync(false))).author_workspaces).toEqual([]);
-      expect((yield* onDevice(userB, homeB, "b", sync(true))).author_workspaces).toEqual([]);
-      expect(yield* fs.exists(second)).toBe(false);
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
-
-  it.effect("leaves an occupied destination untouched", () =>
-    Effect.gen(function* () {
-      const { fs, onDevice, userC, homeC, occupied, sync, userA, homeA } = yield* world();
-      expect((yield* onDevice(userA, homeA, "a", sync(true))).status).toBe("pushed");
-      const occupiedResult = yield* onDevice(userC, homeC, "c", sync(true));
-      expect(occupiedResult.status).toBe("pulled");
-      expect(Schema.encodeSync(SyncResult)(occupiedResult).author_workspaces).toEqual([
-        expect.objectContaining({
-          status: "failed",
-          failure: expect.objectContaining({
-            _tag: "PullDirectoryNotEmpty",
-            path: expect.stringContaining("/swyx/tools"),
+describe(
+  sync.preserveWorkspaceFolders.title,
+  { meta: { guarantee: sync.preserveWorkspaceFolders } },
+  () => {
+    it.effect("continues Library sync when an Author Workspace is busy", () =>
+      Effect.gen(function* () {
+        const { author, onDevice, userB, homeB, second, sync, libraryReads, userA, homeA } =
+          yield* world();
+        expect((yield* onDevice(userA, homeA, "a", sync(true))).status).toBe("pushed");
+        yield* onDevice(userB, homeB, "b", sync(true));
+        const readsBeforeBusy = libraryReads.length;
+        const busy = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const gate = yield* author.gate("b", "before-current");
+            const manual = yield* onDevice(
+              userB,
+              homeB,
+              "b",
+              syncAuthorWorkspace(second, { home: homeB, apply: true }),
+            ).pipe(Effect.forkScoped);
+            yield* gate.reached();
+            const result = yield* onDevice(userB, homeB, "b", sync(true));
+            yield* gate.release();
+            yield* Fiber.join(manual);
+            return result;
           }),
-        }),
-      ]);
-      expect(yield* fs.readDirectory(occupied)).toEqual(["user.txt"]);
-      expect(yield* fs.readFileString(join(occupied, "user.txt"))).toBe("keep\n");
-    }).pipe(Effect.provide(testPlatformLayer)),
-  );
-});
+        );
+        expect(libraryReads.slice(readsBeforeBusy)).toContain("b");
+        expect(busy.status).not.toBe("conflicted");
+        const encoded = encodeResult("librarySync", syncOutputContracts.librarySync, busy);
+        const decoded = Schema.decodeUnknownSync(SyncResult)(
+          JSON.parse(JSON.stringify(encoded.encodedData)),
+        );
+        const failure = decoded.author_workspaces?.[0]?.failure;
+        expect(decoded.author_workspaces?.[0]?.status).toBe("failed");
+        expect(failure).toBeInstanceOf(AuthorWorkspaceBusy);
+        expect(failure).toMatchObject({
+          root: yield* (yield* FileSystem.FileSystem).realPath(second),
+        });
+      }).pipe(Effect.provide(testPlatformLayer)),
+    );
 
-syncGuarantee(describe, "pullMissing", () => {
+    it.effect("omits a deleted workspace from preview and does not recreate it on apply", () =>
+      Effect.gen(function* () {
+        const { fs, onDevice, userB, homeB, second, sync, userA, homeA } = yield* world();
+        expect((yield* onDevice(userA, homeA, "a", sync(true))).status).toBe("pushed");
+        yield* onDevice(userB, homeB, "b", sync(true));
+        yield* fs.remove(second, { recursive: true });
+        expect((yield* onDevice(userB, homeB, "b", sync(false))).author_workspaces).toEqual([]);
+        expect((yield* onDevice(userB, homeB, "b", sync(true))).author_workspaces).toEqual([]);
+        expect(yield* fs.exists(second)).toBe(false);
+      }).pipe(Effect.provide(testPlatformLayer)),
+    );
+
+    it.effect("leaves an occupied destination untouched", () =>
+      Effect.gen(function* () {
+        const { fs, onDevice, userC, homeC, occupied, sync, userA, homeA } = yield* world();
+        expect((yield* onDevice(userA, homeA, "a", sync(true))).status).toBe("pushed");
+        const occupiedResult = yield* onDevice(userC, homeC, "c", sync(true));
+        expect(occupiedResult.status).toBe("pulled");
+        expect(Schema.encodeSync(SyncResult)(occupiedResult).author_workspaces).toEqual([
+          expect.objectContaining({
+            status: "failed",
+            failure: expect.objectContaining({
+              _tag: "PullDirectoryNotEmpty",
+              path: expect.stringContaining("/swyx/tools"),
+            }),
+          }),
+        ]);
+        expect(yield* fs.readDirectory(occupied)).toEqual(["user.txt"]);
+        expect(yield* fs.readFileString(join(occupied, "user.txt"))).toBe("keep\n");
+      }).pipe(Effect.provide(testPlatformLayer)),
+    );
+  },
+);
+
+describe(sync.pullMissing.title, { meta: { guarantee: sync.pullMissing } }, () => {
   it.effect("pulls under a symlinked skit directory", () =>
     Effect.gen(function* () {
       const { fs, scratchRoot, onDevice, sync, userA, homeA } = yield* world();
@@ -432,7 +436,7 @@ syncGuarantee(describe, "pullMissing", () => {
   );
 });
 
-syncGuarantee(describe, "propagateEdits", () => {
+describe(sync.propagateEdits.title, { meta: { guarantee: sync.propagateEdits } }, () => {
   for (const scope of ["author", "device"] as const) {
     it.effect(`refreshes enabled harness bytes after a ${scope} sync receives a remote edit`, () =>
       Effect.gen(function* () {
@@ -470,7 +474,7 @@ syncGuarantee(describe, "propagateEdits", () => {
   }
 });
 
-syncGuarantee(describe, "linkPulledWorkspace", () => {
+describe(sync.linkPulledWorkspace.title, { meta: { guarantee: sync.linkPulledWorkspace } }, () => {
   it.effect(
     "a pulled workspace updates its enabled skills offline and retains last-valid bytes",
     () =>
@@ -593,7 +597,7 @@ syncGuarantee(describe, "linkPulledWorkspace", () => {
   );
 });
 
-syncGuarantee(describe, "pullMissing", () => {
+describe(sync.pullMissing.title, { meta: { guarantee: sync.pullMissing } }, () => {
   it.effect(
     "independent imports of one connected Draft converge on the Registry collection handle",
     () =>
@@ -618,7 +622,7 @@ syncGuarantee(describe, "pullMissing", () => {
   );
 });
 
-syncGuarantee(describe, "mergeOfflineEdits", () => {
+describe(sync.mergeOfflineEdits.title, { meta: { guarantee: sync.mergeOfflineEdits } }, () => {
   it.effect("converges overlapping offline edits without a second Library conflict", () =>
     Effect.gen(function* () {
       const { fs, first, second, userA, homeA, userB, homeB, onDevice, sync } = yield* world();

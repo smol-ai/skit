@@ -1,4 +1,4 @@
-import { syncGuarantee } from "../../../test-support/sync-guarantees.mjs";
+import sync from "../../skit/test/fixtures/sync-guarantees.json" with { type: "json" };
 import { describe } from "@effect/vitest";
 import { assert, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
@@ -10,7 +10,7 @@ import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
 import { devices } from "./helpers/library-sync-devices.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
-syncGuarantee(describe, "protectStoredCopies", () => {
+describe(sync.protectStoredCopies.title, { meta: { guarantee: sync.protectStoredCopies } }, () => {
   it.effect("reports local_bytes_changed as a stopped sync with exit 1", () =>
     Effect.gen(function* () {
       const { a } = yield* devices;
@@ -41,90 +41,94 @@ syncGuarantee(describe, "protectStoredCopies", () => {
   );
 });
 
-syncGuarantee(describe, "retainAfterInstallFailure", () => {
-  it.effect("reports an already-synced Library with a blocked device selection as nonzero", () =>
-    Effect.gen(function* () {
-      const { a, b, fs, remote } = yield* devices;
-      yield* a.importSource("first");
-      yield* a.sync();
-      yield* fs.makeDirectory(join(b.root, "first"), { recursive: true });
-      yield* fs.writeFileString(join(b.root, "first", "SKILL.md"), "existing copy\n");
-      assert.strictEqual(
-        (yield* b.sync({ deviceSelection: { skills: ["first"], collections: [] } })).status,
-        "enablement_incomplete",
-      );
-      const head = yield* remote;
-      assert.ok(head);
-      const server = createServer((_request, response) => {
-        response.writeHead(200, { "content-type": "application/json" });
-        response.end(JSON.stringify({ library: head }));
-      });
-      yield* Effect.acquireRelease(
-        Effect.callback<void, Error>((resume) => {
-          server.once("error", (error) => resume(Effect.fail(error)));
-          server.listen(0, "127.0.0.1", () => resume(Effect.void));
-        }),
-        () =>
-          Effect.callback<void, Error>((resume) => {
-            server.close((error) => resume(error ? Effect.fail(error) : Effect.void));
-          }).pipe(Effect.orDie),
-      );
-      const address = server.address();
-      assert.ok(address && typeof address !== "string");
-      const origin = `http://127.0.0.1:${address.port}`;
-      // Accept the test Registry origin through sync rather than editing accepted ancestry.
-      yield* b.sync({ origin });
-      const output = yield* Effect.callback<{ code: number | null; stdout: string }, Error>(
-        (resume) => {
-          const child = spawn(
-            process.execPath,
-            [
-              join(import.meta.dirname, "../bin/skit.js"),
-              "sync",
-              "--apply",
-              "--home",
-              b.home,
-              "--codex-root",
-              b.root,
-              "--json",
-            ],
-            {
-              env: { ...process.env, SKIT_SERVER_URL: origin, SKIT_TOKEN: "test" },
-            },
-          );
-          let stdout = "";
-          child.stdout.setEncoding("utf8");
-          child.stdout.on("data", (chunk: string) => {
-            stdout += chunk;
-          });
-          child.on("error", (error) => resume(Effect.fail(error)));
-          child.on("close", (code) => resume(Effect.succeed({ code, stdout })));
-        },
-      );
-      // The CLI's committed process-status policy uses 1 for incomplete results.
-      assert.strictEqual(output.code, 1);
-      const result = JSON.parse(output.stdout).data;
-      assert.strictEqual(result.status, "enablement_incomplete");
-      assert.strictEqual(result.sync_status, "clean");
-      const issues = yield* Schema.decodeUnknownEffect(Schema.Array(SyncIssue))(
-        result.enablement_issues,
-      );
-      const conflict = issues.find((issue) => issue._tag === "InstalledFolderConflicted");
-      assert.strictEqual(conflict?._tag, "InstalledFolderConflicted");
-      if (conflict?._tag === "InstalledFolderConflicted") {
-        assert.strictEqual(conflict.path, join(b.root, "first"));
-        assert.deepEqual(
-          conflict.conflicts.map((reason) => reason._tag),
-          ["MarkerMissing", "ContentChanged"],
+describe(
+  sync.retainAfterInstallFailure.title,
+  { meta: { guarantee: sync.retainAfterInstallFailure } },
+  () => {
+    it.effect("reports an already-synced Library with a blocked device selection as nonzero", () =>
+      Effect.gen(function* () {
+        const { a, b, fs, remote } = yield* devices;
+        yield* a.importSource("first");
+        yield* a.sync();
+        yield* fs.makeDirectory(join(b.root, "first"), { recursive: true });
+        yield* fs.writeFileString(join(b.root, "first", "SKILL.md"), "existing copy\n");
+        assert.strictEqual(
+          (yield* b.sync({ deviceSelection: { skills: ["first"], collections: [] } })).status,
+          "enablement_incomplete",
         );
-        const changed = conflict.conflicts.find((reason) => reason._tag === "ContentChanged");
-        assert.strictEqual(changed?._tag, "ContentChanged");
-        if (changed?._tag === "ContentChanged") assert.strictEqual(changed.baseline, "library");
-      }
-      assert.strictEqual(
-        yield* fs.readFileString(join(b.root, "first", "SKILL.md")),
-        "existing copy\n",
-      );
-    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-  );
-});
+        const head = yield* remote;
+        assert.ok(head);
+        const server = createServer((_request, response) => {
+          response.writeHead(200, { "content-type": "application/json" });
+          response.end(JSON.stringify({ library: head }));
+        });
+        yield* Effect.acquireRelease(
+          Effect.callback<void, Error>((resume) => {
+            server.once("error", (error) => resume(Effect.fail(error)));
+            server.listen(0, "127.0.0.1", () => resume(Effect.void));
+          }),
+          () =>
+            Effect.callback<void, Error>((resume) => {
+              server.close((error) => resume(error ? Effect.fail(error) : Effect.void));
+            }).pipe(Effect.orDie),
+        );
+        const address = server.address();
+        assert.ok(address && typeof address !== "string");
+        const origin = `http://127.0.0.1:${address.port}`;
+        // Accept the test Registry origin through sync rather than editing accepted ancestry.
+        yield* b.sync({ origin });
+        const output = yield* Effect.callback<{ code: number | null; stdout: string }, Error>(
+          (resume) => {
+            const child = spawn(
+              process.execPath,
+              [
+                join(import.meta.dirname, "../bin/skit.js"),
+                "sync",
+                "--apply",
+                "--home",
+                b.home,
+                "--codex-root",
+                b.root,
+                "--json",
+              ],
+              {
+                env: { ...process.env, SKIT_SERVER_URL: origin, SKIT_TOKEN: "test" },
+              },
+            );
+            let stdout = "";
+            child.stdout.setEncoding("utf8");
+            child.stdout.on("data", (chunk: string) => {
+              stdout += chunk;
+            });
+            child.on("error", (error) => resume(Effect.fail(error)));
+            child.on("close", (code) => resume(Effect.succeed({ code, stdout })));
+          },
+        );
+        // The CLI's committed process-status policy uses 1 for incomplete results.
+        assert.strictEqual(output.code, 1);
+        const result = JSON.parse(output.stdout).data;
+        assert.strictEqual(result.status, "enablement_incomplete");
+        assert.strictEqual(result.sync_status, "clean");
+        const issues = yield* Schema.decodeUnknownEffect(Schema.Array(SyncIssue))(
+          result.enablement_issues,
+        );
+        const conflict = issues.find((issue) => issue._tag === "InstalledFolderConflicted");
+        assert.strictEqual(conflict?._tag, "InstalledFolderConflicted");
+        if (conflict?._tag === "InstalledFolderConflicted") {
+          assert.strictEqual(conflict.path, join(b.root, "first"));
+          assert.deepEqual(
+            conflict.conflicts.map((reason) => reason._tag),
+            ["MarkerMissing", "ContentChanged"],
+          );
+          const changed = conflict.conflicts.find((reason) => reason._tag === "ContentChanged");
+          assert.strictEqual(changed?._tag, "ContentChanged");
+          if (changed?._tag === "ContentChanged") assert.strictEqual(changed.baseline, "library");
+        }
+        assert.strictEqual(
+          yield* fs.readFileString(join(b.root, "first", "SKILL.md")),
+          "existing copy\n",
+        );
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+    );
+  },
+);

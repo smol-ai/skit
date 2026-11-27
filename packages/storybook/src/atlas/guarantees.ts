@@ -1,7 +1,7 @@
 import type { Atlas } from "./data.ts";
-import syncSections from "../../../../test-support/sync-guarantees.json" with { type: "json" };
+import type { Guarantee } from "./guarantee-metadata.ts";
 
-/** Command membership and guarantee wording come only from the real test's describe groups. */
+/** Command membership and guarantee wording come from native Vitest metadata or nested describe groups. */
 export const commandGuarantees = (
   atlas: Pick<Atlas, "guaranteeFiles" | "testReports">,
   command: string,
@@ -23,15 +23,29 @@ export const commandGuarantees = (
     }
   >();
   const sectionOrder = new Map<string, Set<string>>();
+  const ranked = new Map<string, number>();
   const currentFiles = atlas.testReports
     .filter((report) => report.provenance === "current")
     .flatMap((report) => report.files);
-  const testKey = (file: string, ancestry: readonly string[], title: string) =>
-    JSON.stringify([file, ...ancestry, title]);
+  const testKey = (
+    file: string,
+    ancestry: readonly string[],
+    title: string,
+    guarantee?: Guarantee,
+  ) =>
+    JSON.stringify(
+      guarantee
+        ? [file, { command: guarantee.command, key: guarantee.key }, title]
+        : [file, ...ancestry, title],
+    );
   const results = new Map(
     currentFiles.flatMap((file) =>
       file.tests.map(
-        (test) => [testKey(file.file, test.ancestorTitles, test.title), test.status] as const,
+        (test) =>
+          [
+            testKey(file.file, test.ancestorTitles, test.title, test.guarantee),
+            test.status,
+          ] as const,
       ),
     ),
   );
@@ -44,6 +58,12 @@ export const commandGuarantees = (
       const title = test.ancestorTitles.at(-1)!;
       const sections = test.ancestorTitles.slice(1, -1);
       const section = JSON.stringify(sections);
+      if (test.guarantee) {
+        const order = test.guarantee.sectionOrder;
+        if (ranked.has(section) && ranked.get(section) !== order)
+          throw new Error(`Conflicting sectionOrder for skit ${command}: ${section}`);
+        ranked.set(section, order);
+      }
       if (!sectionOrder.has(section)) sectionOrder.set(section, new Set());
       // Separate describe blocks can revisit a section. Its first appearance
       // declares its position; a later block adds tests, not a reverse edge.
@@ -52,7 +72,9 @@ export const commandGuarantees = (
         seenSections.add(section);
         previousSection = section;
       }
-      const key = JSON.stringify([...sections, title]);
+      const key = test.guarantee
+        ? JSON.stringify({ command, key: test.guarantee.key })
+        : JSON.stringify([...sections, title]);
       let group = groups.get(key);
       if (group === undefined) {
         group = { key, sections, title, tests: [] };
@@ -60,14 +82,19 @@ export const commandGuarantees = (
       }
       group.tests.push({
         file: file.file,
-        test: { ...test, status: results.get(testKey(file.file, test.ancestorTitles, test.title)) },
+        test: {
+          ...test,
+          status:
+            results.get(testKey(file.file, test.ancestorTitles, test.title, test.guarantee)) ??
+            results.get(testKey(file.file, test.ancestorTitles, test.title)),
+        },
       });
     }
   }
   // Merge the section order declared by each file; no page owns the section names or count.
-  // Sync has a shared authoring catalog, so its file registration order is immaterial.
-  const canonical =
-    command === "sync" ? Object.keys(syncSections).map((section) => JSON.stringify([section])) : [];
+  const canonical = [...ranked.keys()].sort(
+    (a, b) => ranked.get(a)! - ranked.get(b)! || a.localeCompare(b),
+  );
   const remaining = [...sectionOrder.keys()].filter((key) => !canonical.includes(key));
   const ordered: string[] = [...canonical];
   while (remaining.length > 0) {

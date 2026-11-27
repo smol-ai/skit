@@ -1,3 +1,4 @@
+import { Guarantee, guaranteeAncestry } from "./guarantee-metadata.ts";
 import { join, relative } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";
 import { testSource } from "./test-source.ts";
@@ -14,6 +15,7 @@ const Report = Schema.fromJsonString(
         assertionResults: Schema.Array(
           Schema.Struct({
             fullName: Schema.String,
+            meta: Schema.optionalKey(Schema.Struct({ guarantee: Schema.optionalKey(Guarantee) })),
             title: Schema.String,
             ancestorTitles: Schema.Array(Schema.String),
             status: Schema.Literals(["passed", "failed", "skipped", "pending", "todo", "disabled"]),
@@ -61,7 +63,7 @@ export const readTestReports = (root: string) =>
                 tests: file.assertionResults.map((test) => ({
                   name: test.fullName,
                   title: test.title,
-                  ancestorTitles: test.ancestorTitles,
+                  ...guaranteeAncestry(test.ancestorTitles, test.meta?.guarantee),
                   status:
                     test.status === "pending" || test.status === "disabled"
                       ? "skipped"

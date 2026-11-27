@@ -1,4 +1,4 @@
-import { syncGuarantee } from "../../../test-support/sync-guarantees.mjs";
+import sync from "../../skit/test/fixtures/sync-guarantees.json" with { type: "json" };
 import { asV9 } from "./helpers/released-library.js";
 import { describe } from "@effect/vitest";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -59,7 +59,7 @@ const deviceFields = (state: LibraryState) => ({
   installedSkills: state.installed_skills,
 });
 
-syncGuarantee(describe, "keepRegistryRecords", () => {
+describe(sync.keepRegistryRecords.title, { meta: { guarantee: sync.keepRegistryRecords } }, () => {
   /**
    * Restoring an older `state.json`, from a backup or after a write lost to power failure, restores
    * the ancestry it was reconciled with. The next sync must not read the Collections the remote
@@ -130,43 +130,47 @@ syncGuarantee(describe, "keepRegistryRecords", () => {
   );
 });
 
-syncGuarantee(describe, "resolveCollectionRemoval", () => {
-  for (const removalSyncsFirst of [true, false])
-    it.effect(
-      `a removal wins over enabling its Skill elsewhere (removal syncs first=${removalSyncsFirst})`,
-      () =>
-        Effect.gen(function* () {
-          const { a, b, remote } = yield* devices;
-          yield* a.importSource("first");
-          yield* a.importSource("second");
-          yield* a.sync();
-          yield* b.sync();
-          const removed = (yield* a.state).collections[0]!.collection_id;
-          const skillId = (yield* b.state).skills.find(
-            (skill) => skill.collection_id === removed,
-          )!.skill_id;
+describe(
+  sync.resolveCollectionRemoval.title,
+  { meta: { guarantee: sync.resolveCollectionRemoval } },
+  () => {
+    for (const removalSyncsFirst of [true, false])
+      it.effect(
+        `a removal wins over enabling its Skill elsewhere (removal syncs first=${removalSyncsFirst})`,
+        () =>
+          Effect.gen(function* () {
+            const { a, b, remote } = yield* devices;
+            yield* a.importSource("first");
+            yield* a.importSource("second");
+            yield* a.sync();
+            yield* b.sync();
+            const removed = (yield* a.state).collections[0]!.collection_id;
+            const skillId = (yield* b.state).skills.find(
+              (skill) => skill.collection_id === removed,
+            )!.skill_id;
 
-          yield* a.remove(removed);
-          yield* b.edit(enable(skillId));
-          const [first, second] = removalSyncsFirst ? [a, b] : [b, a];
-          assert.strictEqual((yield* first.sync()).status, "merged");
-          assert.strictEqual((yield* second.sync()).status, "merged");
-          yield* first.sync();
+            yield* a.remove(removed);
+            yield* b.edit(enable(skillId));
+            const [first, second] = removalSyncsFirst ? [a, b] : [b, a];
+            assert.strictEqual((yield* first.sync()).status, "merged");
+            assert.strictEqual((yield* second.sync()).status, "merged");
+            yield* first.sync();
 
-          for (const device of [a, b]) {
-            const state = yield* device.state;
-            assert.isFalse(state.collections.some((item) => item.collection_id === removed));
-            assert.deepStrictEqual(state.enabled, []);
-            assert.strictEqual((yield* device.sync()).status, "clean");
-          }
-          assert.isFalse(
-            (yield* remote)!.manifest.collections.some((item) => item.collection_id === removed),
-          );
-        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-    );
-});
+            for (const device of [a, b]) {
+              const state = yield* device.state;
+              assert.isFalse(state.collections.some((item) => item.collection_id === removed));
+              assert.deepStrictEqual(state.enabled, []);
+              assert.strictEqual((yield* device.sync()).status, "clean");
+            }
+            assert.isFalse(
+              (yield* remote)!.manifest.collections.some((item) => item.collection_id === removed),
+            );
+          }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+      );
+  },
+);
 
-syncGuarantee(describe, "protectLaterEdits", () => {
+describe(sync.protectLaterEdits.title, { meta: { guarantee: sync.protectLaterEdits } }, () => {
   it.effect("each sync saves state with the revision it reconciled against", () =>
     Effect.gen(function* () {
       const { a, b, remote } = yield* devices;
@@ -247,61 +251,67 @@ syncGuarantee(describe, "protectLaterEdits", () => {
   );
 });
 
-syncGuarantee(describe, "recordMergedRevision", () => {
-  for (const ancestry of ["missing", "stale"] as const)
-    it.effect(`a clean sync anchoring ${ancestry} ancestry records one completed Sync`, () =>
-      Effect.gen(function* () {
-        const { fs, a, b, remote } = yield* devices;
-        yield* a.importSource("first");
-        if (ancestry === "stale") yield* a.sync();
-        const backup = join(a.home, "..", "ancestry-backup");
-        yield* fs.copy(a.home, backup);
-        if (ancestry === "missing") yield* a.sync();
-        else {
-          yield* b.sync();
-          const label = (yield* b.state).collections[0]!.label;
-          yield* b.edit((state) => ({
-            ...state,
-            collections: state.collections.map((collection) => ({
-              ...collection,
-              label: "temporary",
-            })),
-          }));
-          yield* b.sync();
-          yield* b.edit((state) => ({
-            ...state,
-            collections: state.collections.map((collection) => ({ ...collection, label })),
-          }));
-          yield* b.sync();
-        }
-        const head = (yield* remote)!;
-        yield* fs.remove(a.home, { recursive: true });
-        yield* fs.copy(backup, a.home);
-        const before = yield* a.state;
-        const beforeHistory = yield* (yield* a.owner()).history;
-        const saves = a.saves;
-        assert.strictEqual((yield* a.sync({ apply: false })).status, "clean");
-        assert.strictEqual(a.saves, saves);
-        assert.deepStrictEqual(yield* a.state, before);
+describe(
+  sync.recordMergedRevision.title,
+  { meta: { guarantee: sync.recordMergedRevision } },
+  () => {
+    for (const ancestry of ["missing", "stale"] as const)
+      it.effect(`a clean sync anchoring ${ancestry} ancestry records one completed Sync`, () =>
+        Effect.gen(function* () {
+          const { fs, a, b, remote } = yield* devices;
+          yield* a.importSource("first");
+          if (ancestry === "stale") yield* a.sync();
+          const backup = join(a.home, "..", "ancestry-backup");
+          yield* fs.copy(a.home, backup);
+          if (ancestry === "missing") yield* a.sync();
+          else {
+            yield* b.sync();
+            const label = (yield* b.state).collections[0]!.label;
+            yield* b.edit((state) => ({
+              ...state,
+              collections: state.collections.map((collection) => ({
+                ...collection,
+                label: "temporary",
+              })),
+            }));
+            yield* b.sync();
+            yield* b.edit((state) => ({
+              ...state,
+              collections: state.collections.map((collection) => ({ ...collection, label })),
+            }));
+            yield* b.sync();
+          }
+          const head = (yield* remote)!;
+          yield* fs.remove(a.home, { recursive: true });
+          yield* fs.copy(backup, a.home);
+          const before = yield* a.state;
+          const beforeHistory = yield* (yield* a.owner()).history;
+          const saves = a.saves;
+          assert.strictEqual((yield* a.sync({ apply: false })).status, "clean");
+          assert.strictEqual(a.saves, saves);
+          assert.deepStrictEqual(yield* a.state, before);
 
-        assert.strictEqual((yield* a.sync()).status, "clean");
-        const afterHistory = yield* (yield* a.owner()).history;
-        assert.deepStrictEqual(afterHistory.operations, beforeHistory.operations);
-        assert.strictEqual(afterHistory.events.length, beforeHistory.events.length + 1);
-        assert.isTrue(
-          afterHistory.events.at(-1)?.changes.some((change) => change.action === "operation-Done"),
-        );
-        const anchored = yield* a.state;
-        assert.strictEqual(anchored.sync_ancestry?.revision_id, head.revision_id);
-        const saved = a.saves;
-        assert.strictEqual((yield* a.sync()).status, "clean");
-        assert.strictEqual(a.saves, saved);
-        assert.deepStrictEqual(yield* a.state, anchored);
-      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-    );
-});
+          assert.strictEqual((yield* a.sync()).status, "clean");
+          const afterHistory = yield* (yield* a.owner()).history;
+          assert.deepStrictEqual(afterHistory.operations, beforeHistory.operations);
+          assert.strictEqual(afterHistory.events.length, beforeHistory.events.length + 1);
+          assert.isTrue(
+            afterHistory.events
+              .at(-1)
+              ?.changes.some((change) => change.action === "operation-Done"),
+          );
+          const anchored = yield* a.state;
+          assert.strictEqual(anchored.sync_ancestry?.revision_id, head.revision_id);
+          const saved = a.saves;
+          assert.strictEqual((yield* a.sync()).status, "clean");
+          assert.strictEqual(a.saves, saved);
+          assert.deepStrictEqual(yield* a.state, anchored);
+        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+      );
+  },
+);
 
-syncGuarantee(describe, "sendRemovals", () => {
+describe(sync.sendRemovals.title, { meta: { guarantee: sync.sendRemovals } }, () => {
   it.effect("a local removal after sync still removes the Collection everywhere", () =>
     Effect.gen(function* () {
       const { a, b, remoteCollections } = yield* devices;
@@ -324,7 +334,7 @@ syncGuarantee(describe, "sendRemovals", () => {
   );
 });
 
-syncGuarantee(describe, "keepDeviceSelection", () => {
+describe(sync.keepDeviceSelection.title, { meta: { guarantee: sync.keepDeviceSelection } }, () => {
   it.effect("a merge keeps device-local invocation policies", () =>
     Effect.gen(function* () {
       const { a, b } = yield* devices;
@@ -401,25 +411,29 @@ syncGuarantee(describe, "keepDeviceSelection", () => {
   );
 });
 
-syncGuarantee(describe, "refuseUnusableHarness", () => {
-  it.effect("an obstructed install directory is refused before Sync publishes locally", () =>
-    Effect.gen(function* () {
-      const { fs, a, b, remote, server } = yield* devices;
-      yield* a.importSource("first");
-      yield* a.edit(enable((yield* a.state).skills[0]!.skill_id));
-      yield* a.sync();
-      yield* fs.writeFileString(b.root, "not a directory\n");
-      const head = yield* remote;
-      const writes = server.writeRequests;
-      const failure = yield* Effect.flip(b.sync());
-      assert.strictEqual(failure._tag, "PlatformError");
-      assert.isFalse(yield* fs.exists(join(b.home, "state.json")));
-      assert.strictEqual(yield* fs.readFileString(b.root), "not a directory\n");
-      assert.strictEqual(server.writeRequests, writes);
-      assert.deepStrictEqual(yield* remote, head);
-      yield* fs.remove(b.root);
-      assert.strictEqual((yield* b.sync()).status, "pulled");
-      assert.isTrue(yield* fs.exists(join(b.root, "first", "SKILL.md")));
-    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-  );
-});
+describe(
+  sync.refuseUnusableHarness.title,
+  { meta: { guarantee: sync.refuseUnusableHarness } },
+  () => {
+    it.effect("an obstructed install directory is refused before Sync publishes locally", () =>
+      Effect.gen(function* () {
+        const { fs, a, b, remote, server } = yield* devices;
+        yield* a.importSource("first");
+        yield* a.edit(enable((yield* a.state).skills[0]!.skill_id));
+        yield* a.sync();
+        yield* fs.writeFileString(b.root, "not a directory\n");
+        const head = yield* remote;
+        const writes = server.writeRequests;
+        const failure = yield* Effect.flip(b.sync());
+        assert.strictEqual(failure._tag, "PlatformError");
+        assert.isFalse(yield* fs.exists(join(b.home, "state.json")));
+        assert.strictEqual(yield* fs.readFileString(b.root), "not a directory\n");
+        assert.strictEqual(server.writeRequests, writes);
+        assert.deepStrictEqual(yield* remote, head);
+        yield* fs.remove(b.root);
+        assert.strictEqual((yield* b.sync()).status, "pulled");
+        assert.isTrue(yield* fs.exists(join(b.root, "first", "SKILL.md")));
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+    );
+  },
+);

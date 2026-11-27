@@ -1,4 +1,4 @@
-import { syncGuarantee } from "../../../test-support/sync-guarantees.mjs";
+import sync from "./fixtures/sync-guarantees.json" with { type: "json" };
 import { loadOperations, loadLibrary } from "../src/library/store/library-store.js";
 
 import { libraryDatabasePath } from "../src/library/store/database.js";
@@ -14,7 +14,7 @@ import { currentLibraryManifest, type LibraryManifest } from "../src/library/lib
 import { skitLayer } from "../src/platform/layer.js";
 import { testRoots } from "./helpers/library-store.js";
 
-syncGuarantee(describe, "protectLaterEdits", () => {
+describe(sync.protectLaterEdits.title, { meta: { guarantee: sync.protectLaterEdits } }, () => {
   it.effect(
     "Sync verifies its remote receipt, records a data-only program, and publishes and installs through one owner",
     () =>

@@ -1,6 +1,26 @@
+import { Schema } from "effect";
+import { Guarantee, guaranteeAncestry } from "./guarantee-metadata.ts";
 import { relative, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
+
+export function collectedGuarantee(
+  file: string,
+  title: string,
+  ancestorTitles: string[],
+  meta: object,
+) {
+  if ("guarantee" in meta) {
+    try {
+      const guarantee = Schema.decodeUnknownSync(Guarantee)(meta.guarantee);
+      return { title, ...guaranteeAncestry(ancestorTitles, guarantee) };
+    } catch (cause) {
+      throw new Error(`Invalid meta.guarantee in ${file} for "${title}"`, { cause });
+    }
+  }
+  if (ancestorTitles.length >= 2 && ancestorTitles[0]!.startsWith("skit "))
+    return { title, ancestorTitles };
+}
 
 /** Collect declarations without running test bodies. Collection expands parameterized tests
  * and scenario helpers with the same names Vitest writes to its saved reports. */
@@ -35,8 +55,13 @@ export async function collectGuarantees(root: string) {
             const ancestorTitles = [];
             for (let parent = test.parent; parent.type === "suite"; parent = parent.parent)
               ancestorTitles.unshift(parent.name);
-            if (ancestorTitles.length >= 2 && ancestorTitles[0]!.startsWith("skit "))
-              tests.push({ title: test.name, ancestorTitles });
+            const entry = collectedGuarantee(
+              module.moduleId,
+              test.name,
+              ancestorTitles,
+              test.meta(),
+            );
+            if (entry) tests.push(entry);
             else unattached++;
           }
           return tests.length || unattached

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { expect, it } from "vitest";
+import { collectedGuarantee } from "../src/atlas/guarantee-catalog.ts";
 import { readTestReports } from "../src/atlas/test-reports.ts";
 
 it("reads every saved file without command or filename selection, preserving statuses and run time", async () => {
@@ -94,9 +95,62 @@ it("reads every saved file without command or filename selection, preserving sta
         ],
       },
     ]);
+    const guarantee = {
+      key: "save",
+      command: "example",
+      section: "Writing",
+      sectionOrder: 1,
+      title: "Files are saved.",
+    };
+    const saveReport = (metadata: unknown) =>
+      writeFile(
+        join(folder, "vitest.json"),
+        JSON.stringify({
+          startTime: 1,
+          testResults: [
+            {
+              name: join(root, "packages/cli/test/contract.test.ts"),
+              assertionResults: [
+                {
+                  fullName: "Files are saved. one",
+                  title: "one",
+                  ancestorTitles: ["Files are saved."],
+                  meta: { guarantee: metadata },
+                  status: "passed",
+                },
+              ],
+            },
+          ],
+        }),
+      );
+    await saveReport(guarantee);
+    expect((await Effect.runPromise(readTestReports(root)))[0]?.files[0]?.tests[0]).toMatchObject({
+      guarantee,
+      ancestorTitles: ["skit example", "Writing", "Files are saved."],
+    });
+    await saveReport({ ...guarantee, sectionOrder: "first" });
+    expect((await Effect.runPromise(Effect.result(readTestReports(root))))._tag).toBe("Failure");
     await writeFile(join(folder, "vitest.json"), "{invalid");
     expect((await Effect.runPromise(Effect.result(readTestReports(root))))._tag).toBe("Failure");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+it("collects inherited guarantee metadata and identifies malformed declarations at their source", () => {
+  const guarantee = {
+    key: "save",
+    command: "example",
+    section: "Files",
+    sectionOrder: 1,
+    title: "Files are saved.",
+  };
+  expect(collectedGuarantee("suite.ts", "one", [guarantee.title], { guarantee })).toEqual({
+    title: "one",
+    ancestorTitles: ["skit example", "Files", guarantee.title],
+    guarantee,
+  });
+  expect(() =>
+    collectedGuarantee("suite.ts", "one", ["skit example", "Legacy"], { guarantee: {} }),
+  ).toThrow('Invalid meta.guarantee in suite.ts for "one"');
 });
