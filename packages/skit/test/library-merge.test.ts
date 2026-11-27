@@ -985,3 +985,66 @@ for (const localFollows of [true, false])
         assert.strictEqual(obsolete._tag, "InvalidResolution");
       }),
   );
+
+it.effect(
+  "aligns independent registrations of the same workspace when only one has connected",
+  () =>
+    Effect.gen(function* () {
+      const base = yield* decode({
+        schema: "skit.library.v8",
+        collections: [],
+        skills: [],
+        imports: [],
+        collection_versions: [],
+        snapshot_digests: [],
+        enabled: [],
+      });
+      const upstream = {
+        source_identity: {
+          kind: "authored-workspace",
+          workspace_id: "workspace_" + "a".repeat(32),
+        },
+        tracking: { kind: "default" },
+      };
+      const draft_home = {
+        schema: "skit.remote.v1",
+        origin: "https://registry.example",
+        namespace: "owner",
+        skit: "tools",
+      };
+      const offline = yield* decode({ ...base, collections: [{ ...collection, upstream }] });
+      const connected = yield* decode({
+        ...base,
+        collections: [
+          {
+            ...collection,
+            collection_id: makeCollectionId(),
+            upstream: { ...upstream, draft_home },
+          },
+        ],
+      });
+      const otherDraft = yield* decode({
+        ...base,
+        collections: [
+          ...connected.collections,
+          {
+            ...collection,
+            collection_id: makeCollectionId(),
+            upstream: { ...upstream, draft_home: { ...draft_home, skit: "other" } },
+          },
+        ],
+      });
+      expect(alignLibrary(offline, otherDraft, base).collections).toEqual([]);
+      expect(alignLibrary(otherDraft, offline, base).collections).toEqual([]);
+      for (const [local, remote] of [
+        [offline, connected],
+        [connected, offline],
+      ] as const) {
+        const merged = yield* prepareLibraryMerge({ base, local, remote });
+        if (merged._tag !== "Ready") return assert.fail(`Expected ready merge, got ${merged._tag}`);
+        expect(merged.manifest.collections).toEqual([
+          { ...remote.collections[0], upstream: { ...upstream, draft_home } },
+        ]);
+      }
+    }),
+);

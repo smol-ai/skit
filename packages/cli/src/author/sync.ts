@@ -1,5 +1,6 @@
 import { authoredSkillIssueLines } from "../library/authored-skill-issues.js";
-import { Effect } from "effect";
+import { commandFailure } from "../commands/failure-classification.js";
+import { Cause, Effect } from "effect";
 import type { AuthorVisibility } from "@smolai/skit-core/author";
 
 import { Renderer } from "../terminal/renderer.js";
@@ -31,11 +32,17 @@ export const authorSyncCommand = Effect.fn("CLI.authorSync")(function* (options:
         },
         authorRegistry(home),
       ).pipe(
-        Effect.map((value) =>
-          "issues" in value
-            ? { ...value.result, installation_issues: authoredSkillIssueLines(value.issues) }
-            : value.result,
-        ),
+        Effect.map(({ result, installation }) => {
+          if (!installation) return result;
+          if (installation._tag === "Failure")
+            return {
+              ...result,
+              installation_issues: [commandFailure(Cause.fail(installation.failure)).message],
+            };
+          return installation.success === undefined
+            ? result
+            : { ...result, installation_issues: authoredSkillIssueLines(installation.success) };
+        }),
       ),
     ),
   );

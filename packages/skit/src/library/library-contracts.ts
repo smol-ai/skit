@@ -131,13 +131,19 @@ export const Upstream = Schema.Struct({
 });
 export type Upstream = typeof Upstream.Type;
 
-export const sameUpstream = (left: Upstream, right: Upstream) =>
-  left.source_identity.kind === "authored-workspace" &&
-  right.source_identity.kind === "authored-workspace" &&
-  left.draft_home &&
-  right.draft_home
-    ? Schema.toEquivalence(CanonicalAuthorRemoteHome)(left.draft_home, right.draft_home)
-    : Schema.toEquivalence(Upstream)(left, right);
+export const sameUpstream = (left: Upstream, right: Upstream) => {
+  if (
+    left.source_identity.kind !== "authored-workspace" ||
+    right.source_identity.kind !== "authored-workspace"
+  )
+    return Schema.toEquivalence(Upstream)(left, right);
+  if (left.draft_home && right.draft_home)
+    return Schema.toEquivalence(CanonicalAuthorRemoteHome)(left.draft_home, right.draft_home);
+  return (
+    Schema.toEquivalence(SourceIdentity)(left.source_identity, right.source_identity) &&
+    Schema.toEquivalence(SourceTracking)(left.tracking, right.tracking)
+  );
+};
 
 export const SkillsShLockFileEntry = Schema.Struct({
   type: Schema.Literal("skills.sh-lock"),

@@ -185,6 +185,8 @@ export const saveCatalogue = Effect.fn("Library.saveCatalogue")(function* (
       if (canonicalJson(current) !== canonicalJson(base))
         return yield* new LibraryChanged({ path });
       if (canonicalJson(current) === canonicalJson(next)) {
+        // Device-local selection invalidates captured plans. It changes no portable
+        // catalogue or enabled records for Library history to describe.
         if (draftImport && (yield* selectDraftImport(path, next, draftImport)))
           return yield* advanceLibraryRevision(path);
         return revision;

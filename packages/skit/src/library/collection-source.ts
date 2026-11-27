@@ -1,7 +1,6 @@
 import { AuthorRemoteHome } from "../author/remote.js";
 import { Effect, FileSystem, Option, Schema } from "effect";
-import { skitLocator } from "../author/destination.js";
-import { draftWorkspaces } from "../author/state-store.js";
+import { readDraftWorkspaceLocations } from "../author/inspect.js";
 import { readAuthorIdentity, readAuthorRemote } from "../author/workspace-metadata.js";
 import {
   SourceIdentity,
@@ -25,17 +24,26 @@ export const CollectionSource = Schema.Struct({
 });
 export type CollectionSource = typeof CollectionSource.Type;
 
+/** One operation shares its first checkpoint and machine identity reads across Collections. */
+export const workspaceLookup = Effect.fn("Library.workspaceLookup")(function* (home: string) {
+  return {
+    machine: yield* Effect.cached(MachineSettings.readIdentity(home)),
+    drafts: yield* Effect.cached(readDraftWorkspaceLocations(home)),
+  };
+});
+export type WorkspaceLookup = Effect.Success<ReturnType<typeof workspaceLookup>>;
+
 /** A portable Draft selects a workspace only through this device's confirmed checkpoint. */
 export const localWorkspaceLocations = Effect.fn("Library.localWorkspaceLocations")(function* (
   state: Pick<LibraryManifest, "imports">,
   collection: Collection,
-  home: string,
+  lookup: WorkspaceLookup,
 ) {
   const upstream = collection.upstream;
   const source = upstream?.source_identity;
   if (source?.kind !== "authored-workspace") return [];
   const ownerLocation = Effect.gen(function* () {
-    const machine = yield* MachineSettings.readIdentity(home);
+    const machine = yield* lookup.machine;
     const local = sourceImports(state, collection.collection_id).find(
       (item) =>
         machine !== undefined &&
@@ -50,7 +58,7 @@ export const localWorkspaceLocations = Effect.fn("Library.localWorkspaceLocation
     const owner = yield* ownerLocation;
     return owner ? [owner] : [];
   }
-  const recorded = yield* draftWorkspaces(home, skitLocator(draft));
+  const recorded = (yield* lookup.drafts)(draft);
   const locations = [...recorded];
   if (!locations.length) {
     const owner = yield* ownerLocation;
@@ -77,9 +85,9 @@ export const localWorkspaceLocations = Effect.fn("Library.localWorkspaceLocation
 export const localWorkspace = Effect.fn("Library.localWorkspace")(function* (
   state: Pick<LibraryManifest, "imports">,
   collection: Collection,
-  home: string,
+  lookup: WorkspaceLookup,
 ) {
-  const locations = yield* localWorkspaceLocations(state, collection, home);
+  const locations = yield* localWorkspaceLocations(state, collection, lookup);
   return locations.length === 1 ? locations[0] : undefined;
 });
 /** Missing/broken workspace metadata must not hide its retained Library entry. Remote facts
@@ -87,13 +95,13 @@ export const localWorkspace = Effect.fn("Library.localWorkspace")(function* (
 export const readCollectionSource = Effect.fn("Library.readCollectionSource")(function* (
   state: Pick<LibraryManifest, "imports">,
   collection: Collection,
-  home: string,
+  lookup: WorkspaceLookup,
 ): Effect.fn.Return<CollectionSource | undefined, never, FileSystem.FileSystem> {
   const acquisition = sourceImports(state, collection.collection_id)[0];
   const source = collection.upstream?.source_identity ?? acquisition?.source_identity;
   if (source === undefined) return undefined;
   if (source.kind === "authored-workspace") {
-    const locations = yield* localWorkspaceLocations(state, collection, home).pipe(
+    const locations = yield* localWorkspaceLocations(state, collection, lookup).pipe(
       Effect.orElseSucceed(() => []),
     );
     const local = locations.length === 1 ? locations[0] : undefined;

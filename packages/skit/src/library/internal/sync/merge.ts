@@ -339,11 +339,26 @@ export function mergeLibraryManifests(
       conflictedCollections.add(id);
     }
   }
+  // Independently registered copies of one workspace may first meet after only one
+  // has connected. Carry that address into the merge without resolving any other fields.
+  const connectedUpstreams = new Map(
+    [...local.collections, ...remote.collections]
+      .filter(
+        (item) => independentCollections.includes(item.collection_id) && item.upstream?.draft_home,
+      )
+      .map((item) => [item.collection_id, item.upstream] as const),
+  );
+  const withDraftHome = (item: Collection) => {
+    const connected = connectedUpstreams.get(item.collection_id);
+    return connected && item.upstream && !item.upstream.draft_home
+      ? { ...item, upstream: { ...item.upstream, draft_home: connected.draft_home } }
+      : item;
+  };
   const collections = mergeRecords<Collection>(
     "collection",
     base.collections,
-    local.collections,
-    remote.collections,
+    local.collections.map(withDraftHome),
+    remote.collections.map(withDraftHome),
     (item) => item.collection_id,
     takeRemote,
   );

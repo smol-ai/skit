@@ -94,10 +94,21 @@ export function alignLibrary(
       )
     )
       continue;
-    const remoteMatch = remote.collections.find(
+    const matches = remote.collections.filter(
       (item) => item.upstream !== undefined && sameUpstream(upstream, item.upstream),
     );
-    if (remoteMatch === undefined) continue;
+    const remoteMatch = matches[0];
+    if (matches.length !== 1 || !remoteMatch?.upstream) continue;
+    // An unconnected workspace can match distinct Drafts sharing a workspace ID.
+    // Only align when each side identifies exactly one Collection on the other.
+    const remoteUpstream = remoteMatch.upstream;
+    if (
+      local.collections.some(
+        (item) =>
+          item !== collection && item.upstream && sameUpstream(item.upstream, remoteUpstream),
+      )
+    )
+      continue;
     collections.push({
       from: collection.collection_id,
       to: remoteMatch.collection_id,

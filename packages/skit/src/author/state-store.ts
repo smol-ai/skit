@@ -89,15 +89,14 @@ export const readAuthorSyncLocators = (home: string) =>
   );
 
 /** Device-local workspace observations which have synced this Registry Draft. */
-export const draftWorkspaces = (home: string, locator: string) =>
+export const readDraftWorkspaceRows = (home: string) =>
   read(
     home,
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      return yield* sql<{ workspaceId: string; path: string }>`
-      SELECT w.workspace_id AS workspaceId, w.root AS path
-      FROM author_history_workspaces w JOIN author_sync_checkpoints c USING (workspace_id)
-      WHERE c.locator = ${locator}`;
+      return yield* sql<{ locator: string; workspaceId: string; path: string }>`
+      SELECT c.locator, w.workspace_id AS workspaceId, w.root AS path
+      FROM author_history_workspaces w JOIN author_sync_checkpoints c USING (workspace_id)`;
     }),
     [],
   );

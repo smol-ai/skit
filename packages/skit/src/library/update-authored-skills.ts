@@ -1,5 +1,3 @@
-import { draftWorkspaces } from "../author/state-store.js";
-import { skitLocator } from "../author/destination.js";
 import { AuthorRemoteHome } from "../author/remote.js";
 import { readCatalogue } from "./store/catalogue.js";
 import { LibraryChanged } from "./failures.js";
@@ -26,7 +24,13 @@ import { importAuthoredCollection } from "./import-collection.js";
 import { LibraryWriter, libraryOriginalsPath, loadLibrary } from "./store/library-store.js";
 import { prepareAuthored } from "./internal/content/prepare-authored.js";
 import * as InstalledSkills from "./installed-skills.js";
-import { CollectionSource, localWorkspace, readCollectionSource } from "./collection-source.js";
+import {
+  CollectionSource,
+  localWorkspace,
+  readCollectionSource,
+  workspaceLookup,
+  type WorkspaceLookup,
+} from "./collection-source.js";
 import type { LibraryState } from "./library-state.js";
 import type { RemovalDecision } from "../author/inventory.js";
 import { inspectAuthorWorkspace } from "../author/inspect.js";
@@ -54,7 +58,7 @@ export const AuthoredInstallation = Schema.Struct({
 const readAuthoredInstallation = Effect.fn("Library.readAuthoredInstallation")(function* (
   state: LibraryState,
   collectionId: string,
-  home: string,
+  lookup: WorkspaceLookup,
 ) {
   const collection = state.collections.find((item) => item.collection_id === collectionId)!;
   const members = currentCollectionSkills(state, collection.collection_id);
@@ -78,12 +82,12 @@ const readAuthoredInstallation = Effect.fn("Library.readAuthoredInstallation")(f
       skill: skill.name,
       path: copy.path,
       collection_label: owner.label,
-      source: yield* readCollectionSource(state, owner, home),
+      source: yield* readCollectionSource(state, owner, lookup),
     });
   }
   return {
     collection_label: collection.label,
-    source: yield* readCollectionSource(state, collection, home),
+    source: yield* readCollectionSource(state, collection, lookup),
     disabled_skills: members
       .filter((member) => !enabled.has(member.skill_id))
       .map((member) => member.name),
@@ -159,6 +163,7 @@ export const updateAuthoredSkills = Effect.fn("Library.updateAuthoredSkills")(fu
   const state = yield* loadLibrary(writer.home);
   const installedSkills = yield* InstalledSkills.Service;
   const active = yield* installedSkills.active;
+  const lookup = yield* workspaceLookup(writer.home);
   const matches = [];
   for (const candidate of state.collections) {
     const upstream = candidate.upstream;
@@ -169,7 +174,7 @@ export const updateAuthoredSkills = Effect.fn("Library.updateAuthoredSkills")(fu
         !Schema.toEquivalence(AuthorRemoteHome)(request.draftHome, upstream.draft_home)
       )
         continue;
-      const workspace = yield* localWorkspace(state, candidate, writer.home);
+      const workspace = yield* localWorkspace(state, candidate, lookup);
       if (workspace?.workspaceId !== request.workspaceId || workspace.path !== request.input)
         continue;
     } else if (upstream.source_identity.workspace_id !== request.workspaceId) continue;
@@ -183,7 +188,7 @@ export const updateAuthoredSkills = Effect.fn("Library.updateAuthoredSkills")(fu
       selectedSourceImport(state, collection.collection_id)?.import_id !== request.expectedImportId)
   )
     return yield* new LibraryChanged({ path: writer.home });
-  if (collection === undefined)
+  if (!collection?.upstream)
     return {
       status: "unregistered" as const,
       installed: 0,
@@ -195,9 +200,8 @@ export const updateAuthoredSkills = Effect.fn("Library.updateAuthoredSkills")(fu
   let connected = collection.upstream?.draft_home !== undefined;
   if (
     request.draftHome &&
-    collection.upstream &&
     !collection.upstream.draft_home &&
-    (yield* draftWorkspaces(writer.home, skitLocator(request.draftHome))).some(
+    (yield* lookup.drafts)(request.draftHome).some(
       (location) => location.workspaceId === request.workspaceId && location.path === request.input,
     )
   ) {
@@ -228,7 +232,7 @@ export const updateAuthoredSkills = Effect.fn("Library.updateAuthoredSkills")(fu
       installed: 0,
       installed_copies: [],
       issues: prepared.issues,
-      context: yield* readAuthoredInstallation(state, collection.collection_id, writer.home),
+      context: yield* readAuthoredInstallation(state, collection.collection_id, lookup),
     };
   const { hash, importedAt } = prepared;
   if (hash !== previous?.hash) {
@@ -237,7 +241,7 @@ export const updateAuthoredSkills = Effect.fn("Library.updateAuthoredSkills")(fu
         root: prepared.root,
         input: request.input,
         source: { type: "local", path: request.input },
-        sourceIdentity: collection.upstream!.source_identity,
+        sourceIdentity: collection.upstream.source_identity,
         label: collection.label,
         importedAt,
       },
@@ -307,7 +311,7 @@ export const updateAuthoredSkills = Effect.fn("Library.updateAuthoredSkills")(fu
     installed: installedCopies.length,
     installed_copies: installedCopies,
     issues,
-    context: yield* readAuthoredInstallation(current, collection.collection_id, writer.home),
+    context: yield* readAuthoredInstallation(current, collection.collection_id, lookup),
   };
 });
 

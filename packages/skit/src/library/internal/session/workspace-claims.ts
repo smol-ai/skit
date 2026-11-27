@@ -1,8 +1,6 @@
 import { Effect, FileSystem } from "effect";
 import type { LibraryState } from "../../library-state.js";
-import { localWorkspaceLocations } from "../../collection-source.js";
-
-import * as MachineSettings from "../../machine-settings.js";
+import { localWorkspaceLocations, workspaceLookup } from "../../collection-source.js";
 
 export interface WorkspaceClaim {
   readonly collectionId: string;
@@ -15,7 +13,8 @@ export const readWorkspaceClaims = Effect.fn("LibraryView.readWorkspaceClaims")(
   root: string,
   home: string,
 ) {
-  const machineId = yield* MachineSettings.readIdentity(home);
+  const lookup = yield* workspaceLookup(home);
+  const machineId = yield* lookup.machine;
   const fs = yield* FileSystem.FileSystem;
   const workspaceIdOf = (collection: LibraryState["collections"][number]) =>
     collection.upstream?.source_identity.kind === "authored-workspace"
@@ -27,7 +26,7 @@ export const readWorkspaceClaims = Effect.fn("LibraryView.readWorkspaceClaims")(
     { collectionId: string; input?: string; sourceWorkspaceId: string }
   >();
   for (const collection of state.collections) {
-    const locations = yield* localWorkspaceLocations(state, collection, home);
+    const locations = yield* localWorkspaceLocations(state, collection, lookup);
     if (locations.length > 1) {
       // An occupied root with no adoptable identity makes init refuse a second Collection.
       if (locations.some((item) => item.path === root))

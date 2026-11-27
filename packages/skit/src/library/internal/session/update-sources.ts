@@ -1,3 +1,4 @@
+import { workspaceLookup } from "../../collection-source.js";
 import { LibraryChanged } from "../../failures.js";
 import { CollectionNotUpdatable } from "../../update-failures.js";
 import type { AuthoredSkillIssue } from "../../authored-skill-issues.js";
@@ -102,7 +103,7 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <E, R>(
       const { priorTree, input, acquisition, workspace } = yield* resolveUpdate(
         state,
         before,
-        home,
+        yield* workspaceLookup(home),
       );
       source = sourceLocator(input);
       const subject = { id: before.subjectId, label: before.label };

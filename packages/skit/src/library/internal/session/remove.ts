@@ -4,7 +4,7 @@ import { emptyLibraryState, type LibraryState } from "../../library-state.js";
 import { resolveLibrarySubject, type LibrarySubject } from "../../subject-resolution.js";
 import { enabledSkillIds } from "../../library-contracts.js";
 import { SkillRemovalRequiresCollection } from "../../installation/remove.js";
-import { readCollectionSource } from "../../collection-source.js";
+import { readCollectionSource, workspaceLookup } from "../../collection-source.js";
 
 const describeRemoval = Effect.fn("Library.describeRemoval")(function* (
   state: LibraryState,
@@ -32,7 +32,9 @@ const describeRemoval = Effect.fn("Library.describeRemoval")(function* (
       ? subject.collection
       : state.collections.find((item) => item.collection_id === subject.skill.collection_id);
   const collectionSource =
-    collection === undefined ? undefined : yield* readCollectionSource(state, collection, home);
+    collection === undefined
+      ? undefined
+      : yield* readCollectionSource(state, collection, yield* workspaceLookup(home));
   return {
     subject_id: subject.subjectId,
     subject_kind: subject.kind,

@@ -437,6 +437,59 @@ describe(sync.pullMissing.title, { meta: { guarantee: sync.pullMissing } }, () =
 });
 
 describe(sync.propagateEdits.title, { meta: { guarantee: sync.propagateEdits } }, () => {
+  it.effect(
+    "refreshes the installed copy when foreground author sync cannot reach the Registry",
+    () =>
+      Effect.gen(function* () {
+        const { fs, first, userA, homeA, onDevice } = yield* world();
+        const library = yield* libraryHome({ home: homeA });
+        const skill = (yield* library.durable)?.skills[0];
+        if (!skill) throw new Error("Expected an imported skill");
+        yield* library.enable([{ skill: skill.skill_id }]);
+        const root = join(testRoots(userA).home, ".agents", "skills");
+        yield* writingTo(
+          homeA,
+          installEnabledSkills({ target: "agents", root, variantsPath: join(homeA, "variants") }),
+        );
+        const input = join(first, "skills/review/SKILL.md");
+        const installed = join(root, "review/SKILL.md");
+        const before = yield* fs.readFileString(installed);
+        yield* fs.writeFileString(input, (yield* fs.readFileString(input)) + "\nOffline edit\n");
+        const outcome = yield* onDevice(
+          userA,
+          homeA,
+          "a",
+          authorSyncCommand({ root: first, home: homeA, apply: true }),
+          true,
+        ).pipe(Effect.result);
+        expect(outcome._tag).toBe("Failure");
+        expect(yield* fs.readFileString(installed)).toBe(before + "\nOffline edit\n");
+      }).pipe(Effect.provide(testPlatformLayer)),
+  );
+  it.effect("reports the pushed revision alongside a failed installation refresh", () =>
+    Effect.gen(function* () {
+      const { fs, first, userA, homeA, onDevice, author } = yield* world();
+      const input = join(first, "skills/review/SKILL.md");
+      yield* fs.writeFileString(input, (yield* fs.readFileString(input)) + "\nNew revision\n");
+      const result = yield* onDevice(
+        userA,
+        homeA,
+        "a",
+        Effect.gen(function* () {
+          const library = yield* Library.Service;
+          return yield* authorSyncCommand({ root: first, home: homeA, apply: true }).pipe(
+            Effect.provideService(Library.Service, {
+              ...library,
+              updateAuthoredSkills: () => Effect.fail(new Library.LibraryChanged({ path: homeA })),
+            }),
+          );
+        }),
+      );
+      expect(result.status).toBe("pushed");
+      expect("revision_id" in result && result.revision_id).toBe(yield* author.current());
+      expect("installation_issues" in result && result.installation_issues).toHaveLength(1);
+    }).pipe(Effect.provide(testPlatformLayer)),
+  );
   for (const scope of ["author", "device"] as const) {
     it.effect(`refreshes enabled harness bytes after a ${scope} sync receives a remote edit`, () =>
       Effect.gen(function* () {
