@@ -23,7 +23,7 @@ export interface RawFacts { facts: RawFact[] }
 /** Remove data nodes in the existing order, bridging their inputs to consumers.
  * Adjacency indexes avoid rescanning the whole graph for each removed node.
  * Map insertion order retains the previous surviving-edge/bridged-edge order. */
-export const contractDataNodes = <E extends Omit<Edge, "location">>(edges: ReadonlyArray<E>, data: ReadonlySet<string>): E[] => {
+const contractDataNodes = <E extends Omit<Edge, "location">>(edges: ReadonlyArray<E>, data: ReadonlySet<string>): E[] => {
   const active = new Map<number, E>(), incoming = new Map<string, Set<number>>(), outgoing = new Map<string, Set<number>>();
   let next = 0;
   const add = (edge: E) => {

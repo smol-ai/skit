@@ -17,7 +17,7 @@ const importedFunction = (names: NameResolution, file: ts.SourceFile, name: stri
  * return `Layer.Layer<Out, E, In>`, and `Service.layer` for an imported
  * `Context.Service` class whose static `layer` is `Layer.effect(...)`. This is
  * syntax only; it does not infer instantiated service unions. */
-export const sourceLayerContracts = (names: NameResolution): WalkHook => {
+const sourceLayerContracts = (names: NameResolution): WalkHook => {
   const requirements = (declaration: ts.ClassDeclaration, layer: ts.PropertyDeclaration): ReadonlyArray<ts.Expression> => {
     const found: ts.Expression[] = [];
     const file = declaration.getSourceFile();
@@ -81,7 +81,7 @@ export const sourceLayerContracts = (names: NameResolution): WalkHook => {
  * `makeLocationNode`, `LayerNode.make` or `LayerNode.unbound` definition,
  * record its scope, and add its declared `deps` as requirements. Names resolve
  * as the compiler binds them, through imports, re-exports and namespaces. */
-export const layerNodeDependencies = (names: NameResolution): WalkHook => {
+const layerNodeDependencies = (names: NameResolution): WalkHook => {
   const initializer = (statements: ts.NodeArray<ts.Statement>, name: string): ts.Expression | undefined => {
     for (const statement of statements) if (ts.isVariableStatement(statement)) {
       for (const declaration of statement.declarationList.declarations) if (ts.isIdentifier(declaration.name)

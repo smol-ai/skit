@@ -19,7 +19,7 @@ export const graphArtifactOf = (
   return graphs.length === 0 ? null : { format: "application-graph-v2", repo, commit, graphs };
 };
 
-export const buildGraphArtifact = inNode(import.meta.url, "buildGraphArtifact", (
+const buildGraphArtifact = inNode(import.meta.url, "buildGraphArtifact", (
   repo: string,
   commit: string,
   sources: ReadonlyArray<WorkerSourceFile>,

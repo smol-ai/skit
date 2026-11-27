@@ -6,7 +6,7 @@ import type { GraphEdge, GraphNode } from "./graph-artifact.ts";
 import type { GraphBuilder } from "./graph-builder.ts";
 import type { CompilerProgram, SourceProgram } from "./compiler-program.ts";
 
-export const callName = (expr: ts.Expression): string | null =>
+const callName = (expr: ts.Expression): string | null =>
   ts.isCallExpression(expr) && ts.isPropertyAccessExpression(expr.expression)
   && ts.isIdentifier(expr.expression.expression)
     ? `${expr.expression.expression.text}.${expr.expression.name.text}` : null;

@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 const require = createRequire(import.meta.url);
-export const defaultGraphCompiler = dirname(require.resolve("tsrs/package.json"));
+const defaultGraphCompiler = dirname(require.resolve("tsrs/package.json"));
 export interface GraphCompilerVersions { readonly typescript: string; readonly tsrs: string; readonly typescriptCommit: string; readonly fingerprint: string }
 export const graphCompilerExecutable = (): string => require(resolve(defaultGraphCompiler, "lib/getExePath.js")).default();
 export const graphCompilerVersions = (): GraphCompilerVersions => {

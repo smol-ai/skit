@@ -14,7 +14,7 @@ export * from "tsrs/ast";
 
 export const forEachChild = <T>(node: Node, visit: (child: Node) => T): T | undefined => node.forEachChild(visit);
 
-export const canHaveModifiers = (node: Node): node is Node & { readonly modifiers?: NodeArray<ModifierLike> } =>
+const canHaveModifiers = (node: Node): node is Node & { readonly modifiers?: NodeArray<ModifierLike> } =>
   "modifiers" in node;
 
 export const getModifiers = (node: Node): ReadonlyArray<Modifier> | undefined =>

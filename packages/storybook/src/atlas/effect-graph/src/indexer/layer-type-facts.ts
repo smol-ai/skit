@@ -78,13 +78,12 @@ const CompositionEdge = Schema.Struct({
   relationship: Schema.Literals(["pipe", "call", "arrayLiteral", "symbol", "factory", "returned", "runtime"]),
   index: Schema.optional(Schema.Int),
 });
-export const LayerComposition = Schema.Struct({
+const LayerComposition = Schema.Struct({
   nodes: Schema.Array(CompositionNode),
   edges: Schema.Array(CompositionEdge),
   /** Graph nodes whose expression is a composition node. */
   anchors: Schema.Array(Schema.Struct({ nodeId: Schema.String, composition: Schema.String })),
 });
-export type LayerComposition = typeof LayerComposition.Type;
 
 export const LayerTypeFacts = Schema.Struct({
   sourceFingerprint: Schema.optionalKey(Schema.String),
@@ -138,7 +137,7 @@ const modulePath = (path: string): string => {
  * declared, which the page keeps for a hover. */
 /** A long type name as it reads on the page: its head and first type argument
  * (`OperationHandler<"sessions/verify", …>`). The full name stays its identity. */
-export const shortTypeName = (name: string, max = 80): string => {
+const shortTypeName = (name: string, max = 80): string => {
   if (name.length <= max) return name;
   const open = /^[\w$.]+</.test(name) ? name.indexOf("<") : -1;
   let depth = 0, quote = "";
@@ -153,7 +152,7 @@ export const shortTypeName = (name: string, max = 80): string => {
   return `${name.slice(0, max - 1)}…`;
 };
 
-export interface TypeDisplay {
+interface TypeDisplay {
   readonly name: string;
   readonly role?: string;
   readonly declaredIn?: string;
@@ -163,7 +162,7 @@ export interface TypeDisplay {
   readonly generic?: boolean;
 }
 
-export const typeDisplays = (types: ReadonlyArray<TypeMember>): ReadonlyMap<string, TypeDisplay> => {
+const typeDisplays = (types: ReadonlyArray<TypeMember>): ReadonlyMap<string, TypeDisplay> => {
   const role = (type: TypeMember): string | undefined => type.parameter ? "a type parameter"
     : type.request === "Requires" ? "needed on each request"
     : type.request === "GlobalRequires" ? "needed on each request, by global middleware"
@@ -191,13 +190,13 @@ export const typeDisplays = (types: ReadonlyArray<TypeMember>): ReadonlyMap<stri
 };
 
 /** A type as one line of text (`HttpPlatform (needed on each request)`), for the claims dump and plain lists. */
-export const typeLabels = (types: ReadonlyArray<TypeMember>): ReadonlyMap<string, string> =>
+const typeLabels = (types: ReadonlyArray<TypeMember>): ReadonlyMap<string, string> =>
   new Map([...typeDisplays(types)].map(([id, { name, role, declaredIn }]) =>
     [id, `${name}${role ? ` (${role})` : ""}${declaredIn ? `, from ${declaredIn}` : ""}`]));
 
 /** A router records the errors a request can fail with in the requirements
  * channel (`Request<"Error", E>`); they are errors, not requirements. */
-export const requestChannels = (types: ReadonlyArray<TypeMember>) => {
+const requestChannels = (types: ReadonlyArray<TypeMember>) => {
   const requestErrors = new Set(types.filter((type) => type.request === "Error" || type.request === "GlobalError").map((type) => type.id));
   return (fact: { readonly requires: ReadonlyArray<string>; readonly errors: ReadonlyArray<string> }) => ({
     requires: fact.requires.filter((id) => !requestErrors.has(id)),
@@ -205,7 +204,7 @@ export const requestChannels = (types: ReadonlyArray<TypeMember>) => {
   });
 };
 
-export interface ResolvedLayerTypeFact {
+interface ResolvedLayerTypeFact {
   readonly status: LayerTypeFacts["facts"][number]["status"];
   readonly provides: ReadonlyArray<string>;
   readonly errors: ReadonlyArray<string>;
@@ -218,7 +217,7 @@ export interface ResolvedLayerTypeFact {
 /** Decode the native-compiler sidecar separately from the source graph. A
  * partial fact stays visible as partial evidence and never supplies a complete
  * requirements claim to the renderer. */
-export const indexLayerTypeFacts = (
+const indexLayerTypeFacts = (
   input: unknown, repo: string | undefined, commit: string | undefined,
   nodeIds: ReadonlySet<string>,
 ): { artifact: LayerTypeFacts; byNode: ReadonlyMap<string, ResolvedLayerTypeFact> } => {

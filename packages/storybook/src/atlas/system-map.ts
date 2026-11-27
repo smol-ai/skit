@@ -49,7 +49,7 @@ const ExtractedMap = Schema.Struct({
   compiler: SystemMap.fields.compiler,
 });
 
-export class SystemMapFailure extends Schema.TaggedError<SystemMapFailure>()("SystemMapFailure", {
+class SystemMapFailure extends Schema.TaggedError<SystemMapFailure>()("SystemMapFailure", {
   cause: Schema.Defect(),
 }) {}
 

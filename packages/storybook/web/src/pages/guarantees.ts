@@ -251,7 +251,7 @@ export const guaranteesPage = (
               value: [
                 report === undefined
                   ? h.span([h.Class("text-muted-foreground")], ["No saved test report"])
-                  : `${new Date(report.startTime).toISOString()}${report.provenance === "current" ? "" : ` · ${report.provenance}`}`,
+                  : `${new Date(report.startTime).toISOString()}${report.provenance === "current" ? "" : ` (${report.provenance})`}`,
               ],
             };
           }),

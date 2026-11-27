@@ -347,7 +347,7 @@ export const ServiceDefinition = Schema.Struct({
   providers: Schema.Array(MapProvider),
   stores: Schema.Array(Schema.String),
 });
-export const TracedProvider = Schema.Struct({
+const TracedProvider = Schema.Struct({
   ...MapProvider.fields,
   dependencies: Schema.Array(Schema.String),
 });
@@ -358,7 +358,7 @@ export const RequirementTrace = Schema.Struct({
   candidates: Schema.Array(TracedProvider),
   stops: Schema.Array(MapStop),
 });
-export const CommandRequirements = Schema.Struct({
+const CommandRequirements = Schema.Struct({
   command: Schema.String,
   sources: Schema.Array(MapSource),
   requirements: Schema.Array(RequirementTrace),

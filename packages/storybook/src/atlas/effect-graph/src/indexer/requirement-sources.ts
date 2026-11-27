@@ -34,7 +34,7 @@ export interface RequirementSources {
 /** A Layer that supplies the service: `origin` is the innermost expression
  * whose type provides it, `through` the Layer provided into the part's path
  * that carries it there (the same node when nothing wraps it). */
-export interface RequirementProvider {
+interface RequirementProvider {
   readonly origin: GraphNode;
   readonly through: GraphNode;
   /** The Layer `origin` stands in for, when a `.replace(...)` in this entry replaces it. */

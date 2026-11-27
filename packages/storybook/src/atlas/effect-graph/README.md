@@ -55,7 +55,8 @@ into the sibling effect-grep checkout are permitted.
    production-source/package predicates. `stackLabel` is isolated at its only use;
    no overview/contracts renderer is copied. Atlas runs under Node, so `inNode`
    does not spawn effect-grep’s absent Bun bridge. Source extraction rules otherwise
-   stay unchanged. Keep these packaging corrections when refreshing.
+   stay unchanged. Keep extractor helpers and types private when Atlas has no
+   external caller for them.
 
 2. **Workspace source resolution:** build exact export-to-source paths from workspace
    package manifests, using the same published export targets as Atlas’s existing
@@ -129,7 +130,7 @@ have no separate upstream counterpart. Counts include comments and blank lines.
 
 | Local file | Source path at a464a64 | Current lines | Taken |
 |---|---|---:|---|
-| `scripts/lib/compiler-graph.ts` | `scripts/lib/compiler-graph.ts` | 135 | Whole |
+| `scripts/lib/compiler-graph.ts` | `scripts/lib/compiler-graph.ts` | 135 | Corrected |
 | `scripts/lib/graph-compiler.ts` | `scripts/lib/graph-compiler.ts` | 22 | Corrected |
 | `scripts/lib/graph-value-type.ts` | `scripts/lib/graph-value-type.ts` | 7 | Corrected |
 | `scripts/lib/layer-composition.ts` | `scripts/lib/layer-composition.ts` | 368 | Corrected |
@@ -148,13 +149,13 @@ have no separate upstream counterpart. Counts include comments and blank lines.
 | `src/indexer/graph-artifact.ts` | `src/indexer/graph-artifact.ts` | 101 | Whole |
 | `src/indexer/graph-builder.ts` | `src/indexer/graph-builder.ts` | 58 | Whole |
 | `src/indexer/graph-root.ts` | `src/indexer/graph-root.ts` | 33 | Corrected |
-| `src/indexer/layer-graph.ts` | `src/indexer/layer-graph.ts` | 3 | Whole |
-| `src/indexer/layer-type-facts.ts` | `src/indexer/layer-type-facts.ts` | 252 | Whole |
+| `src/indexer/layer-graph.ts` | `src/indexer/layer-graph.ts` | 3 | Corrected |
+| `src/indexer/layer-type-facts.ts` | `src/indexer/layer-type-facts.ts` | 251 | Corrected |
 | `src/indexer/provider-scopes.ts` | `local correction` | 93 | Local correction |
-| `src/indexer/requirement-sources.ts` | `src/indexer/requirement-sources.ts` | 229 | Whole |
+| `src/indexer/requirement-sources.ts` | `src/indexer/requirement-sources.ts` | 229 | Corrected |
 | `src/indexer/runtime-graph.ts` | `src/indexer/runtime-graph.ts` | 216 | Corrected |
 | `src/indexer/services.ts` | `local correction` | 101 | Local correction |
 | `src/indexer/syntax.ts` | `src/indexer/syntax.ts` | 42 | Corrected |
 | `src/indexer/worker-layer-graph.ts` | `src/indexer/worker-layer-graph.ts` | 250 | Corrected |
 
-Current total: **4,854 lines**, 27 files (limit: 5,000).
+Current total: **4,853 lines**, 27 files (limit: 5,000).

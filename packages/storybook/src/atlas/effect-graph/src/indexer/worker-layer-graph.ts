@@ -28,7 +28,7 @@ const workerCandidate = (path: string): boolean => /\.tsx?$/.test(path) && !/\.d
 /** Recognize the actual Worker declaration, including a subclass built with
  * Cloudflare.Worker and a direct Cloudflare.Worker class expression. The label
  * keeps both identities: the class the source declares and the name it deploys. */
-export const recognizeWorkerEntrypoint = (
+const recognizeWorkerEntrypoint = (
   file: ts.SourceFile, names: NameResolution,
 ): { label: string; node: ts.ClassDeclaration; root: GraphRoot; factory: (node: ts.Node) => node is ts.CallExpression } | null => {
   const isWorkerFactory = (node: ts.Node): node is ts.CallExpression => ts.isCallExpression(node) && names.callee(node) === "Cloudflare.Worker";

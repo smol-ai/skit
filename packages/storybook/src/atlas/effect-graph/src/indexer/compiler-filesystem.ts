@@ -29,7 +29,7 @@ const inspect = (operation: Operation, path: string) => {
 };
 
 /** Revalidate both content and resolution probes, including previously absent paths. */
-export function compilerEnvironmentIssue(value: unknown): string | undefined {
+function compilerEnvironmentIssue(value: unknown): string | undefined {
   const parsed = Schema.decodeUnknownOption(CompilerEnvironment)(value);
   if (parsed._tag === "None") return "compiler environment provenance is missing or invalid";
   for (const observation of parsed.value.observations)
