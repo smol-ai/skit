@@ -3,8 +3,8 @@ import {
   AuthorHistoryBusy,
   AuthorSyncStateConflict,
   AuthorBackupStateConflict,
-} from "./history-failures.js";
-export { AuthorHistoryInvalid } from "./history-failures.js";
+} from "../history-failures.js";
+export { AuthorHistoryInvalid } from "../history-failures.js";
 /**
  * AuthorHistory: the owner of this device's author history (ADR-0027).
  *
@@ -27,21 +27,21 @@ import {
 } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 
-import { normalizeAuthorTreeEntries } from "../artifact/tree.js";
-import { parentDirectories } from "../shared/relative-path.js";
-import { AuthorIgnoreRepository } from "../artifact/plain-author-ignore.js";
-import * as History from "../history/history.js";
-import { HomeBusy } from "../platform/lock-failures.js";
-import { LinkStat } from "../platform/link-stat.js";
-import * as MachineSettings from "../library/machine-settings.js";
-import { SourceProcess } from "../platform/source-process.js";
-import * as Sync from "../sync/sync.js";
-import { type TreeError } from "../shared/tree-error.js";
+import { normalizeAuthorTreeEntries } from "../../artifact/tree.js";
+import { parentDirectories } from "../../shared/relative-path.js";
+import { AuthorIgnoreRepository } from "../../artifact/plain-author-ignore.js";
+import * as History from "../../history/history.js";
+import { HomeBusy } from "../../platform/lock-failures.js";
+import { LinkStat } from "../../platform/link-stat.js";
+import * as MachineSettings from "../../library/machine-settings.js";
+import { SourceProcess } from "../../platform/source-process.js";
+import * as Sync from "../../sync/sync.js";
+import { type TreeError } from "../../shared/tree-error.js";
 
-import { syncPaths } from "../platform/atomic-write.js";
+import { syncPaths } from "../../platform/atomic-write.js";
 import { scanAuthorWorkspace } from "./scan.js";
-import * as HomeLock from "../platform/home-lock.js";
-import { AuthorWorkspaceAlreadyRegistered, LocalFilesChangedDuringSync } from "./failures.js";
+import * as HomeLock from "../../platform/home-lock.js";
+import { AuthorWorkspaceAlreadyRegistered, LocalFilesChangedDuringSync } from "../failures.js";
 
 import {
   AuthorSyncStateInvalid,
@@ -54,13 +54,13 @@ import {
   type WorkspaceLease,
   type WorkspaceRoot,
 } from "./workspace.js";
-import { AuthorWorkspaceInvariantFailed } from "./workspace-contracts.js";
+import { AuthorWorkspaceInvariantFailed } from "../workspace-contracts.js";
 import { makeHistoryStore } from "./history-store.js";
-import { fileBytesPath } from "../artifact/file-bytes.js";
+import { fileBytesPath } from "../../artifact/file-bytes.js";
 import { saveReceivedHistory, writeHistoryEvent } from "./history-journal.js";
-import { libraryDatabasePath } from "../library/store/database.js";
+import { libraryDatabasePath } from "../../library/database.js";
 import * as AuthorState from "./state-store.js";
-import { makeRemovalCheck, scanAuthorInventory, type RemovalDecision } from "./inventory.js";
+import { makeRemovalCheck, scanAuthorInventory, type RemovalDecision } from "../inventory.js";
 
 // ── Errors ─────────────────────────────────────────────────────────────────────────────────────
 

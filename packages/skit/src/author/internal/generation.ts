@@ -1,5 +1,5 @@
 import { type DescriptorFailure } from "../../artifact/failures.js";
-import { NotAnAuthorWorkspace } from "../../author/failures.js";
+import { NotAnAuthorWorkspace } from "../failures.js";
 import { Effect, FileSystem, Schema } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { join, posix, resolve } from "node:path";

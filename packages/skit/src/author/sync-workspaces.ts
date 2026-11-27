@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Option, Path, Result } from "effect";
 import * as Library from "../library/library.js";
-import { AuthorHistory } from "./history.js";
-import { AuthorWorkspace } from "./workspace.js";
+import { AuthorHistory } from "./internal/history.js";
+import { AuthorWorkspace } from "./internal/workspace.js";
 import { parseAuthorDestination, skitLocator } from "./destination.js";
 import { pullAuthorSkit } from "./pull.js";
 import { syncAuthorWorkspace } from "./sync.js";

@@ -4,7 +4,7 @@ import {
   withDatabaseTransaction,
   migrateLibraryDatabase,
   prepareLibraryDatabase,
-} from "../src/library/store/database.js";
+} from "../src/library/database.js";
 import { prepareLibraryDifference } from "../src/library/store/difference.js";
 import { canonicalJson } from "../src/shared/json.js";
 import { declaredFixture as valuesFixture } from "./helpers/library-values.js";
@@ -21,7 +21,7 @@ import { Effect, FileSystem, Schema } from "effect";
 import { systemError } from "effect/PlatformError";
 import { Migrator, SqlClient } from "effect/sql";
 import { join } from "node:path";
-import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/database.js";
 import { migrateLocalLibraryState, readDatabaseState } from "../src/library/store/state-file.js";
 import {
   decodeLibraryState,

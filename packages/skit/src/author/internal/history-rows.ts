@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Hash } from "../shared/hash.js";
-import * as History from "../history/history.js";
+import { Hash } from "../../shared/hash.js";
+import * as History from "../../history/history.js";
 
 const Entry = Schema.Union([
   Schema.Struct({

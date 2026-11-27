@@ -4,7 +4,7 @@ import { SkillAssessmentAcceptance } from "../assessment-acceptance.js";
 import { InvalidLibraryState, LibraryChanged } from "../failures.js";
 import { JsonObject } from "../../shared/json.js";
 import { Hash } from "../../shared/hash.js";
-import { libraryDatabasePath } from "./database.js";
+import { libraryDatabasePath } from "../database.js";
 import { insertAcceptanceRow } from "./rows.js";
 import type { HistoryAction } from "./history-action.js";
 import {

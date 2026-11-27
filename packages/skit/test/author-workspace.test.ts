@@ -1,13 +1,13 @@
 import { WorkspaceFailure } from "../src/author/workspace-contracts.js";
-import { AuthorWorkspace, type WorkspaceLease } from "../src/author/workspace.js";
-import { AuthorHistory } from "../src/author/history.js";
+import { AuthorWorkspace, type WorkspaceLease } from "../src/author/internal/workspace.js";
+import { AuthorHistory } from "../src/author/internal/history.js";
 import { expect, it } from "@effect/vitest";
 import { Deferred, Effect, Exit, Fiber, FileSystem, Layer, Option, Scope, Schema } from "effect";
 import { join } from "node:path";
 import * as History from "../src/history/history.js";
 import * as Sync from "../src/sync/sync.js";
 import { makeMachineId } from "../src/library/entity-ids.js";
-import { scanAuthorSyncTree } from "../src/author/index.js";
+import { scanAuthorSyncTree } from "../src/author/public.js";
 
 import { authorLayer } from "./helpers/author-history.js";
 import { testPlatformLayer } from "./helpers/platform.js";

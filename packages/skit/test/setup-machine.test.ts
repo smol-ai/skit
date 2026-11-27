@@ -4,7 +4,7 @@ import { SqlClient } from "effect/sql";
 import * as Library from "../src/library/library.js";
 import * as MachineSettings from "../src/library/machine-settings.js";
 import { prepareSetupUndo } from "../src/library/setup/undo.js";
-import { withDatabaseTransaction } from "../src/library/store/database.js";
+import { withDatabaseTransaction } from "../src/library/database.js";
 import { loadLibrary, loadOperations } from "../src/library/store/library-store.js";
 import { readLibraryAudit } from "../src/library/audit/audit-log.js";
 import { skitLayer } from "../src/platform/layer.js";

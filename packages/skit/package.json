@@ -41,8 +41,8 @@
       "import": "./dist/library/session.js"
     },
     "./author": {
-      "types": "./dist/author/index.d.ts",
-      "import": "./dist/author/index.js"
+      "types": "./dist/author/public.d.ts",
+      "import": "./dist/author/public.js"
     },
     "./audit": {
       "types": "./dist/auditing/index.d.ts",

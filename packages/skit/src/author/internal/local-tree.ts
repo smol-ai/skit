@@ -1,8 +1,8 @@
 import { Effect, Equal, FileSystem, Option, Path, Stream } from "effect";
 import type { PlatformError } from "effect/PlatformError";
-import * as History from "../history/history.js";
-import { LinkStat } from "../platform/link-stat.js";
-import { isCanonicalRelativePath } from "../shared/relative-path.js";
+import * as History from "../../history/history.js";
+import { LinkStat } from "../../platform/link-stat.js";
+import { isCanonicalRelativePath } from "../../shared/relative-path.js";
 import {
   isNormalizedTreeControlPath,
   nativeIdentityOf,
@@ -10,15 +10,15 @@ import {
   normalizeAuthorTreeEntries,
   scanAuthorTree,
   type NativeTreeIdentity,
-} from "../artifact/tree.js";
-import { SkitContractError } from "../api/contracts.js";
+} from "../../artifact/tree.js";
+import { SkitContractError } from "../../api/contracts.js";
 import { changeFile } from "./file-replacement.js";
 import {
   AuthorLocalPathUnchecked,
   AuthorNonNfcPathUnsupported,
   AuthorNormalizationTwin,
   LocalFilesChangedDuringSync,
-} from "./failures.js";
+} from "../failures.js";
 
 /**
  * The workspace's files as author sync sees them: normalized paths, files only, with their

@@ -14,7 +14,7 @@ import { createSkitArchive } from "../src/artifact/archive.js";
 import {
   generateInvocationMetadata,
   isAuthorWorkspace,
-} from "../src/author/invocation/generation.js";
+} from "../src/author/internal/generation.js";
 import { validateSkitDirectory } from "../src/artifact/skit.js";
 import { type InvocationPolicy } from "../src/artifact/invocation-policy.js";
 

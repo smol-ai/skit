@@ -1,8 +1,8 @@
-import { generateInvocationMetadata } from "./invocation/generation.js";
+import { generateInvocationMetadata } from "./internal/generation.js";
 import { Effect } from "effect";
 import { resolve } from "node:path";
 
-import { AuthorWorkspace } from "./workspace.js";
+import { AuthorWorkspace } from "./internal/workspace.js";
 
 export const generateAuthorInvocation = Effect.fn("Author.generateInvocation")(function* (
   input: string,

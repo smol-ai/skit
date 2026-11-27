@@ -8,18 +8,18 @@ import {
   type Connecting,
   type WorkspaceLease,
   AuthorWorkspaceUnsafe,
-} from "./workspace.js";
-import { AuthorHistory, authorHistoryStoreError } from "./history.js";
+} from "./internal/workspace.js";
+import { AuthorHistory, authorHistoryStoreError } from "./internal/history.js";
 import {
   LocalFilesChangedDuringSync,
   AuthorRemoteAlreadyExists,
   PullDirectoryNotEmpty,
   VisibilityNotAccepted,
 } from "./failures.js";
-import { scanAuthorSyncTree } from "./local-tree.js";
+import { scanAuthorSyncTree } from "./internal/local-tree.js";
 import type { AuthorVisibility, AuthorRemoteHome } from "./remote.js";
 import type { AuthorSyncResult } from "./sync-result.js";
-import { mergeAuthorRevisions } from "./sync-policy.js";
+import { mergeAuthorRevisions } from "./internal/sync-policy.js";
 import { workspaceIdFromClaims } from "./library-claims.js";
 import * as Library from "../library/library.js";
 import { conflictKind } from "./merge/files.js";
@@ -27,7 +27,7 @@ import * as History from "../history/history.js";
 import * as Sync from "../sync/sync.js";
 import { AuthorDestinationRequired } from "./failures.js";
 import { parseAuthorDestination, skitLocator } from "./destination.js";
-import { backupAuthorHistory } from "./backup.js";
+import { backupAuthorHistory } from "./internal/backup.js";
 import type { AuthorRegistry } from "./transport.js";
 
 /** A first sync names its destination and visibility; it is persisted only once connecting. */

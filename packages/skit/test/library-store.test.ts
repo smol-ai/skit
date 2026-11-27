@@ -11,7 +11,7 @@ import {
   type LibraryStateWriteError,
 } from "../src/library/store/library-store.js";
 
-import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/database.js";
 import { PnpmSkillManaged } from "../src/installed-skills/pnpm-failures.js";
 import { PluginManifestInvalid } from "../src/sources/plugin-failures.js";
 import { DedicatedInstallerRequired } from "../src/sources/installer-guidance.js";

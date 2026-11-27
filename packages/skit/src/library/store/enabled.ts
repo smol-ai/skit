@@ -7,7 +7,7 @@ import { InvalidLibraryState, LibraryChanged } from "../failures.js";
 import { LibraryStateFields } from "./state-fields.js";
 import { canonicalJson, JsonObject } from "../../shared/json.js";
 import { diffEnabled } from "../audit/state-diff.js";
-import { libraryDatabasePath } from "./database.js";
+import { libraryDatabasePath } from "../database.js";
 import { loadEnabledRows, saveEnabledRows } from "./rows.js";
 import {
   advanceLibraryRevision,

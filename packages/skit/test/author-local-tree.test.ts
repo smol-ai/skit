@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { scanWorkspaceWrite } from "../src/author/local-tree.js";
+import { scanWorkspaceWrite } from "../src/author/internal/local-tree.js";
 import { skitLayer as testPlatformLayer } from "../src/platform/layer.js";
 
 const fixture = Effect.gen(function* () {

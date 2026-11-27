@@ -1,11 +1,11 @@
 import { Effect, FileSystem, Path, Schema } from "effect";
-import { COLLECTION_CONTROL_DIRECTORY } from "../artifact/control-files.js";
-import * as History from "../history/history.js";
-import { LinkStat } from "../platform/link-stat.js";
-import { SkitContractError } from "../api/contracts.js";
-import { TreeEntry } from "../artifact/tree-entry.js";
-import { syncPaths } from "../platform/atomic-write.js";
-import { AuthorLocalPathUnchecked, LocalFilesChangedDuringSync } from "./failures.js";
+import { COLLECTION_CONTROL_DIRECTORY } from "../../artifact/control-files.js";
+import * as History from "../../history/history.js";
+import { LinkStat } from "../../platform/link-stat.js";
+import { SkitContractError } from "../../api/contracts.js";
+import { TreeEntry } from "../../artifact/tree-entry.js";
+import { syncPaths } from "../../platform/atomic-write.js";
+import { AuthorLocalPathUnchecked, LocalFilesChangedDuringSync } from "../failures.js";
 import { scanWorkspaceWrite } from "./local-tree.js";
 import { changeFile } from "./file-replacement.js";
 

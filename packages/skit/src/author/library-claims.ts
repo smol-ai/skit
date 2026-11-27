@@ -1,6 +1,6 @@
 import type { WorkspaceClaim } from "../library/queries.js";
 import { Option, Schema } from "effect";
-import { WorkspaceId } from "./workspace.js";
+import { WorkspaceId } from "./internal/workspace.js";
 
 /** Reuse the first authored identity claimed at this root when workspace.json has gone (A3). */
 export const workspaceIdFromClaims = (sameRoot: readonly WorkspaceClaim[]) =>

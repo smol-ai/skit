@@ -5,7 +5,7 @@ import { join } from "node:path";
 import * as Library from "../src/library/library.js";
 import { libraryManifestFromLocalState } from "../src/library/library-state.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
-import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/database.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { testRoots } from "./helpers/library-store.js";
 

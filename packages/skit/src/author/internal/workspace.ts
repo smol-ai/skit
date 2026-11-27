@@ -24,16 +24,16 @@ import { Digest, SecureRandom } from "effect/crypto";
 import {
   AUTHOR_WORKSPACE_METADATA_FILE,
   COLLECTION_CONTROL_DIRECTORY,
-} from "../artifact/control-files.js";
-import { AuthorIgnoreRepository } from "../artifact/plain-author-ignore.js";
-import * as History from "../history/history.js";
-import { LinkStat } from "../platform/link-stat.js";
-import { type SkitContractError } from "../api/contracts.js";
-import { SourceProcess } from "../platform/source-process.js";
-import { type TreeError } from "../shared/tree-error.js";
-import { lockFile } from "../platform/file-lock.js";
-import { syncPaths, writeJsonExclusive, writeRawAtomic } from "../platform/atomic-write.js";
-import { isErrno } from "../shared/errno.js";
+} from "../../artifact/control-files.js";
+import { AuthorIgnoreRepository } from "../../artifact/plain-author-ignore.js";
+import * as History from "../../history/history.js";
+import { LinkStat } from "../../platform/link-stat.js";
+import { type SkitContractError } from "../../api/contracts.js";
+import { SourceProcess } from "../../platform/source-process.js";
+import { type TreeError } from "../../shared/tree-error.js";
+import { lockFile } from "../../platform/file-lock.js";
+import { syncPaths, writeJsonExclusive, writeRawAtomic } from "../../platform/atomic-write.js";
+import { isErrno } from "../../shared/errno.js";
 import {
   AuthorWorkspaceMetadataInvalid,
   AuthorRemoteMetadataInvalid,
@@ -41,9 +41,9 @@ import {
   type AuthorNonNfcPathUnsupported,
   type AuthorNormalizationTwin,
   type LocalFilesChangedDuringSync,
-} from "./failures.js";
+} from "../failures.js";
 
-import { AuthorVisibility, AuthorRemoteHome, normalizeRemote } from "./remote.js";
+import { AuthorVisibility, AuthorRemoteHome, normalizeRemote } from "../remote.js";
 
 import { writeWorkspaceTree } from "./write-tree.js";
 import { recoverFileReplacement, replacementPrefix } from "./file-replacement.js";
@@ -53,8 +53,8 @@ import {
   Identity,
   readAuthorIdentity,
   readAuthorRemote,
-} from "./workspace-metadata.js";
-export { WorkspaceId, Identity } from "./workspace-contracts.js";
+} from "../workspace-metadata.js";
+export { WorkspaceId, Identity } from "../workspace-contracts.js";
 import {
   WorkspaceRoot,
   Workspace,
@@ -69,7 +69,7 @@ import {
   AuthorWorkspaceUnsafe,
   AuthorWorkspaceBusy,
   AuthorWorkspaceInvariantFailed,
-} from "./workspace-contracts.js";
+} from "../workspace-contracts.js";
 export {
   WorkspaceRoot,
   SyncKey,
@@ -77,7 +77,7 @@ export {
   AuthorSyncStateInvalid,
   AuthorWorkspaceConflict,
   AuthorWorkspaceRootInvalid,
-} from "./workspace-contracts.js";
+} from "../workspace-contracts.js";
 
 // ── Vocabulary ─────────────────────────────────────────────────────────────────────────────────
 

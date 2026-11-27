@@ -7,7 +7,7 @@ import { skitLayer } from "../src/platform/layer.js";
 import { LibraryWriter, loadLibrary, writeLibrary } from "../src/library/store/library-store.js";
 import { readInventoryState } from "../src/library/store/inventory.js";
 import { migrateLocalLibraryState } from "../src/library/store/state-file.js";
-import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/database.js";
 import { readLibraryAudit } from "../src/library/audit/audit-log.js";
 import { diffInstalledSkills } from "../src/library/audit/state-diff.js";
 import { decodeLibraryState, libraryStateRevision } from "../src/library/library-state.js";

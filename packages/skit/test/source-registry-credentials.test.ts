@@ -22,7 +22,7 @@ import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { resolveSkitSource } from "../src/sources/resolve.js";
 import { createSkitArchive } from "../src/artifact/archive.js";
-import { initSkit } from "../src/author/scaffold.js";
+import { initSkit } from "../src/author/internal/scaffold.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const archive = Effect.scoped(

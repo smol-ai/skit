@@ -12,7 +12,7 @@ import { normalizeCatalogue } from "../manifest.js";
 import { emptyLibraryState } from "../library-state.js";
 import { LibraryStateFields } from "./state-fields.js";
 import { canonicalJson, JsonObject, arrayAt, isJsonObject, stringAt } from "../../shared/json.js";
-import { libraryDatabasePath, withLibraryDatabase } from "./database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../database.js";
 import { loadCatalogueRows, saveCatalogueRows, loadEnabledRows } from "./rows.js";
 import { EnabledState } from "./enabled.js";
 import { saveCatalogueBase } from "./catalogue-base.js";

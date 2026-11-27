@@ -1,12 +1,12 @@
 import { AuthorWorkspace } from "./workspace.js";
-import { skitLocator } from "./destination.js";
+import { skitLocator } from "../destination.js";
 import { Effect, Stream, Option, Schema } from "effect";
 import { type SyncKey } from "./workspace.js";
 import { AuthorHistoryInvalid, type SavedRevision } from "./history.js";
 import { AuthorHistory, authorHistoryStoreError } from "./history.js";
 import type { WorkspaceLease } from "./workspace.js";
-import * as History from "../history/history.js";
-import type * as Sync from "../sync/sync.js";
+import * as History from "../../history/history.js";
+import type * as Sync from "../../sync/sync.js";
 
 /** Back up chronological observations without making an old edit current again. */
 export const backupAuthorHistory = Effect.fn("Author.backupHistory")(function* <E>(

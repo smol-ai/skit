@@ -1,4 +1,4 @@
-import { libraryDatabasePath } from "../src/library/store/database.js";
+import { libraryDatabasePath } from "../src/library/database.js";
 import {
   LibraryWriter,
   writeLibrary,

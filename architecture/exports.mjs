@@ -21,7 +21,7 @@ export const coreExports = {
   "./library/session": { source: "packages/skit/src/library/session.ts" },
   "./author/workspace-contracts": { source: "packages/skit/src/author/workspace-contracts.ts" },
   "./author/failures": { source: "packages/skit/src/author/failures.ts" },
-  "./author": { source: "packages/skit/src/author/index.ts" },
+  "./author": { source: "packages/skit/src/author/public.ts" },
   "./harnesses": { source: "packages/skit/src/harnesses/index.ts" },
   "./audit": { source: "packages/skit/src/auditing/index.ts" },
   "./universal/consumer": { source: "packages/skit/src/universal-consumer.ts" },

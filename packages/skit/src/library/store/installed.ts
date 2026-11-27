@@ -5,7 +5,7 @@ import { InstalledSkill } from "../device-state.js";
 import { InvalidLibraryState, LibraryChanged } from "../failures.js";
 import { canonicalJson } from "../../shared/json.js";
 import { diffInstalledSkills } from "../audit/state-diff.js";
-import { libraryDatabasePath, withLibraryDatabase } from "./database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../database.js";
 import {
   loadInstalledSkillRow,
   saveInstalledSkillRow,

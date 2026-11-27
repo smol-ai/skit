@@ -31,7 +31,7 @@ import { skitLayer } from "../src/platform/layer.js";
 import { declaredFixture as fixture } from "./helpers/library-values.js";
 import { saveLibrary, testRoots } from "./helpers/library-store.js";
 import { SqlClient } from "effect/sql";
-import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/database.js";
 
 it.effect("normalizes an explicit undefined field in the Library save base", () =>
   Effect.gen(function* () {

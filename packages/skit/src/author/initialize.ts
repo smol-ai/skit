@@ -1,6 +1,6 @@
 import { AuthorWorkspaceAlreadyRegistered, DirectoryAlreadyInLibrary } from "./failures.js";
 import { ImportContentInvalid } from "../library/index.js";
-import { initSkit as scaffoldSkit } from "./scaffold.js";
+import { initSkit as scaffoldSkit } from "./internal/scaffold.js";
 import { validateSkitDirectory } from "../artifact/skit.js";
 import * as Library from "../library/index.js";
 
@@ -9,12 +9,12 @@ import {
   type Identity,
   type WorkspaceId,
   type WorkspaceRoot,
-} from "./workspace.js";
+} from "./internal/workspace.js";
 
 import { Clock, Effect, FileSystem, Option, Path } from "effect";
 
 import { workspaceIdFromClaims } from "./library-claims.js";
-import { AuthorHistory, authorHistoryStoreError } from "./history.js";
+import { AuthorHistory, authorHistoryStoreError } from "./internal/history.js";
 
 /**
  * What the Library already says about this folder: no other Collection may claim it, and a

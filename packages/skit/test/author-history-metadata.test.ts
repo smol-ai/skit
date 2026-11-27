@@ -4,8 +4,8 @@ import { Effect, FileSystem, Layer } from "effect";
 import { SqlClient } from "effect/sql";
 import { join } from "node:path";
 import { skitLayer } from "../src/platform/layer.js";
-import { AuthorHistory } from "../src/author/history.js";
-import { AuthorWorkspace } from "../src/author/workspace.js";
+import { AuthorHistory } from "../src/author/internal/history.js";
+import { AuthorWorkspace } from "../src/author/internal/workspace.js";
 import { lockFile } from "../src/platform/file-lock.js";
 import * as History from "../src/history/history.js";
 import { makeMachineId } from "../src/library/entity-ids.js";
@@ -13,8 +13,8 @@ import {
   libraryDatabasePath,
   prepareLibraryDatabase,
   withLibraryDatabase,
-} from "../src/library/store/database.js";
-import { knownHistoryRows } from "../src/author/history-rows.js";
+} from "../src/library/database.js";
+import { knownHistoryRows } from "../src/author/internal/history-rows.js";
 import { Hash } from "../src/shared/hash.js";
 import { emptyLibraryState } from "../src/library/library-state.js";
 import { loadLibrary } from "../src/library/store/library-store.js";

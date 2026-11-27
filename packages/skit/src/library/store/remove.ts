@@ -9,7 +9,7 @@ import { canonicalJson, JsonObject } from "../../shared/json.js";
 import { diffCatalogue, diffEnabled, diffInstalledSkills } from "../audit/state-diff.js";
 import { decodeCatalogue } from "./catalogue.js";
 import { EnabledState, missingEnabledSubject } from "./enabled.js";
-import { libraryDatabasePath } from "./database.js";
+import { libraryDatabasePath } from "../database.js";
 import {
   loadCatalogueRows,
   loadEnabledRows,

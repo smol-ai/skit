@@ -4,15 +4,15 @@ import { SqlClient } from "effect/sql";
 import { join } from "node:path";
 import { skitLayer } from "../src/platform/layer.js";
 import { lockFile } from "../src/platform/file-lock.js";
-import { writeHistoryEvent } from "../src/author/history-journal.js";
-import { AuthorWorkspace } from "../src/author/workspace.js";
+import { writeHistoryEvent } from "../src/author/internal/history-journal.js";
+import { AuthorWorkspace } from "../src/author/internal/workspace.js";
 import { RevisionId } from "../src/history/history.js";
 import {
   currentLibraryTransaction,
   libraryDatabasePath,
   withLibraryDatabase,
   withDatabaseTransaction,
-} from "../src/library/store/database.js";
+} from "../src/library/database.js";
 
 const last = RevisionId.make("sha256:" + "3".repeat(64));
 const next = RevisionId.make("sha256:" + "4".repeat(64));

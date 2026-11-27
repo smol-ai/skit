@@ -1,4 +1,4 @@
-import { migrateLibraryDatabase } from "../src/library/store/database.js";
+import { migrateLibraryDatabase } from "../src/library/database.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { SqlClient } from "effect/sql";
@@ -22,7 +22,7 @@ import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { enabledAt } from "../src/library/enabled.js";
 import { openLibrary, saveLibrary } from "./helpers/library-store.js";
 import { loadLibraryRows } from "../src/library/store/rows.js";
-import { withLibraryDatabase } from "../src/library/store/database.js";
+import { withLibraryDatabase } from "../src/library/database.js";
 import {
   libraryManifestFromLocalState,
   libraryStateRevision,

@@ -1,6 +1,6 @@
 import { Effect, FileSystem, Schema } from "effect";
 import { SqlClient } from "effect/sql";
-import { libraryDatabasePath, withLibraryDatabase } from "./database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../database.js";
 import { loadLibraryListing } from "./rows.js";
 import { AbsoluteDevicePath, InstalledSkill } from "../device-state.js";
 import { SkillId, CollectionId } from "../entity-ids.js";

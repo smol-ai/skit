@@ -496,7 +496,9 @@ const effectRules = {
       const file = relative(repositoryRoot, context.filename);
       const fileDirectory = dirname(context.filename);
       const owners = boundaryOwners.filter(
-        (owner) => ![owner.owner].flat().some((path) => file.startsWith(path)),
+        (owner) =>
+          (!owner.consumer || file.startsWith(owner.consumer)) &&
+          ![owner.owner].flat().some((path) => file.startsWith(path)),
       );
       if (owners.length === 0) return {};
       // Resolve published entry points as well as relative imports; aliases keep the same owner.
@@ -527,21 +529,18 @@ const effectRules = {
         const source = node.source?.value;
         if (typeof source !== "string") return;
         // Whole modules can be private: renaming an exported helper must not open a new bypass.
-        const declared = source.startsWith("@smolai/skit-core/")
-          ? coreExports[`./${source.slice("@smolai/skit-core/".length)}`]
-          : undefined;
-        const target = source.startsWith(".")
-          ? relative(repositoryRoot, resolve(fileDirectory, source))
-          : declared?.source;
+        const target = sourceTarget(source);
         const moduleOwner = owners.find(
           (owner) =>
             target !== undefined &&
             !(source.startsWith(".") && file.startsWith(owner.testOwner ?? "\0")) &&
             owner.privateModules?.some((prefix) => target.startsWith(prefix)) &&
+            !owner.publicModules?.includes(target.replace(/\.[jt]s$/, "")) &&
             !(
               owner.publicNames &&
               !source.startsWith(".") &&
-              (node.importKind === "type" ||
+              (node.type === "TSImportType" ||
+                node.importKind === "type" ||
                 node.exportKind === "type" ||
                 (node.specifiers?.length > 0 &&
                   node.specifiers.every(
@@ -618,6 +617,7 @@ const effectRules = {
         ExportNamedDeclaration: check,
         ExportAllDeclaration: check,
         ImportExpression: check,
+        TSImportType: check,
         MemberExpression(node) {
           reportPrivate(
             node,

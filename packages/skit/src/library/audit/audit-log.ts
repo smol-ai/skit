@@ -4,7 +4,7 @@ import { LibraryAuditEvent } from "./contracts.js";
 export { LibraryAuditChange, LibraryAuditEvent } from "./contracts.js";
 import { LibraryAuditInvalid } from "./failures.js";
 export { LibraryAuditInvalid } from "./failures.js";
-import { libraryDatabasePath, withLibraryDatabase } from "../store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../database.js";
 
 /** Read completed action events; Pending operations keep their event private. */
 const loadLibraryAudit = Effect.fn("LibraryAudit.load")(function* (path: string) {

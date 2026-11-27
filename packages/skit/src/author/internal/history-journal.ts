@@ -3,22 +3,22 @@ import { SecureRandom } from "effect/crypto";
 import { SqlClient } from "effect/sql";
 import { isSqlError } from "effect/sql/SqlError";
 import { join } from "node:path";
-import * as History from "../history/history.js";
-import { Hash, sha256Hash } from "../shared/hash.js";
-import { canonicalJson } from "../shared/json.js";
-import { HomeBusy } from "../platform/lock-failures.js";
-import { lockFile } from "../platform/file-lock.js";
-import { LinkStat } from "../platform/link-stat.js";
-import { AuthorHistoryBusy, AuthorHistoryInvalid } from "./history-failures.js";
-import { AuthorWorkspaceAlreadyRegistered } from "./failures.js";
+import * as History from "../../history/history.js";
+import { Hash, sha256Hash } from "../../shared/hash.js";
+import { canonicalJson } from "../../shared/json.js";
+import { HomeBusy } from "../../platform/lock-failures.js";
+import { lockFile } from "../../platform/file-lock.js";
+import { LinkStat } from "../../platform/link-stat.js";
+import { AuthorHistoryBusy, AuthorHistoryInvalid } from "../history-failures.js";
+import { AuthorWorkspaceAlreadyRegistered } from "../failures.js";
 import { AuthorWorkspace, type SyncKey } from "./workspace.js";
 import * as AuthorState from "./state-store.js";
-import { InvalidLibraryState, LibrarySqlError } from "../library/failures.js";
+import { InvalidLibraryState, LibrarySqlError } from "../../library/failures.js";
 import {
   currentLibraryTransaction,
   libraryDatabasePath,
   withDatabaseTransaction,
-} from "../library/store/database.js";
+} from "../../library/database.js";
 
 const HistoryEvent = Schema.Struct({
   schema: Schema.Literal("skit.author-history-event.v1"),

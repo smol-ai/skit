@@ -1,16 +1,16 @@
 import { Array as EffectArray, Effect, FileSystem, Schema } from "effect";
 import { SqlClient } from "effect/sql";
-import * as History from "../history/history.js";
-import * as Sync from "../sync/sync.js";
+import * as History from "../../history/history.js";
+import * as Sync from "../../sync/sync.js";
 import {
   libraryDatabasePath,
   withDatabaseTransaction,
   withLibraryDatabase,
-} from "../library/store/database.js";
-import { AuthorHistoryInvalid } from "./history-failures.js";
-import { AuthorSyncStateInvalid, WorkspaceId, type SyncKey } from "./workspace-contracts.js";
-import { AuthorRemovalState } from "./inventory.js";
-import { LibrarySqlError, InvalidLibraryState } from "../library/failures.js";
+} from "../../library/database.js";
+import { AuthorHistoryInvalid } from "../history-failures.js";
+import { AuthorSyncStateInvalid, WorkspaceId, type SyncKey } from "../workspace-contracts.js";
+import { AuthorRemovalState } from "../inventory.js";
+import { LibrarySqlError, InvalidLibraryState } from "../../library/failures.js";
 
 const invalid = (path: string, failure: Schema.SchemaError) =>
   new AuthorSyncStateInvalid({ path, reason: { _tag: "InvalidData", failure } });

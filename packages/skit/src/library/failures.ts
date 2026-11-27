@@ -1,4 +1,4 @@
-import { CollectionVersionArchiveInvalid } from "./snapshot-archive-universal.js";
+import { CollectionVersionArchiveInvalid } from "./archive-failures.js";
 import { SchemaFailure } from "../shared/schema-issue.js";
 import { Schema } from "effect";
 import { TreeErrorReason } from "../shared/tree-error.js";

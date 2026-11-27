@@ -12,7 +12,7 @@ import { OperationStatus, type UndoProgram } from "../src/library/store/state-sc
 import { prepareLibraryDifference } from "../src/library/store/difference.js";
 import { snapshotOf } from "../src/library/snapshot.js";
 import { migrateLocalLibraryState } from "../src/library/store/state-file.js";
-import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/database.js";
 import {
   LibraryWriter,
   loadLibrary,

@@ -41,7 +41,7 @@ const stores: readonly Store[] = [
     description:
       "SQLite tables hold collections, skills, imports, installation records, sync ancestry and device-local Draft selections. A released state.json is imported once, kept as a backup, and left as a newer-version stub that older CLIs refuse.",
     sources: [
-      core("library/store/database"),
+      core("library/database"),
       core("library/store/tables"),
       core("library/store/state-schema"),
       core("library/store/operations"),
@@ -125,10 +125,10 @@ const stores: readonly Store[] = [
     format: "SQLite",
     paths: ["<home>/library.sqlite"],
     owner: "AuthorHistory",
-    owners: [{ file: "packages/skit/src/author/history.ts", names: ["AuthorHistory"] }],
+    owners: [{ file: "packages/skit/src/author/internal/history.ts", names: ["AuthorHistory"] }],
     description:
       "Workspace identities and ordered revision events are stored in the shared device database.",
-    sources: [selected("author/history-tables", "createAuthorHistoryTables")],
+    sources: [selected("author/internal/history-tables", "createAuthorHistoryTables")],
   },
   {
     id: "author-objects",
@@ -137,11 +137,11 @@ const stores: readonly Store[] = [
     format: "SQLite and binary files",
     paths: ["<home>/library.sqlite", "<home>/file-bytes/"],
     owner: "AuthorHistory",
-    owners: [{ file: "packages/skit/src/author/history.ts", names: ["AuthorHistory"] }],
+    owners: [{ file: "packages/skit/src/author/internal/history.ts", names: ["AuthorHistory"] }],
     description:
       "SQLite stores tree entries, revision metadata and parent links. File contents are stored by hash.",
     sources: [
-      selected("author/history-tables", "createAuthorMetadataTables"),
+      selected("author/internal/history-tables", "createAuthorMetadataTables"),
       core("artifact/file-bytes"),
       selected("history/history", "Tree", "Author", "Revision"),
       core("artifact/tree-entry"),
@@ -154,11 +154,11 @@ const stores: readonly Store[] = [
     format: "SQLite",
     paths: ["<home>/library.sqlite"],
     owner: "AuthorHistory",
-    owners: [{ file: "packages/skit/src/author/history.ts", names: ["AuthorHistory"] }],
+    owners: [{ file: "packages/skit/src/author/internal/history.ts", names: ["AuthorHistory"] }],
     description:
       "Per-workspace and Registry locator sync checkpoints, removal inventories and acknowledged backup revisions. SyncState defines the durable sync lifecycle.",
     sources: [
-      selected("author/state-tables", "createAuthorStateTables"),
+      selected("author/internal/state-tables", "createAuthorStateTables"),
       core("sync/sync"),
       selected("author/inventory", "AuthorRemovalState"),
     ],
@@ -187,7 +187,7 @@ const stores: readonly Store[] = [
     owner: "HomeLock / AuthorWorkspace",
     owners: [
       { file: "packages/skit/src/platform/home-lock.ts", names: ["withLock"] },
-      { file: "packages/skit/src/author/workspace.ts", names: ["AuthorWorkspace"] },
+      { file: "packages/skit/src/author/internal/workspace.ts", names: ["AuthorWorkspace"] },
     ],
     description:
       "SQLite exclusive transactions provide cross-process locks. These files contain no application records and are never unlinked.",
@@ -200,7 +200,9 @@ const stores: readonly Store[] = [
     format: "JSON",
     paths: ["<workspace>/.skit/workspace.json"],
     owner: "AuthorWorkspace",
-    owners: [{ file: "packages/skit/src/author/workspace.ts", names: ["AuthorWorkspace"] }],
+    owners: [
+      { file: "packages/skit/src/author/internal/workspace.ts", names: ["AuthorWorkspace"] },
+    ],
     description:
       "Stable device-local workspace identity. The older registration field is accepted when reading and is no longer written.",
     sources: [
@@ -215,7 +217,9 @@ const stores: readonly Store[] = [
     format: "JSON",
     paths: ["<workspace>/.skit/connection.json"],
     owner: "AuthorWorkspace",
-    owners: [{ file: "packages/skit/src/author/workspace.ts", names: ["AuthorWorkspace"] }],
+    owners: [
+      { file: "packages/skit/src/author/internal/workspace.ts", names: ["AuthorWorkspace"] },
+    ],
     description:
       "Durable Connecting checkpoint for creating a Registry SKIT. The remote receipt is written separately when connection succeeds.",
     sources: [selected("author/workspace-contracts", "Connecting")],
@@ -227,7 +231,9 @@ const stores: readonly Store[] = [
     format: "JSON",
     paths: ["<workspace>/skit.remote.json"],
     owner: "AuthorWorkspace",
-    owners: [{ file: "packages/skit/src/author/workspace.ts", names: ["AuthorWorkspace"] }],
+    owners: [
+      { file: "packages/skit/src/author/internal/workspace.ts", names: ["AuthorWorkspace"] },
+    ],
     description:
       "The workspace's normalized Registry destination, separate from its portable Descriptor and device-local identity.",
     sources: [core("author/remote")],
@@ -240,7 +246,7 @@ const stores: readonly Store[] = [
     paths: ["<collection>/skit.json"],
     owner: "Artifact / authoring",
     owners: [
-      { file: "packages/skit/src/author/workspace.ts", names: ["AuthorWorkspace"] },
+      { file: "packages/skit/src/author/internal/workspace.ts", names: ["AuthorWorkspace"] },
       { file: "packages/skit/src/artifact/skit.ts", names: ["readSkitDescriptor"] },
     ],
     description:
@@ -255,7 +261,7 @@ const stores: readonly Store[] = [
     paths: ["<skill>/SKILL.md", "<skill>/agents/openai.yaml", "<skill>/**"],
     owner: "Artifact / Installed Skills / Harness invocation adapters",
     owners: [
-      { file: "packages/skit/src/author/workspace.ts", names: ["AuthorWorkspace"] },
+      { file: "packages/skit/src/author/internal/workspace.ts", names: ["AuthorWorkspace"] },
       {
         file: "packages/skit/src/installed-skills/files.ts",
         names: ["stageInstalledSkill", "commitInstalledSkill"],
@@ -295,10 +301,12 @@ const stores: readonly Store[] = [
     format: "Text and temporary file trees",
     paths: ["<workspace>/.skit/.gitignore", "<workspace>/.skit/stage-*"],
     owner: "AuthorWorkspace",
-    owners: [{ file: "packages/skit/src/author/workspace.ts", names: ["AuthorWorkspace"] }],
+    owners: [
+      { file: "packages/skit/src/author/internal/workspace.ts", names: ["AuthorWorkspace"] },
+    ],
     description:
       "The ignore file excludes private workspace control files from Git. Staging directories hold in-progress filesystem writes and may remain after interruption; these are working files rather than another document format.",
-    sources: [core("author/workspace"), core("author/write-tree")],
+    sources: [core("author/internal/workspace"), core("author/internal/write-tree")],
   },
   {
     id: "repository-config",
@@ -409,14 +417,14 @@ const stores: readonly Store[] = [
     owner: "Library sync / Registry Library",
     owners: [
       {
-        file: "packages/skit/src/library/store/stored-manifest.ts",
+        file: "packages/skit/src/library/stored-manifest.ts",
         names: ["StoredLibraryManifest"],
       },
       { file: "packages/skit-server-effect/src/library/service.ts", names: ["ServerLibrary"] },
     ],
     description:
       "Portable Library state saved in Registry snapshots. The storage decoder accepts historical manifests and upgrades to the current contract; device installation state stays local.",
-    sources: [core("library/library-contracts"), core("library/store/stored-manifest")],
+    sources: [core("library/library-contracts"), core("library/stored-manifest")],
   },
   {
     id: "registry-objects",

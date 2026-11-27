@@ -12,7 +12,7 @@ import {
   libraryDatabasePath,
   withLibraryDatabase,
   withDatabaseTransaction,
-} from "../src/library/store/database.js";
+} from "../src/library/database.js";
 import { sha256Hash } from "../src/shared/hash.js";
 
 const content = new Uint8Array([0, 128, 255, 13, 10]);

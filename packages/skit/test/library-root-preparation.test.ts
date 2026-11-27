@@ -4,7 +4,7 @@ import { Effect, FileSystem, Layer, Option } from "effect";
 import { join } from "node:path";
 import * as Library from "../src/library/library.js";
 
-import { libraryDatabasePath } from "../src/library/store/database.js";
+import { libraryDatabasePath } from "../src/library/database.js";
 import { readPathEvidence } from "../src/library/folder-evidence.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { makeMachineId } from "../src/library/entity-ids.js";

@@ -11,7 +11,7 @@ export {
   LibraryWriteRequest,
   SnapshotArchive,
 } from "./library/library-contracts.js";
-export { StoredLibraryManifest } from "./library/store/stored-manifest.js";
+export { StoredLibraryManifest } from "./library/stored-manifest.js";
 export {
   CollectionId,
   SkillId,

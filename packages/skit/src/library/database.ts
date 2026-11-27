@@ -1,19 +1,19 @@
 import { Context, Effect, FileSystem, Option, Schema } from "effect";
-import { InvalidLibraryState, LibraryInvariantFailed, LibrarySqlError } from "../failures.js";
+import { InvalidLibraryState, LibraryInvariantFailed, LibrarySqlError } from "./failures.js";
 import { Migrator, SqlClient } from "effect/sql";
 import { join, resolve } from "node:path";
 
-import { createInventoryTables } from "./inventory-rows.js";
-import { createLibraryTables, createMachineTables } from "./tables.js";
-import { withLibraryStateReplacement } from "./writer-lock.js";
-import { syncPaths } from "../../platform/atomic-write.js";
-import { sqliteLayer } from "../../platform/sqlite.js";
-import { createAuthorStateTables } from "../../author/state-tables.js";
-import { createFileBytesTable } from "../../artifact/file-bytes-table.js";
+import { createInventoryTables } from "./store/inventory-rows.js";
+import { createLibraryTables, createMachineTables } from "./store/tables.js";
+import { withLibraryStateReplacement } from "./store/writer-lock.js";
+import { syncPaths } from "../platform/atomic-write.js";
+import { sqliteLayer } from "../platform/sqlite.js";
 import {
+  createAuthorStateTables,
   createAuthorHistoryTables,
   createAuthorMetadataTables,
-} from "../../author/history-tables.js";
+} from "../author/contracts.js";
+import { createFileBytesTable } from "../artifact/file-bytes-table.js";
 
 export const libraryDatabasePath = (home: string) => join(resolve(home), "library.sqlite");
 

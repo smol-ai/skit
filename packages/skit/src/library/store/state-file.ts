@@ -15,7 +15,7 @@ import {
   prepareLibraryDatabase,
   withDatabaseTransaction,
   withLibraryDatabase,
-} from "./database.js";
+} from "../database.js";
 import { LibraryAuditEvent } from "../audit/contracts.js";
 import { LibraryAuditInvalid } from "../audit/failures.js";
 
