@@ -1,17 +1,21 @@
 import { expectTypeOf, test } from "vitest";
-import type { AuthorHistoryShape } from "../src/author/history.js";
+import type { AuthorHistoryShape } from "../src/author/internal/history.js";
 import { expect, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Option, Schema } from "effect";
 import { join } from "node:path";
-import { backupAuthorHistory, backupAuthorWorkspace } from "../src/author/backup.js";
-import { AuthorHistory } from "../src/author/history.js";
-import { scanAuthorWorkspace } from "../src/author/scan.js";
-import { AuthorWorkspace, WorkspaceId, type WorkspaceLease } from "../src/author/workspace.js";
+import { backupAuthorHistory, backupAuthorWorkspace } from "../src/author/internal/backup.js";
+import { AuthorHistory } from "../src/author/internal/history.js";
+import { scanAuthorWorkspace } from "../src/author/internal/scan.js";
+import {
+  AuthorWorkspace,
+  WorkspaceId,
+  type WorkspaceLease,
+} from "../src/author/internal/workspace.js";
 import * as History from "../src/history/history.js";
 import * as Sync from "../src/sync/sync.js";
 import { SqlClient } from "effect/sql";
-import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
-import { prepareLibraryDatabase } from "../src/library/store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/database.js";
+import { prepareLibraryDatabase } from "../src/library/database.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const ownerLayer = (home: string) =>

@@ -17,7 +17,7 @@ import { skitLayer } from "../src/platform/layer.js";
 
 import { InstalledApply, OperationStatus } from "../src/library/store/state-schema.js";
 import { SqlClient, Statement } from "effect/sql";
-import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/database.js";
 import { saveLibrary, testRoots } from "./helpers/library-store.js";
 
 type Operation = "enable" | "disable" | "update" | "remove" | "uninstall";

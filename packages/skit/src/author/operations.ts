@@ -1,7 +1,11 @@
 import type { AuthoredSkillIssue } from "../library/authored-skill-issues.js";
 import { Effect, Exit, Layer, Result, Schedule } from "effect";
-import { AuthorWorkspace, AuthorWorkspaceUnsafe, type WorkspaceLease } from "./workspace.js";
-import { AuthorHistory, authorHistoryStoreError } from "./history.js";
+import {
+  AuthorWorkspace,
+  AuthorWorkspaceUnsafe,
+  type WorkspaceLease,
+} from "./internal/workspace.js";
+import { AuthorHistory, authorHistoryStoreError } from "./internal/history.js";
 import * as Library from "../library/library.js";
 import { syncAuthorWorkspace } from "./sync.js";
 import type { AuthorRegistry } from "./transport.js";

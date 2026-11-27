@@ -76,7 +76,7 @@ describe("routes", () => {
   });
 
   it("round-trips service identifiers and the Services index", () => {
-    const id = "packages/skit/src/author/workspace.ts#AuthorWorkspace";
+    const id = "packages/skit/src/author/internal/workspace.ts#AuthorWorkspace";
     expect(routeOf(urlAt(servicesHref))).toEqual(AppRoute.Services());
     expect(routeOf(urlAt(serviceHref(id)))).toEqual(AppRoute.Service({ id }));
     expect(routeOf(urlAt(commandTabHref("author publish", "requirements")))).toEqual(

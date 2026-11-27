@@ -3,7 +3,7 @@ import { NodeRuntime } from "@effect/platform-node";
 import { SqlClient } from "effect/sql";
 import { join } from "node:path";
 import { skitLayer } from "../../dist/platform/layer.js";
-import { prepareLibraryDatabase, withLibraryDatabase } from "../../dist/library/store/database.js";
+import { prepareLibraryDatabase, withLibraryDatabase } from "../../dist/library/database.js";
 
 const [home, id, mode] = process.argv.slice(2);
 if (home === undefined || id === undefined) process.exit(2);

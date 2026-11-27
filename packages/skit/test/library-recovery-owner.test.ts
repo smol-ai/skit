@@ -1,6 +1,6 @@
 import { loadOperations, loadLibrary } from "../src/library/store/library-store.js";
 import { SqlClient } from "effect/sql";
-import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/database.js";
 
 import { describe, assert, it } from "@effect/vitest";
 

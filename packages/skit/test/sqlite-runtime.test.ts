@@ -10,7 +10,7 @@ import {
   prepareLibraryDatabase,
   withDatabaseTransaction,
   withLibraryDatabase,
-} from "../src/library/store/database.js";
+} from "../src/library/database.js";
 import { lockFile } from "../src/platform/file-lock.js";
 
 const RuntimeResult = Schema.fromJsonString(

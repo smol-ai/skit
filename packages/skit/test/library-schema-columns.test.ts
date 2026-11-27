@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { SqlClient } from "effect/sql";
-import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/database.js";
 import { writeLibrary, LibraryWriter } from "../src/library/store/library-store.js";
 import { readCatalogue } from "../src/library/store/catalogue.js";
 import { readLibraryAudit } from "../src/library/audit/audit-log.js";

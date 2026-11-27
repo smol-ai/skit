@@ -123,7 +123,7 @@ describe("skit/library-private-api", () => {
     `export * as files from "../platform/atomic-write.js";`,
   ])("a public Author subpath cannot reopen raw write exports: %s", async (source) => {
     expect(
-      await reported("library-private-api", "packages/skit/src/author/index.ts", source),
+      await reported("library-private-api", "packages/skit/src/author/public.ts", source),
     ).toHaveLength(1);
   });
 
@@ -176,7 +176,7 @@ describe("skit/library-private-api", () => {
     [`${library}library.ts`, `export * as Library from "./library.js";`],
     ["packages/skit/src/index.ts", `export * as implementation from "./library/library.js";`],
     ["packages/skit/src/index.ts", `export * from "./library/library.js";`],
-    ["packages/skit/src/author/index.ts", `export * as Library from "../library/library.js";`],
+    ["packages/skit/src/author/public.ts", `export * as Library from "../library/library.js";`],
     ["packages/skit/src/index.ts", `export * as Library from "./library/internal/runtime.js";`],
   ])("other namespace exports cannot reopen implementation: %s", async (filename, source) => {
     expect(await reported("library-private-api", filename, source)).toHaveLength(1);

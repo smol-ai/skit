@@ -4,7 +4,7 @@ import {
   operationSummary,
 } from "../src/library/store/library-store.js";
 
-import { libraryDatabasePath } from "../src/library/store/database.js";
+import { libraryDatabasePath } from "../src/library/database.js";
 import { readLibraryAudit } from "../src/library/audit/audit-log.js";
 import { describe, assert, it } from "@effect/vitest";
 

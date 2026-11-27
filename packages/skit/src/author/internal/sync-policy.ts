@@ -1,9 +1,9 @@
 import { DateTime, Option } from "effect";
-import { followSkillMoves } from "./merge/skill-moves.js";
-import { mergeAlignedAuthorTree, mergeAuthorTree } from "./merge/files.js";
-import * as History from "../history/history.js";
-import * as Merge from "../sync/merge.js";
-import type { TreeFile } from "../artifact/tree-entry.js";
+import { followSkillMoves } from "../merge/skill-moves.js";
+import { mergeAlignedAuthorTree, mergeAuthorTree } from "../merge/files.js";
+import * as History from "../../history/history.js";
+import * as Merge from "../../sync/merge.js";
+import type { TreeFile } from "../../artifact/tree-entry.js";
 
 /**
  * Author sync's overlap rule: an edit beats a deletion, then the later edit wins, and this

@@ -1,4 +1,4 @@
-import { CanonicalAuthorRemoteHome } from "../author/remote.js";
+import { CanonicalAuthorRemoteHome } from "../author/contracts.js";
 import { manifestViolationIssue } from "./manifest-violation.js";
 import { Schema } from "effect";
 import { canonicalJson } from "../shared/json.js";

@@ -19,7 +19,7 @@ const store: PersistedStore = {
   definitions: [
     {
       name: "HistoryEvent",
-      file: "packages/skit/src/author/history.ts",
+      file: "packages/skit/src/author/internal/history.ts",
       line: 105,
       source: "CREATE TABLE author_history_events (event_json TEXT NOT NULL)",
     },

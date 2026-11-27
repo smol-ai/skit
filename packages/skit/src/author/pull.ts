@@ -5,7 +5,7 @@ import { NoRevisionToPull, PullDirectoryNotEmpty } from "./failures.js";
 import { syncAuthorWorkspace } from "./sync.js";
 import { normalizeRemote, type AuthorRemoteHome } from "./remote.js";
 import type { AuthorRegistry } from "./transport.js";
-import { AuthorWorkspace } from "./workspace.js";
+import { AuthorWorkspace } from "./internal/workspace.js";
 
 /**
  * `skit author pull`: make a new Author Workspace from a SKIT that already has a remote home.

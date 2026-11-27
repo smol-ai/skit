@@ -20,7 +20,7 @@ import {
 } from "./state-schema.js";
 import type { LibraryAuditChange } from "../audit/contracts.js";
 import type { HistoryAction } from "./history-action.js";
-import { libraryDatabasePath, withLibraryDatabase } from "./database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../database.js";
 import {
   readDatabaseStateRevision,
   saveDatabaseState,

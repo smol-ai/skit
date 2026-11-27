@@ -1,6 +1,6 @@
 import { loadOperations, LibraryWriter, loadLibrary } from "../src/library/store/library-store.js";
 import { SqlClient } from "effect/sql";
-import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/database.js";
 import { libraryDoctorReport } from "../src/library/inventory/doctor-report.js";
 import { scanInventory } from "../src/library/inventory/refresh.js";
 import { inspectInstalledSkill } from "../src/installed-skills/files.js";

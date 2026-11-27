@@ -1,4 +1,4 @@
-import { AuthorRemoteHome } from "../author/remote.js";
+import { AuthorRemoteHome, type RemovalDecision } from "../author/contracts.js";
 import { readCatalogue } from "./store/catalogue.js";
 import { LibraryChanged } from "./failures.js";
 import type { AuthoredSkillIssue } from "./authored-skill-issues.js";
@@ -32,8 +32,7 @@ import {
   type WorkspaceLookup,
 } from "./collection-source.js";
 import type { LibraryState } from "./library-state.js";
-import type { RemovalDecision } from "../author/inventory.js";
-import { inspectAuthorWorkspace } from "../author/inspect.js";
+import { inspectAuthorWorkspace } from "../author/index.js";
 import { readSkitDescriptor } from "../artifact/skit.js";
 import { installedSkillHash } from "./installed-skill-hash.js";
 import type { InstallDestination } from "../installed-skills/destination.js";

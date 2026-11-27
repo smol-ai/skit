@@ -6,7 +6,7 @@ import { declaredFixture as fixture } from "./helpers/library-values.js";
 import { openLibrary } from "./helpers/library-store.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { snapshotOf } from "../src/library/snapshot.js";
-import { migrateLibraryDatabase, withLibraryDatabase } from "../src/library/store/database.js";
+import { migrateLibraryDatabase, withLibraryDatabase } from "../src/library/database.js";
 import { saveDatabaseState } from "../src/library/store/state-file.js";
 import { libraryListing } from "../src/library/internal/session/listing.js";
 

@@ -6,7 +6,7 @@ import { declaredFixture as fixture } from "./helpers/library-values.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { LibraryWriter, loadLibrary, writeLibrary } from "../src/library/store/library-store.js";
 import { migrateLocalLibraryState } from "../src/library/store/state-file.js";
-import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/database.js";
 import { readLibraryAudit } from "../src/library/audit/audit-log.js";
 import { libraryStateRevision } from "../src/library/library-state.js";
 import { Hash } from "../src/shared/hash.js";

@@ -1,5 +1,5 @@
 import { LibraryInvariantFailed } from "./failures.js";
-import { AuthorWorkspaceInvariantFailed } from "../author/workspace-contracts.js";
+import { AuthorWorkspaceInvariantFailed } from "../author/contracts.js";
 import { ArchiveStreamInvalid } from "../artifact/archive-failure.js";
 import { SchemaFailure } from "../shared/schema-issue.js";
 import { Schema, SchemaGetter } from "effect";

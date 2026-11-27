@@ -1,7 +1,7 @@
 import { Layer } from "effect";
 import { skitLayer, skitConfigurationLayer } from "../../src/platform/index.js";
 
-import { authorWorkspaceLayer } from "../../src/author/index.js";
+import { authorWorkspaceLayer } from "../../src/author/public.js";
 
 /** Standalone adapters receive the same explicit path boundary as executables. */
 export const testPlatformLayer = Layer.mergeAll(

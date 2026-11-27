@@ -9,7 +9,7 @@ import {
   makeSkillVersionId,
 } from "../src/library/entity-ids.js";
 import { LibraryManifest } from "../src/library/library-contracts.js";
-import { StoredLibraryManifest } from "../src/library/store/stored-manifest.js";
+import { StoredLibraryManifest } from "../src/library/stored-manifest.js";
 
 const hash = `sha256:${"a".repeat(64)}`;
 const collectionId = makeCollectionId();

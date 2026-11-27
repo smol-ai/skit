@@ -5,7 +5,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { LibraryWriter, writeLibrary, loadLibrary } from "../src/library/store/library-store.js";
-import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/database.js";
 import { TestClock } from "effect/testing";
 import { join } from "node:path";
 import { Hash } from "../src/shared/hash.js";

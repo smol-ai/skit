@@ -1,13 +1,13 @@
 /** AuthorHistory owns relational metadata, immutable file bytes and recovery evidence. */
 import { Effect, FileSystem, Option, Path, Schema } from "effect";
 import { SqlClient } from "effect/sql";
-import { JsonObject } from "../shared/json.js";
+import { JsonObject } from "../../shared/json.js";
 import {
   libraryDatabasePath,
   prepareLibraryDatabase,
   withLibraryDatabase,
   withDatabaseTransaction,
-} from "../library/store/database.js";
+} from "../../library/database.js";
 import {
   hasHistoryRows,
   knownHistoryRows,
@@ -20,11 +20,11 @@ import {
   type StoredRevision,
 } from "./history-rows.js";
 import { Digest } from "effect/crypto";
-import { Hash, hashHex } from "../shared/hash.js";
-import * as History from "../history/history.js";
-import { TreeDirectory, TreeFile, TreeSymlink } from "../artifact/tree-entry.js";
-import { syncPaths } from "../platform/atomic-write.js";
-import { makeFileBytes, FileBytesInvalid } from "../artifact/file-bytes.js";
+import { Hash, hashHex } from "../../shared/hash.js";
+import * as History from "../../history/history.js";
+import { TreeDirectory, TreeFile, TreeSymlink } from "../../artifact/tree-entry.js";
+import { syncPaths } from "../../platform/atomic-write.js";
+import { makeFileBytes, FileBytesInvalid } from "../../artifact/file-bytes.js";
 
 const StoredFile = Schema.Struct({
   path: TreeFile.fields.path,

@@ -1,5 +1,5 @@
 import { loadOperations, loadLibrary } from "../src/library/store/library-store.js";
-import { libraryDatabasePath } from "../src/library/store/database.js";
+import { libraryDatabasePath } from "../src/library/database.js";
 import { testRoots } from "./helpers/library-store.js";
 import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
 

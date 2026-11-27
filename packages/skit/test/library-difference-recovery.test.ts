@@ -23,7 +23,7 @@ import {
   loadOperations,
   writeLibrary,
 } from "../src/library/store/library-store.js";
-import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/database.js";
 import { prepareLibraryDifference } from "../src/library/store/difference.js";
 import { recordedLibrary } from "../src/library/store/intent.js";
 import { OperationStatus, StepRouting } from "../src/library/store/state-schema.js";

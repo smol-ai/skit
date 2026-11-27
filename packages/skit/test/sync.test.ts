@@ -7,7 +7,7 @@ import * as History from "../src/history/history.js";
 import * as Sync from "../src/sync/sync.js";
 import * as Merge from "../src/sync/merge.js";
 import { FailureTypeId, type SkitFailure } from "../src/shared/failure.js";
-import { mergeAuthorRevisions } from "../src/author/sync-policy.js";
+import { mergeAuthorRevisions } from "../src/author/internal/sync-policy.js";
 import { makeMachineId } from "../src/library/entity-ids.js";
 import { type TreeEntry } from "../src/artifact/tree-entry.js";
 import { memoryStore } from "./helpers/memory-store.js";

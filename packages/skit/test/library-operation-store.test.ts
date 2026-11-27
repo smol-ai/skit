@@ -1,7 +1,7 @@
 import { prepareLibraryDifference } from "../src/library/store/difference.js";
 import { join } from "node:path";
 import { SqlClient } from "effect/sql";
-import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/database.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { emptyLibraryState, LibraryStateDocument } from "../src/library/library-state.js";

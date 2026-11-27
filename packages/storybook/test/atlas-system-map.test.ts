@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { expect, it } from "vitest";
 import { readSystemMap } from "../src/atlas/system-map.ts";
 
-const source = { file: "packages/skit/src/author/workspace.ts", line: 10 };
+const source = { file: "packages/skit/src/author/internal/workspace.ts", line: 10 };
 const member = {
   key: "t1",
   name: "AuthorWorkspace",

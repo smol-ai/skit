@@ -1,8 +1,11 @@
-import { SchemaFailure } from "../shared/schema-issue.js";
 import { Effect, Schema } from "effect";
-import { encodeHashParts, sha256Hash, Hash } from "../shared/hash.js";
+import { encodeHashParts, sha256Hash } from "../shared/hash.js";
 import { SnapshotArchive } from "./library-contracts.js";
-import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
+import { CollectionVersionArchiveInvalid } from "./archive-failures.js";
+export {
+  CollectionVersionArchiveInvalid,
+  CollectionVersionArchiveInvalidReason,
+} from "./archive-failures.js";
 import type { TreeEntry } from "../artifact/tree-entry.js";
 
 const MAX_TREE_BYTES = 32 * 1024 * 1024;
@@ -21,40 +24,6 @@ const safeLink = (path: string, target: string): boolean => {
   }
   return true;
 };
-
-export const CollectionVersionArchiveInvalidReason = Schema.TaggedUnion({
-  InvalidShape: { failure: SchemaFailure },
-  InvalidBase64: { path: Schema.String },
-  DuplicatePath: { path: Schema.String },
-  ByteLimitExceeded: {
-    kind: Schema.Literals(["encoded-file", "tree"]),
-    path: Schema.String,
-    limit: Schema.Int,
-    actual: Schema.Int,
-  },
-  UnsafeSymlink: { path: Schema.String, target: Schema.String },
-  ChildOfNonDirectory: { path: Schema.String },
-  MissingParent: { unreachable: Schema.Int },
-  HashMismatch: {
-    kind: Schema.Literals(["archive", "materialized"]),
-    expected: Hash,
-    actual: Hash,
-  },
-}).annotate({ identifier: "CollectionVersionArchiveInvalidReason" });
-export type CollectionVersionArchiveInvalidReason =
-  typeof CollectionVersionArchiveInvalidReason.Type;
-
-export class CollectionVersionArchiveInvalid
-  extends Schema.TaggedError<CollectionVersionArchiveInvalid, { readonly brand: unique symbol }>()(
-    // Released serialized tag; changing stored/wire spellings is outside this cleanup.
-    "Library.SnapshotArchiveInvalid",
-    { reason: CollectionVersionArchiveInvalidReason },
-  )
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-}
 
 const fromBase64 = (path: string, value: string) =>
   Effect.try({

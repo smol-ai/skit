@@ -1,7 +1,7 @@
 import { Effect } from "effect";
-import { walkAuthorTree } from "../artifact/tree.js";
-import * as History from "../history/history.js";
-import { LocalFilesChangedDuringSync } from "./failures.js";
+import { walkAuthorTree } from "../../artifact/tree.js";
+import * as History from "../../history/history.js";
+import { LocalFilesChangedDuringSync } from "../failures.js";
 
 /** Read one stable Author tree. Recording it and granting removal authority are separate. */
 export const scanAuthorWorkspace = Effect.fn("Author.scanWorkspace")(function* (root: string) {

@@ -12,7 +12,7 @@ import {
   writeLibrary,
 } from "../src/library/store/library-store.js";
 import { migrateLocalLibraryState } from "../src/library/store/state-file.js";
-import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/database.js";
 import { loadEnabledRows } from "../src/library/store/rows.js";
 import { readLibraryAudit } from "../src/library/audit/audit-log.js";
 import { diffLibraryState } from "../src/library/audit/state-diff.js";

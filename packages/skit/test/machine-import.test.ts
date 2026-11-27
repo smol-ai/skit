@@ -11,7 +11,7 @@ import {
   libraryDatabasePath,
   withLibraryDatabase,
   withDatabaseTransaction,
-} from "../src/library/store/database.js";
+} from "../src/library/database.js";
 import { loadMachineRows } from "../src/library/store/machine-rows.js";
 import {
   inspectLocalLibraryState,

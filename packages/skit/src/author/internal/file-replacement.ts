@@ -1,17 +1,17 @@
 import { Effect, FileSystem, Option, Path, Schema } from "effect";
-import { COLLECTION_CONTROL_DIRECTORY } from "../artifact/control-files.js";
+import { COLLECTION_CONTROL_DIRECTORY } from "../../artifact/control-files.js";
 import {
   isNormalizedTreeControlPath,
   nativeIdentityOf,
   sameNativeIdentity,
-} from "../artifact/tree.js";
-import type { TreeFile } from "../artifact/tree-entry.js";
-import * as History from "../history/history.js";
-import { syncPaths } from "../platform/atomic-write.js";
-import { LinkStat } from "../platform/link-stat.js";
-import { isCanonicalRelativePath } from "../shared/relative-path.js";
-import { LocalFilesChangedDuringSync } from "./failures.js";
-import { AuthorWorkspaceUnsafe } from "./workspace-contracts.js";
+} from "../../artifact/tree.js";
+import type { TreeFile } from "../../artifact/tree-entry.js";
+import * as History from "../../history/history.js";
+import { syncPaths } from "../../platform/atomic-write.js";
+import { LinkStat } from "../../platform/link-stat.js";
+import { isCanonicalRelativePath } from "../../shared/relative-path.js";
+import { LocalFilesChangedDuringSync } from "../failures.js";
+import { AuthorWorkspaceUnsafe } from "../workspace-contracts.js";
 
 export const replacementPrefix = "replace-";
 

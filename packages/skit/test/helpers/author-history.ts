@@ -1,6 +1,6 @@
 import { Effect, Layer } from "effect";
-import { AuthorHistory } from "../../src/author/history.js";
-import { authorLayer as owners, refreshAuthorWorkspace } from "../../src/author/index.js";
+import { AuthorHistory } from "../../src/author/internal/history.js";
+import { authorLayer as owners, refreshAuthorWorkspace } from "../../src/author/public.js";
 export const authorLayer = (home: string) => Layer.fresh(owners({ home }));
 export const refreshWorkspace = refreshAuthorWorkspace;
 const storedTrees = Effect.gen(function* () {

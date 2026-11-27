@@ -1,11 +1,11 @@
-import { readDraftWorkspaceRows } from "./state-store.js";
+import { readDraftWorkspaceRows } from "./internal/state-store.js";
 import { skitLocator } from "./destination.js";
 import type { AuthorRemoteHome } from "./remote.js";
 import { Effect, FileSystem } from "effect";
 import { resolve } from "node:path";
 import { authorIgnoreRepositoryLayer } from "../artifact/plain-author-ignore.js";
-import { checkAuthorRemovals } from "./history.js";
-import { scanAuthorWorkspace } from "./scan.js";
+import { checkAuthorRemovals } from "./internal/history.js";
+import { scanAuthorWorkspace } from "./internal/scan.js";
 
 /** Inspect stable inputs and removal authority without registering, saving history or syncing. */
 export const inspectAuthorWorkspace = Effect.fn("Author.inspectWorkspace")(function* (

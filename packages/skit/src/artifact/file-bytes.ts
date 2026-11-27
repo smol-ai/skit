@@ -10,7 +10,7 @@ import {
   libraryDatabasePath,
   withDatabaseTransaction,
   withLibraryDatabase,
-} from "../library/store/database.js";
+} from "../library/database.js";
 
 export class FileBytesInvalid
   extends Schema.TaggedError<FileBytesInvalid, { readonly brand: unique symbol }>()(

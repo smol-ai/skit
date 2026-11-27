@@ -4,7 +4,7 @@ import { StalePlan } from "../plan-failures.js";
 import { SyncAncestry } from "./state-fields.js";
 import { canonicalJson, JsonObject } from "../../shared/json.js";
 import { emptyLibraryState } from "../library-state.js";
-import { libraryDatabasePath } from "./database.js";
+import { libraryDatabasePath } from "../database.js";
 import { loadSyncAncestryRows, saveSyncAncestryRows } from "./rows.js";
 import {
   advanceLibraryRevision,

@@ -15,7 +15,7 @@ import {
   type LinkEvidence,
 } from "../../dist/library/store/state-schema.js";
 import { HistoryAction } from "../../dist/library/store/history-action.js";
-import { withLibraryDatabase, libraryDatabasePath } from "../../dist/library/store/database.js";
+import { withLibraryDatabase, libraryDatabasePath } from "../../dist/library/database.js";
 import {
   migrateLocalLibraryState,
   readDatabaseState,

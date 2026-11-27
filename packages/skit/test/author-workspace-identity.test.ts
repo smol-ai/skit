@@ -1,5 +1,5 @@
-import { AuthorWorkspace } from "../src/author/workspace.js";
-import { AuthorHistory } from "../src/author/history.js";
+import { AuthorWorkspace } from "../src/author/internal/workspace.js";
+import { AuthorHistory } from "../src/author/internal/history.js";
 import { expect, it } from "@effect/vitest";
 import { Effect, FileSystem, Option, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";

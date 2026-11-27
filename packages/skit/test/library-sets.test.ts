@@ -15,7 +15,7 @@ import {
   withDatabaseTransaction,
   withLibraryDatabase,
   libraryDatabasePath,
-} from "../src/library/store/database.js";
+} from "../src/library/database.js";
 import { migrateLocalLibraryState } from "../src/library/store/state-file.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { fixture, declaredFixture } from "./helpers/library-values.js";

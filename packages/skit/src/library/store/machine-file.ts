@@ -10,7 +10,7 @@ import {
   prepareLibraryDatabase,
   withDatabaseTransaction,
   withLibraryDatabase,
-} from "./database.js";
+} from "../database.js";
 import { loadMachineRows, saveMachineRows } from "./machine-rows.js";
 import { LegacyMachineId, MachineId, migratedMachineId } from "../entity-ids.js";
 import { Unusable } from "../machine-settings-failures.js";

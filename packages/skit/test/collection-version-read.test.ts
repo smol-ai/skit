@@ -11,13 +11,13 @@ import {
   reproducible,
 } from "../src/library/installation/retained-skill.js";
 import { testRoots } from "./helpers/library-store.js";
-import { AuthorHistory } from "../src/author/history.js";
-import { AuthorWorkspace } from "../src/author/workspace.js";
+import { AuthorHistory } from "../src/author/internal/history.js";
+import { AuthorWorkspace } from "../src/author/internal/workspace.js";
 import { fileBytesPath, makeFileBytes } from "../src/artifact/file-bytes.js";
 import { lockFile } from "../src/platform/file-lock.js";
 import { Hash } from "../src/shared/hash.js";
 import { SqlClient } from "effect/sql";
-import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/database.js";
 import { prepareSetupSourceUndo } from "../src/library/internal/setup/undo-sources.js";
 import { prepareSetupChanges } from "../src/library/store/setup-intent.js";
 import { setupIntent } from "../src/library/store/intent.js";

@@ -2,10 +2,10 @@ import type { DiscoveryRestoreConflict } from "./machine-settings-conflicts.js";
 import { Effect, FileSystem, Schema } from "effect";
 import { hostname } from "node:os";
 import { resolve } from "node:path";
-import { libraryDatabasePath, withLibraryDatabase } from "./store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "./database.js";
 import { loadMachineRows, saveMachineRows } from "./store/machine-rows.js";
 import { loadMachineSettings } from "./store/machine-file.js";
-import { withDatabaseTransaction } from "./store/database.js";
+import { withDatabaseTransaction } from "./database.js";
 
 import { hashParts } from "../artifact/descriptor.js";
 import { Hash } from "../shared/hash.js";

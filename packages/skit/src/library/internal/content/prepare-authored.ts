@@ -19,7 +19,7 @@ import {
   readAuthoredInputs,
 } from "./authored-inputs.js";
 import type { HarnessName } from "../../../harnesses/contracts.js";
-import type { RemovalDecision } from "../../../author/inventory.js";
+import type { RemovalDecision } from "../../../author/contracts.js";
 
 const within = (path: string, root: string) =>
   root === "." || path === root || path.startsWith(`${root}/`);

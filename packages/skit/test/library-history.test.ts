@@ -3,7 +3,7 @@ import { makeOperationId, migratedMachineId } from "../src/library/entity-ids.js
 import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
 import { readLibraryAudit } from "../src/library/audit/audit-log.js";
 import { SqlClient } from "effect/sql";
-import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/database.js";
 import { OperationStatus } from "../src/library/store/state-schema.js";
 
 import { describe, assert, it } from "@effect/vitest";

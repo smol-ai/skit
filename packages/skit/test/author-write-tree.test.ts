@@ -1,10 +1,10 @@
 import { assert, expect, it } from "@effect/vitest";
 import { Effect, FileSystem, Schema } from "effect";
 import { basename, dirname, join } from "node:path";
-import { recoverFileReplacement } from "../src/author/file-replacement.js";
+import { recoverFileReplacement } from "../src/author/internal/file-replacement.js";
 import { LinkStat } from "../src/platform/link-stat.js";
-import { scanAuthorSyncTree } from "../src/author/local-tree.js";
-import { writeWorkspaceTree } from "../src/author/write-tree.js";
+import { scanAuthorSyncTree } from "../src/author/internal/local-tree.js";
+import { writeWorkspaceTree } from "../src/author/internal/write-tree.js";
 import * as History from "../src/history/history.js";
 import { skitLayer } from "../src/platform/layer.js";
 

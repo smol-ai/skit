@@ -130,7 +130,7 @@ describe("skit/owner-boundaries", () => {
     for (const filename of [
       "packages/cli/src/registry/auth.ts",
       "packages/skit/src/library/machine-settings.ts",
-      "packages/skit/src/author/history.ts",
+      "packages/skit/src/author/internal/history.ts",
       "packages/skit/src/platform/home-lock.ts",
     ])
       expect(
@@ -510,6 +510,57 @@ describe("skit/owner-boundaries", () => {
     ]);
   });
 
+  test.each([
+    ["packages/skit/src/library/collection-source.ts", "../author/new-module.js", 1],
+    ["packages/skit/src/library/collection-source.ts", "../author/index.js", 0],
+    ["packages/skit/src/library/collection-source.ts", "../author/contracts.js", 0],
+    ["packages/skit/src/sync/example.ts", "../author/internal/new-module.js", 1],
+    ["packages/skit/src/author/example.ts", "../library/store/new-module.js", 1],
+  ] as const)("enforces %s importing %s", async (file, target, count) => {
+    expect(await reported(`export * from "${target}";`, "owner-boundaries", file)).toHaveLength(
+      count,
+    );
+  });
+
+  test("Library cannot reach Author storage, implementation types or the package command entry", async () => {
+    const statements = [
+      'import { readDraftWorkspaceRows } from "../author/internal/state-store.js";',
+      'import type { AuthorRemoteHome } from "../author/remote.js";',
+      'type Remote = import("../author/remote.js").AuthorRemoteHome;',
+      'const commands = import("../author/public.js");',
+      'export * from "@smolai/skit-core/author";',
+    ];
+    expect(
+      await reported(
+        statements.join("\n"),
+        "owner-boundaries",
+        "packages/skit/src/library/collection-source.ts",
+      ),
+    ).toHaveLength(statements.length);
+  });
+
+  test("shared database and manifest entries stay accessible while store types are private", async () => {
+    const source = [
+      'import { withLibraryDatabase } from "../library/database.js";',
+      'import { StoredLibraryManifest } from "../library/stored-manifest.js";',
+      'type State = import("../library/store/state-file.js").State;',
+      'type Remote = import("@smolai/skit-core/sync").Remote;',
+    ].join("\n");
+    expect(
+      await reported(source, "owner-boundaries", "packages/skit/src/artifact/file-bytes.ts"),
+    ).toEqual(["../library/store/state-file.js"]);
+  });
+
+  test("package-local tests may inspect new private modules by relative path", async () => {
+    const source = [
+      'import * as Author from "../src/author/internal/new-module.js";',
+      'import * as Store from "../src/library/store/new-module.js";',
+    ].join("\n");
+    expect(
+      await reported(source, "owner-boundaries", "packages/skit/test/example.test.ts"),
+    ).toEqual([]);
+  });
+
   test("calling the owner is allowed", async () => {
     expect(await reported(`import * as Library from "@smolai/skit-core/library";`)).toEqual([]);
   });
@@ -517,13 +568,13 @@ describe("skit/owner-boundaries", () => {
   test.each(["local-tree", "write-tree"])(
     "Author %s authority stays inside its owner and package-local unit tests",
     async (module) => {
-      const source = `import * as checks from "../src/author/${module}.js";`;
+      const source = `import * as checks from "../src/author/internal/${module}.js";`;
       expect(
         await reported(source, "owner-boundaries", "packages/skit/test/author-local-tree.test.ts"),
       ).toEqual([]);
       expect(
         await reported(
-          `import * as checks from "../../skit/src/author/${module}.js";`,
+          `import * as checks from "../../skit/src/author/internal/${module}.js";`,
           "owner-boundaries",
           "packages/cli/src/example.ts",
         ),
@@ -537,10 +588,13 @@ describe("skit/owner-boundaries", () => {
     expect(
       await reported(
         (directory) =>
-          `import { writeWorkspaceTree } from "${module(directory, "author/write-tree")}";
-import { makeHistoryStore } from "${module(directory, "author/history-store")}";`,
+          `import { writeWorkspaceTree } from "${module(directory, "author/internal/write-tree")}";
+import { makeHistoryStore } from "${module(directory, "author/internal/history-store")}";`,
       ),
-    ).toEqual([expect.stringContaining("author/write-tree.js"), "makeHistoryStore"]);
+    ).toEqual([
+      expect.stringContaining("author/internal/write-tree.js"),
+      expect.stringContaining("author/internal/history-store.js"),
+    ]);
   });
 
   test.each(["packages/skit/test/recovery-moves.test.ts", "packages/skit/src/index.ts"])(
@@ -609,9 +663,9 @@ describe("author lifecycle boundary", () => {
       'import * as Author from "@smolai/skit-core/author"; const history = Author.AuthorHistory;',
       'import * as Author from "@smolai/skit-core/author"; const alias = Author; const { AuthorWorkspace: owner } = alias;',
       'export { AuthorWorkspace as Workspace } from "@smolai/skit-core/author";',
-      'import { AuthorWorkspace } from "../../../skit/src/author/workspace.js";',
-      'export * from "../../../skit/src/author/history.js";',
-      'const history = import("../../../skit/src/author/history.js");',
+      'import { AuthorWorkspace } from "../../../skit/src/author/internal/workspace.js";',
+      'export * from "../../../skit/src/author/internal/history.js";',
+      'const history = import("../../../skit/src/author/internal/history.js");',
       'import { run as execute } from "../../../skit/src/sync/sync.js";',
       'import * as Engine from "../../../skit/src/sync/sync.js"; Engine.run({});',
       'export * from "../../../skit/src/sync/sync.js";',
@@ -633,7 +687,7 @@ describe("author lifecycle boundary", () => {
       ).toEqual([]);
     expect(
       await reported(
-        'import { AuthorWorkspace } from "../src/author/workspace.js";',
+        'import { AuthorWorkspace } from "../src/author/internal/workspace.js";',
         "owner-boundaries",
         "packages/skit/test/author-workspace.test.ts",
       ),

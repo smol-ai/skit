@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { SqlClient } from "effect/sql";
-import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/database.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { saveLibrary } from "./helpers/library-store.js";
 import { declaredFixture } from "./helpers/library-values.js";

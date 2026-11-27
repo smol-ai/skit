@@ -56,15 +56,15 @@ export const termDebt = {
   "packages/skit/src/auditing/probes.ts": ["name captured", "name observed"],
   "packages/skit/src/auditing/provenance.ts": ["text SKIT projection"],
   "packages/skit/src/auditing/skills.ts": ["name observations", "text SKIT projection"],
-  "packages/skit/src/author/backup.ts": [
+  "packages/skit/src/author/internal/backup.ts": [
     "text the acknowledged backup is not an ancestor of this workspace's observation",
   ],
-  "packages/skit/src/author/history.ts": [
+  "packages/skit/src/author/internal/history.ts": [
     "name observed",
     "text Sync again; it resumes from the acknowledged observation.",
     "text a backup checkpoint must advance one observed revision without skipping its parent",
   ],
-  "packages/skit/src/author/local-tree.ts": ["name observed"],
+  "packages/skit/src/author/internal/local-tree.ts": ["name observed"],
   "packages/skit/src/author/operations.ts": ["name observed"],
   "packages/skit/src/author/sync.ts": ["name adopt", "name observation"],
   "packages/skit/src/harnesses/codex-skill-metadata.ts": [

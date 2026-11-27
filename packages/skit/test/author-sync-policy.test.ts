@@ -3,7 +3,11 @@ import { Option } from "effect";
 import type * as History from "../src/history/history.js";
 import * as SkillMoves from "../src/author/merge/skill-moves.js";
 import * as Merge from "../src/sync/merge.js";
-import { authorDecider, authorTree, mergeAuthorRevisions } from "../src/author/sync-policy.js";
+import {
+  authorDecider,
+  authorTree,
+  mergeAuthorRevisions,
+} from "../src/author/internal/sync-policy.js";
 
 const entry = (path: string, text: string): History.Tree[number] => ({
   path,

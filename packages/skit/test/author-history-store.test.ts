@@ -3,12 +3,12 @@ import { Effect, FileSystem, Layer } from "effect";
 import { systemError } from "effect/PlatformError";
 import { dirname, join } from "node:path";
 import * as History from "../src/history/history.js";
-import { AuthorHistory } from "../src/author/history.js";
-import { AuthorWorkspace } from "../src/author/workspace.js";
+import { AuthorHistory } from "../src/author/internal/history.js";
+import { AuthorWorkspace } from "../src/author/internal/workspace.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { lockFile } from "../src/platform/file-lock.js";
 import { SqlClient } from "effect/sql";
-import { prepareLibraryDatabase, withLibraryDatabase } from "../src/library/store/database.js";
+import { prepareLibraryDatabase, withLibraryDatabase } from "../src/library/database.js";
 
 const openStore = (directory: string) =>
   Effect.map(AuthorHistory, (history) => history.engineStore).pipe(

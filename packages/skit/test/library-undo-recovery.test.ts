@@ -9,7 +9,7 @@ import { collectionVersionPath } from "../src/library/collection-version.js";
 import * as Library from "../src/library/library.js";
 import { readPathEvidence } from "../src/library/folder-evidence.js";
 
-import { libraryDatabasePath } from "../src/library/store/database.js";
+import { libraryDatabasePath } from "../src/library/database.js";
 
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { inspectRecoveryOperation } from "../src/library/internal/recovery/moves.js";

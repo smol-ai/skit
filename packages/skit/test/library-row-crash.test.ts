@@ -24,7 +24,7 @@ import {
   readDatabaseState,
   saveLibraryState,
 } from "../src/library/store/state-file.js";
-import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/database.js";
 import { snapshotOf } from "../src/library/snapshot.js";
 import { canonicalJson } from "../src/shared/json.js";
 import { LibraryAuditEvent } from "../src/library/audit/contracts.js";

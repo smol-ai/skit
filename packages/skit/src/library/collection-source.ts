@@ -1,7 +1,10 @@
-import { AuthorRemoteHome } from "../author/remote.js";
+import { AuthorRemoteHome } from "../author/contracts.js";
 import { Effect, FileSystem, Option, Schema } from "effect";
-import { readDraftWorkspaceLocations } from "../author/inspect.js";
-import { readAuthorIdentity, readAuthorRemote } from "../author/workspace-metadata.js";
+import {
+  readDraftWorkspaceLocations,
+  readAuthorIdentity,
+  readAuthorRemote,
+} from "../author/index.js";
 import {
   SourceIdentity,
   sourceImports,

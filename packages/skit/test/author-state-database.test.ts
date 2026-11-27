@@ -9,12 +9,12 @@ import {
   withAuthorStateTransaction,
   saveAuthorSyncState,
   saveAuthorInventory,
-} from "../src/author/state-store.js";
+} from "../src/author/internal/state-store.js";
 import {
   libraryDatabasePath,
   prepareLibraryDatabase,
   withLibraryDatabase,
-} from "../src/library/store/database.js";
+} from "../src/library/database.js";
 import { skitLayer } from "../src/platform/layer.js";
 import * as MachineSettings from "../src/library/machine-settings.js";
 import { withLock } from "../src/platform/home-lock.js";

@@ -19,7 +19,7 @@ import {
   type LibraryManifest,
   type CollectionVersion,
 } from "../src/library/library-contracts.js";
-import { StoredLibraryManifest } from "../src/library/store/stored-manifest.js";
+import { StoredLibraryManifest } from "../src/library/stored-manifest.js";
 
 const digest = `sha256:${"a".repeat(64)}`;
 const collectionVersionId = makeCollectionVersionId();

@@ -5,7 +5,7 @@ import { LibraryStateFields } from "./state-fields.js";
 import { InvalidLibraryState, LibraryChanged } from "../failures.js";
 import { canonicalJson, JsonObject } from "../../shared/json.js";
 import { diffInstalledSkills } from "../audit/state-diff.js";
-import { libraryDatabasePath, withLibraryDatabase } from "./database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../database.js";
 import { loadInventoryRows, saveInventoryRows, decodeInventoryScan } from "./inventory-rows.js";
 import { loadInstalledSkillRows, saveInstalledSkillRows } from "./rows.js";
 import {

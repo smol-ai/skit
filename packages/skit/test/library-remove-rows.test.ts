@@ -13,7 +13,7 @@ import {
 } from "../src/library/store/library-store.js";
 import { readCatalogue } from "../src/library/store/catalogue.js";
 import { migrateLocalLibraryState } from "../src/library/store/state-file.js";
-import { libraryDatabasePath, withLibraryDatabase } from "../src/library/store/database.js";
+import { libraryDatabasePath, withLibraryDatabase } from "../src/library/database.js";
 import { readLibraryAudit, LibraryAuditEvent } from "../src/library/audit/audit-log.js";
 import { diffLibraryState } from "../src/library/audit/state-diff.js";
 import { libraryStateRevision } from "../src/library/library-state.js";

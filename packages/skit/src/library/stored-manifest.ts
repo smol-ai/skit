@@ -1,9 +1,9 @@
 import { Schema } from "effect";
-import { LibraryManifest } from "../library-contracts.js";
-import { LibraryManifestFromV4 } from "./manifest-v4.js";
-import { LibraryManifestFromV5 } from "./manifest-v5.js";
-import { LibraryManifestFromV6 } from "./manifest-v6.js";
-import { LibraryManifestFromV7 } from "./manifest-v7.js";
+import { LibraryManifest } from "./library-contracts.js";
+import { LibraryManifestFromV4 } from "./store/manifest-v4.js";
+import { LibraryManifestFromV5 } from "./store/manifest-v5.js";
+import { LibraryManifestFromV6 } from "./store/manifest-v6.js";
+import { LibraryManifestFromV7 } from "./store/manifest-v7.js";
 
 /**
  * A portable manifest as persisted by any SKIT since `skit.library.v4`, brought to the current
