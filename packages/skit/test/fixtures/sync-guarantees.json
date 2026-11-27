@@ -1,0 +1,198 @@
+{
+  "keepRegistryRecords": {
+    "key": "keepRegistryRecords",
+    "command": "sync",
+    "section": "Connecting and previewing",
+    "sectionOrder": 1,
+    "title": "A new Library keeps records already held by the Registry."
+  },
+  "previewWithoutWrites": {
+    "key": "previewWithoutWrites",
+    "command": "sync",
+    "section": "Connecting and previewing",
+    "sectionOrder": 1,
+    "title": "Preview leaves the proposed Library sync unapplied."
+  },
+  "refuseNewerFormat": {
+    "key": "refuseNewerFormat",
+    "command": "sync",
+    "section": "Connecting and previewing",
+    "sectionOrder": 1,
+    "title": "Sync refuses a newer Registry format before uploading changes."
+  },
+  "pullMissing": {
+    "key": "pullMissing",
+    "command": "sync",
+    "section": "Syncing Author Workspaces",
+    "sectionOrder": 2,
+    "title": "Sync pulls missing authored SKITs into this device without creating duplicate Collections."
+  },
+  "propagateEdits": {
+    "key": "propagateEdits",
+    "command": "sync",
+    "section": "Syncing Author Workspaces",
+    "sectionOrder": 2,
+    "title": "Sync propagates edits between connected Author Workspaces and refreshes enabled harnesses."
+  },
+  "preserveWorkspaceFolders": {
+    "key": "preserveWorkspaceFolders",
+    "command": "sync",
+    "section": "Syncing Author Workspaces",
+    "sectionOrder": 2,
+    "title": "Sync leaves occupied or deleted workspace folders alone and continues Library sync if a workspace is busy."
+  },
+  "linkPulledWorkspace": {
+    "key": "linkPulledWorkspace",
+    "command": "sync",
+    "section": "Syncing Author Workspaces",
+    "sectionOrder": 2,
+    "title": "A pulled workspace links to the synced Collection and updates enabled Skills offline."
+  },
+  "mergeOfflineEdits": {
+    "key": "mergeOfflineEdits",
+    "command": "sync",
+    "section": "Syncing Author Workspaces",
+    "sectionOrder": 2,
+    "title": "Overlapping offline edits to a connected Draft converge without losing either device’s history."
+  },
+  "sendRemovals": {
+    "key": "sendRemovals",
+    "command": "sync",
+    "section": "Choosing between changes",
+    "sectionOrder": 3,
+    "title": "Sync sends removals made since this Library last synced."
+  },
+  "alignIndependentImports": {
+    "key": "alignIndependentImports",
+    "command": "sync",
+    "section": "Choosing between changes",
+    "sectionOrder": 3,
+    "title": "Adding the same source on two devices merges into one Collection instead of duplicating it."
+  },
+  "retainResolvedVersions": {
+    "key": "retainResolvedVersions",
+    "command": "sync",
+    "section": "Choosing between changes",
+    "sectionOrder": 3,
+    "title": "Resolving a conflict with --take-remote keeps older local Skill versions in history."
+  },
+  "preserveConflicts": {
+    "key": "preserveConflicts",
+    "command": "sync",
+    "section": "Choosing between changes",
+    "sectionOrder": 3,
+    "title": "Conflicts leave both Libraries unchanged."
+  },
+  "resolveCollectionRemoval": {
+    "key": "resolveCollectionRemoval",
+    "command": "sync",
+    "section": "Choosing between changes",
+    "sectionOrder": 3,
+    "title": "Removing a Collection on one device while editing it on another conflicts as one decision."
+  },
+  "keepUnrelatedSelections": {
+    "key": "keepUnrelatedSelections",
+    "command": "sync",
+    "section": "Choosing between changes",
+    "sectionOrder": 3,
+    "title": "Sync keeps unrelated Registry choices when resolving a local selection conflict."
+  },
+  "repeatConflictResolution": {
+    "key": "repeatConflictResolution",
+    "command": "sync",
+    "section": "Choosing between changes",
+    "sectionOrder": 3,
+    "title": "Retrying after a failed conflict resolution still requires passing --take-remote again."
+  },
+  "protectLaterEdits": {
+    "key": "protectLaterEdits",
+    "command": "sync",
+    "section": "Recovering interrupted work",
+    "sectionOrder": 4,
+    "title": "An unresolved earlier sync cannot silently overwrite a later edit."
+  },
+  "recordMergedRevision": {
+    "key": "recordMergedRevision",
+    "command": "sync",
+    "section": "Recovering interrupted work",
+    "sectionOrder": 4,
+    "title": "Sync records the Registry revision it merged before uploading local changes."
+  },
+  "protectStoredCopies": {
+    "key": "protectStoredCopies",
+    "command": "sync",
+    "section": "Recovering interrupted work",
+    "sectionOrder": 4,
+    "title": "Sync stops if SKIT’s stored Skill copies were modified on disk."
+  },
+  "preserveRefusedSync": {
+    "key": "preserveRefusedSync",
+    "command": "sync",
+    "section": "Recovering interrupted work",
+    "sectionOrder": 4,
+    "title": "A refused Library sync leaves the saved Library records unchanged."
+  },
+  "retryAcceptedChange": {
+    "key": "retryAcceptedChange",
+    "command": "sync",
+    "section": "Recovering interrupted work",
+    "sectionOrder": 4,
+    "title": "A failed Library sync can be retried without losing a Registry change already accepted."
+  },
+  "rejectPartialDownload": {
+    "key": "rejectPartialDownload",
+    "command": "sync",
+    "section": "Recovering interrupted work",
+    "sectionOrder": 4,
+    "title": "A failed download does not save a partial fresh Library."
+  },
+  "reuseVerifiedDownload": {
+    "key": "reuseVerifiedDownload",
+    "command": "sync",
+    "section": "Recovering interrupted work",
+    "sectionOrder": 4,
+    "title": "Sync reuses a verified saved download."
+  },
+  "keepDeviceSelection": {
+    "key": "keepDeviceSelection",
+    "command": "sync",
+    "section": "Keeping device choices",
+    "sectionOrder": 5,
+    "title": "Sync keeps this device’s installation choices local."
+  },
+  "retainAfterInstallFailure": {
+    "key": "retainAfterInstallFailure",
+    "command": "sync",
+    "section": "Keeping device choices",
+    "sectionOrder": 5,
+    "title": "If copying Skills to a harness fails after syncing, the synced Library is kept."
+  },
+  "refuseUnusableHarness": {
+    "key": "refuseUnusableHarness",
+    "command": "sync",
+    "section": "Keeping device choices",
+    "sectionOrder": 5,
+    "title": "If a harness skills directory is unusable before sync, sync stops without saving."
+  },
+  "protectEditedSkills": {
+    "key": "protectEditedSkills",
+    "command": "sync",
+    "section": "Keeping device choices",
+    "sectionOrder": 5,
+    "title": "Sync never overwrites or deletes a Skill folder you edited directly."
+  },
+  "respectRepositoryDestinations": {
+    "key": "respectRepositoryDestinations",
+    "command": "sync",
+    "section": "Keeping device choices",
+    "sectionOrder": 5,
+    "title": "Sync keeps each repository’s installed Skills at that repository’s destination."
+  },
+  "ignoreInactiveEdits": {
+    "key": "ignoreInactiveEdits",
+    "command": "sync",
+    "section": "Keeping device choices",
+    "sectionOrder": 5,
+    "title": "Edits left in an uninstalled harness do not block sync."
+  }
+}

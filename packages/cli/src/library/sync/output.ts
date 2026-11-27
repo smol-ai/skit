@@ -1,3 +1,4 @@
+import { AuthoredSkillIssue } from "@smolai/skit-core/library/update";
 import { AuthorSyncResult } from "@smolai/skit-core/author";
 import { ManageStopped, SyncStopped } from "@smolai/skit-core/library";
 import { SchemaFailure } from "@smolai/skit-core/shared";
@@ -48,6 +49,7 @@ const AuthorWorkspaceResult = Schema.Struct({
   status: Schema.Literals(["unconnected", "sync", "updated", "failed", "pull_ready", "pulled"]),
   sync: Schema.optionalKey(AuthorSyncResult),
   sync_failure: Schema.optionalKey(AuthorSyncFailure),
+  installation_issues: Schema.optionalKey(Schema.Array(AuthoredSkillIssue)),
   installation: Schema.optionalKey(Schema.String),
   installation_failure: Schema.optionalKey(AuthorSyncFailure),
   failure: Schema.optionalKey(AuthorSyncFailure),

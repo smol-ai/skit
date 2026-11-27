@@ -1,0 +1,100 @@
+/* Terminal colours. ANSI 0 to 15 sit on Fluid's theme tokens; each is mixed with the page's
+   foreground, which darkens it on a light page and lightens it on a dark one, so it stays legible. */
+:root {
+  --terminal-font: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  --terminal-foreground: var(--foreground);
+  --terminal-background: var(--surface-2);
+  --terminal-0: color-mix(in oklab, var(--muted-foreground) 60%, var(--background));
+  --terminal-1: color-mix(in oklab, var(--destructive) 80%, var(--foreground));
+  --terminal-2: color-mix(in oklab, var(--success) 70%, var(--foreground));
+  --terminal-3: color-mix(in oklab, var(--warning) 70%, var(--foreground));
+  --terminal-4: color-mix(in oklab, var(--info) 75%, var(--foreground));
+  --terminal-5: color-mix(in oklab, light-dark(#a855f7, #d8b4fe) 75%, var(--foreground));
+  --terminal-6: color-mix(in oklab, light-dark(#0891b2, #67e8f9) 75%, var(--foreground));
+  --terminal-7: color-mix(in oklab, var(--foreground) 80%, var(--background));
+  --terminal-8: var(--muted-foreground);
+  --terminal-9: var(--terminal-1);
+  --terminal-10: var(--terminal-2);
+  --terminal-11: var(--terminal-3);
+  --terminal-12: var(--terminal-4);
+  --terminal-13: var(--terminal-5);
+  --terminal-14: var(--terminal-6);
+  --terminal-15: var(--foreground);
+}
+
+.terminal-frame {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.terminal-frame pre {
+  margin: 0;
+  padding: 16px 20px;
+  overflow-x: auto;
+  white-space: pre;
+  font: 13px / 20px var(--terminal-font);
+  color: var(--terminal-foreground);
+  background: var(--terminal-background);
+  border-radius: inherit;
+}
+.terminal-frame pre:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.terminal-frame.thumbnail pre {
+  max-height: 240px;
+  overflow: hidden;
+  padding: 12px 14px;
+  font-size: 11px;
+  line-height: 16px;
+}
+.terminal-frame .bold {
+  font-weight: 700;
+}
+.terminal-frame .dim {
+  opacity: 0.6;
+}
+.terminal-frame .italic {
+  font-style: italic;
+}
+.terminal-frame .underline {
+  text-decoration: underline;
+}
+.terminal-frame .issue {
+  color: inherit;
+  background: color-mix(in oklab, var(--destructive) 22%, transparent);
+  border-radius: 3px;
+  text-decoration: underline wavy var(--destructive);
+  text-decoration-skip-ink: none;
+  text-underline-offset: 4px;
+}
+/* The status spinner: a one-column window over its glyphs, stepped through with CSS. */
+.spinner {
+  display: inline-block;
+  width: 1ch;
+  overflow: hidden;
+  vertical-align: bottom;
+  user-select: none;
+}
+.spinner > span {
+  display: inline-flex;
+  animation: spinner calc(var(--interval) * var(--frames)) steps(var(--frames)) infinite;
+}
+.spinner > span > span {
+  flex: none;
+  width: 1ch;
+  text-align: center;
+}
+.spinner.still > span {
+  animation: none;
+}
+@keyframes spinner {
+  to {
+    transform: translateX(calc(-1ch * var(--frames)));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner > span {
+    animation: none;
+  }
+}

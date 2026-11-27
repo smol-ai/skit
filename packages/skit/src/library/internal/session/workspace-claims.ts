@@ -1,53 +1,63 @@
 import { Effect, FileSystem } from "effect";
 import type { LibraryState } from "../../library-state.js";
-import { sourceImports } from "../../library-contracts.js";
+import { localWorkspaceLocations, workspaceLookup } from "../../collection-source.js";
 
 export interface WorkspaceClaim {
   readonly collectionId: string;
   readonly workspaceId?: string;
 }
 
-/** Import history records former locations; only the latest matching source names this one. */
-const workspaceLocation = (
-  state: LibraryState,
-  collection: LibraryState["collections"][number],
-) => {
-  const source = collection.upstream?.source_identity;
-  if (source?.kind !== "authored-workspace") return undefined;
-  const current = sourceImports(state, collection.collection_id).find(
-    (item) =>
-      item.source_identity.kind === "authored-workspace" &&
-      item.source_identity.workspace_id === source.workspace_id,
-  );
-  return current === undefined
-    ? undefined
-    : { workspaceId: source.workspace_id, path: current.input.value };
-};
-
 /** Provenance and canonical paths from one captured Library; Author decides registration. */
 export const readWorkspaceClaims = Effect.fn("LibraryView.readWorkspaceClaims")(function* (
   state: LibraryState,
   root: string,
+  home: string,
 ) {
+  const lookup = yield* workspaceLookup(home);
+  const machineId = yield* lookup.machine;
   const fs = yield* FileSystem.FileSystem;
   const workspaceIdOf = (collection: LibraryState["collections"][number]) =>
     collection.upstream?.source_identity.kind === "authored-workspace"
       ? collection.upstream.source_identity.workspace_id
       : undefined;
   const atRoot: WorkspaceClaim[] = [];
+  const registrations = new Map<
+    string,
+    { collectionId: string; input?: string; sourceWorkspaceId: string }
+  >();
   for (const collection of state.collections) {
-    const location = workspaceLocation(state, collection);
+    const locations = yield* localWorkspaceLocations(state, collection, lookup);
+    if (locations.length > 1) {
+      // An occupied root with no adoptable identity makes init refuse a second Collection.
+      if (locations.some((item) => item.path === root))
+        atRoot.push({ collectionId: collection.collection_id });
+      continue;
+    }
+    const location = locations[0];
+    const sourceWorkspaceId = workspaceIdOf(collection);
+    if (sourceWorkspaceId !== undefined) {
+      registrations.set(location?.workspaceId ?? sourceWorkspaceId, {
+        collectionId: collection.collection_id,
+        sourceWorkspaceId,
+        ...(location ? { input: location.path } : {}),
+      });
+    }
     const inputs =
       workspaceIdOf(collection) === undefined
         ? state.imports
-            .filter((sourceImport) => sourceImport.collection_id === collection.collection_id)
+            .filter(
+              (sourceImport) =>
+                machineId !== undefined &&
+                sourceImport.machine_id === machineId &&
+                sourceImport.collection_id === collection.collection_id,
+            )
             .map((sourceImport) => sourceImport.input.value)
         : location === undefined
           ? []
           : [location.path];
     for (const input of inputs)
       if ((yield* fs.exists(input)) && (yield* fs.realPath(input)) === root) {
-        const workspaceId = workspaceIdOf(collection);
+        const workspaceId = location?.workspaceId;
         atRoot.push({
           collectionId: collection.collection_id,
           ...(workspaceId === undefined ? {} : { workspaceId }),
@@ -60,12 +70,11 @@ export const readWorkspaceClaims = Effect.fn("LibraryView.readWorkspaceClaims")(
     readRegistration: Effect.fn("LibraryView.readWorkspaceRegistration")(function* (
       workspaceId: string,
     ) {
-      const collection = state.collections.find((item) => workspaceIdOf(item) === workspaceId);
-      if (collection === undefined) return undefined;
-      const input = workspaceLocation(state, collection)?.path;
+      const registration = registrations.get(workspaceId);
+      if (!registration) return undefined;
+      const input = registration.input;
       return {
-        collectionId: collection.collection_id,
-        ...(input === undefined ? {} : { input }),
+        ...registration,
         ...(input !== undefined && (yield* fs.exists(input))
           ? { root: yield* fs.realPath(input) }
           : {}),

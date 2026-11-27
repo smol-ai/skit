@@ -83,6 +83,12 @@ const libraryMigrations = () => ({
     yield* createAuthorMetadataTables;
     yield* createFileBytesTable;
   }),
+  "002_local_draft_imports": Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    yield* sql`CREATE TABLE library_local_draft_imports (
+      import_id TEXT PRIMARY KEY REFERENCES library_imports(import_id) ON DELETE CASCADE
+    ) STRICT`;
+  }),
 });
 
 /** Schema changes load only the owner rows whose layout changes; never legacy files. */

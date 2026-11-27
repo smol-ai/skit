@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { JourneyPlayback } from "../src/playback";
 
 const frames = [
-  { label: "Ready", output: "" },
+  { label: "$ skit sync --apply", output: "$ skit sync --apply\n" },
   { label: "Download", output: "Plan\n", status: "Downloading 0/2" },
   { label: "Result", output: "Done\n" },
 ];

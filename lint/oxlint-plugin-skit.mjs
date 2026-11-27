@@ -1,3 +1,4 @@
+import { atlasTokenRule } from "./atlas-tokens.mjs";
 import { dirname, relative, resolve } from "node:path";
 import { readFileSync } from "node:fs";
 import { approvedServices, owners as boundaryOwners } from "../architecture/boundaries.mjs";
@@ -827,6 +828,7 @@ const effectRules = {
 export default {
   meta: { name: "skit" },
   rules: {
+    "atlas-tokens": atlasTokenRule,
     "no-middle-dot-delimiter": {
       meta: {
         type: "problem",

@@ -6,7 +6,7 @@ import type { Hash } from "../../../shared/hash.js";
 import { originalTreeHash } from "../../collection-version.js";
 import { readCollectionVersion } from "../content/read-collection-version.js";
 import {
-  latestSourceImport,
+  subjectSourceImport,
   resolveOwningLibrarySubjects,
   subjectImportIds,
 } from "../../subject-resolution.js";
@@ -45,7 +45,7 @@ export const checkLibrarySubjects = Effect.fn("Library.checkSubjects")(function*
       const copies = state.collection_versions.filter((copy) =>
         copyIds.has(copy.collection_version_id),
       );
-      const sourceImport = latestSourceImport(state, subject);
+      const sourceImport = subjectSourceImport(state, subject);
       const currentCopy =
         sourceImport === undefined
           ? undefined

@@ -89,14 +89,15 @@ export function deviceInstallationIntent(state: LibraryState, manifest?: Library
 /** Keep device installation choices separate from the portable Library being synchronized. */
 export function prepareDeviceInstallation(state: LibraryState, manifest: LibraryManifest) {
   const intent = deviceInstallationIntent(state, manifest);
-  const selected = { ...manifest, enabled: intent.globals[0]?.enabled ?? [] };
+  const local = state.local_draft_imports ? { local_draft_imports: state.local_draft_imports } : {};
+  const selected = { ...manifest, ...local, enabled: intent.globals[0]?.enabled ?? [] };
   return {
     ...intent,
     manifest: selected,
     resolveEnabled(enabled: readonly Enabled[]) {
       if (intent.independent) return { account: manifest, installation: selected };
       const installation = { ...manifest, enabled };
-      return { account: installation, installation };
+      return { account: installation, installation: { ...installation, ...local } };
     },
   };
 }

@@ -1,3 +1,4 @@
+import sync from "../../skit/test/fixtures/sync-guarantees.json" with { type: "json" };
 import { describe } from "@effect/vitest";
 import { SyncInputInvalid } from "@smolai/skit-core/library/sync/failures";
 import { classifyFailure } from "../src/commands/failure-classification.js";
@@ -142,198 +143,184 @@ describe("skit remove", () => {
   });
 });
 
-describe("skit sync", () => {
-  describe("Keeping device choices", () => {
-    describe("Sync keeps this device’s installation choices local.", () => {
-      it.effect(
-        "syncs new Library content while preserving an edited deselected installed skill",
-        () =>
-          Effect.gen(function* () {
-            const { a, b, fs } = yield* devices;
-            yield* a.importSource("first");
-            yield* a.sync();
-            yield* b.sync({ deviceSelection: { skills: ["first"], collections: [] } });
-            const path = join(b.root, "first", "SKILL.md");
-            yield* fs.writeFileString(path, "local edits\n");
-            yield* a.importSource("second");
-            yield* a.sync();
-            const result = yield* b.sync({ deviceSelection: { skills: [], collections: [] } });
-            assert.strictEqual(result.status, "enablement_incomplete");
-            assert.strictEqual((yield* b.state).skills.length, 2);
-            assert.strictEqual(yield* fs.readFileString(path), "local edits\n");
-            yield* fs.writeFileString(path, "first\n");
-            assert.strictEqual((yield* b.sync()).status, "clean");
-            assert.isFalse(yield* fs.exists(path));
-          }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-      );
+describe(sync.keepDeviceSelection.title, { meta: { guarantee: sync.keepDeviceSelection } }, () => {
+  it.effect("syncs new Library content while preserving an edited deselected installed skill", () =>
+    Effect.gen(function* () {
+      const { a, b, fs } = yield* devices;
+      yield* a.importSource("first");
+      yield* a.sync();
+      yield* b.sync({ deviceSelection: { skills: ["first"], collections: [] } });
+      const path = join(b.root, "first", "SKILL.md");
+      yield* fs.writeFileString(path, "local edits\n");
+      yield* a.importSource("second");
+      yield* a.sync();
+      const result = yield* b.sync({ deviceSelection: { skills: [], collections: [] } });
+      assert.strictEqual(result.status, "enablement_incomplete");
+      assert.strictEqual((yield* b.state).skills.length, 2);
+      assert.strictEqual(yield* fs.readFileString(path), "local edits\n");
+      yield* fs.writeFileString(path, "first\n");
+      assert.strictEqual((yield* b.sync()).status, "clean");
+      assert.isFalse(yield* fs.exists(path));
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+  );
 
-      it.effect("remote removal reports a missing device choice without silently pruning it", () =>
-        Effect.gen(function* () {
-          const { a, b, remote } = yield* devices;
-          const first = yield* a.importSource("first");
-          yield* a.importSource("second");
-          yield* a.sync();
-          yield* b.sync({ deviceSelection: { skills: ["first", "second"], collections: [] } });
-          const selected = (yield* b.state).device_skill_selection;
-          yield* a.remove(first.collection.collection_id);
-          yield* a.sync();
-          const head = yield* remote;
-          for (const _attempt of [1, 2]) {
-            const result = yield* b.sync();
-            assert.strictEqual(result.status, "enablement_incomplete");
-            if (result.status === "enablement_incomplete")
-              assert.isTrue(
-                result.enablement_issues?.some(
-                  (issue) =>
-                    issue._tag === "SelectionMissing" &&
-                    "skill" in issue.selection &&
-                    first.skills.map((skill) => skill.skill_id).includes(issue.selection.skill),
-                ),
-              );
-            const state = yield* b.state;
-            assert.deepStrictEqual(state.device_skill_selection, selected);
-            assert.isFalse(
-              state.collections.some(
-                (collection) => collection.collection_id === first.collection.collection_id,
-              ),
-            );
-            assert.deepStrictEqual(yield* remote, head);
-          }
-        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-      );
+  it.effect("remote removal reports a missing device choice without silently pruning it", () =>
+    Effect.gen(function* () {
+      const { a, b, remote } = yield* devices;
+      const first = yield* a.importSource("first");
+      yield* a.importSource("second");
+      yield* a.sync();
+      yield* b.sync({ deviceSelection: { skills: ["first", "second"], collections: [] } });
+      const selected = (yield* b.state).device_skill_selection;
+      yield* a.remove(first.collection.collection_id);
+      yield* a.sync();
+      const head = yield* remote;
+      for (const _attempt of [1, 2]) {
+        const result = yield* b.sync();
+        assert.strictEqual(result.status, "enablement_incomplete");
+        if (result.status === "enablement_incomplete")
+          assert.isTrue(
+            result.enablement_issues?.some(
+              (issue) =>
+                issue._tag === "SelectionMissing" &&
+                "skill" in issue.selection &&
+                first.skills.map((skill) => skill.skill_id).includes(issue.selection.skill),
+            ),
+          );
+        const state = yield* b.state;
+        assert.deepStrictEqual(state.device_skill_selection, selected);
+        assert.isFalse(
+          state.collections.some(
+            (collection) => collection.collection_id === first.collection.collection_id,
+          ),
+        );
+        assert.deepStrictEqual(yield* remote, head);
+      }
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+  );
 
-      it.effect(
-        "identity alignment preserves device entries and invocation policy without changing account intent",
-        () =>
-          Effect.gen(function* () {
-            const { a, b, remote, fs } = yield* devices;
-            const published = yield* a.importSource("first");
-            const local = yield* b.importSource("first");
-            const publishedSkill = published.skills[0];
-            const localSkill = local.skills[0];
-            assert.ok(publishedSkill);
-            assert.ok(localSkill);
-            yield* a.edit((state) => ({
-              ...state,
-              enabled: [{ collection: published.collection.collection_id }],
-            }));
-            yield* a.sync();
-            const account = (yield* remote)?.manifest.enabled;
-            yield* b.edit((state) => ({
-              ...state,
-              device_skill_selection: {
-                mode: "choose",
-                enabled: [
-                  { skill: localSkill.skill_id },
-                  { collection: local.collection.collection_id },
-                ],
-                invocation_policies: { [localSkill.skill_id]: "explicit" },
-              },
-            }));
-            const result = yield* b.sync();
-            assert.strictEqual(result.status, "merged");
-            const state = yield* b.state;
-            const selection = state.device_skill_selection;
-            assert.strictEqual(selection?.mode, "choose");
-            if (selection?.mode !== "choose") return yield* Effect.die("Missing device selection");
-            const { enabled, ...settings } = selection;
-            assert.deepStrictEqual(settings, {
-              mode: "choose",
-              invocation_policies: { [publishedSkill.skill_id]: "explicit" },
-            });
-            assert.deepStrictEqual(
-              new Set(enabled.map((item) => JSON.stringify(item))),
-              new Set([
-                JSON.stringify({ skill: publishedSkill.skill_id }),
-                JSON.stringify({ collection: published.collection.collection_id }),
-              ]),
-            );
-            assert.deepStrictEqual((yield* remote)?.manifest.enabled, account);
-            assert.isTrue(yield* fs.exists(join(b.root, "first", "SKILL.md")));
-          }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-      );
+  it.effect(
+    "identity alignment preserves device entries and invocation policy without changing account intent",
+    () =>
+      Effect.gen(function* () {
+        const { a, b, remote, fs } = yield* devices;
+        const published = yield* a.importSource("first");
+        const local = yield* b.importSource("first");
+        const publishedSkill = published.skills[0];
+        const localSkill = local.skills[0];
+        assert.ok(publishedSkill);
+        assert.ok(localSkill);
+        yield* a.edit((state) => ({
+          ...state,
+          enabled: [{ collection: published.collection.collection_id }],
+        }));
+        yield* a.sync();
+        const account = (yield* remote)?.manifest.enabled;
+        yield* b.edit((state) => ({
+          ...state,
+          device_skill_selection: {
+            mode: "choose",
+            enabled: [
+              { skill: localSkill.skill_id },
+              { collection: local.collection.collection_id },
+            ],
+            invocation_policies: { [localSkill.skill_id]: "explicit" },
+          },
+        }));
+        const result = yield* b.sync();
+        assert.strictEqual(result.status, "merged");
+        const state = yield* b.state;
+        const selection = state.device_skill_selection;
+        assert.strictEqual(selection?.mode, "choose");
+        if (selection?.mode !== "choose") return yield* Effect.die("Missing device selection");
+        const { enabled, ...settings } = selection;
+        assert.deepStrictEqual(settings, {
+          mode: "choose",
+          invocation_policies: { [publishedSkill.skill_id]: "explicit" },
+        });
+        assert.deepStrictEqual(
+          new Set(enabled.map((item) => JSON.stringify(item))),
+          new Set([
+            JSON.stringify({ skill: publishedSkill.skill_id }),
+            JSON.stringify({ collection: published.collection.collection_id }),
+          ]),
+        );
+        assert.deepStrictEqual((yield* remote)?.manifest.enabled, account);
+        assert.isTrue(yield* fs.exists(join(b.root, "first", "SKILL.md")));
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+  );
 
-      it.effect(
-        "retains the full account Library while persisting an individual device choice",
-        () =>
-          Effect.gen(function* () {
-            const { a, b, c, fs, remote } = yield* devices;
-            const first = yield* a.importSource("first");
-            const second = yield* a.importSource("second");
-            yield* a.edit((state) => ({
-              ...state,
-              enabled: [
-                { collection: first.collection.collection_id },
-                { collection: second.collection.collection_id },
-              ],
-            }));
-            yield* a.sync();
-            const head = yield* remote;
-            const pulled = yield* b.sync({
-              deviceSelection: { skills: ["first"], collections: [] },
-            });
-            assert.strictEqual(pulled.status, "pulled");
-            assert.strictEqual((yield* b.state).skills.length, 2);
-            assert.deepStrictEqual(yield* remote, head);
-            assert.isTrue(yield* fs.exists(join(b.root, "first", "SKILL.md")));
-            assert.isFalse(yield* fs.exists(join(b.root, "second")));
-            assert.strictEqual((yield* b.state).device_skill_selection?.mode, "choose");
-            assert.strictEqual((yield* b.sync()).status, "clean");
-            assert.isFalse(yield* fs.exists(join(b.root, "second")));
-            assert.strictEqual((yield* c.sync()).status, "pulled");
-            assert.isTrue(yield* fs.exists(join(c.root, "first", "SKILL.md")));
-            assert.isTrue(yield* fs.exists(join(c.root, "second", "SKILL.md")));
-            assert.deepStrictEqual(yield* remote, head);
-            assert.strictEqual(
-              (yield* b.sync({ deviceSelection: "follow-account" })).status,
-              "clean",
-            );
-            assert.isTrue(yield* fs.exists(join(b.root, "second", "SKILL.md")));
-            assert.strictEqual((yield* b.state).device_skill_selection?.mode, "follow-account");
-            assert.deepStrictEqual(yield* remote, head);
-          }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-      );
-    });
-  });
+  it.effect("retains the full account Library while persisting an individual device choice", () =>
+    Effect.gen(function* () {
+      const { a, b, c, fs, remote } = yield* devices;
+      const first = yield* a.importSource("first");
+      const second = yield* a.importSource("second");
+      yield* a.edit((state) => ({
+        ...state,
+        enabled: [
+          { collection: first.collection.collection_id },
+          { collection: second.collection.collection_id },
+        ],
+      }));
+      yield* a.sync();
+      const head = yield* remote;
+      const pulled = yield* b.sync({
+        deviceSelection: { skills: ["first"], collections: [] },
+      });
+      assert.strictEqual(pulled.status, "pulled");
+      assert.strictEqual((yield* b.state).skills.length, 2);
+      assert.deepStrictEqual(yield* remote, head);
+      assert.isTrue(yield* fs.exists(join(b.root, "first", "SKILL.md")));
+      assert.isFalse(yield* fs.exists(join(b.root, "second")));
+      assert.strictEqual((yield* b.state).device_skill_selection?.mode, "choose");
+      assert.strictEqual((yield* b.sync()).status, "clean");
+      assert.isFalse(yield* fs.exists(join(b.root, "second")));
+      assert.strictEqual((yield* c.sync()).status, "pulled");
+      assert.isTrue(yield* fs.exists(join(c.root, "first", "SKILL.md")));
+      assert.isTrue(yield* fs.exists(join(c.root, "second", "SKILL.md")));
+      assert.deepStrictEqual(yield* remote, head);
+      assert.strictEqual((yield* b.sync({ deviceSelection: "follow-account" })).status, "clean");
+      assert.isTrue(yield* fs.exists(join(b.root, "second", "SKILL.md")));
+      assert.strictEqual((yield* b.state).device_skill_selection?.mode, "follow-account");
+      assert.deepStrictEqual(yield* remote, head);
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+  );
 });
 
-describe("skit sync", () => {
-  describe("Keeping device choices", () => {
-    describe("An installed-copy failure does not undo an already completed Library sync.", () => {
-      it.effect("a blocked selected destination leaves the Library synced and can be retried", () =>
-        Effect.gen(function* () {
-          const homes = yield* devices;
-          const { a, b, fs, remote } = homes;
-          const first = yield* a.importSource("first");
-          yield* a.edit((state) => ({
-            ...state,
-            enabled: [{ skill: first.skills[0]!.skill_id }],
-          }));
-          yield* a.sync();
-          const head = yield* remote;
-          yield* fs.makeDirectory(join(b.root, "first"), { recursive: true });
-          yield* fs.writeFileString(join(b.root, "first", "SKILL.md"), "existing copy\n");
-          const result = yield* b.sync({ deviceSelection: { skills: ["first"], collections: [] } });
-          assert.strictEqual(result.status, "enablement_incomplete");
-          assert.strictEqual((yield* b.state).skills.length, 1);
-          assert.strictEqual(
-            yield* fs.readFileString(join(b.root, "first", "SKILL.md")),
-            "existing copy\n",
-          );
-          assert.deepStrictEqual(yield* remote, head);
-          const downloads = homes.snapshotReads;
-          yield* fs.remove(join(b.root, "first"), { recursive: true });
-          assert.strictEqual((yield* b.sync()).status, "clean");
-          assert.strictEqual(homes.snapshotReads, downloads);
-          assert.strictEqual(
-            yield* fs.readFileString(join(b.root, "first", "SKILL.md")),
-            "first\n",
-          );
-        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-      );
-    });
-  });
-});
+describe(
+  sync.retainAfterInstallFailure.title,
+  { meta: { guarantee: sync.retainAfterInstallFailure } },
+  () => {
+    it.effect("a blocked selected destination leaves the Library synced and can be retried", () =>
+      Effect.gen(function* () {
+        const homes = yield* devices;
+        const { a, b, fs, remote } = homes;
+        const first = yield* a.importSource("first");
+        yield* a.edit((state) => ({
+          ...state,
+          enabled: [{ skill: first.skills[0]!.skill_id }],
+        }));
+        yield* a.sync();
+        const head = yield* remote;
+        yield* fs.makeDirectory(join(b.root, "first"), { recursive: true });
+        yield* fs.writeFileString(join(b.root, "first", "SKILL.md"), "existing copy\n");
+        const result = yield* b.sync({ deviceSelection: { skills: ["first"], collections: [] } });
+        assert.strictEqual(result.status, "enablement_incomplete");
+        assert.strictEqual((yield* b.state).skills.length, 1);
+        assert.strictEqual(
+          yield* fs.readFileString(join(b.root, "first", "SKILL.md")),
+          "existing copy\n",
+        );
+        assert.deepStrictEqual(yield* remote, head);
+        const downloads = homes.snapshotReads;
+        yield* fs.remove(join(b.root, "first"), { recursive: true });
+        assert.strictEqual((yield* b.sync()).status, "clean");
+        assert.strictEqual(homes.snapshotReads, downloads);
+        assert.strictEqual(yield* fs.readFileString(join(b.root, "first", "SKILL.md")), "first\n");
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+    );
+  },
+);
 
 describe("skit enable", () => {
   describe("Enable refuses an unapproved copy at an installation destination.", () => {

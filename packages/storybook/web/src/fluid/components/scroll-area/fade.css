@@ -1,0 +1,47 @@
+@property --ff-scroll-fade-start {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
+@property --ff-scroll-fade-end {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
+@keyframes ff-scroll-fade-start {
+  from {
+    --ff-scroll-fade-start: 1;
+  }
+  to {
+    --ff-scroll-fade-start: 0;
+  }
+}
+@keyframes ff-scroll-fade-end {
+  from {
+    --ff-scroll-fade-end: 0;
+  }
+  to {
+    --ff-scroll-fade-end: 1;
+  }
+}
+.ff-scroll-fade {
+  --scroll-fade-size: 48px;
+}
+/* Source behavior: browsers without scroll timelines keep crisp edges. */
+@supports (animation-timeline: scroll()) {
+  .ff-scroll-fade {
+    mask-image: linear-gradient(
+      to bottom,
+      rgb(0 0 0 / var(--ff-scroll-fade-start)) 0,
+      #000 var(--scroll-fade-size),
+      #000 calc(100% - var(--scroll-fade-size)),
+      rgb(0 0 0 / var(--ff-scroll-fade-end)) 100%
+    );
+    animation:
+      ff-scroll-fade-start both linear,
+      ff-scroll-fade-end both linear;
+    animation-timeline: scroll(self), scroll(self);
+    animation-range-start: 0, calc(100% - var(--scroll-fade-size));
+    animation-range-end: var(--scroll-fade-size), 100%;
+  }
+}

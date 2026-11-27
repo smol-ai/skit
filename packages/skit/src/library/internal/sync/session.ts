@@ -1,4 +1,4 @@
-import { readCollectionSource } from "../../collection-source.js";
+import { readCollectionSource, workspaceLookup } from "../../collection-source.js";
 import { Effect, Option } from "effect";
 import type * as Library from "../../library.js";
 import { StalePlan } from "../../library-plan.js";
@@ -210,9 +210,10 @@ export function openSyncSession(
         result: { ...note, ...conflict(transition.conflicts, remote?.revision_id) },
       };
     const workspaces = new Map<string, { label: string; authority?: string }>();
+    const lookup = yield* workspaceLookup(home);
     for (const collection of merge.alignedLocal.collections) {
       if (collection.upstream?.source_identity.kind !== "authored-workspace") continue;
-      const source = yield* readCollectionSource(merge.alignedLocal, collection, home);
+      const source = yield* readCollectionSource(merge.alignedLocal, collection, lookup);
       if (source?.workspace_status === "connected")
         workspaces.set(collection.collection_id, {
           label: source.name,

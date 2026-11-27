@@ -1,3 +1,5 @@
+import { AuthorRemoteHome } from "../author/remote.js";
+import { readCatalogue } from "./store/catalogue.js";
 import { LibraryChanged } from "./failures.js";
 import type { AuthoredSkillIssue } from "./authored-skill-issues.js";
 import { Clock, Effect, FileSystem, Schema } from "effect";
@@ -10,6 +12,7 @@ import { TreeError } from "../shared/tree-error.js";
 import type { Interface } from "./library.js";
 import {
   sourceImports,
+  selectedSourceImport,
   currentCollectionSkills,
   enabledSkillIds,
   type Import,
@@ -21,7 +24,13 @@ import { importAuthoredCollection } from "./import-collection.js";
 import { LibraryWriter, libraryOriginalsPath, loadLibrary } from "./store/library-store.js";
 import { prepareAuthored } from "./internal/content/prepare-authored.js";
 import * as InstalledSkills from "./installed-skills.js";
-import { CollectionSource, readCollectionSource } from "./collection-source.js";
+import {
+  CollectionSource,
+  localWorkspace,
+  readCollectionSource,
+  workspaceLookup,
+  type WorkspaceLookup,
+} from "./collection-source.js";
 import type { LibraryState } from "./library-state.js";
 import type { RemovalDecision } from "../author/inventory.js";
 import { inspectAuthorWorkspace } from "../author/inspect.js";
@@ -49,7 +58,7 @@ export const AuthoredInstallation = Schema.Struct({
 const readAuthoredInstallation = Effect.fn("Library.readAuthoredInstallation")(function* (
   state: LibraryState,
   collectionId: string,
-  home: string,
+  lookup: WorkspaceLookup,
 ) {
   const collection = state.collections.find((item) => item.collection_id === collectionId)!;
   const members = currentCollectionSkills(state, collection.collection_id);
@@ -73,12 +82,12 @@ const readAuthoredInstallation = Effect.fn("Library.readAuthoredInstallation")(f
       skill: skill.name,
       path: copy.path,
       collection_label: owner.label,
-      source: yield* readCollectionSource(state, owner, home),
+      source: yield* readCollectionSource(state, owner, lookup),
     });
   }
   return {
     collection_label: collection.label,
-    source: yield* readCollectionSource(state, collection, home),
+    source: yield* readCollectionSource(state, collection, lookup),
     disabled_skills: members
       .filter((member) => !enabled.has(member.skill_id))
       .map((member) => member.name),
@@ -90,6 +99,7 @@ const readAuthoredInstallation = Effect.fn("Library.readAuthoredInstallation")(f
 /** Bytes already preserved by Author history; the Library never reads the editable root. */
 export interface AuthoredSkillsUpdate {
   readonly workspaceId: string;
+  readonly draftHome?: AuthorRemoteHome;
   readonly expectedImportId?: string;
   readonly input: string;
   readonly tree: readonly TreeEntry[];
@@ -153,27 +163,58 @@ export const updateAuthoredSkills = Effect.fn("Library.updateAuthoredSkills")(fu
   const state = yield* loadLibrary(writer.home);
   const installedSkills = yield* InstalledSkills.Service;
   const active = yield* installedSkills.active;
-  const collection = state.collections.find((candidate) =>
-    sourceImports(state, candidate.collection_id).some(
-      (item) =>
-        item.source_identity.kind === "authored-workspace" &&
-        item.source_identity.workspace_id === request.workspaceId,
-    ),
-  );
+  const lookup = yield* workspaceLookup(writer.home);
+  const matches = [];
+  for (const candidate of state.collections) {
+    const upstream = candidate.upstream;
+    if (upstream?.source_identity.kind !== "authored-workspace") continue;
+    if (upstream.draft_home) {
+      if (
+        !request.draftHome ||
+        !Schema.toEquivalence(AuthorRemoteHome)(request.draftHome, upstream.draft_home)
+      )
+        continue;
+      const workspace = yield* localWorkspace(state, candidate, lookup);
+      if (workspace?.workspaceId !== request.workspaceId || workspace.path !== request.input)
+        continue;
+    } else if (upstream.source_identity.workspace_id !== request.workspaceId) continue;
+    matches.push(candidate);
+  }
+  if (matches.length > 1) return yield* new LibraryChanged({ path: writer.home });
+  const collection = matches[0];
   if (
     request.expectedImportId !== undefined &&
     (collection === undefined ||
-      sourceImports(state, collection.collection_id)[0]?.import_id !== request.expectedImportId)
+      selectedSourceImport(state, collection.collection_id)?.import_id !== request.expectedImportId)
   )
     return yield* new LibraryChanged({ path: writer.home });
-  if (collection === undefined)
+  if (!collection?.upstream)
     return {
       status: "unregistered" as const,
       installed: 0,
       installed_copies: [],
       issues: [] as AuthoredSkillIssue[],
     };
-  const previousImport = sourceImports(state, collection.collection_id)[0];
+  // An offline observation can update a local installation. Only a checkpoint from
+  // this workspace may introduce a Registry address into the portable catalogue.
+  let connected = collection.upstream?.draft_home !== undefined;
+  if (
+    request.draftHome &&
+    !collection.upstream.draft_home &&
+    (yield* lookup.drafts)(request.draftHome).some(
+      (location) => location.workspaceId === request.workspaceId && location.path === request.input,
+    )
+  ) {
+    const stored = yield* readCatalogue(writer.home);
+    const collections = stored.value.collections.map((item) =>
+      item.collection_id === collection.collection_id && item.upstream
+        ? { ...item, upstream: { ...item.upstream, draft_home: request.draftHome } }
+        : item,
+    );
+    yield* writer.saveCatalogue({ ...stored.value, collections }, stored.value, stored.revision);
+    connected = true;
+  }
+  const previousImport = selectedSourceImport(state, collection.collection_id);
   const previous = state.collection_versions.find(
     (copy) => copy.collection_version_id === previousImport?.collection_version_id,
   );
@@ -191,18 +232,34 @@ export const updateAuthoredSkills = Effect.fn("Library.updateAuthoredSkills")(fu
       installed: 0,
       installed_copies: [],
       issues: prepared.issues,
-      context: yield* readAuthoredInstallation(state, collection.collection_id, writer.home),
+      context: yield* readAuthoredInstallation(state, collection.collection_id, lookup),
     };
   const { hash, importedAt } = prepared;
-  if (hash !== previous?.hash)
-    yield* importAuthoredCollection({
-      root: prepared.root,
-      input: request.input,
-      source: { type: "local", path: request.input },
-      sourceIdentity: { kind: "authored-workspace", workspace_id: request.workspaceId },
-      label: collection.label,
-      importedAt,
-    });
+  if (hash !== previous?.hash) {
+    yield* importAuthoredCollection(
+      {
+        root: prepared.root,
+        input: request.input,
+        source: { type: "local", path: request.input },
+        sourceIdentity: collection.upstream.source_identity,
+        label: collection.label,
+        importedAt,
+      },
+      connected,
+    );
+  } else if (
+    connected &&
+    previousImport &&
+    !state.local_draft_imports?.includes(previousImport.import_id)
+  ) {
+    const stored = yield* readCatalogue(writer.home);
+    yield* writer.saveCatalogue(
+      stored.value,
+      stored.value,
+      stored.revision,
+      previousImport.import_id,
+    );
+  }
   const current = yield* loadLibrary(writer.home);
   const issues = [...prepared.issues];
   const installedCopies: Array<typeof AuthoredInstalledCopy.Type> = [];
@@ -254,7 +311,7 @@ export const updateAuthoredSkills = Effect.fn("Library.updateAuthoredSkills")(fu
     installed: installedCopies.length,
     installed_copies: installedCopies,
     issues,
-    context: yield* readAuthoredInstallation(current, collection.collection_id, writer.home),
+    context: yield* readAuthoredInstallation(current, collection.collection_id, lookup),
   };
 });
 
@@ -263,23 +320,21 @@ export const updateAuthoredSkills = Effect.fn("Library.updateAuthoredSkills")(fu
 export const inspectAuthoredSkills = Effect.fn("Library.inspectAuthoredSkills")(function* (
   home: string,
   state: LibraryState,
-  sourceImport: Import & {
-    readonly source_identity: Extract<Import["source_identity"], { kind: "authored-workspace" }>;
-  },
+  sourceImport: Import,
+  workspace: { readonly workspaceId: string; readonly path: string },
   previous: CollectionVersion,
   active: readonly InstallDestination[],
 ) {
-  const identity = sourceImport.source_identity;
   const { tree, removal } = yield* inspectAuthorWorkspace(
-    sourceImport.input.value,
+    workspace.path,
     home,
-    identity.workspace_id,
+    workspace.workspaceId,
   );
   const prepared = yield* prepareAuthoredUpdate(
     home,
     {
-      workspaceId: identity.workspace_id,
-      input: sourceImport.input.value,
+      workspaceId: workspace.workspaceId,
+      input: workspace.path,
       tree,
       revisionId: "preview",
       savedAt: new Date(0).toISOString(),

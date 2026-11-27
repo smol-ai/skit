@@ -19505,7 +19505,8 @@
                           "connected",
                           "unconnected",
                           "unavailable",
-                          "identity-mismatch"
+                          "identity-mismatch",
+                          "ambiguous"
                         ]
                       }
                     },
@@ -40685,7 +40686,8 @@
                           "connected",
                           "unconnected",
                           "unavailable",
-                          "identity-mismatch"
+                          "identity-mismatch",
+                          "ambiguous"
                         ]
                       }
                     },

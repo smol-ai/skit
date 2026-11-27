@@ -1,11 +1,12 @@
 import type { AuthoredSkillIssue } from "../../authored-skill-issues.js";
 import { Effect } from "effect";
+import { localWorkspace, workspaceLookup, type WorkspaceLookup } from "../../collection-source.js";
 import { CollectionNotUpdatable } from "../../update-failures.js";
 import { enabledByScope } from "../../enabled.js";
 import { enabledSkillIds, type SkitSource } from "../../library-contracts.js";
 import type { LibraryState } from "../../library-state.js";
 import {
-  latestSourceImport,
+  subjectSourceImport,
   resolveOwningLibrarySubjects,
   type LibrarySubject,
 } from "../../subject-resolution.js";
@@ -112,8 +113,9 @@ export const skillChanges = (
 export const resolveUpdate = Effect.fn("Library.resolveCollectionUpdate")(function* (
   state: LibraryState,
   subject: LibrarySubject,
+  lookup: WorkspaceLookup,
 ) {
-  const sourceImport = latestSourceImport(state, subject);
+  const sourceImport = subjectSourceImport(state, subject);
   const priorTree =
     sourceImport === undefined
       ? undefined
@@ -125,11 +127,28 @@ export const resolveUpdate = Effect.fn("Library.resolveCollectionUpdate")(functi
       subject_id: subject.subjectId,
       label: subject.label,
     });
-  const input: SkitSource =
-    sourceImport.source_identity.kind === "authored-workspace"
-      ? { type: "local", path: sourceImport.input.value }
-      : yield* subjectSource(subject, sourceImport.input.value);
-  return { acquisition: sourceImport, priorTree, input };
+  if (sourceImport.source_identity.kind === "authored-workspace") {
+    const collection = state.collections.find(
+      (item) => item.collection_id === sourceImport.collection_id,
+    );
+    const workspace = collection && (yield* localWorkspace(state, collection, lookup));
+    if (!workspace)
+      return yield* new CollectionNotUpdatable({
+        subject_id: subject.subjectId,
+        label: subject.label,
+      });
+    return {
+      acquisition: sourceImport,
+      priorTree,
+      input: { type: "local", path: workspace.path } as const,
+      workspace,
+    };
+  }
+  return {
+    acquisition: sourceImport,
+    priorTree,
+    input: yield* subjectSource(subject, sourceImport.input.value),
+  };
 });
 
 /** Observe one Collection without retaining content or reconciling installed skills. */
@@ -140,20 +159,23 @@ const previewCollectionUpdate = Effect.fn("Library.previewCollectionUpdate")(fun
     input: SkitSource,
     previousSkillPaths?: readonly string[],
   ) => Effect.Effect<SourceInspection, E, R>,
+  lookup: WorkspaceLookup,
   authored?: { readonly home: string; readonly active: InstalledSkills.Interface["active"] },
 ) {
   const {
     acquisition: sourceImport,
     priorTree: tree,
     input,
-  } = yield* resolveUpdate(state, subject);
+    workspace,
+  } = yield* resolveUpdate(state, subject, lookup);
   const isAuthored = sourceImport.source_identity.kind === "authored-workspace";
   const inspected =
-    isAuthored && authored !== undefined
+    isAuthored && workspace && authored !== undefined
       ? yield* inspectAuthoredSkills(
           authored.home,
           state,
-          { ...sourceImport, source_identity: sourceImport.source_identity },
+          sourceImport,
+          workspace,
           tree,
           yield* authored.active,
         )
@@ -194,10 +216,10 @@ const selectSubjects = Effect.fn("Library.selectUpdates")(function* (
   if (query === undefined)
     return matches.filter(
       (subject) =>
-        latestSourceImport(state, subject) !== undefined &&
+        subjectSourceImport(state, subject) !== undefined &&
         subject.kind === "collection" &&
         (subject.collection.upstream !== undefined ||
-          latestSourceImport(state, subject)?.source_identity.kind === "authored-workspace"),
+          subjectSourceImport(state, subject)?.source_identity.kind === "authored-workspace"),
     );
   return matches;
 });
@@ -210,10 +232,12 @@ export const previewSourceUpdates = Effect.fn("Library.previewSourceUpdates")(fu
     input: SkitSource,
     previousSkillPaths?: readonly string[],
   ) => Effect.Effect<SourceInspection, E, R>,
+  home: string,
   authored?: { readonly home: string; readonly active: InstalledSkills.Interface["active"] },
 ) {
+  const lookup = yield* workspaceLookup(home);
   return yield* Effect.forEach(yield* selectSubjects(state, query), (subject) =>
-    previewCollectionUpdate(state, subject, inspectSource, authored),
+    previewCollectionUpdate(state, subject, inspectSource, lookup, authored),
   );
 });
 export { selectSubjects };

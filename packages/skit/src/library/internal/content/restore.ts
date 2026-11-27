@@ -26,6 +26,7 @@ import {
   type LibraryManifest,
   type SnapshotArchive,
 } from "../../library-contracts.js";
+import { prepareDeviceInstallation } from "../../enabled.js";
 import { repositorySelectsInstalledSkill } from "../../installation/uninstall.js";
 import {
   RestoreInvalid,
@@ -426,7 +427,8 @@ function strandedByRestore(current: LibraryState, manifest: LibraryManifest) {
     manifest.skills.flatMap((skill) => skill.versions.map((version) => version.skill_version_id)),
   );
   const conflicts: RestoreOwnershipConflict[] = [];
-  const enabled = new Set(enabledSkillIds(manifest, manifest.enabled));
+  const installation = prepareDeviceInstallation(current, manifest).manifest;
+  const enabled = new Set(enabledSkillIds(installation, installation.enabled));
   for (const installed of current.installed_skills) {
     if (
       (!enabled.has(installed.skill_id) && !repositorySelectsInstalledSkill(current, installed)) ||
@@ -475,9 +477,17 @@ export const blendRestoredState = Effect.fn("Library.blendRestoredState")(functi
       reason: { _tag: "OwnershipWouldBeStranded", conflicts: ownership },
     });
   // This device's invocation overrides apply to whatever the restored Library enables.
-  const { invocation_policies: localPolicies, ...device } = current;
+  const {
+    invocation_policies: localPolicies,
+    local_draft_imports: localDrafts,
+    ...device
+  } = current;
+  const selected = localDrafts?.filter((id) =>
+    restored.imports.some((item) => item.import_id === id),
+  );
   return yield* decodeLibraryState({
     ...device,
+    ...(selected?.length ? { local_draft_imports: selected } : {}),
     collections: restored.collections,
     skills: restored.skills,
     collection_versions: restored.collection_versions,

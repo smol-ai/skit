@@ -1,0 +1,124 @@
+.ff-dropdown {
+  display: inline-flex;
+}
+.ff-dropdown > .ff-button[hidden] {
+  display: none;
+}
+.ff-dropdown-trigger-content {
+  display: contents;
+  border-radius: inherit;
+  gap: inherit;
+}
+.ff-dropdown-popup {
+  width: 288px;
+  min-width: var(--button-width, 0px);
+  max-height: min(480px, var(--available-height, calc(100vh - 16px)));
+}
+.ff-dropdown-popup .ff-popup-viewport {
+  max-height: 480px;
+}
+.ff-dropdown-submenu {
+  width: 224px;
+  min-width: 0;
+  z-index: 101;
+}
+.ff-dropdown-submenu-backdrop {
+  display: none;
+}
+.ff-dropdown-popup[data-surface-level='4'] {
+  background: var(--surface-4, light-dark(#fff, #2c2c2c));
+}
+.ff-dropdown-popup[data-surface-level='5'] {
+  background: var(--surface-5, light-dark(#fff, #333));
+}
+.ff-dropdown-popup[data-surface-level='6'] {
+  background: var(--surface-6, light-dark(#fff, #3a3a3a));
+}
+.ff-dropdown-popup[data-surface-level='7'] {
+  background: var(--surface-7, light-dark(#fff, #414141));
+}
+.ff-dropdown-popup[data-surface-level='8'] {
+  background: var(--surface-8, light-dark(#fff, #484848));
+}
+.ff-dropdown-tree {
+  display: inline-flex;
+}
+.ff-dropdown-panel {
+  position: relative;
+  width: 288px;
+  max-width: 100%;
+  min-width: 0;
+  z-index: auto;
+}
+.ff-dropdown-panel-viewport {
+  max-height: none;
+}
+.ff-dropdown-panel .ff-popup-row {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+.ff-dropdown-panel .ff-popup-heading {
+  padding: 6px 8px;
+}
+.ff-dropdown-search {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  margin: -4px -4px 2px;
+  height: 36px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border, #ddd) 60%, transparent);
+  background: var(--surface-3, light-dark(#fff, #262626));
+  box-sizing: border-box;
+}
+.ff-dropdown-search > svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--muted-foreground, #737373);
+}
+.ff-dropdown-search:focus-within > svg {
+  color: var(--foreground, #171717);
+  stroke-width: 2;
+}
+.ff-dropdown-search-input {
+  min-width: 0;
+  width: 100%;
+  flex: 1;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  outline: none;
+  box-shadow: none;
+  color: var(--foreground, #171717);
+  font: var(--fs-body, 13px)/24px var(--font-sans, Inter, system-ui, sans-serif);
+  padding: 0;
+}
+.ff-dropdown-search-input::placeholder {
+  color: var(--muted-foreground, #737373);
+}
+.ff-popup[data-size='compact'] .ff-dropdown-search {
+  height: 28px;
+  padding: 0 10px;
+  gap: 4px;
+}
+.ff-popup[data-size='compact'] .ff-dropdown-search > svg {
+  width: 14px;
+  height: 14px;
+}
+.ff-popup[data-size='compact'] .ff-dropdown-search-input {
+  font-size: var(--fs-body-compact, 12px);
+  line-height: 20px;
+}
+.ff-dropdown-empty {
+  padding: 24px 8px;
+  text-align: center;
+  color: var(--muted-foreground, #737373);
+  font: var(--fs-body, 13px)/20px var(--font-sans, Inter, system-ui, sans-serif);
+}

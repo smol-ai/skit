@@ -1,0 +1,165 @@
+.ff-tabs {
+  min-width: 0;
+  width: 100%;
+}
+.ff-tabs-list {
+  position: relative;
+  display: flex;
+  align-items: center;
+  isolation: isolate;
+  user-select: none;
+  overflow-x: auto;
+  max-width: calc(100% + 8px);
+  margin: -4px;
+  padding: 4px;
+  scrollbar-width: none;
+}
+.ff-tabs-list::-webkit-scrollbar {
+  display: none;
+}
+.ff-tabs-list > .ff-hover-highlight {
+  background: var(--active, rgb(0 0 0 / 0.08));
+}
+.ff-tabs-list > .ff-selected-highlight {
+  transition: opacity 80ms;
+}
+.ff-tabs-list.ff-tabs-hovering > .ff-selected-highlight {
+  opacity: 0.8;
+  transition: opacity 80ms;
+}
+.ff-tab {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 36px;
+  gap: 8px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  outline: none;
+  cursor: pointer;
+  color: var(--muted-foreground, #737373);
+  font: var(--fs-body, 13px)/var(--lh-body, 20px) var(--font-sans, Inter, system-ui, sans-serif);
+}
+.ff-tabs-list[data-size='compact'] .ff-tab {
+  height: 28px;
+  padding: 0 10px;
+  gap: 4px;
+  font-size: var(--fs-body-compact, 12px);
+  line-height: var(--lh-body-compact, 18px);
+}
+.ff-tabs-list[data-radius='pill'] .ff-tab {
+  border-radius: 20px;
+}
+.ff-tabs-list .ff-tab[data-collapse-label='true'] {
+  gap: 0;
+}
+.ff-tab:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.ff-tabs-list > .ff-tab[aria-selected='true'] {
+  background: transparent;
+}
+.ff-tab:is([aria-selected='true'], [data-fluid-hover-active], :hover, :focus-visible) {
+  color: var(--foreground, #171717);
+}
+.ff-tab-icon {
+  display: flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.ff-tabs-list[data-size='compact'] .ff-tab-icon {
+  width: 14px;
+  height: 14px;
+}
+.ff-tab-icon svg {
+  color: inherit;
+  width: 100%;
+  height: 100%;
+  stroke-width: 1.5;
+  transition:
+    color 80ms,
+    stroke-width 80ms;
+}
+.ff-tab:is([aria-selected='true'], [data-fluid-hover-active], :hover, :focus-visible)
+  .ff-tab-icon
+  svg {
+  stroke-width: 2;
+}
+/* Upstream's collapsing wrapper inherits the page's 16/24 (the tab's text
+ * size sits on the label), and the inline-grid label rides that line box's
+ * baseline, so it sits a touch below centre. Same line box here. */
+.ff-tab-label-clip {
+  display: block;
+  overflow: hidden;
+  flex: none;
+}
+.ff-tab[data-collapse-label='true'] .ff-tab-label-clip {
+  font-size: 16px;
+  line-height: 24px;
+}
+.ff-tab[data-collapse-label='true'] .ff-tab-label {
+  font-size: var(--fs-body, 13px);
+  line-height: var(--lh-body, 20px);
+}
+.ff-tabs-list[data-size='compact'] .ff-tab[data-collapse-label='true'] .ff-tab-label {
+  font-size: var(--fs-body-compact, 12px);
+  line-height: var(--lh-body-compact, 18px);
+}
+.ff-tab-label {
+  display: inline-grid;
+  white-space: nowrap;
+}
+.ff-tab-label > span {
+  grid-area: 1 / 1;
+  text-box: trim-both cap alphabetic;
+}
+.ff-tab-label-sizer {
+  visibility: hidden;
+  font-variation-settings:
+    'wght' 550,
+    'opsz' 18;
+}
+.ff-tab-label-text {
+  font-variation-settings:
+    'wght' 400,
+    'opsz' 14;
+  transition:
+    color 80ms,
+    font-variation-settings 80ms;
+}
+.ff-tab[aria-selected='true'] .ff-tab-label-text {
+  font-variation-settings:
+    'wght' 550,
+    'opsz' 18;
+}
+.ff-tabs-panel {
+  outline: none;
+}
+.ff-tabs-panel[hidden] {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff-tab-icon svg,
+  .ff-tab-label-text,
+  .ff-tabs-list.ff-tabs-hovering > .ff-selected-highlight {
+    transition: none;
+  }
+}
+
+/* Sharp uses the source shape-context radii. */
+.ff-tabs-list[data-radius='sharp'] .ff-tab {
+  border-radius: 1px;
+}
+
+/* Label and shared Sidebar Count use one baseline; the tab owns outer padding. */
+.ff-tab-label-count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}

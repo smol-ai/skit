@@ -1,0 +1,155 @@
+.ff-accordion {
+  width: 288px;
+  max-width: 100%;
+  position: relative;
+  color: var(--foreground, #171717);
+  font-family: var(--font-sans, Inter, system-ui, sans-serif);
+}
+.ff-accordion,
+.ff-accordion * {
+  box-sizing: border-box;
+}
+/* The open item's tint is an overlay, as upstream's absolute highlight: it
+ * paints over the (unpositioned) body text, under the z-10 trigger. */
+.ff-accordion-item::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: transparent;
+  transition: background-color 80ms;
+}
+.ff-accordion-item[data-accordion-highlight='item'][data-state='open']::after {
+  background: light-dark(
+    color-mix(in oklab, var(--accent, #e5e5e5) 20%, transparent),
+    color-mix(in oklab, var(--accent, #525252) 12%, transparent)
+  );
+}
+.ff-accordion-item {
+  position: relative;
+  border-radius: 8px;
+  transition: background-color 80ms;
+}
+.ff-accordion-heading {
+  margin: 0;
+  font: inherit;
+}
+.ff-accordion-trigger {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--muted-foreground, #737373);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: inherit;
+}
+.ff-accordion-trigger:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.ff-accordion-trigger:focus-visible {
+  outline: 1px solid var(--focus-ring, #6b97ff);
+  outline-offset: 0;
+}
+.ff-accordion-label-grid {
+  display: inline-grid;
+  flex: 1;
+  text-align: left;
+  font-size: var(--fs-body, 13px);
+  line-height: var(--lh-body, 20px);
+}
+.ff-accordion-label-grid > span {
+  grid-area: 1/1;
+}
+.ff-accordion-label-ghost {
+  visibility: hidden;
+  font-variation-settings:
+    'wght' 550,
+    'opsz' 18;
+}
+/* Only the label carries the weight axes (upstream's fontWeights.normal);
+ * the body text keeps the font's automatic optical size. */
+.ff-accordion-label {
+  font-variation-settings:
+    'wght' 400,
+    'opsz' 14;
+  transition:
+    color 80ms,
+    font-variation-settings 80ms;
+}
+.ff-accordion-trigger[data-state='open'] .ff-accordion-label {
+  color: var(--foreground, #171717);
+  font-variation-settings:
+    'wght' 550,
+    'opsz' 18;
+}
+.ff-accordion-chevron {
+  display: flex;
+  flex-shrink: 0;
+  transition: transform 80ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.ff-accordion-chevron svg {
+  width: 16px;
+  height: 16px;
+}
+.ff-accordion-trigger[data-state='open'] .ff-accordion-chevron {
+  transform: rotate(90deg);
+  color: var(--foreground, #171717);
+}
+.ff-accordion-panel {
+  overflow: hidden;
+  height: var(--accordion-height, auto);
+  opacity: var(--accordion-opacity, 1);
+}
+.ff-accordion-body {
+  padding: 4px 12px 12px;
+  font-size: var(--fs-body, 13px);
+  line-height: var(--lh-body, 20px);
+  color: var(--muted-foreground, #737373);
+}
+.ff-accordion[data-size='compact'] .ff-accordion-trigger {
+  padding: 4px 10px;
+  gap: 4px;
+}
+.ff-accordion[data-size='compact'] .ff-accordion-label-grid,
+.ff-accordion[data-size='compact'] .ff-accordion-body {
+  font-size: var(--fs-body-compact, 12px);
+  line-height: var(--lh-body-compact, 18px);
+}
+.ff-accordion[data-size='compact'] .ff-accordion-body {
+  padding: 4px 10px 10px;
+}
+.ff-accordion[data-size='compact'] .ff-accordion-chevron svg {
+  width: 14px;
+  height: 14px;
+}
+.ff-accordion[data-radius='pill'] .ff-accordion-item {
+  border-radius: 20px;
+}
+.ff-accordion [data-fluid-hover-active] .ff-accordion-label {
+  color: var(--foreground, #171717);
+}
+.ff-accordion [data-fluid-hover-active] svg {
+  color: var(--foreground, #171717);
+  stroke-width: 2;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff-accordion-chevron,
+  .ff-accordion-item,
+  .ff-accordion-label {
+    transition: none;
+  }
+}
+
+/* Sharp uses the source shape-context radii. */
+.ff-accordion[data-radius='sharp'] .ff-accordion-item {
+  border-radius: 1px;
+}

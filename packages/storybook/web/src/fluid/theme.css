@@ -1,0 +1,62 @@
+/* Fluid Functionalism design: MIT, Micka Touillaud. See LICENSE.original.
+ * Import once in the application entry. Inter is optional and consumer-supplied.
+ * Set data-fluid-theme="light" or "dark" on <html>; omission follows the OS. */
+:root {
+  color-scheme: light dark;
+  --font-sans: Inter, system-ui, sans-serif;
+  --checker-a: light-dark(#bbb, #1f1f1f);
+  --checker-b: light-dark(#fff, #2a2a2a);
+  --fs-body: 13px;
+  --lh-body: 20px;
+  --fs-body-compact: 12px;
+  --lh-body-compact: 18px;
+  --fs-caption: 12px;
+  --lh-caption: 16px;
+  --fs-caption-compact: 11px;
+  --lh-caption-compact: 14px;
+  --surface-1: light-dark(#fafafa, #171717);
+  --surface-2: light-dark(#fcfcfc, #1e1e1e);
+  --surface-3: light-dark(#fff, #252525);
+  --surface-4: light-dark(#fff, #2c2c2c);
+  --surface-5: light-dark(#fff, #333);
+  --surface-6: light-dark(#fff, #3a3a3a);
+  --surface-7: light-dark(#fff, #414141);
+  --surface-8: light-dark(#fff, #484848);
+  --foreground: light-dark(#171717, #f5f5f5);
+  --background: var(--surface-1);
+  --muted-foreground: light-dark(#737373, #a3a3a3);
+  --muted: light-dark(#f4f4f5, #1e1e1e);
+  --accent: light-dark(#e5e5e5, #525252);
+  --accent-foreground: var(--foreground);
+  --selected: light-dark(#d4d4d4, #525252);
+  --card: var(--surface-3);
+  --card-foreground: var(--foreground);
+  --destructive: light-dark(#ef4444, #fca5a5);
+  --destructive-light: light-dark(#fef2f2, #450a0a);
+  --info: light-dark(#3b82f6, #93c5fd);
+  --success: light-dark(#22c55e, #86efac);
+  --warning: light-dark(#f59e0b, #fcd34d);
+  --fluid-accent: #6b97ff;
+  --focus-ring: var(--fluid-accent);
+  --ring: light-dark(#e5e5e5, #404040);
+  --input: light-dark(#e5e5e5, #404040);
+  --border: color-mix(in oklab, var(--foreground) 12%, transparent);
+  --tint: light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.25));
+  --tint-hover: light-dark(rgb(0 0 0 / 0.065), rgb(255 255 255 / 0.2));
+  --hover: light-dark(rgb(0 0 0 / 0.04), rgb(255 255 255 / 0.06));
+  --active: light-dark(rgb(0 0 0 / 0.07), rgb(255 255 255 / 0.1));
+  --overlay: 0 0 0;
+  --shadow-surface-5: 0 8px 24px rgb(0 0 0 / 0.12), 0 0 0 1px var(--border);
+}
+:root[data-fluid-theme='light'] {
+  color-scheme: light;
+}
+:root[data-fluid-theme='dark'] {
+  color-scheme: dark;
+  --overlay: 255 255 255;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-fluid-theme='light']) {
+    --overlay: 255 255 255;
+  }
+}

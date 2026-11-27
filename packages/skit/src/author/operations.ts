@@ -72,7 +72,9 @@ export const updateAuthoredSkills = Effect.fn("Author.updateSkills")(function* (
   }
   const { saved, tree, removal } = observed;
   const library = yield* Library.Service;
+  const { connection } = yield* workspaces.read(root);
   const updated = yield* library.updateAuthoredSkills({
+    ...(connection._tag === "Connected" ? { draftHome: connection.remote } : {}),
     workspaceId: identity.value.workspaceId,
     input: root,
     tree,
@@ -85,6 +87,16 @@ export const updateAuthoredSkills = Effect.fn("Author.updateSkills")(function* (
   });
   return { ...updated, revision_id: saved.id };
 }, Effect.scoped);
+
+/** Keep the lease through both operations, including when the Registry rejects sync. */
+const syncAndRefresh = Effect.fn("Author.syncAndRefresh")(function* <S, E, R, A, F, T>(
+  synchronize: Effect.Effect<S, E, R>,
+  refresh: Effect.Effect<A, F, T>,
+) {
+  const sync = yield* Effect.result(synchronize);
+  const installation = yield* Effect.result(refresh);
+  return { sync, installation };
+});
 
 /** Local installation and Registry backup are independent outcomes of one workspace operation.
  * Sync may advance removal authority or change local files even before failing. Always install
@@ -116,12 +128,11 @@ export const updateAuthorWorkspace = Effect.fn("Author.updateWorkspace")(functio
     return { installation, sync: undefined };
   const workspace = yield* workspaces.read(root);
   if (workspace.connection._tag !== "Connected") return { installation, sync: undefined };
-  const sync = yield* syncAuthorWorkspace(root, { ...options, apply: true }, registry, lease).pipe(
-    Effect.timeout("30 seconds"),
-    Effect.result,
-  );
-  const updated = yield* updateAuthoredSkills(root, lease, { confirmRemovals: true }).pipe(
-    Effect.result,
+  const { sync, installation: updated } = yield* syncAndRefresh(
+    syncAuthorWorkspace(root, { ...options, apply: true }, registry, lease).pipe(
+      Effect.timeout("30 seconds"),
+    ),
+    updateAuthoredSkills(root, lease, { confirmRemovals: true }),
   );
   if (installation._tag === "Success" && updated._tag === "Success") {
     const copies = [
@@ -143,4 +154,33 @@ export const updateAuthorWorkspace = Effect.fn("Author.updateWorkspace")(functio
   if (installation._tag === "Success" && updated._tag === "Failure")
     return { installation, sync, installation_error: updated.failure };
   return { installation: updated, sync };
+}, Effect.scoped);
+
+/** Foreground sync also refreshes copies owned by this workspace's Library import. */
+export const syncInstalledWorkspace = Effect.fn("Author.syncInstalledWorkspace")(function* <
+  E,
+  R,
+  P,
+>(
+  input: string,
+  options: Parameters<typeof syncAuthorWorkspace>[1],
+  registry: Pick<AuthorRegistry<E, R, P>, "origin" | "connect">,
+) {
+  if (!options.apply) return { result: yield* syncAuthorWorkspace(input, options, registry) };
+  const workspaces = yield* AuthorWorkspace;
+  const root = yield* workspaces.resolveRoot(input);
+  const lease = yield* workspaces.acquire(root);
+  const refresh = Effect.gen(function* () {
+    const identity = yield* workspaces.readIdentity(root);
+    if (identity._tag === "None") return;
+    const claims = yield* (yield* Library.Service).workspaceClaims(root);
+    if (claims.atRoot.some((entry) => entry.workspaceId === identity.value.workspaceId))
+      return (yield* updateAuthoredSkills(root, lease)).issues;
+  });
+  const { sync, installation } = yield* syncAndRefresh(
+    syncAuthorWorkspace(root, options, registry, lease),
+    refresh,
+  );
+  if (sync._tag === "Failure") return yield* Effect.fail(sync.failure);
+  return { result: sync.success, installation };
 }, Effect.scoped);

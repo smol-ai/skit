@@ -82,3 +82,61 @@ fixture-generated identifiers; those need normalization before use as
 reproducible documentation assets. The exporter does not upload images or
 update Markdown automatically.
 
+## CLI Atlas
+
+Run `pnpm cli:atlas` from the repository root to start the viewer immediately.
+Open the localhost URL it prints. This serves existing `atlas-data/` and does not
+build the CLI, record flows or run tests. The package commands `atlas` and
+`atlas:dev` start the same Vite development server.
+
+Generate data once on a fresh checkout, or explicitly refresh it after changing
+the CLI, recordings or saved test reports:
+
+```sh
+pnpm cli:atlas:generate
+```
+
+Generation runs the replayable flows and can take a few minutes. It is separate
+from starting the viewer. To build a static site from existing data, run
+`pnpm cli:atlas:build`; the result is `packages/storybook/atlas/`.
+
+Atlas explains commands, checked failures, persisted formats and recorded flows.
+Command/error links come from TypeScript types before application providers;
+dependency errors are listed separately. Store ownership is curated as exported
+code symbols and validated during generation. Owner errors describe an interface,
+not command-to-store access. Flows show shared prefixes as a tree, and repeated
+progress ticks expand without changing step URLs. Vocabulary comes from
+`CONTEXT.md`; coverage counts and missing stories have their own page.
+
+Data and terminal frames are generated from the checkout and isolated journey
+fixtures. Atlas does not inspect your installed Skills or saved Library data.
+
+## Atlas test results
+
+Atlas collects guarantee names and their tests from the current CLI and core test suites during generation, without running the tests. Commands with declared guarantees show a Guarantees tab even when no report exists. Matching results from a current clean checkout add pass, failure or skip statuses.
+
+The evidence runner and collector discover `test/**/*.test.ts` under the CLI and core packages. Fixture directories and separate opt-in `.e2e.ts` entrypoints are excluded. For `skit sync`, add a named guarantee to `packages/skit/test/fixtures/sync-guarantees.json` and pass it to Vitest with `describe(g.title, { meta: { guarantee: g } }, tests)`. The catalog records each guarantee’s command, stable key, section and display order. Atlas validates section order and reports copy issues when generating. The Coverage page lists files containing tests outside a command guarantee.
+
+Run `pnpm cli:atlas:guarantees` to refresh declarations and saved outcomes in the existing index. The first run builds the full Atlas if the index is missing.
+
+Atlas reads saved results from Vitest's standard JSON reporter. To save local author
+test results (including author sync/watch and the replayable scenarios), run:
+
+```sh
+pnpm --filter @smolai/skit build
+pnpm --filter @smolai/skit test:atlas
+pnpm --filter @smolai/skit-core test:atlas
+pnpm cli:atlas:generate
+pnpm cli:atlas
+```
+
+The CLI and core reports live at `packages/cli/.atlas/vitest.json` and
+`packages/skit/.atlas/vitest.json`. Both are ignored. The scripts use the
+shared Atlas Vitest config, including the isolated HOME. Collection does not execute test bodies. Missing reports show “No saved test report”. Invalid reports fail
+the build. CI does not publish these reports.
+
+Each report records the Git revision and whether the checkout was dirty during
+the run. Atlas shows test results against the current clean revision. Reports
+from a different revision are marked stale. Older reports and reports involving
+dirty checkouts are unverified. Scenario flow pages show a saved pass or failure
+only when the report matches the current clean checkout.

@@ -1,0 +1,361 @@
+/* Upstream CommandMenu, class for class. Sizes follow the default (36 px rows)
+ * and compact (28 px) ladder; the panel takes its max-height from the
+ * consumer's wrapper through max-height: inherit. */
+.ff-command-menu {
+  position: relative;
+  width: 100%;
+  max-height: inherit;
+  overflow: hidden;
+}
+.ff-command-frame {
+  max-height: inherit;
+  overflow: hidden;
+}
+.ff-command-column {
+  display: flex;
+  max-height: inherit;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.ff-command-input {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  height: 48px;
+  gap: 10px;
+  padding: 0 16px;
+}
+.ff-command-menu[data-size='compact'] .ff-command-input {
+  height: 40px;
+  gap: 8px;
+  padding: 0 12px;
+}
+.ff-command-input-icon {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+  transition: color 80ms;
+}
+.ff-command-input-icon svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.5;
+  transition: stroke-width 80ms;
+}
+.ff-command-menu[data-size='compact'] .ff-command-input-icon svg {
+  width: 14px;
+  height: 14px;
+}
+.ff-command-input:focus-within .ff-command-input-icon {
+  color: var(--foreground);
+}
+.ff-command-input:focus-within .ff-command-input-icon svg {
+  stroke-width: 2;
+}
+/* The upstream HugeIcons numeric prop lives on each path, so its CSS-only
+ * SVG focus cue leaves the fixed 1.5px search paths unchanged. */
+.ff-command-input-icon svg[data-library='HugeIcons'] > path {
+  stroke-width: 1.5;
+}
+/* One notch above the rows' body size: the field is the palette's title
+ * line. rounded-none because the base focus rule would clip the caret. */
+.ff-command-field {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--foreground);
+  outline: none;
+  font: inherit;
+  font-size: var(--fs-subtitle, 14px);
+  line-height: 24px;
+}
+.ff-command-field::placeholder {
+  color: var(--muted-foreground);
+}
+.ff-command-menu[data-size='compact'] .ff-command-field {
+  font-size: var(--fs-subtitle-compact, 13px);
+  line-height: 20px;
+}
+@media (pointer: coarse) {
+  .ff-command-field {
+    font-size: 16px;
+  }
+}
+
+.ff-command-tabs {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 8px;
+}
+.ff-command-menu[data-size='compact'] .ff-command-tabs {
+  gap: 4px;
+  padding: 0 8px 6px;
+}
+.ff-command-tabs-list {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+}
+.ff-command-tabs-trailing {
+  margin-left: auto;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+}
+.ff-command-filters {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px 8px;
+}
+.ff-command-menu[data-size='compact'] .ff-command-filters {
+  padding: 0 8px 6px;
+}
+/* Controls hug their content: a Select trigger drops the field width it
+ * keeps in forms. */
+.ff-command-menu :is(.ff-command-filters, .ff-command-tabs-trailing) [role='combobox'],
+.ff-command-menu :is(.ff-command-filters, .ff-command-tabs-trailing) .ff-select-field,
+.ff-command-menu :is(.ff-command-filters, .ff-command-tabs-trailing) .ff-select,
+.ff-command-menu
+  :is(.ff-command-filters, .ff-command-tabs-trailing)
+  .ff-select[data-size]
+  .ff-select-trigger {
+  width: auto;
+  min-width: 0;
+}
+
+/* The divider rides the header line (pulled up 1px onto it); with no footer
+ * the list is the last child and its bottom hairline would double the
+ * panel's own edge, so it is dropped. */
+.ff-command-scroll.ff-scroll-area {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  border-top: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+}
+.ff-command-scroll::before {
+  top: -1px !important;
+}
+.ff-command-scroll:last-child::after {
+  display: none !important;
+}
+.ff-command-viewport.ff-scroll-viewport {
+  height: auto;
+  min-height: 0;
+  flex: 1;
+}
+.ff-command-list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  outline: none;
+}
+.ff-command-list[data-empty] {
+  justify-content: center;
+  padding: 0;
+}
+.ff-command-group {
+  display: flex;
+  flex-direction: column;
+}
+.ff-command-heading {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  height: 28px;
+  padding: 0 8px;
+  color: var(--muted-foreground);
+  font-size: var(--fs-caption, 12px);
+  line-height: var(--lh-caption, 16px);
+}
+.ff-command-menu[data-size='compact'] .ff-command-heading {
+  height: 24px;
+  padding: 0 6px;
+  font-size: var(--fs-caption-compact, 11px);
+  line-height: var(--lh-caption-compact, 14px);
+}
+
+.ff-command-item {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  height: 36px;
+  gap: 8px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: var(--muted-foreground);
+  font-size: var(--fs-body, 13px);
+  line-height: var(--lh-body, 20px);
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  transition: color 80ms;
+}
+.ff-command-menu[data-radius='sharp'] .ff-command-item {
+  border-radius: 1px;
+}
+.ff-command-menu[data-size='compact'] .ff-command-item {
+  height: 28px;
+  gap: 4px;
+  padding: 0 6px;
+  font-size: var(--fs-body-compact, 12px);
+  line-height: var(--lh-body-compact, 18px);
+}
+.ff-command-item[aria-selected='true'] {
+  color: var(--foreground);
+}
+.ff-command-item[aria-disabled='true'] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+.ff-command-item-icon {
+  display: flex;
+  flex-shrink: 0;
+}
+.ff-command-item-icon svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.5;
+  transition:
+    color 80ms,
+    stroke-width 80ms;
+}
+.ff-command-menu[data-size='compact'] .ff-command-item-icon svg {
+  width: 14px;
+  height: 14px;
+}
+.ff-command-item[aria-selected='true'] .ff-command-item-icon svg {
+  stroke-width: 2;
+}
+.ff-command-item-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: baseline;
+  gap: 8px;
+}
+/* The padding pair keeps truncate's overflow:hidden from clipping ascenders
+ * and descenders outside the trimmed box. */
+.ff-command-item-label,
+.ff-command-item-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-box: trim-both cap alphabetic;
+  padding: 4px 0;
+  margin: -4px 0;
+}
+.ff-command-item-description {
+  min-width: 0;
+  color: var(--muted-foreground);
+}
+
+.ff-command-shortcut {
+  margin-left: auto;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2px;
+  vertical-align: middle;
+  font-family: var(--font-sans, Inter, system-ui, sans-serif);
+}
+.ff-command-shortcut[data-inline] {
+  margin-left: 0;
+}
+.ff-command-cap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  min-width: 20px;
+  padding: 0 4px;
+  border-radius: 5px;
+  background: var(--hover);
+  color: var(--muted-foreground);
+  font-size: var(--fs-micro, 11px);
+  line-height: var(--lh-micro, 14px);
+}
+.ff-command-shortcut[data-size='compact'] .ff-command-cap {
+  height: 16px;
+  min-width: 16px;
+  font-size: var(--fs-micro-compact, 10px);
+  line-height: var(--lh-micro-compact, 12px);
+}
+
+.ff-command-empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--muted-foreground);
+  font-size: var(--fs-body, 13px);
+  line-height: var(--lh-body, 20px);
+}
+.ff-command-menu[data-size='compact'] .ff-command-empty {
+  font-size: var(--fs-body-compact, 12px);
+  line-height: var(--lh-body-compact, 18px);
+}
+
+.ff-command-footer {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  height: 40px;
+  gap: 16px;
+  padding: 0 16px;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: var(--fs-caption, 12px);
+  line-height: var(--lh-caption, 16px);
+}
+.ff-command-menu[data-size='compact'] .ff-command-footer {
+  height: 32px;
+  gap: 12px;
+  padding: 0 12px;
+  font-size: var(--fs-caption-compact, 11px);
+  line-height: var(--lh-caption-compact, 14px);
+}
+.ff-command-hint {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+}
+.ff-command-footer-action {
+  margin-left: auto;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--foreground);
+}
+.ff-command-footer-action-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* CommandMenuDialog: opens centred at its cap and keeps that top edge, so the
+ * field stays put while the rows under it filter down. Below 580px of height
+ * the cap is 76dvh and the top lands on 12dvh. */
+.ff-dialog-panel.ff-command-dialog {
+  top: max(12dvh, calc(50dvh - 220px));
+  display: flex;
+  max-height: min(440px, 76dvh);
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}

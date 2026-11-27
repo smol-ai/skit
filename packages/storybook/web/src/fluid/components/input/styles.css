@@ -1,0 +1,179 @@
+.ff-input,
+.ff-textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--foreground);
+  outline: none;
+  font-family: var(--font-sans, Inter, system-ui, sans-serif);
+  font-size: var(--fs-body, 13px);
+  line-height: var(--lh-body, 20px);
+  font-variation-settings:
+    'wght' 400,
+    'opsz' 14;
+  transition:
+    background-color 80ms,
+    border-color 80ms;
+}
+.ff-input {
+  height: 36px;
+  padding: 0 12px;
+}
+.ff-input[data-size='compact'],
+.ff-textarea[data-size='compact'] {
+  font-size: var(--fs-body-compact, 12px);
+  line-height: var(--lh-body-compact, 18px);
+}
+.ff-input[data-size='compact'] {
+  height: 28px;
+  padding: 0 10px;
+}
+.ff-input[data-radius='pill'] {
+  border-radius: 20px;
+}
+:is(.ff-input, .ff-textarea)::placeholder {
+  color: var(--muted-foreground);
+  opacity: 1;
+}
+:is(.ff-input, .ff-textarea):hover {
+  background: var(--hover);
+}
+:is(.ff-input, .ff-textarea)[aria-invalid='true'] {
+  border-color: color-mix(in oklab, var(--destructive) 50%, transparent);
+}
+:is(.ff-input, .ff-textarea):focus {
+  border-color: color-mix(in oklab, var(--foreground) 40%, transparent);
+}
+:is(.ff-input, .ff-textarea):focus:hover {
+  background: transparent;
+}
+:is(.ff-input, .ff-textarea):disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+.ff-input-wrapper {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+.ff-input[type='number'] {
+  appearance: textfield;
+  padding-right: 68px;
+}
+.ff-input[type='number']::-webkit-inner-spin-button,
+.ff-input[type='number']::-webkit-outer-spin-button {
+  appearance: none;
+}
+.ff-input[type='number'][data-size='compact'] {
+  padding-right: 54px;
+}
+.ff-input-steps {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 4px;
+  display: flex;
+  align-items: center;
+}
+.ff-input-step {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  outline: none;
+  transition:
+    background-color 80ms,
+    color 80ms;
+}
+.ff-input-step:hover {
+  color: var(--foreground);
+  background: var(--hover);
+}
+.ff-input-step:disabled {
+  pointer-events: none;
+}
+.ff-input-step svg,
+.ff-input-file-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.ff-input-wrapper[data-radius='pill'] .ff-input-step {
+  border-radius: 16px;
+}
+.ff-input-wrapper[data-size='compact'] .ff-input-steps {
+  right: 2px;
+}
+.ff-input-wrapper[data-size='compact'] .ff-input-step {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
+.ff-input-wrapper[data-size='compact'][data-radius='pill'] .ff-input-step {
+  border-radius: 18px;
+}
+.ff-input-wrapper[data-size='compact'] svg {
+  width: 14px;
+  height: 14px;
+}
+.ff-input[type='file'] {
+  padding: 7px 12px 7px 36px;
+  color: var(--muted-foreground);
+}
+.ff-input[type='file'][data-size='compact'] {
+  padding: 4px 10px 4px 28px;
+}
+.ff-input::file-selector-button {
+  margin-right: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  cursor: pointer;
+  font: inherit;
+}
+.ff-input-file-icon {
+  position: absolute;
+  display: flex;
+  top: 50%;
+  left: 12px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--muted-foreground);
+  transition: color 80ms;
+}
+.ff-input-wrapper[data-size='compact'] .ff-input-file-icon {
+  left: 10px;
+}
+.ff-input-wrapper[data-has-file='true'] :is(.ff-input-file-icon, .ff-input) {
+  color: var(--foreground);
+}
+@media (pointer: coarse) {
+  .ff-input[data-size],
+  .ff-textarea[data-size] {
+    font-size: 16px;
+  }
+}
+
+/* Sharp uses the source shape-context radii. */
+.ff-input[data-radius='sharp'] {
+  border-radius: 1px;
+}
+.ff-input-wrapper[data-radius='sharp'] .ff-input-step {
+  border-radius: 1px;
+}
+.ff-input-wrapper[data-size='compact'][data-radius='sharp'] .ff-input-step {
+  border-radius: 1px;
+}

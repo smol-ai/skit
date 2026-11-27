@@ -1,0 +1,153 @@
+/* The collapsible group's chevron springs 90° to point down while open
+ * (spring.fast ≈ 80ms). Everything else is upstream's utility classes. */
+.ff-sidebar-chevron {
+  transition: rotate 80ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.ff-sidebar-chevron[data-open='true'] {
+  rotate: 90deg;
+}
+.ff-sidebar-chevron svg {
+  width: var(--glyph-size, 16px);
+  height: var(--glyph-size, 16px);
+  stroke-width: 1.5;
+  flex-shrink: 0;
+}
+[data-sidebar='trigger'] svg {
+  width: var(--glyph-size, 16px);
+  height: var(--glyph-size, 16px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff-sidebar-chevron {
+    transition: none;
+  }
+}
+
+/* Lit rows: the hovered row (fluid hover marks it) and the active one read
+ * in the foreground, icons at stroke 2; the badge lights on the active row. */
+[data-sidebar='menu-button'][data-fluid-hover-active] [data-sidebar='menu-label-text'],
+[data-sidebar='menu-sub-button'][data-fluid-hover-active] [data-sidebar='menu-label-text'] {
+  color: var(--foreground);
+}
+.ff-sidebar-row-icon {
+  color: var(--muted-foreground);
+}
+.ff-sidebar-row-icon svg {
+  width: var(--icon-size);
+  height: var(--icon-size);
+  stroke-width: 1.5;
+  transition: stroke-width 80ms;
+}
+.ff-sidebar-row-icon[data-lit='true'],
+[data-fluid-hover-active] > .ff-sidebar-row-icon {
+  color: var(--foreground);
+}
+.ff-sidebar-row-icon[data-lit='true'] svg,
+[data-fluid-hover-active] > .ff-sidebar-row-icon svg {
+  stroke-width: 2;
+}
+[data-fluid-hover-active] [data-sidebar='menu-dot'][data-dot='filled'] {
+  background-color: color-mix(in oklab, var(--foreground) 60%, transparent);
+}
+[data-fluid-hover-active] [data-sidebar='menu-dot'][data-dot='ring'] {
+  border-color: color-mix(in oklab, var(--foreground) 60%, transparent);
+}
+
+/* Block glyphs at the icon step, stroke 1.5, muted. */
+.ff-sidebar-glyph {
+  color: var(--muted-foreground);
+}
+.ff-sidebar-glyph svg {
+  width: var(--glyph-size, 16px);
+  height: var(--glyph-size, 16px);
+  stroke-width: 1.5;
+}
+.ff-sidebar-callout-media svg {
+  /* The callouts are compact Cards: CardMedia draws its glyph at 16px. */
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.5;
+}
+
+/* The icon-rail comparison's scripted pieces (docs). Cursors ride the slow
+ * spring tier; the peek card slides on moderate; the rail's tooltip lands
+ * half a second late on purpose. */
+.ff-compare-cursor {
+  transition: transform 240ms cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+.ff-compare-glyph svg {
+  width: var(--size);
+  height: var(--size);
+  stroke-width: 1.5;
+}
+.ff-compare-peek {
+  transform: translateX(-108%);
+  transition: transform 120ms ease-out;
+}
+.ff-compare-peek[data-engaged='true'] {
+  transform: none;
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.ff-compare-tip {
+  animation: ff-compare-tip 80ms 500ms both cubic-bezier(0.23, 1, 0.32, 1);
+}
+@keyframes ff-compare-tip {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff-compare-cursor,
+  .ff-compare-peek {
+    transition: none;
+  }
+  .ff-compare-tip {
+    animation: none;
+  }
+}
+
+/* Sidebar-anchored menus sit on the shared grid: items start at the row's
+ * edge (pl-2), the check on the trigger chevron's axis (pr-1.5). */
+.ff-popup.ff-dropdown-popup[data-sidebar-menu='grid'] .ff-popup-row {
+  padding: 0 6px 0 8px;
+  gap: 8px;
+}
+:root:not([data-hover='standard']) [data-ff-sidebar-menu] [data-sidebar='menu-button']:hover {
+  background: transparent;
+}
+/* Trigger-width plus 10px, less the 4px live measures (245 on a 239px row). */
+.ff-popup.ff-dropdown-popup[data-sidebar-menu='grid'] {
+  width: calc(var(--button-width) + 6px);
+  min-width: 240px;
+}
+.ff-popup.ff-dropdown-popup[data-sidebar-menu='plain'] {
+  width: 240px;
+  min-width: 0;
+}
+
+/* A hover-revealed action rendered as a dropdown trigger sits inside the
+ * dropdown's contents wrapper, out of reach of upstream's
+ * peer-hover/menu-button reveal: the same reveal, one level down. */
+[data-sidebar='menu-button']:is(:hover, :focus-visible)
+  ~ .ff-sidebar-dropdown
+  > [data-sidebar='menu-action'][data-show-on-hover],
+.ff-sidebar-dropdown > [data-sidebar='menu-action'][data-show-on-hover][aria-expanded='true'] {
+  opacity: 1;
+}
+/* Docs demos in a narrow frame (upstream's useNarrowFrame, < 768px). */
+@media (max-width: 767px) {
+  [data-demo-narrow='shell'] {
+    --sidebar-width: 11rem !important;
+  }
+  [data-demo-narrow='rail'] {
+    --sidebar-width: 100% !important;
+  }
+  [data-demo-narrow='rail'] > [data-slot='sidebar-inset'] {
+    display: none;
+  }
+  /* The rail and its inner panel carry the open width inline. */
+  [data-demo-narrow] > [data-slot='sidebar']:not([data-state='collapsed']),
+  [data-demo-narrow] > [data-slot='sidebar']:not([data-state='collapsed']) > div[style*='width'] {
+    width: var(--sidebar-width) !important;
+  }
+}

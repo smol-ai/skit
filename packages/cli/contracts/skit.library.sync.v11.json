@@ -1925,6 +1925,12 @@
           "sync_failure": {
             "$ref": "#/definitions/AuthorWorkspaceSyncFailure"
           },
+          "installation_issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/AuthoredSkillIssue"
+            }
+          },
           "installation": {
             "type": "string"
           },
@@ -13863,7 +13869,8 @@
                       "connected",
                       "unconnected",
                       "unavailable",
-                      "identity-mismatch"
+                      "identity-mismatch",
+                      "ambiguous"
                     ]
                   }
                 },
@@ -20054,6 +20061,1454 @@
           "required": [
             "_tag",
             "message"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "AuthoredSkillIssue": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "DescriptorHeld"
+              ]
+            },
+            "failure": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/DescriptorMalformedEncoded"
+                },
+                {
+                  "$ref": "#/definitions/DuplicateSkillNamesEncoded"
+                },
+                {
+                  "$ref": "#/definitions/DuplicateSkillPathsEncoded"
+                },
+                {
+                  "$ref": "#/definitions/ConflictingInvocationDeclarationEncoded"
+                },
+                {
+                  "$ref": "#/definitions/ReadmeFrontmatterMissingEncoded"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "PlatformError"
+                      ]
+                    },
+                    "reason": {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "AlreadyExists",
+                            "BadResource",
+                            "Busy",
+                            "InvalidData",
+                            "NotFound",
+                            "PermissionDenied",
+                            "TimedOut",
+                            "UnexpectedEof",
+                            "Unknown",
+                            "WouldBlock",
+                            "WriteZero",
+                            "BadArgument"
+                          ]
+                        },
+                        "module": {
+                          "type": "string"
+                        },
+                        "method": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "syscall": {
+                          "type": "string"
+                        },
+                        "pathOrDescriptor": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "_tag",
+                        "module",
+                        "method"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "reason"
+                  ],
+                  "additionalProperties": true
+                }
+              ]
+            }
+          },
+          "required": [
+            "_tag",
+            "failure"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "ReservedInputPath"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "MembershipRemovalPending"
+              ]
+            },
+            "skill": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "skill",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "InputRemovalPending"
+              ]
+            },
+            "skill": {
+              "type": "string"
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "_tag",
+            "skill",
+            "paths"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "ValidationHeld"
+              ]
+            },
+            "skill": {
+              "type": "string"
+            },
+            "diagnostics": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "enum": [
+                          "SKILL_FILE_MISSING"
+                        ]
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": [
+                          "info",
+                          "warning",
+                          "error"
+                        ]
+                      },
+                      "path": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "severity",
+                      "path"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "enum": [
+                          "SHARED_SOURCE_MISSING"
+                        ]
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": [
+                          "info",
+                          "warning",
+                          "error"
+                        ]
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "skill": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "severity",
+                      "path",
+                      "skill"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "enum": [
+                          "SHARED_TARGET_TRAVERSAL"
+                        ]
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": [
+                          "info",
+                          "warning",
+                          "error"
+                        ]
+                      },
+                      "path": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "severity",
+                      "path"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "enum": [
+                          "SECURITY_POLICY_BLOCKED"
+                        ]
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": [
+                          "info",
+                          "warning",
+                          "error"
+                        ]
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "assessment": {
+                        "type": "object",
+                        "properties": {
+                          "context": {
+                            "type": "string",
+                            "enum": [
+                              "author",
+                              "import",
+                              "project",
+                              "publish"
+                            ]
+                          },
+                          "outcome": {
+                            "type": "string",
+                            "enum": [
+                              "allow",
+                              "warn",
+                              "block"
+                            ]
+                          },
+                          "reasons": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "code": {
+                                  "type": "string"
+                                },
+                                "ruleIds": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "capabilityIds": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "code",
+                                "ruleIds",
+                                "capabilityIds"
+                              ],
+                              "additionalProperties": true
+                            }
+                          },
+                          "findingDecisions": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "fingerprint": {
+                                  "type": "string",
+                                  "pattern": "^sha256:[a-f0-9]{64}$"
+                                },
+                                "ruleId": {
+                                  "type": "string"
+                                },
+                                "disposition": {
+                                  "type": "string",
+                                  "enum": [
+                                    "unresolved",
+                                    "accepted"
+                                  ]
+                                },
+                                "acceptance": {
+                                  "type": "object",
+                                  "properties": {
+                                    "fingerprint": {
+                                      "type": "string",
+                                      "pattern": "^sha256:[a-f0-9]{64}$"
+                                    },
+                                    "artifactContentHash": {
+                                      "type": "string",
+                                      "pattern": "^sha256:[a-f0-9]{64}$"
+                                    },
+                                    "skill_version_id": {
+                                      "type": "string"
+                                    },
+                                    "context": {
+                                      "type": "string",
+                                      "enum": [
+                                        "project"
+                                      ]
+                                    },
+                                    "principal": {
+                                      "type": "string"
+                                    },
+                                    "rationale": {
+                                      "type": "string"
+                                    },
+                                    "acceptedAt": {
+                                      "type": "string"
+                                    },
+                                    "expiresAt": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "fingerprint",
+                                    "artifactContentHash",
+                                    "skill_version_id",
+                                    "context",
+                                    "principal",
+                                    "rationale",
+                                    "acceptedAt"
+                                  ],
+                                  "additionalProperties": true
+                                }
+                              },
+                              "required": [
+                                "fingerprint",
+                                "ruleId",
+                                "disposition"
+                              ],
+                              "additionalProperties": true
+                            }
+                          }
+                        },
+                        "required": [
+                          "context",
+                          "outcome",
+                          "reasons",
+                          "findingDecisions"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "severity",
+                      "path",
+                      "assessment"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "enum": [
+                          "SECURITY_ASSESSMENT_WARNING"
+                        ]
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": [
+                          "info",
+                          "warning",
+                          "error"
+                        ]
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "assessment": {
+                        "type": "object",
+                        "properties": {
+                          "context": {
+                            "type": "string",
+                            "enum": [
+                              "author",
+                              "import",
+                              "project",
+                              "publish"
+                            ]
+                          },
+                          "outcome": {
+                            "type": "string",
+                            "enum": [
+                              "allow",
+                              "warn",
+                              "block"
+                            ]
+                          },
+                          "reasons": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "code": {
+                                  "type": "string"
+                                },
+                                "ruleIds": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "capabilityIds": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "code",
+                                "ruleIds",
+                                "capabilityIds"
+                              ],
+                              "additionalProperties": true
+                            }
+                          },
+                          "findingDecisions": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "fingerprint": {
+                                  "type": "string",
+                                  "pattern": "^sha256:[a-f0-9]{64}$"
+                                },
+                                "ruleId": {
+                                  "type": "string"
+                                },
+                                "disposition": {
+                                  "type": "string",
+                                  "enum": [
+                                    "unresolved",
+                                    "accepted"
+                                  ]
+                                },
+                                "acceptance": {
+                                  "type": "object",
+                                  "properties": {
+                                    "fingerprint": {
+                                      "type": "string",
+                                      "pattern": "^sha256:[a-f0-9]{64}$"
+                                    },
+                                    "artifactContentHash": {
+                                      "type": "string",
+                                      "pattern": "^sha256:[a-f0-9]{64}$"
+                                    },
+                                    "skill_version_id": {
+                                      "type": "string"
+                                    },
+                                    "context": {
+                                      "type": "string",
+                                      "enum": [
+                                        "project"
+                                      ]
+                                    },
+                                    "principal": {
+                                      "type": "string"
+                                    },
+                                    "rationale": {
+                                      "type": "string"
+                                    },
+                                    "acceptedAt": {
+                                      "type": "string"
+                                    },
+                                    "expiresAt": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "fingerprint",
+                                    "artifactContentHash",
+                                    "skill_version_id",
+                                    "context",
+                                    "principal",
+                                    "rationale",
+                                    "acceptedAt"
+                                  ],
+                                  "additionalProperties": true
+                                }
+                              },
+                              "required": [
+                                "fingerprint",
+                                "ruleId",
+                                "disposition"
+                              ],
+                              "additionalProperties": true
+                            }
+                          }
+                        },
+                        "required": [
+                          "context",
+                          "outcome",
+                          "reasons",
+                          "findingDecisions"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "severity",
+                      "path",
+                      "assessment"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "enum": [
+                          "INVOCATION_METADATA_MISMATCH"
+                        ]
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": [
+                          "info",
+                          "warning",
+                          "error"
+                        ]
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "issue": {
+                        "type": "object",
+                        "properties": {
+                          "skill": {
+                            "type": "string"
+                          },
+                          "harness": {
+                            "type": "string",
+                            "enum": [
+                              "claude-code",
+                              "codex"
+                            ]
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "field": {
+                            "type": "string"
+                          },
+                          "policy": {
+                            "type": "string",
+                            "enum": [
+                              "explicit",
+                              "implicit",
+                              "host-policy"
+                            ]
+                          },
+                          "expected": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "explicit",
+                                  "implicit"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "actual": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "explicit",
+                                  "implicit"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "skill",
+                          "harness",
+                          "path",
+                          "field",
+                          "policy"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "severity",
+                      "path",
+                      "issue"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "enum": [
+                          "CAPABILITY_PATH_MISSING"
+                        ]
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": [
+                          "info",
+                          "warning",
+                          "error"
+                        ]
+                      },
+                      "path": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "severity",
+                      "path"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "enum": [
+                          "EXAMPLE_MANIFEST_INVALID"
+                        ]
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": [
+                          "info",
+                          "warning",
+                          "error"
+                        ]
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "reason": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "Unreadable"
+                                ]
+                              },
+                              "failure": {
+                                "type": "object",
+                                "properties": {
+                                  "_tag": {
+                                    "type": "string",
+                                    "enum": [
+                                      "PlatformError"
+                                    ]
+                                  },
+                                  "reason": {
+                                    "type": "object",
+                                    "properties": {
+                                      "_tag": {
+                                        "type": "string",
+                                        "enum": [
+                                          "AlreadyExists",
+                                          "BadResource",
+                                          "Busy",
+                                          "InvalidData",
+                                          "NotFound",
+                                          "PermissionDenied",
+                                          "TimedOut",
+                                          "UnexpectedEof",
+                                          "Unknown",
+                                          "WouldBlock",
+                                          "WriteZero",
+                                          "BadArgument"
+                                        ]
+                                      },
+                                      "module": {
+                                        "type": "string"
+                                      },
+                                      "method": {
+                                        "type": "string"
+                                      },
+                                      "description": {
+                                        "type": "string"
+                                      },
+                                      "syscall": {
+                                        "type": "string"
+                                      },
+                                      "pathOrDescriptor": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "number"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "_tag",
+                                      "module",
+                                      "method"
+                                    ],
+                                    "additionalProperties": true
+                                  }
+                                },
+                                "required": [
+                                  "_tag",
+                                  "reason"
+                                ],
+                                "additionalProperties": true
+                              }
+                            },
+                            "required": [
+                              "_tag",
+                              "failure"
+                            ],
+                            "additionalProperties": true
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "Malformed"
+                                ]
+                              },
+                              "issue": {
+                                "$ref": "#/definitions/DescriptorIssue"
+                              }
+                            },
+                            "required": [
+                              "_tag",
+                              "issue"
+                            ],
+                            "additionalProperties": true
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "severity",
+                      "path",
+                      "reason"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "enum": [
+                          "EXAMPLE_PATH_IDENTITY_MISMATCH"
+                        ]
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": [
+                          "info",
+                          "warning",
+                          "error"
+                        ]
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "skill": {
+                        "type": "string"
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "directorySkill": {
+                        "type": "string"
+                      },
+                      "directoryId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "severity",
+                      "path",
+                      "skill",
+                      "id",
+                      "directorySkill",
+                      "directoryId"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "enum": [
+                          "EXAMPLE_SKILL_UNKNOWN"
+                        ]
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": [
+                          "info",
+                          "warning",
+                          "error"
+                        ]
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "skill": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "severity",
+                      "path",
+                      "skill"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "enum": [
+                          "EXAMPLE_ID_DUPLICATE"
+                        ]
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": [
+                          "info",
+                          "warning",
+                          "error"
+                        ]
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "skill": {
+                        "type": "string"
+                      },
+                      "id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "severity",
+                      "path",
+                      "skill",
+                      "id"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "enum": [
+                          "EXAMPLE_PROMPT_MISSING"
+                        ]
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": [
+                          "info",
+                          "warning",
+                          "error"
+                        ]
+                      },
+                      "path": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "severity",
+                      "path"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "enum": [
+                          "EXAMPLE_FIXTURE_MISSING"
+                        ]
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": [
+                          "info",
+                          "warning",
+                          "error"
+                        ]
+                      },
+                      "path": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "severity",
+                      "path"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "enum": [
+                          "EXAMPLE_SCREENSHOT_MISSING"
+                        ]
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": [
+                          "info",
+                          "warning",
+                          "error"
+                        ]
+                      },
+                      "path": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "severity",
+                      "path"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "enum": [
+                          "EXAMPLE_SCREENSHOT_MEDIA_INVALID"
+                        ]
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": [
+                          "info",
+                          "warning",
+                          "error"
+                        ]
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "mediaType": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "severity",
+                      "path",
+                      "mediaType"
+                    ],
+                    "additionalProperties": true
+                  }
+                ]
+              }
+            }
+          },
+          "required": [
+            "_tag",
+            "skill",
+            "diagnostics"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "MetadataHeld"
+              ]
+            },
+            "skill": {
+              "type": "string"
+            },
+            "reports": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "harness": {
+                    "type": "string",
+                    "enum": [
+                      "codex",
+                      "claude-code",
+                      "opencode",
+                      "devin"
+                    ]
+                  },
+                  "contractId": {
+                    "type": "string"
+                  },
+                  "variant": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "valid",
+                      "invalid",
+                      "unknown"
+                    ]
+                  },
+                  "fields": {
+                    "type": "object"
+                  },
+                  "issues": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "frontmatter-missing",
+                            "frontmatter-invalid",
+                            "field-missing",
+                            "field-type",
+                            "field-constraint",
+                            "field-unknown"
+                          ]
+                        },
+                        "field": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "severity": {
+                          "type": "string",
+                          "enum": [
+                            "error",
+                            "unknown"
+                          ]
+                        },
+                        "sourceIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "field",
+                        "severity",
+                        "sourceIds"
+                      ],
+                      "additionalProperties": true
+                    }
+                  }
+                },
+                "required": [
+                  "harness",
+                  "contractId",
+                  "variant",
+                  "status",
+                  "fields",
+                  "issues"
+                ],
+                "additionalProperties": true
+              }
+            }
+          },
+          "required": [
+            "_tag",
+            "skill",
+            "reports"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "PreparationFailed"
+              ]
+            },
+            "skill": {
+              "type": "string"
+            },
+            "failure": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/DescriptorMalformedEncoded"
+                },
+                {
+                  "$ref": "#/definitions/DuplicateSkillNamesEncoded"
+                },
+                {
+                  "$ref": "#/definitions/DuplicateSkillPathsEncoded"
+                },
+                {
+                  "$ref": "#/definitions/ConflictingInvocationDeclarationEncoded"
+                },
+                {
+                  "$ref": "#/definitions/ReadmeFrontmatterMissingEncoded"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "PlatformError"
+                      ]
+                    },
+                    "reason": {
+                      "type": "object",
+                      "properties": {
+                        "_tag": {
+                          "type": "string",
+                          "enum": [
+                            "AlreadyExists",
+                            "BadResource",
+                            "Busy",
+                            "InvalidData",
+                            "NotFound",
+                            "PermissionDenied",
+                            "TimedOut",
+                            "UnexpectedEof",
+                            "Unknown",
+                            "WouldBlock",
+                            "WriteZero",
+                            "BadArgument"
+                          ]
+                        },
+                        "module": {
+                          "type": "string"
+                        },
+                        "method": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "syscall": {
+                          "type": "string"
+                        },
+                        "pathOrDescriptor": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "_tag",
+                        "module",
+                        "method"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "reason"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "$ref": "#/definitions/TreeErrorEncoded"
+                },
+                {
+                  "$ref": "#/definitions/HarnessMetadataInvalidEncoded"
+                },
+                {
+                  "$ref": "#/definitions/SharedTargetCollisionEncoded"
+                },
+                {
+                  "$ref": "#/definitions/ProjectedPathCollisionEncoded"
+                },
+                {
+                  "$ref": "#/definitions/Library.SkillMaterializationInvalidEncoded"
+                }
+              ]
+            }
+          },
+          "required": [
+            "_tag",
+            "skill",
+            "failure"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "UninstallBlocked"
+              ]
+            },
+            "skill": {
+              "type": "string"
+            },
+            "failure": {
+              "$ref": "#/definitions/UninstallConflictEncoded"
+            }
+          },
+          "required": [
+            "_tag",
+            "skill",
+            "failure"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "CopyFailed"
+              ]
+            },
+            "skill": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "failure": {
+              "$ref": "#/definitions/ApplyFailure"
+            }
+          },
+          "required": [
+            "_tag",
+            "skill",
+            "path",
+            "failure"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "CopyConflicted"
+              ]
+            },
+            "skill": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "skill",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "CopyPending"
+              ]
+            },
+            "skill": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_tag",
+            "skill",
+            "path"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "_tag": {
+              "type": "string",
+              "enum": [
+                "InstallationFailed"
+              ]
+            },
+            "skill": {
+              "type": "string"
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "failure": {
+              "$ref": "#/definitions/ApplyFailure"
+            }
+          },
+          "required": [
+            "_tag",
+            "skill",
+            "paths",
+            "failure"
           ],
           "additionalProperties": true
         }

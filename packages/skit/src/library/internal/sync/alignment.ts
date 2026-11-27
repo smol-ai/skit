@@ -1,6 +1,6 @@
-import { Schema } from "effect";
 import {
-  Upstream,
+  sameUpstream,
+  type Upstream,
   type Enabled,
   type LibraryManifest,
   type SkillVersion,
@@ -15,7 +15,11 @@ import { remapEnabled } from "../../enabled.js";
  * Skill by its remote ID, so they apply after the Skill aliases.
  */
 export interface LibraryAliases {
-  readonly collections: readonly { readonly from: CollectionId; readonly to: CollectionId }[];
+  readonly collections: readonly {
+    readonly from: CollectionId;
+    readonly to: CollectionId;
+    readonly upstream?: Upstream;
+  }[];
   readonly skills: readonly { readonly from: SkillId; readonly to: SkillId }[];
   readonly versions: readonly {
     readonly skillId: SkillId;
@@ -90,12 +94,28 @@ export function alignLibrary(
       )
     )
       continue;
-    const remoteMatch = remote.collections.find(
-      (item) =>
-        item.upstream !== undefined && Schema.toEquivalence(Upstream)(upstream, item.upstream),
+    const matches = remote.collections.filter(
+      (item) => item.upstream !== undefined && sameUpstream(upstream, item.upstream),
     );
-    if (remoteMatch === undefined) continue;
-    collections.push({ from: collection.collection_id, to: remoteMatch.collection_id });
+    const remoteMatch = matches[0];
+    if (matches.length !== 1 || !remoteMatch?.upstream) continue;
+    // An unconnected workspace can match distinct Drafts sharing a workspace ID.
+    // Only align when each side identifies exactly one Collection on the other.
+    const remoteUpstream = remoteMatch.upstream;
+    if (
+      local.collections.some(
+        (item) =>
+          item !== collection && item.upstream && sameUpstream(item.upstream, remoteUpstream),
+      )
+    )
+      continue;
+    collections.push({
+      from: collection.collection_id,
+      to: remoteMatch.collection_id,
+      ...(upstream.draft_home && remoteMatch.upstream?.draft_home
+        ? { upstream: remoteMatch.upstream }
+        : {}),
+    });
   }
   for (const skill of local.skills) {
     if ([...base.skills, ...remote.skills].some((item) => item.skill_id === skill.skill_id))
@@ -123,13 +143,22 @@ export function alignLibrary(
   return { collections, skills, versions };
 }
 
+const aliasCollections = (collections: LibraryManifest["collections"], aliases: LibraryAliases) =>
+  collections.map((item) => {
+    const alias = aliases.collections.find((candidate) => candidate.from === item.collection_id);
+    return alias
+      ? {
+          ...item,
+          collection_id: alias.to,
+          ...(alias.upstream ? { upstream: alias.upstream } : {}),
+        }
+      : item;
+  });
+
 export function aliasManifest(manifest: LibraryManifest, aliases: LibraryAliases): LibraryManifest {
   return {
     ...manifest,
-    collections: manifest.collections.map((item) => ({
-      ...item,
-      collection_id: collectionId(item.collection_id, aliases),
-    })),
+    collections: aliasCollections(manifest.collections, aliases),
     skills: aliasSkills(manifest.skills, aliases),
     imports: manifest.imports.map((item) => ({
       ...item,
@@ -146,10 +175,7 @@ export function aliasManifest(manifest: LibraryManifest, aliases: LibraryAliases
 export function aliasDevice(state: LibraryState, aliases: LibraryAliases): LibraryState {
   return {
     ...remapEnabled(state, aliases),
-    collections: state.collections.map((item) => ({
-      ...item,
-      collection_id: collectionId(item.collection_id, aliases),
-    })),
+    collections: aliasCollections(state.collections, aliases),
     skills: aliasSkills(state.skills, aliases),
     imports: state.imports.map((item) => ({
       ...item,

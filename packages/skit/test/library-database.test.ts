@@ -655,8 +655,38 @@ it.effect("refuses newer database migrations with the known and observed version
         _tag: "NewerDatabaseMigration",
         databasePath: path,
         migration: 15,
-        supported: 1,
+        supported: 2,
       });
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("upgrades a populated database without inventing a local Draft selection", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-draft-selection-migration-" });
+    yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(legacy));
+    yield* migrateLocalLibraryState(home);
+    const before = yield* loadLibrary(home);
+    const path = libraryDatabasePath(home);
+    // Reconstruct the preceding native schema in the isolated test database.
+    yield* withLibraryDatabase(
+      path,
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`DROP TABLE library_local_draft_imports`;
+        yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 2`;
+      }),
+    );
+    yield* prepareLibraryDatabase(home);
+    assert.deepStrictEqual(yield* loadLibrary(home), before);
+    yield* withLibraryDatabase(
+      path,
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        assert.deepStrictEqual(yield* sql`SELECT import_id FROM library_local_draft_imports`, []);
+      }),
+      true,
+    );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -690,8 +720,8 @@ it.effect("revalidates a database that appeared after the initial probe", () =>
     if (error._tag === "InvalidLibraryState")
       assert.deepStrictEqual(error.reason, {
         _tag: "DatabaseMigrationsMismatch",
-        expected: ["1_library"],
-        actual: ["1_unexpected"],
+        expected: ["1_library", "2_local_draft_imports"],
+        actual: ["1_unexpected", "2_local_draft_imports"],
       });
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -880,7 +910,7 @@ for (const bad of ["document", "migration"])
       if (failed._tag === "InvalidLibraryState")
         assert.deepStrictEqual(failed.reason, {
           _tag: "DatabaseMigrationsMismatch",
-          expected: ["1_library"],
+          expected: ["1_library", "2_local_draft_imports"],
           actual: [bad === "document" ? "1_document_library" : "1_unknown"],
         });
       const after = yield* withLibraryDatabase(

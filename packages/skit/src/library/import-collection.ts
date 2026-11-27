@@ -196,6 +196,7 @@ interface PersistPreparedRequest extends ImportRequest {
 
 const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function* (
   request: PersistPreparedRequest,
+  selectDraft = false,
 ) {
   const writer = yield* LibraryWriter;
   const machineId = request.machineId ?? (yield* MachineSettings.ensureIdentity(writer.home));
@@ -284,13 +285,15 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       imported_at: previous.imported_at,
     }) &&
     unchangedSkills.every((skill) => skill !== undefined)
-  )
+  ) {
+    if (selectDraft) yield* writer.saveCatalogue(base, base, stored.revision, previous.import_id);
     return {
       action: "unchanged",
       collection,
       skills: unchangedSkills,
       ...imported,
     } satisfies ImportedCollection;
+  }
   const previousCopy = state.collection_versions.find(
     (copy) => copy.collection_version_id === previous?.collection_version_id,
   );
@@ -366,7 +369,12 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     : versionsChanged
       ? ("updated" as const)
       : ("unchanged" as const);
-  yield* writer.saveCatalogue(successor, base, stored.revision);
+  yield* writer.saveCatalogue(
+    successor,
+    base,
+    stored.revision,
+    selectDraft ? sourceImport.import_id : undefined,
+  );
   return { action, collection, skills, ...imported } satisfies ImportedCollection;
 });
 
@@ -501,7 +509,7 @@ export interface AuthoredImport {
   readonly importedAt: string;
 }
 export const importAuthoredCollection = Effect.fn("Library.retainAuthoredCollectionUnderLock")(
-  function* (request: AuthoredImport) {
+  function* (request: AuthoredImport, selectDraft = false) {
     const candidate = yield* validateSkitDirectory(request.root, "retained", {
       assessmentContext: "import",
     });
@@ -549,13 +557,16 @@ export const importAuthoredCollection = Effect.fn("Library.retainAuthoredCollect
         materializationProfile: "declared-skit-skill/v1",
       });
     }
-    return yield* persistPrepared({
-      ...request,
-      skills: [],
-      lockFileEntries: [],
-      collectionVersionHash,
-      facts,
-    });
+    return yield* persistPrepared(
+      {
+        ...request,
+        skills: [],
+        lockFileEntries: [],
+        collectionVersionHash,
+        facts,
+      },
+      selectDraft,
+    );
   },
 );
 

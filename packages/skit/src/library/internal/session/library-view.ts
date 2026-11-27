@@ -21,7 +21,7 @@ import { libraryListing } from "./listing.js";
 export const libraryView = (
   current: LibraryState,
   home: string,
-  authored?: Parameters<typeof previewSourceUpdates>[3],
+  authored?: Parameters<typeof previewSourceUpdates>[4],
 ) => {
   const originalsPath = join(home, "originals");
   const state = structuredClone(current);
@@ -31,14 +31,14 @@ export const libraryView = (
     readManifest: Effect.fn("LibraryView.readManifest")(function* () {
       return structuredClone(yield* libraryManifestFromLocalState(state));
     }),
-    readWorkspaceClaims: (root: string) => readWorkspaceClaims(state, root),
+    readWorkspaceClaims: (root: string) => readWorkspaceClaims(state, root, home),
     previewSourceUpdates: <E, R>(
       query: string | undefined,
       inspectSource: (
         input: SkitSource,
         previousSkillPaths?: readonly string[],
       ) => Effect.Effect<SourceInspection, E, R>,
-    ) => previewSourceUpdates(state, query, inspectSource, authored),
+    ) => previewSourceUpdates(state, query, inspectSource, home, authored),
     checkSubjects: <E, R>(
       query: string | undefined,
       options: {

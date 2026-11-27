@@ -21,10 +21,17 @@ export function resultExitCode(result: CommandResult, previous = 0): ProcessExit
       failed = result.data.status === "invalid" || result.data.status === "policy-blocked";
       break;
     case "sync":
-      failed = result.data.status === "blocked" || result.data.status === "waiting_for_removal";
+      failed =
+        !!result.data.installation_issues?.length ||
+        result.data.status === "blocked" ||
+        result.data.status === "waiting_for_removal";
       break;
     case "librarySync":
       failed =
+        result.data.author_workspaces?.some(
+          (folder) =>
+            !!folder.installation_issues?.length || folder.installation_failure !== undefined,
+        ) === true ||
         result.data.status === "local_bytes_changed" ||
         result.data.status === "conflicted" ||
         result.data.status === "resolution_invalid" ||

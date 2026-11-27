@@ -1,3 +1,4 @@
+import type { ImportId } from "../entity-ids.js";
 import { Effect, FileSystem, Schema, Struct } from "effect";
 import { SqlClient } from "effect/sql";
 import {
@@ -138,6 +139,31 @@ export const checkCatalogueChange = Effect.fn("Library.checkCatalogueChange")(fu
   }
 });
 
+/** Select this import in the same transaction that makes its retained content available. */
+const selectDraftImport = Effect.fn("Library.selectDraftImport")(function* (
+  path: string,
+  catalogue: Catalogue,
+  id: ImportId,
+) {
+  const source = catalogue.imports.find((item) => item.import_id === id && item.kind === "source");
+  if (
+    !source ||
+    !catalogue.collections.find((item) => item.collection_id === source.collection_id)?.upstream
+      ?.draft_home
+  )
+    return yield* new LibraryChanged({ path });
+  const sql = yield* SqlClient.SqlClient;
+  const selected = yield* sql<{
+    import_id: string;
+  }>`SELECT d.import_id FROM library_local_draft_imports d
+    JOIN library_imports i USING (import_id) WHERE i.collection_id = ${source.collection_id}`;
+  if (selected.length === 1 && selected[0]?.import_id === id) return false;
+  yield* sql`DELETE FROM library_local_draft_imports WHERE import_id IN (
+    SELECT import_id FROM library_imports WHERE collection_id = ${source.collection_id})`;
+  yield* sql`INSERT INTO library_local_draft_imports(import_id) VALUES (${id})`;
+  return true;
+});
+
 /** Catalogue rows, affected accepted-base rows, setup progress, revision and audit commit together. */
 export const saveCatalogue = Effect.fn("Library.saveCatalogue")(function* (
   home: string,
@@ -145,6 +171,7 @@ export const saveCatalogue = Effect.fn("Library.saveCatalogue")(function* (
   baseInput: Catalogue,
   revision: number | null,
   action: HistoryAction,
+  draftImport?: ImportId,
 ) {
   const path = libraryDatabasePath(home);
   return yield* withLibraryTransaction(
@@ -157,7 +184,13 @@ export const saveCatalogue = Effect.fn("Library.saveCatalogue")(function* (
       const current = yield* decodeCatalogue(path, yield* loadCatalogueRows());
       if (canonicalJson(current) !== canonicalJson(base))
         return yield* new LibraryChanged({ path });
-      if (canonicalJson(current) === canonicalJson(next)) return revision;
+      if (canonicalJson(current) === canonicalJson(next)) {
+        // Device-local selection invalidates captured plans. It changes no portable
+        // catalogue or enabled records for Library history to describe.
+        if (draftImport && (yield* selectDraftImport(path, next, draftImport)))
+          return yield* advanceLibraryRevision(path);
+        return revision;
+      }
       const beforeDocument = yield* Schema.decodeUnknownEffect(JsonObject)(current);
       const nextDocument = yield* Schema.decodeUnknownEffect(JsonObject)(next);
       yield* checkCatalogueChange(path, nextDocument, beforeDocument);
@@ -168,6 +201,7 @@ export const saveCatalogue = Effect.fn("Library.saveCatalogue")(function* (
         after = { ...enabled, ...next };
       yield* saveCatalogueBase(path, nextDocument, beforeDocument);
       yield* saveCatalogueRows(nextDocument, beforeDocument);
+      if (draftImport) yield* selectDraftImport(path, next, draftImport);
       yield* saveSetupIntentProgress(path, setupIntent(before), setupIntent(after));
       const accepted = yield* advanceLibraryRevision(path);
       yield* saveLibraryHistory(path, action, [

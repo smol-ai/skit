@@ -1,3 +1,4 @@
+import sync from "../../skit/test/fixtures/sync-guarantees.json" with { type: "json" };
 import { describe } from "@effect/vitest";
 import { readLibraryManifest } from "./helpers/library-manifest.js";
 import { originalArchive, originalTreePath } from "./helpers/original-tree.js";
@@ -117,216 +118,214 @@ const fixture = Effect.gen(function* () {
   };
 });
 
-describe("skit sync", () => {
-  describe("Recovering interrupted work", () => {
-    describe("A failed download does not save a partial fresh Library.", () => {
-      it.effect(
-        "fresh Library sync restores every declared Registry file at the exact retained digest",
-        () =>
-          Effect.gen(function* () {
-            const f = yield* fixture;
-            const state = yield* f.seed(registrySource);
-            yield* f.sync();
-            assert.deepStrictEqual(
-              (yield* f.load(f.freshHome)).collection_versions,
-              state.collection_versions,
-            );
-            const hash = state.collection_versions[0]!.hash;
-            assert.strictEqual((yield* originalArchive(f.root(hash), hash)).digest, hash);
-            for (const [path, bytes] of Object.entries(f.files))
-              assert.strictEqual(yield* f.fs.readFileString(join(f.root(hash), path)), bytes);
-            const targetRoot = join(f.workspace, "agent-skills");
-            const restored = yield* f.load(f.freshHome);
-            yield* writingTo(
-              f.freshHome,
-              Effect.gen(function* () {
-                const owner = yield* Library.Service;
-                for (const skill of restored.skills) {
-                  const plan = yield* owner.plan(
-                    {
-                      _tag: "Enabled",
-                      changes: [
-                        {
-                          _tag: "Enable",
-                          subject: { _tag: "Skill", id: skill.skill_id },
-                          where: [{ kind: "global" }],
-                        },
-                      ],
-                    },
-                    { base: yield* owner.read },
-                  );
-                  yield* owner.apply({ _tag: "Apply", plan });
-                }
-              }),
-            );
-            yield* writingTo(
-              f.freshHome,
-              installEnabledSkills({
-                target: "agents",
-                root: targetRoot,
-                variantsPath: join(f.freshHome, "variants"),
-              }),
-            );
-            const installed = join(targetRoot, "review");
-            assert.strictEqual(
-              yield* f.fs.readFileString(join(installed, "context.md")),
-              f.files["shared/context.md"],
-            );
-            assert.strictEqual(
-              yield* f.fs.readFileString(join(installed, "SKILL.md")),
-              f.files["skills/review/SKILL.md"],
-            );
-            for (const path of ["README.md", "skit.json", ".gitignore", "skills/.gitkeep"])
-              assert.isFalse(yield* f.fs.exists(join(installed, path)));
-          }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-      );
-
-      it.effect("plain Registry restore keeps the retained subset and excludes sibling files", () =>
+describe(
+  sync.rejectPartialDownload.title,
+  { meta: { guarantee: sync.rejectPartialDownload } },
+  () => {
+    it.effect(
+      "fresh Library sync restores every declared Registry file at the exact retained digest",
+      () =>
         Effect.gen(function* () {
           const f = yield* fixture;
-          yield* f.fs.remove(join(f.sourceRoot, "skit.json"));
-          yield* f.repack;
           const state = yield* f.seed(registrySource);
           yield* f.sync();
+          assert.deepStrictEqual(
+            (yield* f.load(f.freshHome)).collection_versions,
+            state.collection_versions,
+          );
           const hash = state.collection_versions[0]!.hash;
           assert.strictEqual((yield* originalArchive(f.root(hash), hash)).digest, hash);
-          assert.isFalse(yield* f.fs.exists(join(f.root(hash), "README.md")));
-          assert.isFalse(yield* f.fs.exists(join(f.root(hash), "skills/.gitkeep")));
+          for (const [path, bytes] of Object.entries(f.files))
+            assert.strictEqual(yield* f.fs.readFileString(join(f.root(hash), path)), bytes);
+          const targetRoot = join(f.workspace, "agent-skills");
+          const restored = yield* f.load(f.freshHome);
+          yield* writingTo(
+            f.freshHome,
+            Effect.gen(function* () {
+              const owner = yield* Library.Service;
+              for (const skill of restored.skills) {
+                const plan = yield* owner.plan(
+                  {
+                    _tag: "Enabled",
+                    changes: [
+                      {
+                        _tag: "Enable",
+                        subject: { _tag: "Skill", id: skill.skill_id },
+                        where: [{ kind: "global" }],
+                      },
+                    ],
+                  },
+                  { base: yield* owner.read },
+                );
+                yield* owner.apply({ _tag: "Apply", plan });
+              }
+            }),
+          );
+          yield* writingTo(
+            f.freshHome,
+            installEnabledSkills({
+              target: "agents",
+              root: targetRoot,
+              variantsPath: join(f.freshHome, "variants"),
+            }),
+          );
+          const installed = join(targetRoot, "review");
           assert.strictEqual(
-            yield* f.fs.readFileString(join(f.root(hash), "skills/review/SKILL.md")),
+            yield* f.fs.readFileString(join(installed, "context.md")),
+            f.files["shared/context.md"],
+          );
+          assert.strictEqual(
+            yield* f.fs.readFileString(join(installed, "SKILL.md")),
             f.files["skills/review/SKILL.md"],
           );
+          for (const path of ["README.md", "skit.json", ".gitignore", "skills/.gitkeep"])
+            assert.isFalse(yield* f.fs.exists(join(installed, path)));
         }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-      );
+    );
 
-      it.effect("changed declared source bytes fail before saving a fresh Library", () =>
+    it.effect("plain Registry restore keeps the retained subset and excludes sibling files", () =>
+      Effect.gen(function* () {
+        const f = yield* fixture;
+        yield* f.fs.remove(join(f.sourceRoot, "skit.json"));
+        yield* f.repack;
+        const state = yield* f.seed(registrySource);
+        yield* f.sync();
+        const hash = state.collection_versions[0]!.hash;
+        assert.strictEqual((yield* originalArchive(f.root(hash), hash)).digest, hash);
+        assert.isFalse(yield* f.fs.exists(join(f.root(hash), "README.md")));
+        assert.isFalse(yield* f.fs.exists(join(f.root(hash), "skills/.gitkeep")));
+        assert.strictEqual(
+          yield* f.fs.readFileString(join(f.root(hash), "skills/review/SKILL.md")),
+          f.files["skills/review/SKILL.md"],
+        );
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+    );
+
+    it.effect("changed declared source bytes fail before saving a fresh Library", () =>
+      Effect.gen(function* () {
+        const f = yield* fixture;
+        const state = yield* f.seed(registrySource);
+        const remote = f.server.stored;
+        yield* f.fs.writeFileString(join(f.sourceRoot, "README.md"), "Changed\n");
+        yield* f.repack;
+        const error = yield* f.sync().pipe(Effect.flip);
+        assert.strictEqual(error._tag, "Library.SyncSourceRestoreInvalid");
+        if (error._tag === "Library.SyncSourceRestoreInvalid") {
+          assert.strictEqual(error.hash, state.collection_versions[0]!.hash);
+          assert.strictEqual(error.reason._tag, "HashMismatch");
+        }
+        assert.isFalse(yield* f.fs.exists(join(f.freshHome, "state.json")));
+        assert.deepStrictEqual(f.server.stored, remote);
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+    );
+
+    it.effect("invalid restored source metadata reports its hash and cause before saving", () =>
+      Effect.gen(function* () {
+        const f = yield* fixture;
+        const state = yield* f.seed(registrySource);
+        const remote = f.server.stored;
+        yield* f.fs.writeFileString(join(f.sourceRoot, "skit.json"), "{ invalid JSON");
+        yield* f.repack;
+        const error = yield* f.sync().pipe(Effect.flip);
+        assert.strictEqual(error._tag, "Library.SyncSourceRestoreInvalid");
+        if (error._tag === "Library.SyncSourceRestoreInvalid") {
+          assert.strictEqual(error.hash, state.collection_versions[0]!.hash);
+          if (error.reason._tag === "SourceFetchFailed") assert.isDefined(error.reason.failure);
+          assert.strictEqual(error.reason._tag, "SourceFetchFailed");
+        }
+        assert.isFalse(yield* f.fs.exists(join(f.freshHome, "state.json")));
+        assert.deepStrictEqual(f.server.stored, remote);
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+    );
+
+    it.effect("a declared copy rejects a source that no longer declares a SKIT", () =>
+      Effect.gen(function* () {
+        const f = yield* fixture;
+        yield* f.seed(registrySource);
+        yield* f.fs.remove(join(f.sourceRoot, "skit.json"));
+        yield* f.repack;
+        const error = yield* f.sync().pipe(Effect.flip);
+        assert.strictEqual(error._tag, "Library.SyncSourceRestoreInvalid");
+        if (error._tag === "Library.SyncSourceRestoreInvalid")
+          assert.strictEqual(error.reason._tag, "DescriptorMissing");
+        assert.isFalse(yield* f.fs.exists(join(f.freshHome, "state.json")));
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+    );
+
+    it.effect.each(["git", "github"] as const)(
+      "declared %s subpath restoration captures the resolved root at its pinned commit",
+      (kind) =>
         Effect.gen(function* () {
           const f = yield* fixture;
-          const state = yield* f.seed(registrySource);
-          const remote = f.server.stored;
-          yield* f.fs.writeFileString(join(f.sourceRoot, "README.md"), "Changed\n");
-          yield* f.repack;
-          const error = yield* f.sync().pipe(Effect.flip);
-          assert.strictEqual(error._tag, "Library.SyncSourceRestoreInvalid");
-          if (error._tag === "Library.SyncSourceRestoreInvalid") {
-            assert.strictEqual(error.hash, state.collection_versions[0]!.hash);
-            assert.strictEqual(error.reason._tag, "HashMismatch");
-          }
-          assert.isFalse(yield* f.fs.exists(join(f.freshHome, "state.json")));
-          assert.deepStrictEqual(f.server.stored, remote);
-        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-      );
-
-      it.effect("invalid restored source metadata reports its hash and cause before saving", () =>
-        Effect.gen(function* () {
-          const f = yield* fixture;
-          const state = yield* f.seed(registrySource);
-          const remote = f.server.stored;
-          yield* f.fs.writeFileString(join(f.sourceRoot, "skit.json"), "{ invalid JSON");
-          yield* f.repack;
-          const error = yield* f.sync().pipe(Effect.flip);
-          assert.strictEqual(error._tag, "Library.SyncSourceRestoreInvalid");
-          if (error._tag === "Library.SyncSourceRestoreInvalid") {
-            assert.strictEqual(error.hash, state.collection_versions[0]!.hash);
-            if (error.reason._tag === "SourceFetchFailed") assert.isDefined(error.reason.failure);
-            assert.strictEqual(error.reason._tag, "SourceFetchFailed");
-          }
-          assert.isFalse(yield* f.fs.exists(join(f.freshHome, "state.json")));
-          assert.deepStrictEqual(f.server.stored, remote);
-        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-      );
-
-      it.effect("a declared copy rejects a source that no longer declares a SKIT", () =>
-        Effect.gen(function* () {
-          const f = yield* fixture;
-          yield* f.seed(registrySource);
-          yield* f.fs.remove(join(f.sourceRoot, "skit.json"));
-          yield* f.repack;
-          const error = yield* f.sync().pipe(Effect.flip);
-          assert.strictEqual(error._tag, "Library.SyncSourceRestoreInvalid");
-          if (error._tag === "Library.SyncSourceRestoreInvalid")
-            assert.strictEqual(error.reason._tag, "DescriptorMissing");
-          assert.isFalse(yield* f.fs.exists(join(f.freshHome, "state.json")));
-        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-      );
-
-      it.effect.each(["git", "github"] as const)(
-        "declared %s subpath restoration captures the resolved root at its pinned commit",
-        (kind) =>
-          Effect.gen(function* () {
-            const f = yield* fixture;
-            const repo = join(f.workspace, "repo");
-            yield* f.fs.makeDirectory(repo);
-            yield* f.fs.copy(f.sourceRoot, join(repo, "nested"));
-            yield* f.fs.writeFileString(join(repo, "outside.txt"), "Outside Collection\n");
-            yield* Effect.sync(() => {
-              const git = (...args: string[]) => execFileSync("git", args, { cwd: repo });
-              git("init", "-q");
-              git("add", ".");
-              git(
+          const repo = join(f.workspace, "repo");
+          yield* f.fs.makeDirectory(repo);
+          yield* f.fs.copy(f.sourceRoot, join(repo, "nested"));
+          yield* f.fs.writeFileString(join(repo, "outside.txt"), "Outside Collection\n");
+          yield* Effect.sync(() => {
+            const git = (...args: string[]) => execFileSync("git", args, { cwd: repo });
+            git("init", "-q");
+            git("add", ".");
+            git(
+              "-c",
+              "user.name=Test",
+              "-c",
+              "user.email=test@example.com",
+              "commit",
+              "-qm",
+              "fixture",
+            );
+          });
+          const remote =
+            kind === "github"
+              ? "https://github.com/acme/tools"
+              : "https://example.invalid/tools.git";
+          const process = yield* SourceProcess;
+          const route = (args: readonly string[]) =>
+            args.map((arg) => (arg === remote ? repo : arg));
+          const localGit = Layer.succeed(SourceProcess, {
+            run: (command, args, options) => process.run(command, route(args), options),
+            output: (command, args, options) => process.output(command, route(args), options),
+          });
+          const state = yield* f
+            .seed(
+              kind === "github"
+                ? { type: "github", owner: "acme", repository: "tools", subpath: "nested" }
+                : { type: "git", remote, subpath: "nested" },
+            )
+            .pipe(Effect.provide(localGit));
+          yield* f.fs.writeFileString(
+            join(repo, "nested", "README.md"),
+            `${f.files["README.md"]}\nLater source bytes\n`,
+          );
+          yield* Effect.sync(() => execFileSync("git", ["add", "nested/README.md"], { cwd: repo }));
+          yield* Effect.sync(() =>
+            execFileSync(
+              "git",
+              [
                 "-c",
                 "user.name=Test",
                 "-c",
                 "user.email=test@example.com",
                 "commit",
                 "-qm",
-                "fixture",
-              );
-            });
-            const remote =
-              kind === "github"
-                ? "https://github.com/acme/tools"
-                : "https://example.invalid/tools.git";
-            const process = yield* SourceProcess;
-            const route = (args: readonly string[]) =>
-              args.map((arg) => (arg === remote ? repo : arg));
-            const localGit = Layer.succeed(SourceProcess, {
-              run: (command, args, options) => process.run(command, route(args), options),
-              output: (command, args, options) => process.output(command, route(args), options),
-            });
-            const state = yield* f
-              .seed(
-                kind === "github"
-                  ? { type: "github", owner: "acme", repository: "tools", subpath: "nested" }
-                  : { type: "git", remote, subpath: "nested" },
-              )
-              .pipe(Effect.provide(localGit));
-            yield* f.fs.writeFileString(
-              join(repo, "nested", "README.md"),
-              `${f.files["README.md"]}\nLater source bytes\n`,
-            );
-            yield* Effect.sync(() =>
-              execFileSync("git", ["add", "nested/README.md"], { cwd: repo }),
-            );
-            yield* Effect.sync(() =>
-              execFileSync(
-                "git",
-                [
-                  "-c",
-                  "user.name=Test",
-                  "-c",
-                  "user.email=test@example.com",
-                  "commit",
-                  "-qm",
-                  "later",
-                ],
-                { cwd: repo },
-              ),
-            );
-            yield* f.sync().pipe(Effect.provide(localGit));
-            const hash = state.collection_versions[0]!.hash;
-            assert.strictEqual((yield* originalArchive(f.root(hash), hash)).digest, hash);
-            assert.strictEqual(
-              yield* f.fs.readFileString(join(f.root(hash), "skit.json")),
-              f.files["skit.json"],
-            );
-            assert.strictEqual(
-              yield* f.fs.readFileString(join(f.root(hash), "README.md")),
-              f.files["README.md"],
-            );
-            assert.isFalse(yield* f.fs.exists(join(f.root(hash), "outside.txt")));
-          }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-      );
-    });
-  });
-});
+                "later",
+              ],
+              { cwd: repo },
+            ),
+          );
+          yield* f.sync().pipe(Effect.provide(localGit));
+          const hash = state.collection_versions[0]!.hash;
+          assert.strictEqual((yield* originalArchive(f.root(hash), hash)).digest, hash);
+          assert.strictEqual(
+            yield* f.fs.readFileString(join(f.root(hash), "skit.json")),
+            f.files["skit.json"],
+          );
+          assert.strictEqual(
+            yield* f.fs.readFileString(join(f.root(hash), "README.md")),
+            f.files["README.md"],
+          );
+          assert.isFalse(yield* f.fs.exists(join(f.root(hash), "outside.txt")));
+        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+    );
+  },
+);

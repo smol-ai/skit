@@ -1,8 +1,12 @@
-import { Effect } from "effect";
+import { authoredSkillIssueLines } from "../library/authored-skill-issues.js";
+import { commandFailure } from "../commands/failure-classification.js";
+import { Cause, Effect } from "effect";
 import type { AuthorVisibility } from "@smolai/skit-core/author";
 
 import { Renderer } from "../terminal/renderer.js";
-import { syncAuthorWorkspace } from "./sync/workflow.js";
+import { syncInstalledWorkspace } from "@smolai/skit-core/author";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
+import { authorRegistry } from "../registry/author-sync.js";
 
 export const authorSyncCommand = Effect.fn("CLI.authorSync")(function* (options: {
   readonly root?: string;
@@ -13,16 +17,33 @@ export const authorSyncCommand = Effect.fn("CLI.authorSync")(function* (options:
   readonly visibility?: AuthorVisibility;
 }) {
   const renderer = yield* Renderer;
+  const home = options.home ?? (yield* SkitConfiguration).skitHome;
   return yield* renderer.withStatus(
     "Synchronizing skit",
     Effect.scoped(
-      syncAuthorWorkspace(options.root ?? ".", {
-        apply: options.apply,
-        allowLargeDeletion: options.allowLargeDeletion,
-        home: options.home,
-        to: options.to,
-        visibility: options.visibility,
-      }),
+      syncInstalledWorkspace(
+        options.root ?? ".",
+        {
+          apply: options.apply,
+          allowLargeDeletion: options.allowLargeDeletion,
+          home,
+          to: options.to,
+          visibility: options.visibility,
+        },
+        authorRegistry(home),
+      ).pipe(
+        Effect.map(({ result, installation }) => {
+          if (!installation) return result;
+          if (installation._tag === "Failure")
+            return {
+              ...result,
+              installation_issues: [commandFailure(Cause.fail(installation.failure)).message],
+            };
+          return installation.success === undefined
+            ? result
+            : { ...result, installation_issues: authoredSkillIssueLines(installation.success) };
+        }),
+      ),
     ),
   );
 });

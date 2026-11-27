@@ -1,0 +1,85 @@
+.ff-switch {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 0;
+  background: none;
+  outline: none;
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+  font: var(--fs-body, 13px) / var(--lh-body, 20px) var(--font-sans, Inter, system-ui, sans-serif);
+  color: var(--muted-foreground, #737373);
+}
+.ff-switch[data-size='compact'] {
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: var(--fs-body-compact, 12px);
+  line-height: var(--lh-body-compact, 18px);
+}
+.ff-switch:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+.ff-switch[data-checked] {
+  color: var(--foreground, #171717);
+}
+.ff-switch-label {
+  text-box: trim-both cap alphabetic;
+  transition: color 80ms;
+}
+.ff-switch-track {
+  position: relative;
+  display: block;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--accent, #e5e5e5);
+  transition: background-color 80ms;
+}
+.ff-switch[data-size='compact'] .ff-switch-track {
+  width: 28px;
+  height: 16px;
+}
+.ff-switch[data-hovered] .ff-switch-track {
+  background: color-mix(in oklab, var(--accent, #e5e5e5), rgb(var(--overlay, 0 0 0)) 10%);
+}
+.ff-switch[data-checked] .ff-switch-track {
+  background: var(--fluid-accent, #6b97ff);
+}
+.ff-switch[data-checked][data-hovered] .ff-switch-track {
+  background: color-mix(in oklab, var(--fluid-accent, #6b97ff), black 8%);
+}
+.ff-switch:focus-visible .ff-switch-track {
+  box-shadow:
+    0 0 0 2px var(--background, #fff),
+    0 0 0 3px var(--focus-ring, #6b97ff);
+}
+.ff-switch-thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  width: 16px;
+  height: 16px;
+  transform: translate(2px, 2px);
+  background: white;
+  border-radius: 999px;
+  box-shadow:
+    0 1px 3px 0 rgb(0 0 0/0.1),
+    0 1px 2px -1px rgb(0 0 0/0.1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff-switch-track,
+  .ff-switch-label {
+    transition: none;
+  }
+}
+
+.ff-switch[data-radius='sharp'] :is(.ff-switch-track, .ff-switch-thumb) {
+  border-radius: 0;
+}

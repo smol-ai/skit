@@ -1,0 +1,170 @@
+.ff-dialog-root,
+.ff-dialog-portal {
+  display: contents;
+}
+.ff-dialog {
+  margin: 0;
+  overflow: visible;
+  color: var(--foreground, #171717);
+}
+.ff-dialog:not([open]) {
+  display: none;
+}
+.ff-dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  background: light-dark(rgb(0 0 0/0.4), rgb(0 0 0/0.8));
+  opacity: 1;
+}
+.ff-dialog-panel {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(100% - 32px);
+  max-width: 400px;
+  padding: 24px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 12px;
+  background: var(--surface-5, light-dark(#fff, #333));
+  box-shadow: var(--shadow-5, 0 0 0 1px #00000014, 0 12px 24px -8px #0003);
+  outline: none;
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+.ff-dialog-panel[data-width='lg'] {
+  max-width: 540px;
+}
+.ff-dialog-panel[data-width='xl'] {
+  max-width: 880px;
+}
+/* Atlas terminal recordings retain their full-width viewing preset. */
+.ff-dialog-panel[data-width='2xl'] {
+  max-width: min(1100px, 96vw);
+}
+.ff-dialog-panel[data-size='compact'] {
+  max-width: 360px;
+}
+.ff-dialog-panel[data-width='lg'][data-size='compact'] {
+  max-width: 480px;
+}
+.ff-dialog-panel[data-width='xl'][data-size='compact'] {
+  max-width: 800px;
+}
+.ff-dialog-panel[data-radius='pill'] {
+  border-radius: 24px;
+}
+.ff-dialog-panel[data-position='top'] {
+  top: 12dvh;
+  transform: translateX(-50%) scale(1);
+}
+.ff-dialog-panel[data-surface-level='1'] {
+  background: var(--surface-1, light-dark(#fff, #171717));
+  box-shadow: var(--shadow-1);
+}
+.ff-dialog-panel[data-surface-level='2'] {
+  background: var(--surface-2, light-dark(#fff, #1e1e1e));
+  box-shadow: var(--shadow-2);
+}
+.ff-dialog-panel[data-surface-level='3'] {
+  background: var(--surface-3, light-dark(#fff, #252525));
+  box-shadow: var(--shadow-3);
+}
+.ff-dialog-panel[data-surface-level='4'] {
+  background: var(--surface-4, light-dark(#fff, #2c2c2c));
+  box-shadow: var(--shadow-4);
+}
+.ff-dialog-panel[data-surface-level='6'] {
+  background: var(--surface-6, light-dark(#fff, #3a3a3a));
+  box-shadow: var(--shadow-6);
+}
+.ff-dialog-panel[data-surface-level='7'] {
+  background: var(--surface-7, light-dark(#fff, #414141));
+  box-shadow: var(--shadow-7);
+}
+.ff-dialog-panel[data-surface-level='8'] {
+  background: var(--surface-8, light-dark(#fff, #484848));
+  box-shadow: var(--shadow-8);
+}
+/* Motion 14.7.1 spring({duration:240,bounce:.12}).toString(). */
+.ff-dialog-panel[data-transition],
+.ff-dialog-backdrop[data-transition] {
+  transition:
+    opacity 250ms linear(0, 0.3878, 0.7777, 0.9458, 0.9946, 1.0029, 1.0021, 1),
+    transform 250ms linear(0, 0.3878, 0.7777, 0.9458, 0.9946, 1.0029, 1.0021, 1);
+}
+.ff-dialog-panel[data-leave],
+.ff-dialog-backdrop[data-leave] {
+  transition-duration: 160ms;
+  transition-timing-function: ease-out;
+}
+.ff-dialog-panel[data-closed] {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.97);
+}
+.ff-dialog-panel[data-position='top'][data-closed] {
+  transform: translateX(-50%) scale(0.97);
+}
+.ff-dialog-backdrop[data-closed] {
+  opacity: 0;
+}
+.ff-dialog-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.ff-dialog-title {
+  margin: 0;
+  color: var(--foreground, #171717);
+  font: var(--fs-title, 16px)/var(--lh-title, 22px) var(--font-sans, Inter, system-ui, sans-serif);
+  font-variation-settings:
+    'wght' 550,
+    'opsz' 18;
+}
+.ff-dialog-description {
+  margin: 0;
+  color: var(--muted-foreground, #737373);
+  font: var(--fs-body, 13px)/var(--lh-body, 20px) var(--font-sans, Inter, system-ui, sans-serif);
+}
+.ff-dialog-panel[data-size='compact'] .ff-dialog-title {
+  font-size: var(--fs-title-compact, 15px);
+  line-height: var(--lh-title-compact, 20px);
+}
+.ff-dialog-panel[data-size='compact'] .ff-dialog-description {
+  font-size: var(--fs-body-compact, 12px);
+  line-height: var(--lh-body-compact, 18px);
+}
+.ff-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 24px;
+}
+.ff-dialog-close {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+}
+.ff-dialog-header-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff-dialog-panel[data-transition],
+  .ff-dialog-backdrop[data-transition] {
+    transition: none;
+  }
+}
+
+/* Sharp uses the source shape-context radii. */
+.ff-dialog-panel[data-radius='sharp'] {
+  border-radius: 1px;
+}

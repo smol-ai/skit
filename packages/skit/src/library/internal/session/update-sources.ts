@@ -1,3 +1,4 @@
+import { workspaceLookup } from "../../collection-source.js";
 import { LibraryChanged } from "../../failures.js";
 import { CollectionNotUpdatable } from "../../update-failures.js";
 import type { AuthoredSkillIssue } from "../../authored-skill-issues.js";
@@ -8,7 +9,7 @@ import type { Interface } from "../../library.js";
 import { emptyLibraryState, type LibraryState } from "../../library-state.js";
 import { loadLibrary, writeLibrary } from "../../store/library-store.js";
 import {
-  latestSourceImport,
+  subjectSourceImport,
   matchingLibrarySubjects,
   type LibrarySubject,
 } from "../../subject-resolution.js";
@@ -99,12 +100,16 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <E, R>(
   let sourceImported = false;
   return yield* Effect.scoped(
     Effect.gen(function* () {
-      const { priorTree, input, acquisition } = yield* resolveUpdate(state, before);
+      const { priorTree, input, acquisition, workspace } = yield* resolveUpdate(
+        state,
+        before,
+        yield* workspaceLookup(home),
+      );
       source = sourceLocator(input);
       const subject = { id: before.subjectId, label: before.label };
       const authored =
-        acquisition.source_identity.kind === "authored-workspace"
-          ? yield* adapters.updateAuthoredSkills(acquisition.input.value, {
+        workspace !== undefined
+          ? yield* adapters.updateAuthoredSkills(workspace.path, {
               library,
               home,
               expectedImportId: acquisition.import_id,
@@ -126,7 +131,7 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <E, R>(
             )
           : yield* Effect.gen(function* () {
               const current = yield* loadLibrary(home);
-              const latest = latestSourceImport(current, before);
+              const latest = subjectSourceImport(current, before);
               const version =
                 current.collection_versions.find(
                   (item) => item.collection_version_id === latest?.collection_version_id,
@@ -256,8 +261,8 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <E, R>(
           // Inspect persisted evidence rather than claiming that such an update was rolled back.
           if (!sourceImported) {
             const current = yield* loadLibrary(home);
-            const previous = latestSourceImport(state, before);
-            const latest = latestSourceImport(current, before);
+            const previous = subjectSourceImport(state, before);
+            const latest = subjectSourceImport(current, before);
             sourceImported = latest !== undefined && latest.import_id !== previous?.import_id;
           }
           return {
@@ -298,14 +303,14 @@ export const updateSources = Effect.fn("Library.updateSources")(function* <E, R>
           label: subject.label,
         });
       if (
-        latestSourceImport(current, before)?.source_identity.kind !==
-        latestSourceImport(state, subject)?.source_identity.kind
+        subjectSourceImport(current, before)?.source_identity.kind !==
+        subjectSourceImport(state, subject)?.source_identity.kind
       )
         return yield* new LibraryChanged({ path: home });
       return yield* updateCollection(home, library, current, before, adapters);
     });
   const authored = (subject: LibrarySubject) =>
-    latestSourceImport(state, subject)?.source_identity.kind === "authored-workspace";
+    subjectSourceImport(state, subject)?.source_identity.kind === "authored-workspace";
   // Keep an ordinary batch one Library action. Authored updates must take workspace
   // ownership before their Library writer, so no outer writer may span those calls.
   if (selected.every((subject) => !authored(subject)))

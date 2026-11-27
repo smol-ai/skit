@@ -6,7 +6,11 @@ import { enabledCollections } from "../../enabled-plan.js";
 import { librarySubjects } from "../../subject-resolution.js";
 import { makeLibrarySkillMetadataReader } from "./skill-metadata.js";
 import { makeLibrarySkillInvocationReader } from "./invocation-source.js";
-import { readCollectionSource } from "../../collection-source.js";
+import {
+  readCollectionSource,
+  workspaceLookup,
+  type WorkspaceLookup,
+} from "../../collection-source.js";
 
 /** Catalogue and selection facts, shared by relational reads and explicitly captured reviews. */
 export const libraryListing = (
@@ -87,12 +91,12 @@ export const libraryListing = (
       .filter(({ value }) => value.collectionId === collection.collection_id)
       .map(({ value }) => value),
   }));
-  const readFacts = Effect.fn("LibraryView.readFacts")(function* () {
+  const readFacts = Effect.fn("LibraryView.readFacts")(function* (lookup: WorkspaceLookup) {
     const readMetadata = makeLibrarySkillMetadataReader(state, originalsPath);
     const sources = new Map(
       yield* Effect.forEach(state.collections, (collection) =>
         Effect.map(
-          readCollectionSource(state, collection, home),
+          readCollectionSource(state, collection, lookup),
           (source) => [collection.collection_id, source] as const,
         ),
       ),
@@ -129,7 +133,7 @@ export const libraryListing = (
     skillsShCollectionIds,
     placements: structuredClone(placements),
     readSkills: Effect.fn("LibraryView.readSkills")(function* () {
-      const rows = yield* readFacts();
+      const rows = yield* readFacts(yield* workspaceLookup(home));
       const readInvocation = yield* makeLibrarySkillInvocationReader(state, originalsPath);
       return yield* Effect.forEach(
         rows.flatMap(({ record, value }) =>
@@ -145,7 +149,8 @@ export const libraryListing = (
       );
     }, Effect.scoped),
     readSubjects: Effect.fn("LibraryView.readSubjects")(function* () {
-      const facts = (yield* readFacts()).map(({ value }) => value);
+      const lookup = yield* workspaceLookup(home);
+      const facts = (yield* readFacts(lookup)).map(({ value }) => value);
       return yield* Effect.forEach(librarySubjects(state), (subject) =>
         Effect.gen(function* () {
           const members = facts.filter((skill) =>
@@ -154,7 +159,7 @@ export const libraryListing = (
           const collectionSource =
             members[0]?.collectionSource ??
             (subject.kind === "collection"
-              ? yield* readCollectionSource(state, subject.collection, home)
+              ? yield* readCollectionSource(state, subject.collection, lookup)
               : undefined);
           return {
             id: subject.subjectId,

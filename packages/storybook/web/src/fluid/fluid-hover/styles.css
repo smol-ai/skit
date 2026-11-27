@@ -1,0 +1,177 @@
+.ff-hover-scope {
+  position: relative;
+  isolation: isolate;
+}
+.ff-hover-highlight,
+.ff-selected-highlight {
+  position: absolute;
+  pointer-events: none;
+  background: var(--hover);
+  z-index: 0;
+  will-change: transform;
+}
+[data-ff-demo] [data-fluid-row]:hover,
+[data-ff-demo] [data-sidebar='menu-button']:hover {
+  background: transparent;
+}
+[data-ff-demo] [data-sidebar='menu-button'],
+[data-ff-demo] [data-sidebar='menu-sub-button'] {
+  transition:
+    color 80ms,
+    padding 80ms;
+}
+[data-ff-demo] [data-fluid-hover-active] {
+  color: var(--foreground);
+}
+[data-ff-list='sidebar'] [data-fluid-hover-active] span:not(.invisible):not([aria-hidden='true']),
+[data-ff-list='tabs'] [data-fluid-hover-active] span:not(.invisible):not([aria-hidden='true']),
+[data-reveal-tabs] [data-fluid-hover-active] span:not(.invisible):not([aria-hidden='true']),
+[data-ff-list='menu'] [data-fluid-hover-active] span:not(.invisible):not([aria-hidden='true']),
+[data-fluid-hover-active] [data-slot='card-title'] span:not(.invisible) {
+  color: var(--foreground);
+  font-variation-settings:
+    'wght' 550,
+    'opsz' 18;
+}
+[data-ff-demo] [data-fluid-hover-active] svg {
+  stroke-width: 2;
+}
+.ff-fake-cursor {
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  z-index: 30;
+  pointer-events: none;
+}
+.ff-math-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+}
+.ff-math-boundary {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  border-top: 1px dashed color-mix(in srgb, var(--foreground) 20%, transparent);
+}
+.ff-math-dot {
+  position: absolute;
+  right: 16px;
+  width: 8px;
+  height: 8px;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--foreground) 25%, transparent);
+  transition: background-color 80ms;
+}
+.ff-math-dot.winner {
+  background: var(--focus-ring, #6b97ff);
+}
+.ff-math-pointer {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 1px;
+  background: var(--focus-ring, #6b97ff);
+  opacity: 0.7;
+}
+.ff-math-distance {
+  position: absolute;
+  right: 19.5px;
+  width: 1px;
+  background: var(--focus-ring, #6b97ff);
+}
+.ff-math-readout {
+  position: absolute;
+  right: 28px;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  font: 11px/14px monospace;
+  color: var(--foreground);
+}
+.ff-inspect-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  overflow: hidden;
+}
+.ff-inspect-capture {
+  position: absolute;
+  pointer-events: auto;
+  cursor: crosshair;
+}
+.ff-inspect-target {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.ff-inspect-rulers {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+  overflow: hidden;
+}
+.ff-inspect-rect {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 9px/1 monospace;
+  color: var(--foreground);
+}
+.ff-inspect-tooltip {
+  position: fixed;
+  z-index: 80;
+  pointer-events: none;
+  max-width: 240px;
+  padding: 16px 14px;
+  background: var(--surface-5);
+  color: var(--foreground);
+  box-shadow: var(--shadow-surface-5);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: 11px/16px monospace;
+}
+[data-component-preview] .shiki,
+[data-component-preview] .shiki span {
+  color: light-dark(var(--shiki-light), var(--shiki-dark));
+}
+
+[data-ff-list='tabs'] > .ff-hover-highlight,
+.ff-selected-highlight {
+  background: var(--active);
+}
+[data-ff-list='tabs'].ff-tabs-hovering > .ff-selected-highlight {
+  opacity: 0.8;
+  transition: opacity 80ms;
+}
+
+[data-ff-list='tabs'] > [data-fluid-row],
+[data-ff-list='menu'] > [data-fluid-row] {
+  border-radius: 8px;
+}
+[data-radius='pill'] [data-ff-demo] [data-fluid-row],
+[data-radius='pill'] [data-ff-demo] [data-sidebar='menu-button'],
+[data-radius='pill'] [data-ff-demo] [data-sidebar='menu-sub-button'] {
+  border-radius: 20px;
+}
+[data-ff-list='cards'] [data-fluid-row]:hover [data-slot='card-description'] span {
+  color: var(--muted-foreground);
+  font-variation-settings:
+    'wght' 400,
+    'opsz' 14;
+}
+
+[data-ff-list='tabs'] > [aria-selected='true'] {
+  background: transparent;
+}
+.ff-selected-highlight {
+  background: var(--active);
+}
+[data-ff-list='tabs'] > [role='tab']:focus-visible {
+  outline: 1px solid var(--focus-ring, #6b97ff);
+  outline-offset: 2px;
+}
